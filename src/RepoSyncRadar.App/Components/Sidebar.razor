@@ -1,6 +1,7 @@
 @using Microsoft.Extensions.DependencyInjection
 @using RepoSyncRadar.Core.Data
 @using RepoSyncRadar.Core.Models
+@implements IDisposable
 
 @*
     Sidebar — Phase 1 minimum review inbox.
@@ -46,11 +47,46 @@
     [Parameter] public EventCallback<ReviewStatus?> SelectedChanged { get; set; }
 
     private IReadOnlyDictionary<ReviewStatus, int>? _counts;
+    private IReviewBroadcaster? _broadcaster;
 
     protected override async Task OnInitializedAsync()
     {
+        await ReloadAsync();
+        _broadcaster = Services.GetService<IReviewBroadcaster>();
+        if (_broadcaster is not null)
+        {
+            _broadcaster.Reviewed += OnReviewed;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
         var repo = Services.GetRequiredService<IRadarRepository>();
         _counts = await repo.GetReviewCountsAsync();
+    }
+
+    private async void OnReviewed(object? sender, EventArgs e)
+    {
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await ReloadAsync();
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+            // The component was disposed mid-broadcast; safe to swallow.
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_broadcaster is not null)
+        {
+            _broadcaster.Reviewed -= OnReviewed;
+        }
     }
 
     private Task OnSelectAsync(ReviewStatus status)

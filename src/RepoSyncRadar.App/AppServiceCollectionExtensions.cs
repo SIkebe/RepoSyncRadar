@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Audit;
 using RepoSyncRadar.App.Copilot.Tools;
@@ -24,6 +25,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<RadarWriteTools>();
         services.TryAddSingleton<ICopilotSessionFactory, CopilotSessionFactory>();
         services.TryAddSingleton<MorningTriageSession>();
+        services.TryAddSingleton<IReviewBroadcaster, ReviewBroadcaster>();
 
         return services;
     }

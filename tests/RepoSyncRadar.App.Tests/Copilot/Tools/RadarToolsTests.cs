@@ -219,6 +219,12 @@ public sealed class RadarToolsTests
 
         public Task<IReadOnlyDictionary<ReviewStatus, int>> GetReviewCountsAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(new Dictionary<ReviewStatus, int>());
+
+        public Task<bool> AddIgnoreRuleAsync(string pattern, string? reason, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
+
+        public Task<int> BulkRejectByPathPrefixAsync(string pathPrefix, string reason, CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
     }
 
     private sealed class StubDocsGitHubClient : IDocsGitHubClient

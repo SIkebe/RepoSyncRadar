@@ -67,4 +67,25 @@ public interface IRadarRepository
     /// </summary>
     Task<IReadOnlyDictionary<ReviewStatus, int>> GetReviewCountsAsync(
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adds a new <see cref="IgnoreRule"/>. If the same pattern already exists the call is
+    /// a no-op (returns false). Used by the Review UI's "Ignore Directory" flow.
+    /// </summary>
+    /// <returns><c>true</c> when a new row is inserted; <c>false</c> when the pattern already exists.</returns>
+    Task<bool> AddIgnoreRuleAsync(
+        string pattern,
+        string? reason,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Bulk-rejects every commit whose at least one <see cref="CommitFile.Path"/> begins with
+    /// <paramref name="pathPrefix"/> and that is currently <see cref="ReviewStatus.Unseen"/>.
+    /// Used by the Review UI's "Ignore Directory" flow to retroactively clean the inbox.
+    /// </summary>
+    /// <returns>The number of commits that transitioned to <see cref="ReviewStatus.Rejected"/>.</returns>
+    Task<int> BulkRejectByPathPrefixAsync(
+        string pathPrefix,
+        string reason,
+        CancellationToken cancellationToken = default);
 }

@@ -1,0 +1,120 @@
+@using Microsoft.Extensions.DependencyInjection
+@using RepoSyncRadar.Core.Data
+@using RepoSyncRadar.Core.Models
+
+@*
+    ReviewActions — Adopt / Reject / Later / Ignore Directory buttons for the selected
+    commit. See IMPLEMENTATION_PLAN.md §Step 16. The component talks to IRadarRepository
+    directly (not RadarWriteTools) so that users can act without requiring a Copilot
+    session, and emits an IReviewBroadcaster event so the Sidebar updates immediately.
+*@
+
+<div class="radar-review-actions" data-testid="review-actions">
+    <button type="button"
+            data-testid="review-adopt"
+            class="adopt"
+            disabled="@_busy"
+            @onclick="AdoptAsync">採用</button>
+
+    <input type="text"
+           data-testid="review-reject-reason"
+           placeholder="却下理由 (必須)"
+           value="@_rejectReason"
+           @oninput="OnRejectReasonChanged" />
+    <button type="button"
+            data-testid="review-reject"
+            class="reject"
+            disabled="@(_busy || string.IsNullOrWhiteSpace(_rejectReason))"
+            @onclick="RejectAsync">却下</button>
+
+    <button type="button"
+            data-testid="review-later"
+            class="later"
+            disabled="@_busy"
+            @onclick="LaterAsync">あとで</button>
+
+    <details data-testid="review-ignore-details">
+        <summary>ディレクトリを無視</summary>
+        <input type="text"
+               data-testid="review-ignore-pattern"
+               placeholder="例: aspnet/security/**"
+               value="@_ignorePattern"
+               @oninput="OnIgnorePatternChanged" />
+        <button type="button"
+                data-testid="review-ignore"
+                class="ignore"
+                disabled="@(_busy || string.IsNullOrWhiteSpace(_ignorePattern))"
+                @onclick="IgnoreDirectoryAsync">無視リストへ追加</button>
+    </details>
+</div>
+
+@code {
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    [Parameter] public string? Sha { get; set; }
+
+    [Parameter] public EventCallback<ReviewStatus> Reviewed { get; set; }
+
+    private string _rejectReason = string.Empty;
+    private string _ignorePattern = string.Empty;
+    private bool _busy;
+
+    private void OnRejectReasonChanged(ChangeEventArgs e)
+        => _rejectReason = e.Value as string ?? string.Empty;
+
+    private void OnIgnorePatternChanged(ChangeEventArgs e)
+        => _ignorePattern = e.Value as string ?? string.Empty;
+
+    private async Task AdoptAsync()
+        => await SetReviewAsync(ReviewStatus.Adopted, reason: null);
+
+    private async Task RejectAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_rejectReason)) return;
+        await SetReviewAsync(ReviewStatus.Rejected, _rejectReason);
+        _rejectReason = string.Empty;
+    }
+
+    private async Task LaterAsync()
+        => await SetReviewAsync(ReviewStatus.Later, reason: null);
+
+    private async Task SetReviewAsync(ReviewStatus status, string? reason)
+    {
+        if (string.IsNullOrEmpty(Sha) || _busy) return;
+        _busy = true;
+        try
+        {
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            await repo.SetReviewAsync(Sha, status, reason);
+            Services.GetRequiredService<IReviewBroadcaster>().Publish();
+            await Reviewed.InvokeAsync(status);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task IgnoreDirectoryAsync()
+    {
+        var pattern = _ignorePattern.Trim();
+        if (string.IsNullOrEmpty(pattern) || _busy) return;
+        _busy = true;
+        try
+        {
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            await repo.AddIgnoreRuleAsync(pattern, reason: "ignore-directory");
+            var prefix = pattern.TrimEnd('*', '/');
+            if (!string.IsNullOrEmpty(prefix))
+            {
+                await repo.BulkRejectByPathPrefixAsync(prefix, reason: "auto-ignored");
+            }
+            Services.GetRequiredService<IReviewBroadcaster>().Publish();
+            _ignorePattern = string.Empty;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

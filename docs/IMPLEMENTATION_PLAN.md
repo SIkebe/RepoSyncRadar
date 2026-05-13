@@ -922,6 +922,8 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
   - 完了日 2026-05-13, テスト件数 10
 - [x] Step 15 — Morning Triage
   - 完了日 2026-05-13, テスト件数 5
+- [x] Step 16 — Review UI
+  - 完了日 2026-05-13, テスト件数 5
 - [ ] Step 15 — Morning Triage
 - [ ] Step 16 — Review UI
 - [ ] Step 17 — Adoption + 下書き

@@ -208,4 +208,89 @@ public sealed class RadarRepository : IRadarRepository
 
         return counts;
     }
+
+    public async Task<bool> AddIgnoreRuleAsync(
+        string pattern,
+        string? reason,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
+
+        using var db = _contextFactory.CreateDbContext();
+        var exists = await db.IgnoreRules
+            .AsNoTracking()
+            .AnyAsync(r => r.Pattern == pattern, cancellationToken)
+            .ConfigureAwait(false);
+        if (exists)
+        {
+            return false;
+        }
+
+        db.IgnoreRules.Add(new IgnoreRule
+        {
+            Pattern = pattern,
+            Reason = reason,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    public async Task<int> BulkRejectByPathPrefixAsync(
+        string pathPrefix,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pathPrefix);
+        ArgumentNullException.ThrowIfNull(reason);
+
+        using var db = _contextFactory.CreateDbContext();
+        var likePattern = EscapeLike(pathPrefix) + "%";
+        var matchingShas = await db.Commits
+            .Where(c => (c.Review == null || c.Review.Status == ReviewStatus.Unseen)
+                && c.Files.Any(f => EF.Functions.Like(f.Path, likePattern)))
+            .Select(c => c.Sha)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (matchingShas.Count == 0)
+        {
+            return 0;
+        }
+
+        var existingReviews = await db.Reviews
+            .Where(r => matchingShas.Contains(r.Sha))
+            .ToDictionaryAsync(r => r.Sha, cancellationToken)
+            .ConfigureAwait(false);
+
+        var now = DateTime.UtcNow;
+        foreach (var sha in matchingShas)
+        {
+            if (existingReviews.TryGetValue(sha, out var review))
+            {
+                review.Status = ReviewStatus.Rejected;
+                review.Reason = reason;
+                review.ReviewedAt = now;
+            }
+            else
+            {
+                db.Reviews.Add(new Review
+                {
+                    Sha = sha,
+                    Status = ReviewStatus.Rejected,
+                    Reason = reason,
+                    ReviewedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return matchingShas.Count;
+    }
+
+    /// <summary>Escapes the LIKE wildcards (<c>%</c> and <c>_</c>) inside a literal path prefix.</summary>
+    private static string EscapeLike(string value)
+        => value.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
 }
