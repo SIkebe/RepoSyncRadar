@@ -1,0 +1,9 @@
+# EF Core が自動生成する migration コードは整形・最適化対象外。
+# `dotnet ef migrations add` で再生成されるため、ここではアナライザを緩める。
+[*.cs]
+
+# IDE0161: file-scoped namespace
+dotnet_diagnostic.IDE0161.severity = none
+
+# CA1861: prefer 'static readonly' over constant array arguments
+dotnet_diagnostic.CA1861.severity = none
