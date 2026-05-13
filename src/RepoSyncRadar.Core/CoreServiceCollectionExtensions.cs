@@ -34,6 +34,7 @@ public static class CoreServiceCollectionExtensions
         // docs/IMPLEMENTATION_PLAN.md). Resolving IDocsGitHubClient before that
         // registration will throw at first use, not at host start.
         services.TryAddSingleton<IRadarRepository, RadarRepository>();
+        services.TryAddSingleton<IRadarQueryRunner, SqliteRadarQueryRunner>();
         services.TryAddSingleton<IDocsGitHubClient, DocsGitHubClient>();
         services.TryAddSingleton<ICommitIngestionService, CommitIngestionService>();
         services.TryAddSingleton<IPathToUrlResolver, NullPathToUrlResolver>();

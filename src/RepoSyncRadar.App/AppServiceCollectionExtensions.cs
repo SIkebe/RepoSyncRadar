@@ -27,6 +27,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<ICopilotSessionFactory, CopilotSessionFactory>();
         services.TryAddSingleton<MorningTriageSession>();
         services.TryAddSingleton<AdoptionSession>();
+        services.TryAddSingleton<AskSession>();
         services.TryAddSingleton<ICopilotAgent, CopilotAgent>();
         services.TryAddSingleton<IReviewBroadcaster, ReviewBroadcaster>();
         services.TryAddSingleton<IClipboard, WpfClipboard>();

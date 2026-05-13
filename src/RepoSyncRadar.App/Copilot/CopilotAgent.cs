@@ -11,13 +11,16 @@ public sealed class CopilotAgent : ICopilotAgent
 {
     private readonly MorningTriageSession _triage;
     private readonly AdoptionSession _adoption;
+    private readonly AskSession _ask;
 
-    public CopilotAgent(MorningTriageSession triage, AdoptionSession adoption)
+    public CopilotAgent(MorningTriageSession triage, AdoptionSession adoption, AskSession ask)
     {
         ArgumentNullException.ThrowIfNull(triage);
         ArgumentNullException.ThrowIfNull(adoption);
+        ArgumentNullException.ThrowIfNull(ask);
         _triage = triage;
         _adoption = adoption;
+        _ask = ask;
     }
 
     public async Task RunMorningTriageAsync(CancellationToken cancellationToken = default)
@@ -31,5 +34,5 @@ public sealed class CopilotAgent : ICopilotAgent
     }
 
     public Task<string> AskAsync(string naturalLanguageQuery, CancellationToken cancellationToken = default)
-        => throw new NotImplementedException("Ask session lands in Step 18.");
+        => _ask.AskAsync(naturalLanguageQuery, debug: false, cancellationToken);
 }

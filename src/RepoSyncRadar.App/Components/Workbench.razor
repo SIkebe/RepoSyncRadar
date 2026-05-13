@@ -20,6 +20,10 @@
 
         <main class="radar-workbench">
             <MudPaper Elevation="0" Class="pa-2">
+                <AskPalette />
+            </MudPaper>
+
+            <MudPaper Elevation="0" Class="pa-2">
                 <CommitList Filter="@_filter"
                             SelectedSha="@_selectedCommit?.Sha"
                             OnCommitSelected="HandleCommitSelected" />
