@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using Microsoft.AspNetCore.Components.WebView;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -34,6 +35,18 @@ namespace RepoSyncRadar.App;
 /// </remarks>
 public partial class MainWindow : Window
 {
+    /// <summary>
+    /// Environment variable name. When set to a TCP port, BlazorWebView's WebView2
+    /// will expose the Chrome DevTools Protocol on that port for E2E tests.
+    /// </summary>
+    private const string BlazorCdpPortEnv = "REPOSYNCRADAR_BLAZOR_CDP_PORT";
+
+    /// <summary>
+    /// Environment variable name. When set to a TCP port, DocsView's WebView2 will
+    /// expose the Chrome DevTools Protocol on that port for E2E tests.
+    /// </summary>
+    private const string DocsCdpPortEnv = "REPOSYNCRADAR_DOCS_CDP_PORT";
+
     private readonly UrlAllowList _allowList;
     private readonly ILogger<MainWindow> _logger;
 
@@ -62,6 +75,10 @@ public partial class MainWindow : Window
             // locale. WebView2 forwards this value to the Accept-Language HTTP header,
             // which docs.github.com uses to redirect to the matching localized variant.
             Language = "en-US",
+            // For E2E test runs the env var supplies a remote-debugging port. Production
+            // builds without the env var get no CDP exposure (string.Empty leaves the
+            // args clean).
+            AdditionalBrowserArguments = BuildBrowserArguments(DocsCdpPortEnv),
         };
 
         DocsView.CoreWebView2InitializationCompleted += OnDocsViewInitializationCompleted;
@@ -70,6 +87,48 @@ public partial class MainWindow : Window
         // is set. Setting Source triggers the initialization pipeline. We also pin
         // the initial path to /en so the first navigation skips the locale redirect.
         DocsView.Source = new Uri("https://docs.github.com/en");
+    }
+
+    /// <summary>
+    /// Wires the same CDP-port opt-in into BlazorWebView's internal WebView2. Only
+    /// active when <see cref="BlazorCdpPortEnv"/> is set, so production builds keep
+    /// CDP closed.
+    /// </summary>
+    private void OnBlazorViewInitializing(object? sender, BlazorWebViewInitializingEventArgs e)
+    {
+        var args = BuildBrowserArguments(BlazorCdpPortEnv);
+        if (args.Length == 0)
+        {
+            return;
+        }
+
+        e.EnvironmentOptions ??= new CoreWebView2EnvironmentOptions();
+        var existing = e.EnvironmentOptions.AdditionalBrowserArguments;
+        e.EnvironmentOptions.AdditionalBrowserArguments =
+            string.IsNullOrEmpty(existing) ? args : $"{existing} {args}";
+    }
+
+    /// <summary>
+    /// Reads a port from the supplied environment variable and returns the matching
+    /// Chromium <c>--remote-debugging-port=N</c> switch. Returns an empty string when
+    /// the variable is unset or invalid so callers can safely concatenate.
+    /// </summary>
+    private static string BuildBrowserArguments(string envName)
+    {
+        var raw = Environment.GetEnvironmentVariable(envName);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return string.Empty;
+        }
+
+        if (!int.TryParse(raw, out var port) || port is <= 0 or > 65535)
+        {
+            return string.Empty;
+        }
+
+        // Bind explicitly to the loopback interface so the CDP endpoint is not
+        // reachable from the network even on misconfigured machines.
+        return $"--remote-debugging-port={port} --remote-allow-origins=*";
     }
 
     private void OnDocsViewInitializationCompleted(

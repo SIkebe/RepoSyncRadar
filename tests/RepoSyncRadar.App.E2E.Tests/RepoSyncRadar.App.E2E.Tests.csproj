@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Same TFM as App so the test process can launch the produced exe alongside
+      its own runtime. The Windows SDK version is required by WebView2 (see App
+      csproj for the original rationale).
+    -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <RootNamespace>RepoSyncRadar.App.E2E.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+
+    <!--
+      Expose the App's built exe path to the test assembly via AssemblyMetadata
+      so the AppHost helper does not have to guess relative paths.
+      The expression is evaluated against the App csproj path at build time.
+    -->
+    <AppExePath>$(MSBuildThisFileDirectory)..\..\src\RepoSyncRadar.App\bin\$(Configuration)\$(TargetFramework)\RepoSyncRadar.exe</AppExePath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="RepoSyncRadarAppExePath" Value="$(AppExePath)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Testing.Platform" />
+    <PackageReference Include="Microsoft.Playwright" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Force the App to build before this project so AppExePath above resolves to
+      a real binary at test time. ReferenceOutputAssembly=false avoids dragging
+      WPF / WebView2 dependencies into the test compile graph (we only need the
+      exe on disk, not its types).
+    -->
+    <ProjectReference Include="..\..\src\RepoSyncRadar.App\RepoSyncRadar.App.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+      <Private>false</Private>
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

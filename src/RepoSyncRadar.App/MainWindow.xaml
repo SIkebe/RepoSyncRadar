@@ -18,7 +18,8 @@
     <!-- Left + center: Blazor app shell (sidebar, workbench, drafts). -->
     <blazor:BlazorWebView x:Name="BlazorView"
                           Grid.Column="0"
-                          HostPage="wwwroot/index.html">
+                          HostPage="wwwroot/index.html"
+                          BlazorWebViewInitializing="OnBlazorViewInitializing">
       <blazor:BlazorWebView.RootComponents>
         <blazor:RootComponent Selector="#app"
                               ComponentType="{x:Type pages:Workbench}" />

@@ -31,6 +31,7 @@
 - [Step 20. 配布(Velopack)とシークレット保管(DPAPI)](#step-20-配布velopackとシークレット保管dpapi)
 - [付録 A — テスト命名規約](#付録-a--テスト命名規約)
 - [付録 B — テスト固定値 / フィクスチャ管理](#付録-b--テスト固定値--フィクスチャ管理)
+- [付録 C — E2E テスト (Playwright over WebView2 CDP)](#付録-c--e2e-テスト-playwright-over-webview2-cdp)
 
 ---
 
@@ -921,3 +922,56 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
 - [ ] Step 18 — Ask Palette / SqlGuard
 - [ ] Step 19 — ローカルプレビュー
 - [ ] Step 20 — 配布 + DPAPI
+
+---
+
+## 付録 C — E2E テスト (Playwright over WebView2 CDP)
+
+> Step 10 のマニュアルスモークで発覚した「Blazor が `Loading…` のまま」「サイドバーが横並びになる」「Inbox 見出しが左端で切れる」といった UI リグレッションを **自動化された E2E** で押さえます。
+> WPF + WebView2 のテストには Appium / WinAppDriver もありますが、WinAppDriver は WebView2 内の DOM を覗けません。代わりに **WebView2 が Chromium ベースである** ことを使い、**Chrome DevTools Protocol (CDP)** 経由で Playwright (`Microsoft.Playwright`) から DOM を直接検査します。
+
+### C.1 構成
+
+| 役割 | プロジェクト / クラス | メモ |
+|---|---|---|
+| 子プロセス起動 + CDP ポート待機 | `tests/RepoSyncRadar.App.E2E.Tests/AppHost.cs` | `RepoSyncRadar.exe` を `psi.EnvironmentVariables` で起動。`/json/version` を 60s ポーリング |
+| Playwright + 2 つの `IBrowser` 共有 | `AppHostFixture` | BlazorWebView 用と DocsView 用に CDP を 2 ポート開き、`Chromium.ConnectOverCDPAsync` で接続 |
+| 全 E2E クラスで 1 アプリ共有 | `E2ETests` (`[CollectionDefinition]`) | テスト実行毎に WPF を 1 回だけ起動。WebView2 の UDF ロック残留に起因する 2 回目起動失敗を回避 |
+| App 側の CDP 注入 hook | `MainWindow.xaml.cs` | 環境変数 `REPOSYNCRADAR_BLAZOR_CDP_PORT` / `REPOSYNCRADAR_DOCS_CDP_PORT` が **セットされた時だけ** `--remote-debugging-port=N` を WebView2 に渡す。本番ビルドは何も渡さない |
+
+### C.2 セキュリティ (Production との分離)
+
+- CDP は **環境変数が立っている時のみ** 有効。env を立てなければ `MainWindow` は WebView2 に追加引数を渡さず、本番ユーザーが意図せず CDP を晒すことはありません。
+- `AppHost.ReserveFreePort` は `TcpListener(IPAddress.Loopback, 0)` で `127.0.0.1` 限定のポートを取り、それを CDP に割り当てます。LAN からは到達不能です。
+
+### C.3 テストの設計指針
+
+E2E は **過去に起きたバグそのもの** を assertion で固定します:
+
+| バグ | テスト | 期待値 |
+|---|---|---|
+| Blazor が起動せず `Loading…` のまま | `BlazorShell_HostPage_Loading_Placeholder_Is_Replaced` | `#app` の text に `Loading…` を含まない |
+| サイドバーが横並び | `SidebarItems_Are_Stacked_Vertically_Not_Inline` | 各 `sidebar-item-*` の `boundingBox.Y` が単調増加 |
+| Inbox 見出しが左端で切れる | `Sidebar_Pane_Has_Horizontal_Padding_So_Headings_Are_Not_Clipped` | `.radar-sidebar-pane` の `getComputedStyle(...).paddingLeft >= 4px` |
+| Razor 部分マウント | `BlazorShell_Mounts_With_Sidebar_And_CommitList` | 5 種の `sidebar-item-{status}` がすべて可視 |
+| DocsView の言語切替 | `DocsView_Loads_GitHub_Docs_In_English` | `final URL ⊃ docs.github.com` かつ `/en` を含み、`document.documentElement.lang` が `en` 始まり |
+
+### C.4 実行方法
+
+```powershell
+# 全テスト (E2E 含む)
+dotnet test --filter "Category!=Manual"
+
+# E2E のみ
+dotnet test tests/RepoSyncRadar.App.E2E.Tests --filter "Category=E2E"
+
+# CI で E2E をスキップ (デスクトップセッションが無い場合)
+dotnet test --filter "Category!=Manual&Category!=E2E"
+```
+
+E2E は **対話的デスクトップセッション** を必要とします (WebView2 の OS-window を実際に開くため)。Windows ヘッドレス CI 上ではスキップしてください。
+
+### C.5 Playwright ドライバ
+
+CDP **接続のみ** を行うので Playwright の付属ブラウザバイナリインストール (`playwright.ps1 install`) は不要です (`Microsoft.Playwright.dll` 内蔵のドライバスタブで足ります)。新規開発機でいきなり E2E を回してもインストール手順は発生しません。
+

@@ -30,6 +30,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RepoSyncRadar.Integrations.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RepoSyncRadar.App.Tests", "tests\RepoSyncRadar.App.Tests\RepoSyncRadar.App.Tests.csproj", "{A777479E-6D84-4CFF-BFCC-77AFDE8704E4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RepoSyncRadar.App.E2E.Tests", "tests\RepoSyncRadar.App.E2E.Tests\RepoSyncRadar.App.E2E.Tests.csproj", "{8A5C7652-0A21-4AB6-A158-358E6A8E2263}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -100,6 +104,18 @@ Global
 		{A777479E-6D84-4CFF-BFCC-77AFDE8704E4}.Release|x64.Build.0 = Release|Any CPU
 		{A777479E-6D84-4CFF-BFCC-77AFDE8704E4}.Release|x86.ActiveCfg = Release|Any CPU
 		{A777479E-6D84-4CFF-BFCC-77AFDE8704E4}.Release|x86.Build.0 = Release|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Debug|x64.Build.0 = Debug|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Debug|x86.Build.0 = Debug|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Release|x64.ActiveCfg = Release|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Release|x64.Build.0 = Release|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Release|x86.ActiveCfg = Release|Any CPU
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -108,6 +124,7 @@ Global
 		{1F1D6D3C-9FD0-4701-A602-020F553D4E79} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{D97103C1-E675-4047-A643-69E7503DAD11} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{A777479E-6D84-4CFF-BFCC-77AFDE8704E4} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{8A5C7652-0A21-4AB6-A158-358E6A8E2263} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {55555555-5555-5555-5555-555555555555}
