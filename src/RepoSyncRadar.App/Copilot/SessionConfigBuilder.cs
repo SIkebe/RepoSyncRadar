@@ -1,5 +1,6 @@
 using GitHub.Copilot.SDK;
 using Microsoft.Extensions.Options;
+using RepoSyncRadar.App.Copilot.Audit;
 using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;
@@ -16,14 +17,15 @@ internal static class SessionConfigBuilder
     public static SessionConfig Build(
         SessionPurpose purpose,
         IOptions<CopilotOptions> options,
-        PermissionRequestHandler permissionHandler)
+        PermissionRequestHandler permissionHandler,
+        ToolAuditHook? auditHook = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(permissionHandler);
 
         var copilot = options.Value;
 
-        return new SessionConfig
+        var config = new SessionConfig
         {
             ClientName = ClientName,
             Model = copilot.DefaultModel,
@@ -37,6 +39,25 @@ internal static class SessionConfigBuilder
             },
             OnPermissionRequest = permissionHandler,
         };
+
+        if (auditHook is not null)
+        {
+            config.Hooks = new SessionHooks
+            {
+                OnPreToolUse = async (input, invocation) =>
+                {
+                    await auditHook.OnPreToolUseAsync(input, invocation).ConfigureAwait(false);
+                    return null;
+                },
+                OnPostToolUse = async (input, invocation) =>
+                {
+                    await auditHook.OnPostToolUseAsync(input, invocation).ConfigureAwait(false);
+                    return null;
+                },
+            };
+        }
+
+        return config;
     }
 
     private static string SystemPromptFor(SessionPurpose purpose) => purpose switch

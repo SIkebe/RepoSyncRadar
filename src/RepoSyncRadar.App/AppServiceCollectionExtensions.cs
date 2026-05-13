@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using RepoSyncRadar.App.Copilot;
+using RepoSyncRadar.App.Copilot.Audit;
 
 namespace RepoSyncRadar.App;
 
@@ -15,6 +16,9 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<UrlAllowList>();
         services.TryAddSingleton<IPermissionPrompt, WpfPermissionPrompt>();
         services.TryAddSingleton<RadarPermissionPolicy>();
+        services.TryAddSingleton<IAuditJsonlSink>(sp =>
+            FileSystemAuditJsonlSink.CreateDefault(sp.GetRequiredService<TimeProvider>()));
+        services.TryAddSingleton<ToolAuditHook>();
         services.TryAddSingleton<ICopilotSessionFactory, CopilotSessionFactory>();
 
         return services;

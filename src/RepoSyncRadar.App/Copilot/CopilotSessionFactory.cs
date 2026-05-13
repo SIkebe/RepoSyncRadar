@@ -1,6 +1,7 @@
 using GitHub.Copilot.SDK;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using RepoSyncRadar.App.Copilot.Audit;
 using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;
@@ -25,6 +26,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 
     private readonly IOptions<CopilotOptions> _options;
     private readonly RadarPermissionPolicy _permissionPolicy;
+    private readonly ToolAuditHook? _auditHook;
     private readonly ILogger<CopilotSessionFactory> _logger;
     private readonly SemaphoreSlim _clientGate = new(1, 1);
     private CopilotClient? _client;
@@ -33,7 +35,8 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     public CopilotSessionFactory(
         IOptions<CopilotOptions> options,
         RadarPermissionPolicy permissionPolicy,
-        ILogger<CopilotSessionFactory> logger)
+        ILogger<CopilotSessionFactory> logger,
+        ToolAuditHook? auditHook = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(permissionPolicy);
@@ -42,6 +45,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         _options = options;
         _permissionPolicy = permissionPolicy;
         _logger = logger;
+        _auditHook = auditHook;
     }
 
     public async Task<CopilotSession> CreateSessionAsync(
@@ -51,7 +55,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var client = await GetOrCreateClientAsync(cancellationToken).ConfigureAwait(false);
-        var config = SessionConfigBuilder.Build(purpose, _options, _permissionPolicy.HandleAsync);
+        var config = SessionConfigBuilder.Build(purpose, _options, _permissionPolicy.HandleAsync, _auditHook);
         return await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
     }
 
