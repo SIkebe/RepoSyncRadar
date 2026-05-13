@@ -13,8 +13,16 @@ public interface IDocsGitHubClient
 {
     /// <summary>
     /// Lists the most recent <c>Repo sync</c> PRs that have not yet been mirrored to the local store.
+    /// The returned <see cref="Commit"/>s have an empty <see cref="Commit.Files"/> list; callers that
+    /// need per-file metadata must call <see cref="GetCommitFilesAsync"/> explicitly.
     /// </summary>
     Task<IReadOnlyList<Commit>> FetchUnseenCommitsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the list of <see cref="CommitFile"/> entries for a given commit SHA. Loaded lazily
+    /// so the unseen-commit listing does not pay the per-commit roundtrip up front.
+    /// </summary>
+    Task<IReadOnlyList<CommitFile>> GetCommitFilesAsync(string sha, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Returns the unified diff for the given commit. The result may be paginated by the GitHub API.

@@ -6,6 +6,7 @@ using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Options;
 using RepoSyncRadar.Core.Services;
 using RepoSyncRadar.Core.Services.Docs;
+using RepoSyncRadar.Core.Services.GitHub;
 
 namespace RepoSyncRadar.Core;
 
@@ -27,6 +28,12 @@ public static class CoreServiceCollectionExtensions
         });
 
         services.AddHttpClient<IDocsApiClient, DocsApiClient>();
+
+        // DocsGitHubClient is a thin Octokit wrapper. The host is expected to register
+        // IGitHubClient and IRadarRepository with the appropriate credentials/persistence
+        // (see Step 7 / Step 20 in docs/IMPLEMENTATION_PLAN.md). Resolving IDocsGitHubClient
+        // before those are wired up will throw at first use, not at host start.
+        services.TryAddSingleton<IDocsGitHubClient, DocsGitHubClient>();
 
         return services;
     }
