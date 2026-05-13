@@ -1,0 +1,213 @@
+# RepoSyncRadar 使い方ガイド
+
+`github/docs` の Repo sync PR を毎朝さばいて SNS / 社内 / 顧客向け Changelog を発信する負担を、5〜10 分のワークフローに圧縮するための Windows デスクトップアプリです。Step 1〜19 まで実装されており、Copilot CLI が手元で動く環境があれば実用できます。
+
+設計の出発点は [DESIGN.md](DESIGN.md)、ステップ別の実装範囲は [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) を参照してください。
+
+---
+
+## 目次
+
+1. [前提環境](#1-前提環境)
+2. [初期セットアップ](#2-初期セットアップ)
+3. [画面の構成](#3-画面の構成)
+4. [毎日のワークフロー](#4-毎日のワークフロー510-分)
+5. [オプション機能](#5-オプション機能)
+6. [既知の制約と運用 Tips](#6-既知の制約と運用-tips)
+7. [ビルド・テストのワンライナー](#7-ビルドテストのワンライナー)
+8. [さらに深く知るには](#8-さらに深く知るには)
+
+---
+
+## 1. 前提環境
+
+| 項目 | バージョン / 条件 |
+|---|---|
+| OS | Windows 11(WebView2 ランタイム必須、通常はプリインストール済) |
+| .NET SDK | .NET 10 SDK 以降([global.json](../global.json) で固定) |
+| GitHub Copilot | アクティブな Copilot サブスクリプション(初回起動時に Copilot CLI が自動取得される) |
+| GitHub PAT | `repo` スコープ(`github/docs` を読むため) |
+
+---
+
+## 2. 初期セットアップ
+
+### 2.1 取得 〜 ビルド
+
+```powershell
+git clone <repo-url> C:\github\RepoSyncRadar
+cd C:\github\RepoSyncRadar
+dotnet restore
+dotnet build
+```
+
+### 2.2 設定ファイルを書く
+
+[src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。個人 PAT などの機微情報は、同フォルダに `appsettings.Local.json` を作って追記します(`.gitignore` 済み)。
+
+```jsonc
+{
+  "GitHub": {
+    "Owner": "github",
+    "Repo": "docs",
+    "PullRequestTitleFilter": "Repo sync",
+    "MaxPullRequests": 5,
+    "PersonalAccessToken": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  "Copilot": {
+    "DefaultModel": "gpt-5",
+    "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ]
+  },
+  // Step 19 を使う場合のみ。空ならローカルプレビュー機能はオフ。
+  "DocsRepository": {
+    "BareCloneDir": "C:\\github\\.cache\\docs.git",
+    "CloneUrl": "https://github.com/github/docs.git",
+    "WorktreeRoot": "C:\\github\\.cache\\docs-worktrees",
+    "MaxWorktrees": 5,
+    "PreviewCommand": "npm",
+    "PreviewArguments": "run dev -- --port {port}",
+    "PreviewBasePort": 4500
+  }
+}
+```
+
+> PAT は環境変数 `RADAR_GitHub__PersonalAccessToken` でも渡せます(Step 20 で DPAPI に移行予定)。
+
+### 2.3 起動
+
+```powershell
+dotnet run --project src/RepoSyncRadar.App
+```
+
+初回起動時:
+
+1. `%LocalAppData%\RepoSyncRadar\radar.db` に SQLite を作成し、EF Core マイグレーションが走る
+2. Copilot CLI がバンドルから展開・常駐(子プロセス)
+3. WPF + BlazorWebView の本体ウィンドウが開く
+
+---
+
+## 3. 画面の構成
+
+```
+┌──────────────┬──────────────────────────────────────────────┐
+│ Sidebar      │ Workbench                                    │
+│  Inbox       │  ┌──────────────────────────────────────┐    │
+│  Adopted     │  │ Ask Palette  (Ctrl+Enter で実行)     │    │
+│  Rejected    │  ├──────────────────────────────────────┤    │
+│  Later       │  │ Commit List  (絞り込み済みの一覧)    │    │
+│  Ignored     │  ├──────────────────────────────────────┤    │
+│              │  │ Commit Detail                        │    │
+│              │  │   - Review Actions (Adopt/Reject/…)  │    │
+│              │  │   - Drafts Panel  (3 媒体下書き)     │    │
+│              │  └──────────────────────────────────────┘    │
+└──────────────┴──────────────────────────────────────────────┘
+```
+
+- **Sidebar**: ステータス別の件数。クリックでフィルタ切り替え。
+- **Ask Palette**: 自然言語で SQL を投げるコマンドパレット(Step 18 で追加)。
+- **Commit List**: 取り込まれたコミットの一覧。クリックで詳細へ。
+- **Commit Detail**: ファイル一覧 + 公開 URL マッピング。
+
+---
+
+## 4. 毎日のワークフロー(5〜10 分)
+
+### 4.1 朝のトリアージ(Morning Triage)
+
+[`MorningTriageSession`](../src/RepoSyncRadar.App/Copilot/MorningTriageSession.cs) が以下を順に実行します(Step 15)。
+
+1. `github/docs` の Repo sync PR を最大 `MaxPullRequests` 件取得
+2. 各 PR のコミットを SQLite に **冪等取り込み**(既知 SHA はスキップ)
+3. Copilot に「Must read 5 件 / Skim 15 件 / 残りは Archive」の方針でスコアリング
+4. `radar_save_review` を呼んで `Reviews` テーブルに保存
+
+> 起動直後はサイドバーの **Inbox** に並びます。
+
+### 4.2 レビュー(Adopt / Reject / Later / Ignore)
+
+Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Components/ReviewActions.razor) から処理します(Step 16):
+
+| アクション | 用途 | データ |
+|---|---|---|
+| **Adopt** | 採用、媒体別下書き候補 | `Reviews.Status = Adopted` |
+| **Reject** | 紹介しない理由を 1 行残す | `Reviews.Message` に保存 |
+| **Later** | 後回し | `Reviews.Status = Later` |
+| **Ignore Directory** | このパス配下を以降全部除外 | `IgnoreRules` 追加 + 既存も一括 Reject |
+
+`Ignore Directory` は `EF.Functions.Like` で `path/%` を一括処理するので、不要なディレクトリを 1 クリックで永続的に視界から外せます。
+
+### 4.3 媒体別下書き(Drafts Panel)
+
+Adopt したコミットを選ぶと [`DraftsPanel`](../src/RepoSyncRadar.App/Components/DraftsPanel.razor) が表示されます(Step 17)。
+
+- 既に下書きがあれば即表示。なければ **Regenerate** ボタンで生成。
+- [`AdoptionSession`](../src/RepoSyncRadar.App/Copilot/AdoptionSession.cs) が、差分(50KB 超は安全に切り詰め) + 過去 5 件の採用例(few-shot)を Copilot に渡し、Twitter / Teams / 顧客向けの 3 媒体を JSON で返させて `Drafts` テーブルに保存。
+- 各媒体には **コピーボタン**(WPF Dispatcher 経由で Clipboard へ)。
+
+### 4.4 Ask Palette(自然言語フィルタ)
+
+Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPalette.razor)(Step 18):
+
+1. 「先週採用したコミットで `actions` ディレクトリのものは?」のように日本語で書く
+2. **実行** か **Ctrl+Enter** で送信
+3. [`AskSession`](../src/RepoSyncRadar.App/Copilot/AskSession.cs) が Copilot に SQL を作らせ、[`SqlGuard`](../src/RepoSyncRadar.Core/Services/SqlGuard.cs) で検査(SELECT のみ / 許可 9 テーブル / `LIMIT 100` 強制)
+4. 通過した SQL を読み取り専用 SQLite 接続で実行 → Markdown 表で表示
+
+`SQL を表示 (debug)` にチェックを入れると、実行された SQL も出ます(デバッグ用途)。
+
+---
+
+## 5. オプション機能
+
+### 5.1 ローカルプレビュー(Step 19)
+
+`DocsRepository` セクションを埋めておくと、PR HEAD の見た目を bare clone + worktree で確認できます。空のままなら **完全に no-op** で他機能には影響しません。
+
+- 仕組み: [`DocsWorktreeManager`](../src/RepoSyncRadar.Core/Services/Preview/DocsWorktreeManager.cs) が `git clone --bare` した親リポから worktree を切り、[`PreviewServerHost`](../src/RepoSyncRadar.Core/Services/Preview/PreviewServerHost.cs) が `npm run dev` を sidecar 起動
+- LRU で `MaxWorktrees` を超えたら最も古い worktree を `git worktree remove --force`
+- アプリ終了時に preview プロセスは確実に kill されます(`IAsyncDisposable`)
+
+### 5.2 監査ログ
+
+すべての `radar_*` ツール呼び出しは `Audits` テーブルに記録(Step 12 の `OnPreToolUse` / `OnPostToolUse`)。Ask Palette で次のように確認できます:
+
+```
+過去 1 時間に呼ばれた radar_* ツールを多い順に
+```
+
+---
+
+## 6. 既知の制約と運用 Tips
+
+| 項目 | 状態 |
+|---|---|
+| 自動投稿 | **しない方針**(下書きまで。最終確認は人間) |
+| 多言語 | 日本語のみ。英訳は媒体下書きの中で副次的に出るのみ |
+| クラウド同期 | なし。`radar.db` を持ち運ぶ運用 |
+| Velopack 自己更新 | **Step 20 で実装予定**。現状は `git pull && dotnet build` |
+| PAT の置き場 | 現状は `appsettings.Local.json`。Step 20 で Windows Credential Manager (DPAPI) へ移行予定 |
+
+---
+
+## 7. ビルド・テストのワンライナー
+
+```powershell
+# 厳格ビルド(警告=エラー)
+dotnet build -warnaserror
+
+# 自動テスト(手動カテゴリ除く / 全 147 件)
+dotnet test --no-build --filter "Category!=Manual"
+
+# 一発スクリプト
+.\scripts\check.ps1
+```
+
+---
+
+## 8. さらに深く知るには
+
+- 設計の出発点と意思決定ログ → [DESIGN.md](DESIGN.md)
+- ステップ別の実装範囲・テスト件数 → [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
+- Razor コンポーネントの構造 → [../src/RepoSyncRadar.App/Components/](../src/RepoSyncRadar.App/Components/)
+- Copilot セッション層 → [../src/RepoSyncRadar.App/Copilot/](../src/RepoSyncRadar.App/Copilot/)
