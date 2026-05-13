@@ -23,6 +23,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<RadarTools>();
         services.TryAddSingleton<RadarWriteTools>();
         services.TryAddSingleton<ICopilotSessionFactory, CopilotSessionFactory>();
+        services.TryAddSingleton<MorningTriageSession>();
 
         return services;
     }

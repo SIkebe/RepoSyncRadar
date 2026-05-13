@@ -48,7 +48,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         _auditHook = auditHook;
     }
 
-    public async Task<CopilotSession> CreateSessionAsync(
+    public async Task<ICopilotSession> CreateSessionAsync(
         SessionPurpose purpose,
         CancellationToken cancellationToken = default)
     {
@@ -56,7 +56,8 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 
         var client = await GetOrCreateClientAsync(cancellationToken).ConfigureAwait(false);
         var config = SessionConfigBuilder.Build(purpose, _options, _permissionPolicy.HandleAsync, _auditHook);
-        return await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
+        var session = await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
+        return new SdkCopilotSession(session);
     }
 
     /// <summary>
