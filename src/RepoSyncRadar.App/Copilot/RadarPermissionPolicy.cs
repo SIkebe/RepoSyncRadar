@@ -8,7 +8,8 @@ namespace RepoSyncRadar.App.Copilot;
 /// intentionally restrictive — see <c>docs/DESIGN.md §8.1</c> and the Step 11 entry of
 /// <c>docs/IMPLEMENTATION_PLAN.md</c>:
 /// <list type="bullet">
-///   <item><description><c>custom-tool</c> / <c>read</c> are approved without prompting.</description></item>
+///   <item><description><c>custom-tool</c> on the read-only allow-list is approved without prompting; everything else is prompted (Step 14).</description></item>
+///   <item><description><c>read</c> is approved without prompting.</description></item>
 ///   <item><description><c>url</c> is approved if the host is on <see cref="UrlAllowList"/>; otherwise the UI is asked.</description></item>
 ///   <item><description><c>write</c> always goes through the UI prompt.</description></item>
 ///   <item><description><c>shell</c> is denied by rule — no shell allow-list is defined yet.</description></item>
@@ -17,6 +18,18 @@ namespace RepoSyncRadar.App.Copilot;
 /// </summary>
 public sealed partial class RadarPermissionPolicy
 {
+    /// <summary>
+    /// Custom-tool names that are pre-approved without prompting. Keep in sync with the
+    /// read-only set registered by <c>RadarTools</c> (Step 13).
+    /// </summary>
+    internal static readonly IReadOnlySet<string> ReadOnlyToolNames = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "radar_list_commits",
+        "radar_get_diff",
+        "radar_resolve_url",
+        "radar_fetch_rendered",
+    };
+
     private readonly UrlAllowList _urlAllowList;
     private readonly IPermissionPrompt _prompt;
     private readonly ILogger<RadarPermissionPolicy> _logger;
@@ -50,8 +63,14 @@ public sealed partial class RadarPermissionPolicy
         switch (request)
         {
             case PermissionRequestCustomTool customTool:
-                LogApprovingCustomTool(_logger, customTool.ToolName, sessionId);
-                return Approved();
+                if (customTool.ToolName is not null && ReadOnlyToolNames.Contains(customTool.ToolName))
+                {
+                    LogApprovingCustomTool(_logger, customTool.ToolName, sessionId);
+                    return Approved();
+                }
+
+                LogPromptingForCustomTool(_logger, customTool.ToolName, sessionId);
+                return await ConfirmAsync(customTool).ConfigureAwait(false);
 
             case PermissionRequestRead read:
                 LogApprovingRead(_logger, read.Path, sessionId);
@@ -101,6 +120,10 @@ public sealed partial class RadarPermissionPolicy
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
         Message = "Approving custom tool {ToolName} (session={SessionId})")]
     private static partial void LogApprovingCustomTool(ILogger logger, string? toolName, string sessionId);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information,
+        Message = "Custom tool {ToolName} is not on the read-only allow-list; prompting user (session={SessionId})")]
+    private static partial void LogPromptingForCustomTool(ILogger logger, string? toolName, string sessionId);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug,
         Message = "Approving read of {Path} (session={SessionId})")]
