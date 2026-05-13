@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using RepoSyncRadar.App.Auth;
+using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Options;
 using Xunit;
 

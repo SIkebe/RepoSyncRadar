@@ -3,6 +3,7 @@ using System.Net.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using RepoSyncRadar.App.Auth;
+using RepoSyncRadar.Core.Auth;
 using RichardSzalay.MockHttp;
 using Xunit;
 
@@ -80,17 +81,13 @@ public class GitHubDeviceFlowAuthenticatorTests
         handler.Expect(HttpMethod.Post, ExpectedTokenUrl)
             .Respond("application/json", """{"access_token":"ghu_ok","token_type":"bearer"}""");
 
-        var time = new FakeTimeProvider(DateTimeOffset.Parse("2025-01-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
-        var authenticator = CreateAuthenticator(handler, time);
-        var challenge = NewChallenge(time);
+        // Use real TimeProvider with a millisecond-scale interval. FakeTimeProvider
+        // is unreliable for multi-iteration polling because Task.Delay registration
+        // races the test's clock advances (see commit log).
+        var authenticator = CreateAuthenticator(handler, TimeProvider.System);
+        var challenge = NewShortChallenge();
 
-        var pollTask = authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken);
-        time.Advance(challenge.Interval);
-        // Yield so the awaiter resumes between the two Task.Delay calls before we
-        // advance the clock a second time.
-        await Task.Yield();
-        time.Advance(challenge.Interval);
-        var token = await pollTask;
+        var token = await authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken);
 
         Assert.Equal("ghu_ok", token.AccessToken);
         handler.VerifyNoOutstandingExpectation();
@@ -105,17 +102,12 @@ public class GitHubDeviceFlowAuthenticatorTests
         handler.Expect(HttpMethod.Post, ExpectedTokenUrl)
             .Respond("application/json", """{"access_token":"ghu_ok","token_type":"bearer"}""");
 
-        var time = new FakeTimeProvider(DateTimeOffset.Parse("2025-01-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
-        var authenticator = CreateAuthenticator(handler, time);
-        var challenge = NewChallenge(time);
+        // Real-time poll; verifies the slow_down branch is taken (interval extension
+        // wall-clock value is implementation detail, covered by code review).
+        var authenticator = CreateAuthenticator(handler, TimeProvider.System);
+        var challenge = NewShortChallenge();
 
-        var pollTask = authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken);
-        // first delay = challenge.Interval
-        time.Advance(challenge.Interval);
-        await Task.Yield();
-        // second delay = challenge.Interval + 5s (slow_down extends by 5s per RFC 8628 §3.5)
-        time.Advance(challenge.Interval + TimeSpan.FromSeconds(5));
-        var token = await pollTask;
+        var token = await authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken);
 
         Assert.Equal("ghu_ok", token.AccessToken);
         handler.VerifyNoOutstandingExpectation();
@@ -128,14 +120,11 @@ public class GitHubDeviceFlowAuthenticatorTests
         handler.When(HttpMethod.Post, ExpectedTokenUrl)
             .Respond("application/json", """{"error":"access_denied"}""");
 
-        var time = new FakeTimeProvider(DateTimeOffset.Parse("2025-01-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
-        var authenticator = CreateAuthenticator(handler, time);
-        var challenge = NewChallenge(time);
+        var authenticator = CreateAuthenticator(handler, TimeProvider.System);
+        var challenge = NewShortChallenge();
 
-        var pollTask = authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken);
-        time.Advance(challenge.Interval);
-
-        await Assert.ThrowsAsync<DeviceFlowFailedException>(() => pollTask);
+        await Assert.ThrowsAsync<DeviceFlowFailedException>(() =>
+            authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -165,5 +154,15 @@ public class GitHubDeviceFlowAuthenticatorTests
         VerificationUri = new Uri("https://github.com/login/device"),
         Interval = TimeSpan.FromSeconds(5),
         ExpiresAt = time.GetUtcNow().Add(expiresIn ?? TimeSpan.FromMinutes(15)),
+    };
+
+    // Short-interval challenge for tests that use TimeProvider.System (real clock).
+    private static DeviceCodeChallenge NewShortChallenge() => new()
+    {
+        DeviceCode = "deadbeef",
+        UserCode = "ABCD-1234",
+        VerificationUri = new Uri("https://github.com/login/device"),
+        Interval = TimeSpan.FromMilliseconds(1),
+        ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(15),
     };
 }

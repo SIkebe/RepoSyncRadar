@@ -22,21 +22,10 @@ public interface IGitHubDeviceFlowAuthenticator
     /// Polls GitHub until the user authorizes the device, the code expires, or the
     /// user denies access. Honors <see cref="DeviceCodeChallenge.Interval"/> and the
     /// <c>slow_down</c> protocol error by extending the delay by 5 seconds.
-    /// Throws <see cref="DeviceFlowFailedException"/> on terminal errors.
+    /// Throws <see cref="RepoSyncRadar.Core.Auth.DeviceFlowFailedException"/> on terminal errors.
     /// </summary>
     Task<StoredGitHubToken> PollForTokenAsync(
         string clientId,
         DeviceCodeChallenge challenge,
         CancellationToken cancellationToken);
-}
-
-/// <summary>
-/// Thrown when GitHub returns a terminal error during the device flow
-/// (<c>access_denied</c>, <c>expired_token</c>, <c>incorrect_client_credentials</c>,
-/// network failure, etc.).
-/// </summary>
-public sealed class DeviceFlowFailedException : Exception
-{
-    public DeviceFlowFailedException(string message) : base(message) { }
-    public DeviceFlowFailedException(string message, Exception inner) : base(message, inner) { }
 }

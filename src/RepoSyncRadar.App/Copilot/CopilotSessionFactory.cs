@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Copilot.Audit;
+using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;

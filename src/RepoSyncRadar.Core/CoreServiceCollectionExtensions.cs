@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Octokit;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Options;
 using RepoSyncRadar.Core.Services;
@@ -30,10 +31,13 @@ public static class CoreServiceCollectionExtensions
 
         services.AddHttpClient<IDocsApiClient, DocsApiClient>();
 
-        // DocsGitHubClient is a thin Octokit wrapper. The host is expected to register
-        // IGitHubClient with the appropriate credentials (see Step 20 in
-        // docs/IMPLEMENTATION_PLAN.md). Resolving IDocsGitHubClient before that
-        // registration will throw at first use, not at host start.
+        // Octokit client is registered here without credentials; DocsGitHubClient
+        // refreshes Connection.Credentials on every call using the same OAuth
+        // user token that the Copilot SDK consumes (IGitHubAccessTokenProvider,
+        // registered by the App layer). This keeps GitHub auth on a single token.
+        services.TryAddSingleton<IGitHubClient>(_ =>
+            new GitHubClient(new ProductHeaderValue("RepoSyncRadar")));
+
         services.TryAddSingleton<IRadarRepository, RadarRepository>();
         services.TryAddSingleton<IRadarQueryRunner, SqliteRadarQueryRunner>();
         services.TryAddSingleton<IDocsGitHubClient, DocsGitHubClient>();

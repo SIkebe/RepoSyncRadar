@@ -21,9 +21,6 @@ public sealed class GitHubOptions
     [Required(AllowEmptyStrings = false)]
     public string PullRequestTitleFilter { get; set; } = "Repo sync";
 
-    /// <summary>Optional. When empty, the app uses Windows Credential Manager (DPAPI).</summary>
-    public string? PersonalAccessToken { get; set; }
-
     /// <summary>How many PRs to scan on each fetch.</summary>
     [Range(1, 100)]
     public int MaxPullRequests { get; set; } = 5;

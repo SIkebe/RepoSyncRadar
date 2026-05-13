@@ -5,6 +5,7 @@ using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Audit;
 using RepoSyncRadar.App.Copilot.Tools;
+using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Services;
 
 namespace RepoSyncRadar.App;

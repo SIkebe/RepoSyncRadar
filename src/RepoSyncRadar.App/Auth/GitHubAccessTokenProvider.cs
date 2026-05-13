@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Auth;

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Octokit;
+using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Options;
 using RepoSyncRadar.Core.Services.GitHub;
@@ -159,9 +160,11 @@ public class DocsGitHubClientTests
     }
 
     [Fact]
-    public async Task Token_Empty_Logs_Warning()
+    public async Task EachCall_Refreshes_Octokit_Credentials_From_TokenProvider()
     {
-        var (client, github, _, logger) = CreateClient(options => options.PersonalAccessToken = null);
+        var tokenProvider = Substitute.For<IGitHubAccessTokenProvider>();
+        tokenProvider.GetAccessTokenAsync(Arg.Any<CancellationToken>()).Returns("ghu_oauth_user_token");
+        var (client, github, _, _) = CreateClient(tokenProvider: tokenProvider);
         var ct = TestContext.Current.CancellationToken;
 
         github.PullRequest.GetAllForRepository(
@@ -170,9 +173,9 @@ public class DocsGitHubClientTests
 
         _ = await client.FetchUnseenCommitsAsync(ct);
 
-        Assert.Contains(logger.Entries, entry =>
-            entry.Level == LogLevel.Warning &&
-            entry.Message.Contains("anonymous", StringComparison.OrdinalIgnoreCase));
+        await tokenProvider.Received(1).GetAccessTokenAsync(Arg.Any<CancellationToken>());
+        github.Connection.Received().Credentials = Arg.Is<Credentials>(c =>
+            c.Password == "ghu_oauth_user_token");
     }
 
     private static (
@@ -180,7 +183,9 @@ public class DocsGitHubClientTests
         IGitHubClient github,
         IRadarRepository repository,
         CapturingLogger<DocsGitHubClient> logger)
-        CreateClient(Action<GitHubOptions>? configure = null)
+        CreateClient(
+            Action<GitHubOptions>? configure = null,
+            IGitHubAccessTokenProvider? tokenProvider = null)
     {
         var github = Substitute.For<IGitHubClient>();
         var repository = Substitute.For<IRadarRepository>();
@@ -192,14 +197,27 @@ public class DocsGitHubClientTests
             Owner = Owner,
             Repo = Repo,
             PullRequestTitleFilter = "Repo sync",
-            PersonalAccessToken = "ghp_unit_test",
             MaxPullRequests = 5,
         };
         configure?.Invoke(options);
 
+        var resolvedTokenProvider = tokenProvider ?? StubTokenProvider("ghu_stub_token");
+
         var logger = new CapturingLogger<DocsGitHubClient>();
-        var client = new DocsGitHubClient(github, repository, Options.Create(options), logger);
+        var client = new DocsGitHubClient(
+            github,
+            resolvedTokenProvider,
+            repository,
+            Options.Create(options),
+            logger);
         return (client, github, repository, logger);
+    }
+
+    private static IGitHubAccessTokenProvider StubTokenProvider(string token)
+    {
+        var provider = Substitute.For<IGitHubAccessTokenProvider>();
+        provider.GetAccessTokenAsync(Arg.Any<CancellationToken>()).Returns(token);
+        return provider;
     }
 
     private static PullRequest MakePullRequest(int number, string title)

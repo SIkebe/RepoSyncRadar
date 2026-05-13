@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Octokit;
+using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Options;
 using DomainCommit = RepoSyncRadar.Core.Models.Commit;
@@ -16,10 +17,10 @@ namespace RepoSyncRadar.Core.Services.GitHub;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The client expects an <see cref="IGitHubClient"/> registered in DI and pre-configured with an
-/// authentication token (when available). When <see cref="GitHubOptions.PersonalAccessToken"/> is
-/// blank, the client emits a single <c>Warning</c> log the first time it is used so that the
-/// anonymous rate limit does not silently surprise the caller.
+/// The client refreshes the Octokit <see cref="IGitHubClient.Connection"/> credentials on every
+/// call using the same OAuth user token consumed by the Copilot SDK
+/// (<see cref="IGitHubAccessTokenProvider"/>). This keeps GitHub auth on a single credential
+/// surface; there is no separate personal access token.
 /// </para>
 /// <para>
 /// PR listing is paginated using Octokit's <see cref="ApiOptions"/> so that arbitrary
@@ -35,23 +36,26 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
     private const string DiffMediaType = "application/vnd.github.v3.diff";
 
     private readonly IGitHubClient _github;
+    private readonly IGitHubAccessTokenProvider _tokenProvider;
     private readonly IRadarRepository _repository;
     private readonly GitHubOptions _options;
     private readonly ILogger<DocsGitHubClient> _logger;
-    private int _tokenWarningEmitted;
 
     public DocsGitHubClient(
         IGitHubClient github,
+        IGitHubAccessTokenProvider tokenProvider,
         IRadarRepository repository,
         IOptions<GitHubOptions> options,
         ILogger<DocsGitHubClient> logger)
     {
         ArgumentNullException.ThrowIfNull(github);
+        ArgumentNullException.ThrowIfNull(tokenProvider);
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
 
         _github = github;
+        _tokenProvider = tokenProvider;
         _repository = repository;
         _options = options.Value;
         _logger = logger;
@@ -59,7 +63,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
 
     public async Task<IReadOnlyList<DomainCommit>> FetchUnseenCommitsAsync(CancellationToken cancellationToken = default)
     {
-        WarnIfTokenMissing();
+        await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
 
         var pullRequestRequest = new PullRequestRequest
         {
@@ -107,7 +111,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
     public async Task<IReadOnlyList<DomainCommitFile>> GetCommitFilesAsync(string sha, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
-        WarnIfTokenMissing();
+        await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
         var commit = await _github.Repository.Commit.Get(_options.Owner, _options.Repo, sha).ConfigureAwait(false);
@@ -134,7 +138,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
     public async Task<string> GetUnifiedDiffAsync(string sha, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
-        WarnIfTokenMissing();
+        await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
         var uri = new Uri($"repos/{_options.Owner}/{_options.Repo}/commits/{sha}", UriKind.Relative);
@@ -149,7 +153,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentException.ThrowIfNullOrWhiteSpace(gitRef);
-        WarnIfTokenMissing();
+        await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
         var contents = await _github.Repository.Content
@@ -214,22 +218,14 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
         };
     }
 
-    private void WarnIfTokenMissing()
+    /// <summary>
+    /// Refreshes <see cref="IGitHubClient.Connection"/> credentials with a freshly resolved
+    /// OAuth user token before each Octokit call. The token provider caches in-memory and
+    /// only triggers DPAPI / device-flow when truly necessary, so the cost here is minimal.
+    /// </summary>
+    private async Task EnsureAuthenticatedAsync(CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(_options.PersonalAccessToken))
-        {
-            return;
-        }
-
-        if (Interlocked.Exchange(ref _tokenWarningEmitted, 1) == 0)
-        {
-            s_anonymousAccessWarning(_logger, null);
-        }
+        var token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+        _github.Connection.Credentials = new Credentials(token);
     }
-
-    private static readonly Action<ILogger, Exception?> s_anonymousAccessWarning =
-        LoggerMessage.Define(
-            LogLevel.Warning,
-            new EventId(1001, nameof(DocsGitHubClient) + ".AnonymousAccess"),
-            "GitHub personal access token is empty; falling back to anonymous API access. Rate limits will be tight.");
 }

@@ -54,22 +54,15 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 
 ### 2.3 設定ファイルを書く
 
-[src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。個人 PAT などの機微情報は、同フォルダに `appsettings.Local.json` を作って追記します(`.gitignore` 済み)。
+[src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。OAuth App の Client ID など環境固有の値は、同フォルダに `appsettings.Local.json` を作って追記します(`.gitignore` 済み)。
 
 ```jsonc
 {
-  "GitHub": {
-    "Owner": "github",
-    "Repo": "docs",
-    "PullRequestTitleFilter": "Repo sync",
-    "MaxPullRequests": 5,
-    "PersonalAccessToken": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-  },
   "Copilot": {
     "DefaultModel": "gpt-5",
     "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ],
     "OAuthClientId": "Iv23liXXXXXXXXXXXXXX",
-    "OAuthScopes": [ "read:user" ]
+    "OAuthScopes": [ "public_repo" ]
   },
   // Step 19 を使う場合のみ。空ならローカルプレビュー機能はオフ。
   "DocsRepository": {
@@ -84,11 +77,13 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 }
 ```
 
-> `GitHub.PersonalAccessToken` は `github/docs` の PR 一覧を読むため。`Copilot.OAuthClientId` は SDK 経由で Copilot に投げるユーザートークン取得用 — 役割が違うので両方必要です。
+> `Copilot.OAuthClientId` は GitHub Copilot SDK にも、`github/docs` の PR を読む Octokit にも **同じ OAuth ユーザートークン** を渡すために使います。PAT (`ghp_...`) の設定はもう不要です。
+>
+> `OAuthScopes` には `public_repo` を指定してください — Copilot SDK の認証(ユーザー識別)と Octokit の `github/docs` 読み取りの両方を 1 つのトークンでまかなえます。
 >
 > **トークンの保管場所**: OAuth で取得したアクセストークンは DPAPI(`CurrentUser` スコープ)で暗号化し `%LocalAppData%\RepoSyncRadar\github-token.bin` に保存されます。サインアウトはサイドバーから(Step 21 で UI 追加予定)、あるいはこのファイルを削除すれば次回起動時に再サインインを求められます。
 >
-> **デバッグ override**: 環境変数 `COPILOT_GITHUB_TOKEN` を立てると OAuth フローを省略してその値を Copilot SDK に渡します(`GH_TOKEN` / `GITHUB_TOKEN` のような汎用 PAT 変数は意図的に **読まない** — 他ツールのトークンの誤用を防ぐため)。
+> **デバッグ override**: 環境変数 `COPILOT_GITHUB_TOKEN` を立てると OAuth フローを省略してその値を Copilot SDK / Octokit に渡します(`GH_TOKEN` / `GITHUB_TOKEN` のような汎用 PAT 変数は意図的に **読まない** — 他ツールのトークンの誤用を防ぐため)。
 
 ### 2.4 起動
 
@@ -210,7 +205,7 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 | 多言語 | 日本語のみ。英訳は媒体下書きの中で副次的に出るのみ |
 | クラウド同期 | なし。`radar.db` を持ち運ぶ運用 |
 | Velopack 自己更新 | **Step 20 で実装予定**。現状は `git pull && dotnet build` |
-| PAT の置き場 | `appsettings.Local.json` に書く(`github/docs` 読み取り用)。Copilot 用のユーザートークンは OAuth Device Flow + DPAPI で自動管理。 |
+| GitHub 認証 | OAuth Device Flow で 1 度サインイン → DPAPI 暗号化トークンを `%LocalAppData%\RepoSyncRadar\github-token.bin` に保管。Copilot SDK と Octokit (`github/docs` 読み取り) で同じトークンを共有。 |
 
 ---
 
