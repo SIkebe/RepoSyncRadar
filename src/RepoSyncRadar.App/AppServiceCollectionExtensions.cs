@@ -4,6 +4,7 @@ using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Audit;
 using RepoSyncRadar.App.Copilot.Tools;
+using RepoSyncRadar.Core.Services;
 
 namespace RepoSyncRadar.App;
 
@@ -15,7 +16,7 @@ public static class AppServiceCollectionExtensions
 {
     public static IServiceCollection AddRepoSyncRadarApp(this IServiceCollection services)
     {
-        services.TryAddSingleton<UrlAllowList>();
+        services.TryAddSingleton<RepoSyncRadar.App.Copilot.UrlAllowList>();
         services.TryAddSingleton<IPermissionPrompt, WpfPermissionPrompt>();
         services.TryAddSingleton<RadarPermissionPolicy>();
         services.TryAddSingleton<IAuditJsonlSink>(sp =>
@@ -25,7 +26,10 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<RadarWriteTools>();
         services.TryAddSingleton<ICopilotSessionFactory, CopilotSessionFactory>();
         services.TryAddSingleton<MorningTriageSession>();
+        services.TryAddSingleton<AdoptionSession>();
+        services.TryAddSingleton<ICopilotAgent, CopilotAgent>();
         services.TryAddSingleton<IReviewBroadcaster, ReviewBroadcaster>();
+        services.TryAddSingleton<IClipboard, WpfClipboard>();
 
         return services;
     }

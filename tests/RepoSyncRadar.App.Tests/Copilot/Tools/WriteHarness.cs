@@ -42,6 +42,9 @@ internal sealed class WriteHarness : IAsyncDisposable
     public RadarWriteTools CreateTools()
         => new(new ConnectionStringDbContextFactory(_connectionString));
 
+    public IDbContextFactory<RadarDbContext> DbFactory
+        => new ConnectionStringDbContextFactory(_connectionString);
+
     public RadarDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<RadarDbContext>().UseSqlite(_connectionString).Options;
@@ -59,6 +62,32 @@ internal sealed class WriteHarness : IAsyncDisposable
             Author = "octo",
             AuthoredAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
             FetchedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task InsertReviewedCommitAsync(
+        string sha,
+        ReviewStatus status,
+        string? message = null,
+        DateTime? reviewedAtUtc = null,
+        CancellationToken cancellationToken = default)
+    {
+        await using var db = CreateDb();
+        db.Commits.Add(new Commit
+        {
+            Sha = sha,
+            PrNumber = 1,
+            Message = message ?? $"msg-{sha}",
+            Author = "octo",
+            AuthoredAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            FetchedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            Review = new Review
+            {
+                Sha = sha,
+                Status = status,
+                ReviewedAt = reviewedAtUtc ?? DateTime.UtcNow,
+            },
         });
         await db.SaveChangesAsync(cancellationToken);
     }

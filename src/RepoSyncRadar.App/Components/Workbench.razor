@@ -32,6 +32,7 @@
                 @if (_selectedCommit is not null)
                 {
                     <ReviewActions Sha="@_selectedCommit.Sha" />
+                    <DraftsPanel Sha="@_selectedCommit.Sha" />
                 }
             </MudPaper>
         </main>

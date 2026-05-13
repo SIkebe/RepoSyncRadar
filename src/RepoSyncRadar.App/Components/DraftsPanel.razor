@@ -1,0 +1,179 @@
+@* Displays the three media-specific drafts (Twitter / Slack / Customer) for an adopted
+   commit. Loads existing drafts on initialization; "Regenerate" re-invokes the Adoption
+   session. Implemented per IMPLEMENTATION_PLAN.md §Step 17. *@
+
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.DependencyInjection
+@using RepoSyncRadar.App.Copilot
+@using RepoSyncRadar.Core.Data
+@using RepoSyncRadar.Core.Models
+@using RepoSyncRadar.Core.Services
+
+@implements IDisposable
+
+<div class="drafts-panel" data-testid="drafts-panel">
+    @if (string.IsNullOrEmpty(Sha))
+    {
+        <p class="drafts-empty">採用済みコミットを選択してください。</p>
+    }
+    else if (_busy)
+    {
+        <p class="drafts-busy" data-testid="drafts-busy">下書きを生成中…</p>
+    }
+    else
+    {
+        <div class="drafts-actions">
+            <button type="button" data-testid="drafts-regenerate" disabled="@_busy" @onclick="RegenerateAsync">再生成</button>
+        </div>
+        @RenderChannel("twitter", "Twitter", _bundle?.TwitterJa)
+        @RenderChannel("slack", "Slack", _bundle?.SlackJa)
+        @RenderChannel("customer", "顧客向け", _bundle?.CustomerJa)
+        @if (!string.IsNullOrEmpty(_status))
+        {
+            <p class="drafts-status" data-testid="drafts-status">@_status</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string? Sha { get; set; }
+
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    private DraftBundle? _bundle;
+    private string? _lastLoadedSha;
+    private bool _busy;
+    private string? _status;
+    private IReviewBroadcaster? _broadcaster;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrEmpty(Sha))
+        {
+            _bundle = null;
+            _lastLoadedSha = null;
+            return;
+        }
+        if (Sha == _lastLoadedSha)
+        {
+            return;
+        }
+        await LoadAsync();
+        _lastLoadedSha = Sha;
+    }
+
+    protected override void OnInitialized()
+    {
+        _broadcaster = Services.GetService<IReviewBroadcaster>();
+    }
+
+    private async Task LoadAsync()
+    {
+        var sha = Sha;
+        if (string.IsNullOrEmpty(sha))
+        {
+            return;
+        }
+        var dbFactory = Services.GetService<IDbContextFactory<RadarDbContext>>();
+        if (dbFactory is null)
+        {
+            return;
+        }
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var drafts = await db.Drafts.AsNoTracking().Where(d => d.Sha == sha).ToListAsync();
+        if (drafts.Count == 0)
+        {
+            _bundle = null;
+            return;
+        }
+        _bundle = new DraftBundle(
+            FindDraft(drafts, "twitter"),
+            FindDraft(drafts, "slack"),
+            FindDraft(drafts, "customer"));
+    }
+
+    private static string FindDraft(IEnumerable<Draft> drafts, string channel)
+    {
+        var match = drafts.FirstOrDefault(d => string.Equals(d.Channel, channel, StringComparison.OrdinalIgnoreCase));
+        return match?.Body ?? string.Empty;
+    }
+
+    private async Task RegenerateAsync()
+    {
+        if (string.IsNullOrEmpty(Sha) || _busy)
+        {
+            return;
+        }
+        var agent = Services.GetService<ICopilotAgent>();
+        if (agent is null)
+        {
+            _status = "ICopilotAgent が DI に登録されていません。";
+            return;
+        }
+        _busy = true;
+        _status = null;
+        StateHasChanged();
+        try
+        {
+            _bundle = await agent.GenerateDraftsAsync(Sha);
+            _broadcaster?.Publish();
+        }
+        catch (Exception ex)
+        {
+            _status = $"再生成に失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyAsync(string? text, string channel)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+        var clipboard = Services.GetService<IClipboard>();
+        if (clipboard is null)
+        {
+            _status = "クリップボードが利用できません。";
+            return;
+        }
+        await clipboard.SetTextAsync(text);
+        _status = $"{channel} の本文をコピーしました。";
+    }
+
+    private RenderFragment RenderChannel(string channel, string label, string? body) => builder =>
+    {
+        builder.OpenElement(0, "section");
+        builder.AddAttribute(1, "class", "drafts-channel");
+        builder.AddAttribute(2, "data-testid", $"drafts-section-{channel}");
+
+        builder.OpenElement(3, "header");
+        builder.AddContent(4, label);
+        builder.AddMarkupContent(5, " ");
+        builder.OpenElement(6, "button");
+        builder.AddAttribute(7, "type", "button");
+        builder.AddAttribute(8, "data-testid", $"drafts-copy-{channel}");
+        builder.AddAttribute(9, "disabled", string.IsNullOrEmpty(body));
+        builder.AddAttribute(10, "onclick",
+            Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => CopyAsync(body, label)));
+        builder.AddContent(11, "コピー");
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(12, "pre");
+        builder.AddAttribute(13, "data-testid", $"drafts-body-{channel}");
+        builder.AddContent(14, body ?? string.Empty);
+        builder.CloseElement();
+
+        builder.CloseElement();
+    };
+
+    public void Dispose()
+    {
+        // No-op for now; placeholder for future subscriptions.
+    }
+}
