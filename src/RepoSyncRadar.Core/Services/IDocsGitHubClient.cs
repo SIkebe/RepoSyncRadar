@@ -1,0 +1,28 @@
+using RepoSyncRadar.Core.Models;
+
+namespace RepoSyncRadar.Core.Services;
+
+/// <summary>
+/// Pulls Repo sync PR commits and per-commit diffs from <c>github/docs</c>.
+/// </summary>
+/// <remarks>
+/// Implementation is wired up in Phase 1 using Octokit.NET. The interface lives here so the
+/// Copilot tool layer and the UI can take a stable dependency from Phase 0 onward.
+/// </remarks>
+public interface IDocsGitHubClient
+{
+    /// <summary>
+    /// Lists the most recent <c>Repo sync</c> PRs that have not yet been mirrored to the local store.
+    /// </summary>
+    Task<IReadOnlyList<Commit>> FetchUnseenCommitsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the unified diff for the given commit. The result may be paginated by the GitHub API.
+    /// </summary>
+    Task<string> GetUnifiedDiffAsync(string sha, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the raw markdown content for a file at the specified git ref.
+    /// </summary>
+    Task<string> GetFileContentAsync(string path, string gitRef, CancellationToken cancellationToken = default);
+}

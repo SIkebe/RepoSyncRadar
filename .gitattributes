@@ -1,0 +1,50 @@
+# 既定: テキストファイルは自動判定し、リポジトリ内では LF で正規化する。
+# チェックアウト時も LF のまま (eol=lf) なので、Windows でも CRLF に戻らない。
+* text=auto eol=lf
+
+# Windows 専用のスクリプト系は CRLF を維持する。
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=lf
+
+# 明示的にテキスト扱い (拡張子で誤判定されやすいもの)。
+*.cs        text
+*.csproj    text
+*.sln       text
+*.props     text
+*.targets   text
+*.json      text
+*.xml       text
+*.xaml      text
+*.razor     text
+*.html      text
+*.css       text
+*.md        text
+*.yml       text
+*.yaml      text
+*.manifest  text
+*.editorconfig text
+*.gitignore    text
+*.gitattributes text
+
+# バイナリ (差分・改行変換を抑止)。
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.7z    binary
+*.gz    binary
+*.dll   binary
+*.exe   binary
+*.pdb   binary
+*.snk   binary
+*.db    binary
+*.sqlite binary
+
+# GitHub Linguist: 自動生成物を統計から除外。
+**/bin/**            linguist-generated=true
+**/obj/**            linguist-generated=true
+**/Migrations/**     linguist-generated=true

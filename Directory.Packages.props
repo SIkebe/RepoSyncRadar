@@ -1,0 +1,37 @@
+<Project>
+
+  <ItemGroup Label="Microsoft.Extensions">
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="9.7.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="Blazor / Razor">
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="WebView2">
+    <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
+  </ItemGroup>
+
+  <ItemGroup Label="EF Core / SQLite">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="UI Components">
+    <PackageVersion Include="MudBlazor" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Label="GitHub / Copilot">
+    <PackageVersion Include="Octokit" Version="14.0.0" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="0.2.2" />
+  </ItemGroup>
+
+</Project>

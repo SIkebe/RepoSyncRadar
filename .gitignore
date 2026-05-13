@@ -1,0 +1,68 @@
+## .NET / Visual Studio
+bin/
+obj/
+out/
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+x64/
+x86/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.dbmdl
+*.dbproj.schemaview
+*.jfm
+*.pfx
+*.publishsettings
+*.azurePubxml
+*.pubxml
+*.pubxml.user
+*.swp
+*.vsidx
+.vs/
+.vscode/launch.json
+.vscode/tasks.json
+project.lock.json
+project.fragment.lock.json
+artifacts/
+publish/
+
+## Test results
+TestResults/
+[Cc]overage*/
+coverage*.xml
+coverage*.json
+*.coverage
+*.coveragexml
+
+## Rider / IntelliJ
+.idea/
+*.iml
+
+## Node / web (Blazor static assets が npm を使うようになった場合)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+## OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+## RepoSyncRadar 固有
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.cache/
+docs-worktrees/
+local-secrets.json
+appsettings.Local.json
+copilot-traces.jsonl
+*.log
