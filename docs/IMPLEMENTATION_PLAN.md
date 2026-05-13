@@ -912,7 +912,8 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
   - 完了日 2026-05-13, テスト件数 7
 - [x] Step 10 — WebView2 埋め込み
   - 完了日 2026-05-13, テスト件数 8
-- [ ] Step 11 — Copilot SDK ラッパ
+- [x] Step 11 — Copilot SDK ラッパ
+  - 完了日 2026-05-13, テスト件数 10
 - [ ] Step 12 — 監査フック
 - [ ] Step 13 — 読み取りツール
 - [ ] Step 14 — 書き込みツール

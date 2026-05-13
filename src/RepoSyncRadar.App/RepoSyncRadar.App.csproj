@@ -21,10 +21,15 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="MudBlazor" />
+    <PackageReference Include="GitHub.Copilot.SDK" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\RepoSyncRadar.Core\RepoSyncRadar.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RepoSyncRadar.App.Tests" />
   </ItemGroup>
 
   <ItemGroup>

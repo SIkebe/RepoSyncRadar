@@ -40,6 +40,7 @@ public partial class App : Application
         builder.Services.AddWpfBlazorWebView();
         builder.Services.AddMudServices();
         builder.Services.AddRepoSyncRadarCore();
+        builder.Services.AddRepoSyncRadarApp();
 
         _host = builder.Build();
         await _host.StartAsync();
