@@ -15,7 +15,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// adopted commit:
 /// <list type="number">
 ///   <item><description>Loads the commit, its diff, and up to five previously adopted commits as few-shot context.</description></item>
-///   <item><description>Sends an Adoption session prompt asking Copilot to return JSON with twitter/slack/customer drafts.</description></item>
+///   <item><description>Sends an Adoption session prompt asking Copilot to return JSON with twitter/teams/customer drafts.</description></item>
 ///   <item><description>Persists the three drafts to the local <c>radar.db</c>.</description></item>
 /// </list>
 /// Diffs larger than <see cref="MaxDiffBytes"/> are truncated with a marker so the prompt
@@ -141,12 +141,12 @@ public sealed partial class AdoptionSession
         var sb = new StringBuilder();
         sb.AppendLine("# Adoption — 媒体別下書き生成");
         sb.AppendLine();
-        sb.AppendLine("以下のコミットを採用しました。Twitter / Slack / 顧客向けの 3 つの日本語下書きを生成してください。");
+        sb.AppendLine("以下のコミットを採用しました。Twitter / Teams / 顧客向けの 3 つの日本語下書きを生成してください。");
         sb.AppendLine();
         sb.AppendLine("## 入出力");
         sb.AppendLine("- 出力は **必ず JSON のみ**。説明文や Markdown コードブロックは禁止。");
-        sb.AppendLine("- スキーマ: `{ \"twitter\": string, \"slack\": string, \"customer\": string }`");
-        sb.AppendLine("- twitter は 140 文字以内、slack は 800 文字以内、customer は 1600 文字以内を目安。");
+        sb.AppendLine("- スキーマ: `{ \"twitter\": string, \"teams\": string, \"customer\": string }`");
+        sb.AppendLine("- twitter は 140 文字以内、teams は 800 文字以内、customer は 1600 文字以内を目安。");
         sb.AppendLine();
         sb.AppendLine("## 過去の採用例 (Few-shot)");
         var any = false;
@@ -211,7 +211,7 @@ public sealed partial class AdoptionSession
 
         return new DraftBundle(
             parsed.Twitter ?? string.Empty,
-            parsed.Slack ?? string.Empty,
+            parsed.Teams ?? string.Empty,
             parsed.Customer ?? string.Empty);
     }
 
@@ -225,7 +225,7 @@ public sealed partial class AdoptionSession
         var entries = new[]
         {
             new Draft { Sha = sha, Channel = "twitter", Body = bundle.TwitterJa, Posted = false, GeneratedAt = nowUtc },
-            new Draft { Sha = sha, Channel = "slack", Body = bundle.SlackJa, Posted = false, GeneratedAt = nowUtc },
+            new Draft { Sha = sha, Channel = "teams", Body = bundle.TeamsJa, Posted = false, GeneratedAt = nowUtc },
             new Draft { Sha = sha, Channel = "customer", Body = bundle.CustomerJa, Posted = false, GeneratedAt = nowUtc },
         };
         db.Drafts.AddRange(entries);
@@ -235,7 +235,7 @@ public sealed partial class AdoptionSession
     private sealed class DraftJson
     {
         public string? Twitter { get; set; }
-        public string? Slack { get; set; }
+        public string? Teams { get; set; }
         public string? Customer { get; set; }
     }
 

@@ -28,7 +28,7 @@ public sealed class DraftsPanelTests
             var nowUtc = DateTime.UtcNow;
             seed.Drafts.AddRange(
                 new Draft { Sha = "sha1", Channel = "twitter", Body = "TW", GeneratedAt = nowUtc },
-                new Draft { Sha = "sha1", Channel = "slack", Body = "SL", GeneratedAt = nowUtc },
+                new Draft { Sha = "sha1", Channel = "teams", Body = "TM", GeneratedAt = nowUtc },
                 new Draft { Sha = "sha1", Channel = "customer", Body = "CU", GeneratedAt = nowUtc });
             await seed.SaveChangesAsync(ct);
         }
@@ -49,10 +49,10 @@ public sealed class DraftsPanelTests
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("[data-testid=\"drafts-section-twitter\"]"));
-            Assert.NotNull(cut.Find("[data-testid=\"drafts-section-slack\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"drafts-section-teams\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"drafts-section-customer\"]"));
             Assert.Contains("TW", cut.Find("[data-testid=\"drafts-body-twitter\"]").TextContent);
-            Assert.Contains("SL", cut.Find("[data-testid=\"drafts-body-slack\"]").TextContent);
+            Assert.Contains("TM", cut.Find("[data-testid=\"drafts-body-teams\"]").TextContent);
             Assert.Contains("CU", cut.Find("[data-testid=\"drafts-body-customer\"]").TextContent);
         });
     }

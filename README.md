@@ -44,7 +44,7 @@ docs/
 | 1 | Repo sync PR 取得 / コミット表示 / 公式ページ埋め込み |
 | 2 | Copilot SDK 統合 / Morning Triage セッション |
 | 3 | Adopt / Reject / Later / Ignore の運用 UI |
-| 4 | 媒体別下書き(Twitter / Slack / 顧客) |
+| 4 | 媒体別下書き(Twitter / Teams / 顧客) |
 | 5 | 自然言語フィルタ(Ask Palette) |
 | 6 | ローカルプレビュー(bare clone + worktree) |
 | 7 | 配布・自動更新 |

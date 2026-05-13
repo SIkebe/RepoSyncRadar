@@ -689,14 +689,14 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 ### 17.1 目的
 
-採用されたコミットに対して **Twitter / Slack / 顧客向け** の下書きを Adoption セッションで生成。`Drafts` テーブルに保存して UI に表示。
+採用されたコミットに対して **Twitter / Teams / 顧客向け** の下書きを Adoption セッションで生成。`Drafts` テーブルに保存して UI に表示。
 
 ### 17.2 スコープ
 
 - `RepoSyncRadar.App/Copilot/AdoptionSession.cs` が `ICopilotAgent.GenerateDraftsAsync` を実装
 - プロンプトに「過去 5 件の採用例(few-shot)」を含める
 - JSON Schema を `responseFormat` 相当で渡す(Copilot SDK の `Sampling`/`OutputSchema` を使う)
-- `Draft` 3 行(channel = twitter/slack/customer)を `radar_post_draft` 経由で保存
+- `Draft` 3 行(channel = twitter/teams/customer)を `radar_post_draft` 経由で保存
 - 出力 UI: `RepoSyncRadar.App/Components/DraftsPanel.razor`(Copy / Regenerate)
 
 ### 17.3 テスト
@@ -715,7 +715,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 | テスト | 内容 |
 |---|---|
-| `Renders_Three_Sections` | Twitter/Slack/Customer の 3 セクション |
+| `Renders_Three_Sections` | Twitter/Teams/Customer の 3 セクション |
 | `Copy_Button_Invokes_Clipboard` | `IClipboard` スタブが呼ばれる |
 | `Regenerate_Calls_AdoptionSession_Again` | `ICopilotAgent.GenerateDraftsAsync` が再度呼ばれる |
 

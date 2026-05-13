@@ -31,7 +31,7 @@ public sealed class AdoptionSessionTests
         var session = Substitute.For<ICopilotSession>();
         session.SessionId.Returns("s1");
         session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"twitter\":\"tw\",\"slack\":\"sl\",\"customer\":\"cu\"}"));
+            .Returns(Task.FromResult("{\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -40,7 +40,7 @@ public sealed class AdoptionSessionTests
         var bundle = await sut.GenerateDraftsAsync("adopt-1", ct);
 
         Assert.Equal("tw", bundle.TwitterJa);
-        Assert.Equal("sl", bundle.SlackJa);
+        Assert.Equal("tm", bundle.TeamsJa);
         Assert.Equal("cu", bundle.CustomerJa);
     }
 
@@ -57,7 +57,7 @@ public sealed class AdoptionSessionTests
 
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"twitter\":\"a\",\"slack\":\"b\",\"customer\":\"c\"}"));
+            .Returns(Task.FromResult("{\"twitter\":\"a\",\"teams\":\"b\",\"customer\":\"c\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -69,7 +69,7 @@ public sealed class AdoptionSessionTests
         var drafts = await db.Drafts.AsNoTracking().Where(d => d.Sha == "adopt-2").ToListAsync(ct);
         Assert.Equal(3, drafts.Count);
         Assert.Contains(drafts, d => d.Channel == "twitter" && d.Body == "a");
-        Assert.Contains(drafts, d => d.Channel == "slack" && d.Body == "b");
+        Assert.Contains(drafts, d => d.Channel == "teams" && d.Body == "b");
         Assert.Contains(drafts, d => d.Channel == "customer" && d.Body == "c");
     }
 
@@ -97,7 +97,7 @@ public sealed class AdoptionSessionTests
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"twitter\":\"\",\"slack\":\"\",\"customer\":\"\"}"));
+            .Returns(Task.FromResult("{\"twitter\":\"\",\"teams\":\"\",\"customer\":\"\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));

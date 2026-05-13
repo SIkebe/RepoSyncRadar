@@ -27,4 +27,4 @@ public interface ICopilotAgent
 /// <summary>
 /// Three-channel draft bundle. Each member is the raw body the user can copy or edit.
 /// </summary>
-public sealed record DraftBundle(string TwitterJa, string SlackJa, string CustomerJa);
+public sealed record DraftBundle(string TwitterJa, string TeamsJa, string CustomerJa);

@@ -76,14 +76,14 @@
 | **Lisa** (AI / LLM) | エージェント志向 | 3 段階 LLM(cheap → medium → expensive)。Stage 1 で全件スコアリング、Stage 2 で要約、Stage 3 で採用後のみ媒体別下書き。採否を JSONL で蓄積し few-shot 化 |
 | **Maya** (PM / 時短) | ワークフロー設計 | 朝 5 分トリアージのタイムボックス設計。Must read 5 件上限、Skim 15 件、Archive 無制限。KPI(紹介数 / 反応 / 見逃し率)で運用評価 |
 | **Hiro** (DevRel / マーケ) | 出力起点 | 3 媒体それぞれ要件が違う前提で、媒体別テンプレートを LLM プロンプトと一体化(YAML)。「Why I cared」を採用時に 1 行残して文体学習材料に |
-| **Sarah** (UX / プロダクティビティ) | 体験起点 | Tinder for commits のスワイプ UI / マルチデバイス(PWA / VS Code 拡張 / Slack bot)。状態を 1 つの SQLite に集約、Issue とも双方向同期 |
+| **Sarah** (UX / プロダクティビティ) | 体験起点 | Tinder for commits のスワイプ UI / マルチデバイス(PWA / VS Code 拡張 / Teams bot)。状態を 1 つの SQLite に集約、Issue とも双方向同期 |
 
 ### 2.2 相互レビューで全員が合意した「最低限の柱」
 
 1. **データ取得は決定論的に** (GitHub Actions または cron + `gh` CLI)。
 2. **判定は LLM 主体だが、ルールで 1 次フィルタしてコストと暴走を抑える**。
 3. **学習ループ(採否のフィードバック)を初日から組み込む**。
-4. **UI は段階的に拡張、初期は Issue + Slack bot で十分**。
+4. **UI は段階的に拡張、初期は Issue + Teams bot で十分**。
 5. **出力テンプレートは LLM プロンプトと同一資産として管理する**。
 
 ### 2.3 全員が警告した「アンチパターン」
@@ -279,7 +279,7 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 - ユーザーが採用したコミット 1 件に対し、3 媒体の下書きを生成。
 - モデル: `claude-sonnet-4.5` を選好(文体表現力)。
 - 入力: 採用済みコミット + 差分 + 解決済み URL + 過去の採用例 5 件(few-shot)。
-- 出力: JSON で `{ twitter_ja, slack_ja, customer_ja }`。
+- 出力: JSON で `{ twitter_ja, teams_ja, customer_ja }`。
 
 ### 7.3 `AskSession`
 
@@ -444,7 +444,7 @@ public sealed class Draft
 {
     public int Id { get; set; }
     public string Sha { get; set; } = default!;
-    public string Channel { get; set; } = default!; // twitter/slack/customer
+    public string Channel { get; set; } = default!; // twitter/teams/customer
     public string Body { get; set; } = default!;
     public bool Posted { get; set; }
     public string? PostedUrl { get; set; }
@@ -535,7 +535,7 @@ public sealed class CopilotToolLog
 │ [Twitter 🇯🇵]                                              [Copy] [↗]│
 │  GitHub Docs に Copilot Workspace の新しい挙動が反映されました。... │
 │                                                                     │
-│ [Slack 社内]                                              [Copy]    │
+│ [Teams 社内]                                              [Copy]    │
 │  ### 現状 / ### 変更点 / ### 影響範囲 / ### リンク                  │
 │                                                                     │
 │ [顧客向け]                                                [Copy]    │
@@ -743,7 +743,7 @@ Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Ph
 
 - [ ] **モデル選定の自動化**: コスト / 品質 / レイテンシで動的に選ぶか、設定で固定か。
 - [ ] **多言語下書きの英訳併走**: Twitter 用に日本語と英語を並行生成するか。
-- [ ] **Slack bot との連携**: 採用 / 却下を Slack の DM ボタンから操作できるようにするか。
+- [ ] **Teams bot との連携**: 採用 / 却下を Teams のチャットボタンから操作できるようにするか。
 - [ ] **Copilot Extension への昇格**: アプリを Copilot Chat から `@reposync` で呼べるようにするか。
 - [ ] **MAUI Blazor 移植**: iPad / スマホで参照したくなった場合の Razor 共有率を見積もる。
 - [ ] **トレーニングデータの外部化**: 採用例 few-shot を別リポジトリに公開して他社事例を取り込めるか。
