@@ -26,7 +26,8 @@
 | OS | Windows 11(WebView2 ランタイム必須、通常はプリインストール済) |
 | .NET SDK | .NET 10 SDK 以降([global.json](../global.json) で固定) |
 | GitHub Copilot | アクティブな Copilot サブスクリプション(初回起動時に Copilot CLI が自動取得される) |
-| GitHub PAT | `repo` スコープ(`github/docs` を読むため) |
+| GitHub アカウント | Copilot を有効化したアカウント(初回起動時にデバイスフローでサインイン) |
+| GitHub OAuth App | **コントリビューターが用意する OAuth App(後述 2.2)。Device Flow 有効化必須** |
 
 ---
 
@@ -41,7 +42,17 @@ dotnet restore
 dotnet build
 ```
 
-### 2.2 設定ファイルを書く
+### 2.2 GitHub OAuth App を作成して Device Flow を有効化
+
+RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザーアカウントの OAuth トークン** を Copilot SDK に渡します(PAT は使いません)。最初に一度だけ OAuth App を用意してください。
+
+1. https://github.com/settings/developers → **OAuth Apps** → **New OAuth App**
+2. 必須フィールドを埋める(Application name は任意 / Homepage URL は任意の URL / Authorization callback URL は `http://localhost/` でよい — Device Flow では使われない)
+3. 作成後の設定画面で **Enable Device Flow** にチェックを入れて保存(これを忘れると `/login/device/code` が HTTP 422 で失敗します)
+4. 画面に表示される **Client ID** をコピー(`Iv23li...` のような文字列)
+5. シークレットは **発行しない**(Device Flow では不要)
+
+### 2.3 設定ファイルを書く
 
 [src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。個人 PAT などの機微情報は、同フォルダに `appsettings.Local.json` を作って追記します(`.gitignore` 済み)。
 
@@ -56,7 +67,9 @@ dotnet build
   },
   "Copilot": {
     "DefaultModel": "gpt-5",
-    "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ]
+    "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ],
+    "OAuthClientId": "Iv23liXXXXXXXXXXXXXX",
+    "OAuthScopes": [ "read:user" ]
   },
   // Step 19 を使う場合のみ。空ならローカルプレビュー機能はオフ。
   "DocsRepository": {
@@ -71,9 +84,13 @@ dotnet build
 }
 ```
 
-> PAT は環境変数 `RADAR_GitHub__PersonalAccessToken` でも渡せます(Step 20 で DPAPI に移行予定)。
+> `GitHub.PersonalAccessToken` は `github/docs` の PR 一覧を読むため。`Copilot.OAuthClientId` は SDK 経由で Copilot に投げるユーザートークン取得用 — 役割が違うので両方必要です。
+>
+> **トークンの保管場所**: OAuth で取得したアクセストークンは DPAPI(`CurrentUser` スコープ)で暗号化し `%LocalAppData%\RepoSyncRadar\github-token.bin` に保存されます。サインアウトはサイドバーから(Step 21 で UI 追加予定)、あるいはこのファイルを削除すれば次回起動時に再サインインを求められます。
+>
+> **デバッグ override**: 環境変数 `COPILOT_GITHUB_TOKEN` を立てると OAuth フローを省略してその値を Copilot SDK に渡します(`GH_TOKEN` / `GITHUB_TOKEN` のような汎用 PAT 変数は意図的に **読まない** — 他ツールのトークンの誤用を防ぐため)。
 
-### 2.3 起動
+### 2.4 起動
 
 ```powershell
 dotnet run --project src/RepoSyncRadar.App
@@ -82,8 +99,15 @@ dotnet run --project src/RepoSyncRadar.App
 初回起動時:
 
 1. `%LocalAppData%\RepoSyncRadar\radar.db` に SQLite を作成し、EF Core マイグレーションが走る
-2. Copilot CLI がバンドルから展開・常駐(子プロセス)
-3. WPF + BlazorWebView の本体ウィンドウが開く
+2. **GitHub Device Flow サインインダイアログ** が前面に出る:
+   - ユーザーコード(`ABCD-1234` 形式)が自動でクリップボードにコピーされる
+   - 既定ブラウザが `https://github.com/login/device` を自動で開く
+   - 開いたページでコードを貼り付けて GitHub にサインイン → 「Authorize」をクリック
+   - アプリ側はポーリングで完了を検知し、トークンを DPAPI で保存してダイアログを閉じる
+3. Copilot CLI がバンドルから展開・常駐(子プロセス)
+4. WPF + BlazorWebView の本体ウィンドウが開く
+
+> 2 回目以降は保存済みトークンを使うのでサインイン UI は出ません。GitHub 側でセッションを取り消した場合のみ再サインインを求められます。
 
 ---
 
@@ -186,7 +210,7 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 | 多言語 | 日本語のみ。英訳は媒体下書きの中で副次的に出るのみ |
 | クラウド同期 | なし。`radar.db` を持ち運ぶ運用 |
 | Velopack 自己更新 | **Step 20 で実装予定**。現状は `git pull && dotnet build` |
-| PAT の置き場 | 現状は `appsettings.Local.json`。Step 20 で Windows Credential Manager (DPAPI) へ移行予定 |
+| PAT の置き場 | `appsettings.Local.json` に書く(`github/docs` 読み取り用)。Copilot 用のユーザートークンは OAuth Device Flow + DPAPI で自動管理。 |
 
 ---
 
@@ -196,7 +220,7 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 # 厳格ビルド(警告=エラー)
 dotnet build -warnaserror
 
-# 自動テスト(手動カテゴリ除く / 全 147 件)
+# 自動テスト(手動カテゴリ除く / 全 167 件)
 dotnet test --no-build --filter "Category!=Manual"
 
 # 一発スクリプト

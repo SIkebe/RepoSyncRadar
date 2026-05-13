@@ -1,6 +1,7 @@
 using GitHub.Copilot.SDK;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Copilot.Audit;
 using RepoSyncRadar.Core.Options;
 
@@ -9,23 +10,16 @@ namespace RepoSyncRadar.App.Copilot;
 /// <summary>
 /// Production <see cref="ICopilotSessionFactory"/> backed by <see cref="CopilotClient"/>.
 /// The client is created lazily on first use so that tests / DI graph validation never
-/// trigger the embedded CLI process. Authentication follows the environment variable
-/// fallback chain documented in <c>docs/IMPLEMENTATION_PLAN.md §Step 11</c>:
-/// <c>COPILOT_GITHUB_TOKEN</c> → <c>GH_TOKEN</c> → <c>GITHUB_TOKEN</c>. If none are set the
-/// factory falls back to whatever credentials the bundled CLI already has on disk;
-/// callers can detect "not signed in" via <see cref="EnsureReadyAsync"/>.
+/// trigger the embedded CLI process. The GitHub user token comes from
+/// <see cref="IGitHubAccessTokenProvider"/> (env override → cached → DPAPI store →
+/// OAuth Device Flow) and we set <c>UseLoggedInUser = false</c> so the Copilot CLI
+/// never falls back to whatever <c>gh</c> happens to be signed in as on the machine.
 /// </summary>
 public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 {
-    private static readonly string[] TokenEnvironmentVariables =
-    [
-        "COPILOT_GITHUB_TOKEN",
-        "GH_TOKEN",
-        "GITHUB_TOKEN",
-    ];
-
     private readonly IOptions<CopilotOptions> _options;
     private readonly RadarPermissionPolicy _permissionPolicy;
+    private readonly IGitHubAccessTokenProvider _tokenProvider;
     private readonly ToolAuditHook? _auditHook;
     private readonly ILogger<CopilotSessionFactory> _logger;
     private readonly SemaphoreSlim _clientGate = new(1, 1);
@@ -35,15 +29,18 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     public CopilotSessionFactory(
         IOptions<CopilotOptions> options,
         RadarPermissionPolicy permissionPolicy,
+        IGitHubAccessTokenProvider tokenProvider,
         ILogger<CopilotSessionFactory> logger,
         ToolAuditHook? auditHook = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(permissionPolicy);
+        ArgumentNullException.ThrowIfNull(tokenProvider);
         ArgumentNullException.ThrowIfNull(logger);
 
         _options = options;
         _permissionPolicy = permissionPolicy;
+        _tokenProvider = tokenProvider;
         _logger = logger;
         _auditHook = auditHook;
     }
@@ -92,6 +89,9 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             var clientOptions = new CopilotClientOptions
             {
                 AutoStart = true,
+                // Force the SDK to use the token we hand it instead of falling back to
+                // whatever the bundled CLI / gh CLI happens to be signed in as.
+                UseLoggedInUser = false,
             };
 
             var copilot = _options.Value;
@@ -100,16 +100,9 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
                 clientOptions.CliPath = copilot.CliPath;
             }
 
-            var token = ResolveTokenFromEnvironment();
-            if (!string.IsNullOrWhiteSpace(token))
-            {
-                LogForwardingToken(_logger);
-                clientOptions.GitHubToken = token;
-            }
-            else
-            {
-                LogNoTokenInEnvironment(_logger);
-            }
+            var token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
+            clientOptions.GitHubToken = token;
+            LogForwardingToken(_logger);
 
             _client = new CopilotClient(clientOptions);
             return _client;
@@ -118,20 +111,6 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         {
             _clientGate.Release();
         }
-    }
-
-    private static string? ResolveTokenFromEnvironment()
-    {
-        foreach (var name in TokenEnvironmentVariables)
-        {
-            var value = Environment.GetEnvironmentVariable(name);
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-        }
-
-        return null;
     }
 
     public async ValueTask DisposeAsync()
@@ -152,10 +131,6 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
-        Message = "Forwarding GitHub token from environment to Copilot CLI.")]
+        Message = "Forwarding GitHub user token to Copilot CLI.")]
     private static partial void LogForwardingToken(ILogger logger);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information,
-        Message = "No COPILOT_GITHUB_TOKEN / GH_TOKEN / GITHUB_TOKEN set; relying on the Copilot CLI's existing login.")]
-    private static partial void LogNoTokenInEnvironment(ILogger logger);
 }

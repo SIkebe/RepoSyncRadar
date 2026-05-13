@@ -3,8 +3,9 @@ using Microsoft.Extensions.Options;
 namespace RepoSyncRadar.Core.Options;
 
 /// <summary>
-/// Normalizes <see cref="CopilotOptions.AllowedUrlHosts"/> to lowercase and removes
-/// duplicates so downstream allow-list checks can do a plain ordinal comparison.
+/// Normalizes <see cref="CopilotOptions.AllowedUrlHosts"/> and
+/// <see cref="CopilotOptions.OAuthScopes"/> so downstream checks can do plain ordinal
+/// comparisons.
 /// </summary>
 internal sealed class CopilotOptionsPostConfigurer : IPostConfigureOptions<CopilotOptions>
 {
@@ -12,28 +13,47 @@ internal sealed class CopilotOptionsPostConfigurer : IPostConfigureOptions<Copil
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (options.AllowedUrlHosts is null)
+        options.AllowedUrlHosts = Normalize(options.AllowedUrlHosts, lowercase: true);
+        options.OAuthScopes = Normalize(options.OAuthScopes, lowercase: true);
+
+        if (!string.IsNullOrWhiteSpace(options.OAuthClientId))
         {
-            options.AllowedUrlHosts = [];
-            return;
+            options.OAuthClientId = options.OAuthClientId.Trim();
+        }
+        else
+        {
+            options.OAuthClientId = null;
+        }
+    }
+
+    private static List<string> Normalize(IReadOnlyList<string>? source, bool lowercase)
+    {
+        if (source is null || source.Count == 0)
+        {
+            return [];
         }
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var normalized = new List<string>(options.AllowedUrlHosts.Count);
-        foreach (var host in options.AllowedUrlHosts)
+        var normalized = new List<string>(source.Count);
+        foreach (var item in source)
         {
-            if (string.IsNullOrWhiteSpace(host))
+            if (string.IsNullOrWhiteSpace(item))
             {
                 continue;
             }
 
-            var lower = host.Trim().ToLowerInvariant();
-            if (seen.Add(lower))
+            var value = item.Trim();
+            if (lowercase)
             {
-                normalized.Add(lower);
+                value = value.ToLowerInvariant();
+            }
+
+            if (seen.Add(value))
+            {
+                normalized.Add(value);
             }
         }
 
-        options.AllowedUrlHosts = normalized;
+        return normalized;
     }
 }

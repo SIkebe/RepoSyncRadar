@@ -33,4 +33,20 @@ public sealed class CopilotOptions
         "docs.github.com",
         "api.github.com",
     ];
+
+    /// <summary>
+    /// Client ID of the GitHub OAuth (or GitHub) App used for the in-app sign-in device
+    /// flow. The app must have <em>Device flow</em> enabled on github.com. When this is
+    /// null or whitespace the device flow is disabled and the session factory falls back
+    /// to the optional <c>COPILOT_GITHUB_TOKEN</c> environment variable (intended for
+    /// CI/debug). See <c>docs/USAGE.md</c> for the setup steps.
+    /// </summary>
+    public string? OAuthClientId { get; set; }
+
+    /// <summary>
+    /// Scopes requested during the GitHub OAuth device flow. Default is empty, which
+    /// asks for a token bound to the user's Copilot subscription only. Add
+    /// <c>read:user</c> if the app needs to display the signed-in handle.
+    /// </summary>
+    public IReadOnlyList<string> OAuthScopes { get; set; } = [];
 }

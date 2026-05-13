@@ -91,6 +91,39 @@ public class OptionsValidationTests
     }
 
     [Fact]
+    public void Bind_OAuthScopes_AreNormalizedAndDeduplicated()
+    {
+        // OAuth scope strings are case-sensitive at the IdP, but GitHub's documentation
+        // canonicalizes them as lowercase (e.g. "read:user"). Normalizing keeps the
+        // device-flow request body stable regardless of how a contributor types them
+        // into appsettings.json.
+        var json = ValidJson.Replace(
+            "\"AllowedUrlHosts\": [ \"docs.github.com\", \"api.github.com\" ]",
+            "\"AllowedUrlHosts\": [ \"docs.github.com\" ],\n    \"OAuthClientId\": \"  Iv1.test  \",\n    \"OAuthScopes\": [ \"Read:User\", \" read:user \", \"\" ]",
+            StringComparison.Ordinal);
+        using var sp = BuildServiceProvider(json);
+
+        var copilot = sp.GetRequiredService<IOptions<CopilotOptions>>().Value;
+
+        Assert.Equal("Iv1.test", copilot.OAuthClientId);
+        Assert.Equal(["read:user"], copilot.OAuthScopes);
+    }
+
+    [Fact]
+    public void Bind_OAuthClientIdWhitespace_BecomesNull()
+    {
+        var json = ValidJson.Replace(
+            "\"AllowedUrlHosts\": [ \"docs.github.com\", \"api.github.com\" ]",
+            "\"AllowedUrlHosts\": [ \"docs.github.com\" ],\n    \"OAuthClientId\": \"   \"",
+            StringComparison.Ordinal);
+        using var sp = BuildServiceProvider(json);
+
+        var copilot = sp.GetRequiredService<IOptions<CopilotOptions>>().Value;
+
+        Assert.Null(copilot.OAuthClientId);
+    }
+
+    [Fact]
     public void Bind_CopilotDefaultModelEmpty_ThrowsOptionsValidationException()
     {
         var json = ValidJson.Replace("\"DefaultModel\": \"gpt-5\"", "\"DefaultModel\": \"\"", StringComparison.Ordinal);
