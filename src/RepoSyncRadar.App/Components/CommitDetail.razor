@@ -1,0 +1,86 @@
+@using Microsoft.Extensions.DependencyInjection
+@using RepoSyncRadar.Core.Models
+@using RepoSyncRadar.Core.Services
+
+@*
+    CommitDetail — Phase 1 commit inspector. Shows the file list with +/- stats and any
+    canonical docs.github.com URLs returned by IPathToUrlResolver. Diff rendering and
+    Adopt/Reject actions land in later steps.
+*@
+
+<section class="radar-commit-detail" data-testid="commit-detail">
+    @if (Commit is null)
+    {
+        <p class="empty" data-testid="commit-detail-empty">コミットを選択してください。</p>
+    }
+    else
+    {
+        <header class="commit-header">
+            <span class="sha" data-testid="commit-detail-sha">@Commit.Sha</span>
+            <span class="message" data-testid="commit-detail-message">@Commit.Message</span>
+            <span class="author">@Commit.Author</span>
+        </header>
+        <ul class="files">
+            @foreach (var file in Commit.Files)
+            {
+                <li class="file-row" data-testid="commit-detail-file" data-path="@file.Path">
+                    <span class="path">@file.Path</span>
+                    <span class="stats"
+                          data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
+                    @if (_urlsByPath.TryGetValue(file.Path, out var urls) && urls.Count > 0)
+                    {
+                        <ul class="urls">
+                            @foreach (var url in urls)
+                            {
+                                <li>
+                                    <a href="@url" target="_blank" rel="noopener"
+                                       data-testid="commit-detail-url">@url</a>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    [Parameter] public Commit? Commit { get; set; }
+
+    [Parameter] public string Language { get; set; } = "en";
+
+    private readonly Dictionary<string, IReadOnlyList<string>> _urlsByPath =
+        new(StringComparer.Ordinal);
+
+    private string? _resolvedForSha;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Commit is null)
+        {
+            _urlsByPath.Clear();
+            _resolvedForSha = null;
+            return;
+        }
+
+        if (string.Equals(_resolvedForSha, Commit.Sha, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _urlsByPath.Clear();
+        var resolver = Services.GetRequiredService<IPathToUrlResolver>();
+        foreach (var file in Commit.Files)
+        {
+            var urls = await resolver.ResolveAsync(file.Path, Language);
+            _urlsByPath[file.Path] = urls;
+        }
+        _resolvedForSha = Commit.Sha;
+    }
+
+    private static string FormatStats(CommitFile file)
+        => $"+{file.Additions} -{file.Deletions}";
+}

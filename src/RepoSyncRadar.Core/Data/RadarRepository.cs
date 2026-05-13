@@ -143,4 +143,69 @@ public sealed class RadarRepository : IRadarRepository
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    public async Task<IReadOnlyList<Commit>> QueryCommitsAsync(
+        CommitQueryFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        using var db = _contextFactory.CreateDbContext();
+        IQueryable<Commit> query = db.Commits
+            .AsNoTracking()
+            .Include(c => c.Files)
+            .Include(c => c.Review);
+
+        if (filter.Status is { } status)
+        {
+            query = status == ReviewStatus.Unseen
+                ? query.Where(c => c.Review == null || c.Review.Status == ReviewStatus.Unseen)
+                : query.Where(c => c.Review != null && c.Review.Status == status);
+        }
+
+        query = query.OrderByDescending(c => c.AuthoredAt);
+
+        if (filter.Limit is { } limit && limit >= 0)
+        {
+            query = query.Take(limit);
+        }
+
+        var commits = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        return commits;
+    }
+
+    public async Task<IReadOnlyDictionary<ReviewStatus, int>> GetReviewCountsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var db = _contextFactory.CreateDbContext();
+
+        // Commits with no Review row count toward Unseen.
+        var unseenFromMissing = await db.Commits
+            .AsNoTracking()
+            .CountAsync(c => c.Review == null, cancellationToken)
+            .ConfigureAwait(false);
+
+        var grouped = await db.Reviews
+            .AsNoTracking()
+            .GroupBy(r => r.Status)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var counts = new Dictionary<ReviewStatus, int>
+        {
+            [ReviewStatus.Unseen] = unseenFromMissing,
+            [ReviewStatus.Seen] = 0,
+            [ReviewStatus.Adopted] = 0,
+            [ReviewStatus.Rejected] = 0,
+            [ReviewStatus.Later] = 0,
+        };
+
+        foreach (var entry in grouped)
+        {
+            counts[entry.Key] = counts[entry.Key] + entry.Count;
+        }
+
+        return counts;
+    }
 }

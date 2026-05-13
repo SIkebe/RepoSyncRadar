@@ -1,62 +1,55 @@
-@* Top-level Razor shell rendered inside the WPF BlazorWebView. Phase 1 will replace the placeholder content with the real commit list, diff tabs, and drafts panel. *@
+@* Top-level Razor shell rendered inside the WPF BlazorWebView. Phase 1 wires the
+    minimal review surface: Sidebar (status counters) + CommitList (filtered rows) +
+    CommitDetail (files + canonical URLs). Diff / WebView2 / adoption actions land in
+    later steps. *@
+
+@inject IServiceProvider Services
 
 <MudThemeProvider />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<div class="radar-shell">
-    <aside class="radar-sidebar">
-        <MudText Typo="Typo.h6" Class="mb-2">Inbox</MudText>
-        <MudNavMenu>
-            <MudNavLink Icon="@Icons.Material.Filled.Circle" IconColor="Color.Error">未読 (Phase 1)</MudNavLink>
-            <MudNavLink Icon="@Icons.Material.Filled.Circle" IconColor="Color.Warning">スキム (Phase 1)</MudNavLink>
-            <MudNavLink Icon="@Icons.Material.Filled.CheckCircle" IconColor="Color.Success">採用済み (Phase 3)</MudNavLink>
-            <MudNavLink Icon="@Icons.Material.Filled.Cancel" IconColor="Color.Default">却下済み (Phase 3)</MudNavLink>
-            <MudNavLink Icon="@Icons.Material.Filled.Snooze">あとで (Phase 3)</MudNavLink>
-        </MudNavMenu>
-    </aside>
+<CascadingValue Value="Services" IsFixed="true">
+    <div class="radar-shell">
+        <aside class="radar-sidebar-pane">
+            <MudText Typo="Typo.h6" Class="mb-2">Inbox</MudText>
+            <Sidebar Selected="_selectedStatus"
+                     SelectedChanged="HandleStatusChanged" />
+        </aside>
 
-    <main class="radar-workbench">
-        <MudPaper Elevation="0" Class="pa-4">
-            <MudText Typo="Typo.h4" GutterBottom="true">RepoSyncRadar</MudText>
-            <MudText Typo="Typo.subtitle1" Class="mb-3">
-                Repo sync PR の未確認コミットをここに表示します。
-            </MudText>
-            <MudText Typo="Typo.body2" Class="radar-placeholder">
-                これは Phase 0 のスキャフォールドです。Phase 1 では Octokit でコミットを取得し、
-                <code>radar_resolve_url</code> ツール経由で公式 URL と並べて表示します。
-            </MudText>
-            <MudDivider Class="my-3" />
-            <MudButton StartIcon="@Icons.Material.Filled.Sync"
-                       Variant="Variant.Filled"
-                       Color="Color.Primary"
-                       OnClick="HandleSyncClickedAsync"
-                       Disabled="_busy">
-                Sync (placeholder)
-            </MudButton>
-            <MudText Typo="Typo.caption" Class="mt-3 d-block">
-                @_lastMessage
-            </MudText>
-        </MudPaper>
-    </main>
-</div>
+        <main class="radar-workbench">
+            <MudPaper Elevation="0" Class="pa-2">
+                <CommitList Filter="@_filter"
+                            SelectedSha="@_selectedCommit?.Sha"
+                            OnCommitSelected="HandleCommitSelected" />
+            </MudPaper>
+
+            <MudDivider Class="my-2" />
+
+            <MudPaper Elevation="0" Class="pa-2">
+                <CommitDetail Commit="_selectedCommit" />
+            </MudPaper>
+        </main>
+    </div>
+</CascadingValue>
 
 @code {
-    private bool _busy;
-    private string _lastMessage = "未同期です。Phase 1 で実装します。";
+    private ReviewStatus? _selectedStatus;
+    private Commit? _selectedCommit;
+    private CommitQueryFilter _filter = new();
 
-    private async Task HandleSyncClickedAsync()
+    private Task HandleStatusChanged(ReviewStatus? status)
     {
-        _busy = true;
-        try
-        {
-            await Task.Delay(150);
-            _lastMessage = $"同期処理は Phase 1 で実装されます。({DateTime.Now:HH:mm:ss})";
-        }
-        finally
-        {
-            _busy = false;
-        }
+        _selectedStatus = status;
+        _filter = new CommitQueryFilter { Status = status };
+        _selectedCommit = null;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleCommitSelected(Commit commit)
+    {
+        _selectedCommit = commit;
+        return Task.CompletedTask;
     }
 }

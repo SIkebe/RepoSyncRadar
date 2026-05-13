@@ -1,0 +1,61 @@
+@using Microsoft.Extensions.DependencyInjection
+@using RepoSyncRadar.Core.Data
+@using RepoSyncRadar.Core.Models
+
+@*
+    Sidebar — Phase 1 minimum review inbox.
+    Reads counts per ReviewStatus from IRadarRepository and emits status selection events.
+    Production wiring: services come via CascadingValue<IServiceProvider> set by Workbench.
+*@
+
+<nav class="radar-sidebar" data-testid="sidebar">
+    @if (_counts is null)
+    {
+        <p class="loading" data-testid="sidebar-loading">読み込み中…</p>
+    }
+    else
+    {
+        @foreach (var entry in Entries)
+        {
+            <button type="button"
+                    class="sidebar-item @(Selected == entry.Status ? "active" : null)"
+                    data-status="@entry.Status"
+                    data-testid="sidebar-item-@entry.Status"
+                    @onclick="() => OnSelectAsync(entry.Status)">
+                <span class="label">@entry.Label</span>
+                <span class="count" data-testid="sidebar-count-@entry.Status">@_counts[entry.Status]</span>
+            </button>
+        }
+    }
+</nav>
+
+@code {
+    private static readonly (ReviewStatus Status, string Label)[] Entries = new[]
+    {
+        (ReviewStatus.Unseen, "未読"),
+        (ReviewStatus.Seen, "スキム"),
+        (ReviewStatus.Adopted, "採用済み"),
+        (ReviewStatus.Rejected, "却下済み"),
+        (ReviewStatus.Later, "あとで"),
+    };
+
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    [Parameter] public ReviewStatus? Selected { get; set; }
+
+    [Parameter] public EventCallback<ReviewStatus?> SelectedChanged { get; set; }
+
+    private IReadOnlyDictionary<ReviewStatus, int>? _counts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var repo = Services.GetRequiredService<IRadarRepository>();
+        _counts = await repo.GetReviewCountsAsync();
+    }
+
+    private Task OnSelectAsync(ReviewStatus status)
+    {
+        var next = Selected == status ? (ReviewStatus?)null : status;
+        return SelectedChanged.InvokeAsync(next);
+    }
+}

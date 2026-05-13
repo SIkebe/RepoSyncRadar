@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\RepoSyncRadar.App\RepoSyncRadar.App.csproj" />
     <ProjectReference Include="..\..\src\RepoSyncRadar.Core\RepoSyncRadar.Core.csproj" />
   </ItemGroup>
 

@@ -36,6 +36,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IRadarRepository, RadarRepository>();
         services.TryAddSingleton<IDocsGitHubClient, DocsGitHubClient>();
         services.TryAddSingleton<ICommitIngestionService, CommitIngestionService>();
+        services.TryAddSingleton<IPathToUrlResolver, NullPathToUrlResolver>();
 
         return services;
     }

@@ -1,0 +1,21 @@
+namespace RepoSyncRadar.Core.Models;
+
+/// <summary>
+/// Filter passed to <see cref="Data.IRadarRepository.QueryCommitsAsync"/> by the UI.
+/// All members are optional; an empty filter returns every persisted commit ordered by
+/// <see cref="Commit.AuthoredAt"/> descending.
+/// </summary>
+public sealed record CommitQueryFilter
+{
+    /// <summary>
+    /// When supplied, only commits whose <see cref="Review.Status"/> equals this value are
+    /// returned. A commit without a <see cref="Review"/> row is treated as
+    /// <see cref="ReviewStatus.Unseen"/>.
+    /// </summary>
+    public ReviewStatus? Status { get; init; }
+
+    /// <summary>
+    /// Maximum number of commits to return. When null, no limit is applied.
+    /// </summary>
+    public int? Limit { get; init; }
+}

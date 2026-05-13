@@ -401,6 +401,13 @@ Phase 1 の最低 UI:「サイドバーで未読 / コミット一覧」「中�
 | `CommitDetail_Shows_Resolved_Urls` | `PathToUrlResolver` のスタブが返す URL がリンクとして並ぶ |
 | `CommitDetail_Shows_File_Stats` | `+42 -5` などの additions/deletions |
 
+`Core.Tests/Data/` 側で、UI から新規に呼ぶ Repository 拡張も in-memory SQLite で検証する:
+
+| テスト | 内容 |
+|---|---|
+| `QueryCommitsAsync_Filters_By_Status_And_Limit` | `Status` / `Limit` フィルタと AuthoredAt desc の並び、`Unseen` が Review 行なしのコミットを拾うこと |
+| `GetReviewCountsAsync_Counts_All_Buckets` | 5 ステータス全てを 0 埋めで返し、Review 行のないコミットが Unseen に積まれること |
+
 ### 9.4 完了基準
 
 - bUnit テストが緑
@@ -900,7 +907,8 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
   - 完了日 2026-05-13, テスト件数 9
 - [x] Step 8 — サニタイザ
   - 完了日 2026-05-13, テスト件数 8
-- [ ] Step 9 — Razor コンポーネント
+- [x] Step 9 — Razor コンポーネント
+  - 完了日 2026-05-13, テスト件数 7
 - [ ] Step 10 — WebView2 埋め込み
 - [ ] Step 11 — Copilot SDK ラッパ
 - [ ] Step 12 — 監査フック

@@ -1,0 +1,80 @@
+@using Microsoft.Extensions.DependencyInjection
+@using RepoSyncRadar.Core.Data
+@using RepoSyncRadar.Core.Models
+
+@*
+    CommitList — Phase 1 commit inbox view. Loads commits from IRadarRepository using the
+    supplied filter and renders one row per commit. Empty result yields an empty-state
+    message. Row clicks emit OnCommitSelected so the parent can drive CommitDetail.
+*@
+
+<section class="radar-commit-list" data-testid="commit-list">
+    @if (_commits is null)
+    {
+        <p class="loading" data-testid="commit-list-loading">読み込み中…</p>
+    }
+    else if (_commits.Count == 0)
+    {
+        <p class="empty" data-testid="commit-list-empty">表示するコミットがありません。</p>
+    }
+    else
+    {
+        <ul class="commit-rows">
+            @foreach (var commit in _commits)
+            {
+                <li class="commit-row @(SelectedSha == commit.Sha ? "active" : null)"
+                    data-testid="commit-row"
+                    data-sha="@commit.Sha"
+                    @onclick="() => OnSelectAsync(commit)">
+                    <span class="sha">@ShortSha(commit.Sha)</span>
+                    <span class="message">@FirstLine(commit.Message)</span>
+                    <span class="author">@commit.Author</span>
+                    <time class="authored" datetime="@commit.AuthoredAt.ToString("O")">
+                        @commit.AuthoredAt.ToString("yyyy-MM-dd")
+                    </time>
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    [Parameter] public CommitQueryFilter? Filter { get; set; }
+
+    [Parameter] public string? SelectedSha { get; set; }
+
+    [Parameter] public EventCallback<Commit> OnCommitSelected { get; set; }
+
+    private IReadOnlyList<Commit>? _commits;
+    private CommitQueryFilter? _appliedFilter;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Re-query only when the filter reference (or any of its values) changes.
+        if (_commits is not null && Equals(_appliedFilter, Filter))
+        {
+            return;
+        }
+
+        var repo = Services.GetRequiredService<IRadarRepository>();
+        _appliedFilter = Filter;
+        _commits = await repo.QueryCommitsAsync(Filter ?? new CommitQueryFilter());
+    }
+
+    private Task OnSelectAsync(Commit commit) => OnCommitSelected.InvokeAsync(commit);
+
+    private static string ShortSha(string sha)
+        => string.IsNullOrEmpty(sha) ? string.Empty : sha[..Math.Min(7, sha.Length)];
+
+    private static string FirstLine(string? message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return string.Empty;
+        }
+        var newline = message.IndexOf('\n');
+        return newline < 0 ? message : message[..newline];
+    }
+}
