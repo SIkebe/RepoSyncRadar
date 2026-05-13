@@ -29,9 +29,26 @@
                   HorizontalAlignment="Stretch"
                   Background="#DDDDDD" />
 
-    <!-- Right: the live docs.github.com surface. Phase 1 will drive Source via DocsViewBridge. -->
-    <wv2:WebView2 x:Name="DocsView"
-                  Grid.Column="2"
-                  Source="https://docs.github.com/" />
+    <!-- Right: the live docs.github.com surface. Source is assigned in code-behind
+         after CreationProperties (custom UserDataFolder) so DocsView does not collide
+         with BlazorWebView's internal WebView2 on the default folder. -->
+    <Grid Grid.Column="2">
+      <wv2:WebView2 x:Name="DocsView" />
+      <!--
+        Shown only when WebView2 init fails (Evergreen runtime missing, etc.).
+        Kept inside the same grid cell so layout does not shift on fallback.
+      -->
+      <Border x:Name="DocsFallback"
+              Background="#FFF8E1"
+              BorderBrush="#E0C97A"
+              BorderThickness="1"
+              Padding="16"
+              Visibility="Collapsed">
+        <TextBlock x:Name="DocsFallbackMessage"
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Center"
+                   Text="WebView2 を初期化できませんでした。" />
+      </Border>
+    </Grid>
   </Grid>
 </Window>

@@ -909,7 +909,8 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
   - 完了日 2026-05-13, テスト件数 8
 - [x] Step 9 — Razor コンポーネント
   - 完了日 2026-05-13, テスト件数 7
-- [ ] Step 10 — WebView2 埋め込み
+- [x] Step 10 — WebView2 埋め込み
+  - 完了日 2026-05-13, テスト件数 8
 - [ ] Step 11 — Copilot SDK ラッパ
 - [ ] Step 12 — 監査フック
 - [ ] Step 13 — 読み取りツール
