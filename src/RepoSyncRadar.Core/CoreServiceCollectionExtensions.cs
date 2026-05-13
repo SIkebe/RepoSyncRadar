@@ -79,6 +79,20 @@ public static class CoreServiceCollectionExtensions
 
     private static string ResolveDbPath()
     {
+        // E2E tests set REPOSYNCRADAR_DB_PATH so the app does not write into the
+        // developer's real %LOCALAPPDATA%\RepoSyncRadar\radar.db. Production code
+        // paths leave the variable unset and fall back to the original location.
+        var overridePath = Environment.GetEnvironmentVariable("REPOSYNCRADAR_DB_PATH");
+        if (!string.IsNullOrWhiteSpace(overridePath))
+        {
+            var overrideDir = Path.GetDirectoryName(overridePath);
+            if (!string.IsNullOrEmpty(overrideDir))
+            {
+                Directory.CreateDirectory(overrideDir);
+            }
+            return overridePath;
+        }
+
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "RepoSyncRadar");

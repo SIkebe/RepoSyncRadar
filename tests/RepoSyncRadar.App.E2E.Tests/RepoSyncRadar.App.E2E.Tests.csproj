@@ -45,6 +45,13 @@
       <Private>false</Private>
       <PrivateAssets>all</PrivateAssets>
     </ProjectReference>
+
+    <!--
+      Core is referenced as a normal compile-time dependency so SeededAppHostFixture
+      can construct RadarDbContext, run migrations, and seed Scoring / Draft rows
+      into a throwaway radar.db before the App child process boots.
+    -->
+    <ProjectReference Include="..\..\src\RepoSyncRadar.Core\RepoSyncRadar.Core.csproj" />
   </ItemGroup>
 
 </Project>

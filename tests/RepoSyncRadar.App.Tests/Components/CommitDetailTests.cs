@@ -62,6 +62,89 @@ public class CommitDetailTests
             cut.Find("[data-testid=\"commit-detail-stats-content/copilot/other.md\"]").TextContent);
     }
 
+    [Fact]
+    public void CommitDetail_Shows_Scoring_When_Present()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        commit.Scoring = new Scoring
+        {
+            Sha = commit.Sha,
+            Score = 0.72,
+            Category = "feature-update",
+            AudienceJson = "[\"devrel\",\"customer\"]",
+            SummaryJa = "Copilot Workspace の挙動を明確化する変更。",
+            WhyJa = "公式 docs の更新で、顧客向け説明にも影響するため重要。",
+            Model = "gpt-5",
+            ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+        };
+
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        var score = cut.Find("[data-testid=\"commit-detail-score\"]");
+        Assert.Contains("0.72", score.TextContent);
+        Assert.Equal("feature-update", cut.Find("[data-testid=\"commit-detail-category\"]").TextContent);
+        var audience = cut.Find("[data-testid=\"commit-detail-audience\"]").TextContent;
+        Assert.Contains("devrel", audience);
+        Assert.Contains("customer", audience);
+        Assert.Equal(
+            "Copilot Workspace の挙動を明確化する変更。",
+            cut.Find("[data-testid=\"commit-detail-summary\"]").TextContent);
+        Assert.Equal(
+            "公式 docs の更新で、顧客向け説明にも影響するため重要。",
+            cut.Find("[data-testid=\"commit-detail-why\"]").TextContent);
+    }
+
+    [Fact]
+    public void CommitDetail_Shows_Unscored_Hint_When_Scoring_Missing()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        Assert.Null(commit.Scoring);
+
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        var hint = cut.Find("[data-testid=\"commit-detail-unscored\"]");
+        Assert.Contains("未スコアリング", hint.TextContent);
+        Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-score\"]"));
+    }
+
+    [Fact]
+    public void CommitDetail_Handles_Malformed_Audience_Json()
+    {
+        var commit = MakeCommit(("content/copilot/x.md", 1, 0));
+        commit.Scoring = new Scoring
+        {
+            Sha = commit.Sha,
+            Score = 0.5,
+            Category = "doc-fix",
+            AudienceJson = "not-json",
+            SummaryJa = "summary",
+            WhyJa = "why",
+            Model = "gpt-5",
+            ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+        };
+
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        // The audience element is omitted entirely when AudienceJson cannot be parsed.
+        Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-audience\"]"));
+        Assert.Equal("doc-fix", cut.Find("[data-testid=\"commit-detail-category\"]").TextContent);
+    }
+
     private static IRenderedComponent<CommitDetail> RenderDetailWith(
         Commit commit,
         IPathToUrlResolver resolver)

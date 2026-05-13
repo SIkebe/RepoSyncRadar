@@ -154,7 +154,8 @@ public sealed class RadarRepository : IRadarRepository
         IQueryable<Commit> query = db.Commits
             .AsNoTracking()
             .Include(c => c.Files)
-            .Include(c => c.Review);
+            .Include(c => c.Review)
+            .Include(c => c.Scoring);
 
         if (filter.Status is { } status)
         {

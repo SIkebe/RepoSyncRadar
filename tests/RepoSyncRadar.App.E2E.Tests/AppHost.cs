@@ -36,6 +36,16 @@ public sealed class AppHost : IAsyncDisposable
     }
 
     public static async Task<AppHost> StartAsync(CancellationToken cancellationToken = default)
+        => await StartAsync(dbPath: null, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Starts the App with an optional override for the SQLite database path.
+    /// Tests that need to seed deterministic Commits/Scoring/Drafts (e.g. to verify
+    /// that the Score panel and the Teams draft tab actually render) point this at a
+    /// throwaway file under <c>Path.GetTempPath()</c> so the developer's real
+    /// <c>%LOCALAPPDATA%\RepoSyncRadar\radar.db</c> is left untouched.
+    /// </summary>
+    public static async Task<AppHost> StartAsync(string? dbPath, CancellationToken cancellationToken = default)
     {
         var exePath = ResolveAppExePath();
         if (!File.Exists(exePath))
@@ -56,6 +66,10 @@ public sealed class AppHost : IAsyncDisposable
         };
         psi.EnvironmentVariables["REPOSYNCRADAR_BLAZOR_CDP_PORT"] = blazorPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
         psi.EnvironmentVariables["REPOSYNCRADAR_DOCS_CDP_PORT"] = docsPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (!string.IsNullOrWhiteSpace(dbPath))
+        {
+            psi.EnvironmentVariables["REPOSYNCRADAR_DB_PATH"] = dbPath;
+        }
 
         var process = Process.Start(psi)
             ?? throw new InvalidOperationException($"Failed to start '{exePath}'.");

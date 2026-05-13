@@ -219,6 +219,43 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
+    public async Task QueryCommitsAsync_Includes_Scoring_When_Present()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        await repository.UpsertCommitsAsync(
+            new[] { MakeCommit("sha-with-score", prNumber: 1) },
+            ct);
+
+        // Seed a Scoring row out-of-band; the repository surfaces it via Include.
+        using (var seed = fixture.CreateContext())
+        {
+            seed.Scorings.Add(new Scoring
+            {
+                Sha = "sha-with-score",
+                Score = 0.81,
+                Category = "feature-update",
+                AudienceJson = "[\"devrel\"]",
+                SummaryJa = "要約",
+                WhyJa = "理由",
+                Model = "gpt-5",
+                ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+            });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var commits = await repository.QueryCommitsAsync(new CommitQueryFilter(), ct);
+
+        var commit = Assert.Single(commits);
+        Assert.NotNull(commit.Scoring);
+        Assert.Equal(0.81, commit.Scoring!.Score);
+        Assert.Equal("feature-update", commit.Scoring.Category);
+        Assert.Equal("要約", commit.Scoring.SummaryJa);
+    }
+
+    [Fact]
     public async Task GetReviewCountsAsync_Counts_All_Buckets()
     {
         using var fixture = new SqliteFixture();

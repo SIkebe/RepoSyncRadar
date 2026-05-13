@@ -4,8 +4,10 @@
 
 @*
     CommitDetail — Phase 1 commit inspector. Shows the file list with +/- stats and any
-    canonical docs.github.com URLs returned by IPathToUrlResolver. Diff rendering and
-    Adopt/Reject actions land in later steps.
+    canonical docs.github.com URLs returned by IPathToUrlResolver. Also surfaces the
+    LLM-produced Scoring (score / category / audience / summary / why) so the morning
+    triage output is visible to the user. Diff rendering and Adopt/Reject actions live
+    in sibling components.
 *@
 
 <section class="radar-commit-detail" data-testid="commit-detail">
@@ -20,6 +22,31 @@
             <span class="message" data-testid="commit-detail-message">@Commit.Message</span>
             <span class="author">@Commit.Author</span>
         </header>
+        @if (Commit.Scoring is { } scoring)
+        {
+            var audience = TryParseAudience(scoring.AudienceJson);
+            <section class="scoring" data-testid="commit-detail-scoring">
+                <dl>
+                    <dt>Score</dt>
+                    <dd data-testid="commit-detail-score">@FormatScore(scoring.Score)</dd>
+                    <dt>Category</dt>
+                    <dd data-testid="commit-detail-category">@scoring.Category</dd>
+                    @if (audience is { Count: > 0 })
+                    {
+                        <dt>Audience</dt>
+                        <dd data-testid="commit-detail-audience">@string.Join(" / ", audience)</dd>
+                    }
+                    <dt>Summary</dt>
+                    <dd data-testid="commit-detail-summary">@scoring.SummaryJa</dd>
+                    <dt>Why</dt>
+                    <dd data-testid="commit-detail-why">@scoring.WhyJa</dd>
+                </dl>
+            </section>
+        }
+        else
+        {
+            <p class="unscored" data-testid="commit-detail-unscored">未スコアリング (Morning Triage 未実行)</p>
+        }
         <ul class="files">
             @foreach (var file in Commit.Files)
             {
@@ -83,4 +110,23 @@
 
     private static string FormatStats(CommitFile file)
         => $"+{file.Additions} -{file.Deletions}";
+
+    private static string FormatScore(double score)
+        => score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static IReadOnlyList<string>? TryParseAudience(string audienceJson)
+    {
+        if (string.IsNullOrWhiteSpace(audienceJson))
+        {
+            return null;
+        }
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<string[]>(audienceJson);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
 }
