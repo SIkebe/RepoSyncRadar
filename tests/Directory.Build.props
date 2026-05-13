@@ -1,0 +1,18 @@
+<Project>
+
+  <!-- 親 (リポジトリルート) の Directory.Build.props を継承する -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..'))" />
+
+  <!--
+    テストプロジェクト共通の MSBuild 設定。
+    - CA1707: テストメソッド名にアンダースコアを許可する
+      (プラン §付録 A: MethodUnderTest_StateUnderTest_ExpectedBehavior)
+    - TestingPlatformDotnetTestSupport: `dotnet test` を Microsoft Testing Platform に対応させる
+      (xunit.v3 + UseMicrosoftTestingPlatformRunner との組み合わせで必須)
+  -->
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+
+</Project>

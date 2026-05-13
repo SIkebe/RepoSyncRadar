@@ -874,14 +874,18 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
 各ステップ完了時に、本ドキュメント末尾に以下を追記する:
 
 ```text
-- [x] Step N — 完了日 YYYY-MM-DD, テスト件数 NN, 主な変更コミット <sha>
+- [x] Step N — 完了日 YYYY-MM-DD, テスト件数 NN
 ```
+
+> 補足: コミット SHA は `git log` 側で十分追跡できるため、本書には記録しない
+> (`--amend` で自己参照不能になる問題を避ける)。
 
 これにより、本書は「設計書」ではなく「動く実装プラン」として機能する。
 
 ### 進捗
 
-- [ ] Step 1 — テスト基盤
+- [x] Step 1 — テスト基盤
+  - 完了日 2026-05-13, テスト件数 3
 - [ ] Step 2 — オプション検証
 - [ ] Step 3 — EF Core スキーマ
 - [ ] Step 4 — Frontmatter / PathToUrlResolver

@@ -74,10 +74,10 @@ dotnet test --no-build --filter "Category!=Manual"
 - その下に追記:
 
   ```text
-  - [x] Step N — 完了日 YYYY-MM-DD, テスト件数 NN, 主な変更コミット <未コミット | sha>
+  - [x] Step N — 完了日 YYYY-MM-DD, テスト件数 NN
   ```
 
-  日付は `Get-Date -Format yyyy-MM-dd` で取得した実日付を使う。
+  日付は `Get-Date -Format yyyy-MM-dd` で取得した実日付を使う。コミット SHA は記録しない(`--amend` で自己参照不能になるため。SHA は `git log` 側で追跡)。
 
 ### 6. コミット案を提示する(実行しない)
 

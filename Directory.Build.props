@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsNotAsErrors>NU1900;NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+    <!-- .NET 9.0.200+ では NuGet 監査の高重大度が既定でエラー扱いになる。
+         直接依存のみゲートする(間接依存は上流の更新待ち)。 -->
+    <NuGetAuditMode>direct</NuGetAuditMode>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
