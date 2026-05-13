@@ -886,7 +886,8 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
 
 - [x] Step 1 — テスト基盤
   - 完了日 2026-05-13, テスト件数 3
-- [ ] Step 2 — オプション検証
+- [x] Step 2 — オプション検証
+  - 完了日 2026-05-13, テスト件数 7
 - [ ] Step 3 — EF Core スキーマ
 - [ ] Step 4 — Frontmatter / PathToUrlResolver
 - [ ] Step 5 — DocsApiClient

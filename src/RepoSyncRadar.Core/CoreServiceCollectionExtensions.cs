@@ -13,15 +13,40 @@ public static class CoreServiceCollectionExtensions
 {
     public static IServiceCollection AddRepoSyncRadarCore(this IServiceCollection services)
     {
-        services.AddOptions<GitHubOptions>().BindConfiguration(GitHubOptions.SectionName);
-        services.AddOptions<DocsApiOptions>().BindConfiguration(DocsApiOptions.SectionName);
-        services.AddOptions<CopilotOptions>().BindConfiguration(CopilotOptions.SectionName);
+        services.AddRepoSyncRadarOptions();
 
         services.AddDbContextFactory<RadarDbContext>((sp, options) =>
         {
             var dbPath = ResolveDbPath();
             options.UseSqlite($"Data Source={dbPath}");
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers and validates the <c>GitHub</c>, <c>DocsApi</c>, and <c>Copilot</c> options
+    /// sections. Validation runs at <c>IHost.StartAsync</c> time so that an invalid
+    /// <c>appsettings.json</c> fails fast instead of silently producing default values.
+    /// </summary>
+    public static IServiceCollection AddRepoSyncRadarOptions(this IServiceCollection services)
+    {
+        services.AddOptions<GitHubOptions>()
+            .BindConfiguration(GitHubOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddOptions<DocsApiOptions>()
+            .BindConfiguration(DocsApiOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<DocsApiOptions>, DocsApiOptionsValidator>();
+
+        services.AddOptions<CopilotOptions>()
+            .BindConfiguration(CopilotOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<IPostConfigureOptions<CopilotOptions>, CopilotOptionsPostConfigurer>();
 
         return services;
     }

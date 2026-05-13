@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace RepoSyncRadar.Core.Options;
 
 /// <summary>
@@ -11,6 +13,7 @@ public sealed class CopilotOptions
     public string? CliPath { get; set; }
 
     /// <summary>Default model id (e.g. <c>gpt-5</c>, <c>claude-sonnet-4.5</c>).</summary>
+    [Required(AllowEmptyStrings = false)]
     public string DefaultModel { get; set; } = "gpt-5";
 
     /// <summary>Enable streaming response chunks. Recommended for the UI.</summary>
@@ -23,6 +26,8 @@ public sealed class CopilotOptions
     public bool CaptureContent { get; set; }
 
     /// <summary>Hosts that <c>url</c> permission requests may target without UI confirmation.</summary>
+    [Required]
+    [MinLength(1)]
     public IReadOnlyList<string> AllowedUrlHosts { get; set; } =
     [
         "docs.github.com",
