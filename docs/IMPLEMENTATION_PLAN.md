@@ -928,6 +928,8 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
   - 完了日 2026-05-13, テスト件数 8
 - [x] Step 18 — Ask Palette / SqlGuard
   - 完了日 2026-05-13, テスト件数 12
+- [x] Step 19 — ローカルプレビュー
+  - 完了日 2026-05-13, テスト件数 7
 - [ ] Step 15 — Morning Triage
 - [ ] Step 16 — Review UI
 - [ ] Step 17 — Adoption + 下書き

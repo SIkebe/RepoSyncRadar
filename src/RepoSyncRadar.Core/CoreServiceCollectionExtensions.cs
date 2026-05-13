@@ -7,6 +7,7 @@ using RepoSyncRadar.Core.Options;
 using RepoSyncRadar.Core.Services;
 using RepoSyncRadar.Core.Services.Docs;
 using RepoSyncRadar.Core.Services.GitHub;
+using RepoSyncRadar.Core.Services.Preview;
 
 namespace RepoSyncRadar.Core;
 
@@ -38,6 +39,9 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IDocsGitHubClient, DocsGitHubClient>();
         services.TryAddSingleton<ICommitIngestionService, CommitIngestionService>();
         services.TryAddSingleton<IPathToUrlResolver, NullPathToUrlResolver>();
+        services.TryAddSingleton<IProcessRunner, SystemProcessRunner>();
+        services.TryAddSingleton<DocsWorktreeManager>();
+        services.TryAddSingleton<PreviewServerHost>();
 
         return services;
     }
@@ -65,6 +69,10 @@ public static class CoreServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
         services.AddSingleton<IPostConfigureOptions<CopilotOptions>, CopilotOptionsPostConfigurer>();
+
+        services.AddOptions<DocsRepositoryOptions>()
+            .BindConfiguration(DocsRepositoryOptions.SectionName)
+            .ValidateDataAnnotations();
 
         return services;
     }
