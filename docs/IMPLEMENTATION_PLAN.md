@@ -892,7 +892,8 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
   - 完了日 2026-05-13, テスト件数 6
 - [x] Step 4 — Frontmatter / PathToUrlResolver
   - 完了日 2026-05-13, テスト件数 9
-- [ ] Step 5 — DocsApiClient
+- [x] Step 5 — DocsApiClient
+  - 完了日 2026-05-13, テスト件数 8
 - [ ] Step 6 — DocsGitHubClient
 - [ ] Step 7 — 取り込みパイプライン
 - [ ] Step 8 — サニタイザ

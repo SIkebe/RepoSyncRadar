@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Options;
+using RepoSyncRadar.Core.Services;
+using RepoSyncRadar.Core.Services.Docs;
 
 namespace RepoSyncRadar.Core;
 
@@ -15,11 +18,15 @@ public static class CoreServiceCollectionExtensions
     {
         services.AddRepoSyncRadarOptions();
 
+        services.TryAddSingleton(TimeProvider.System);
+
         services.AddDbContextFactory<RadarDbContext>((sp, options) =>
         {
             var dbPath = ResolveDbPath();
             options.UseSqlite($"Data Source={dbPath}");
         });
+
+        services.AddHttpClient<IDocsApiClient, DocsApiClient>();
 
         return services;
     }
