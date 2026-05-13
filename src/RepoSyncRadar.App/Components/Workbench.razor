@@ -4,6 +4,8 @@
     later steps. *@
 
 @inject IServiceProvider Services
+@implements IDisposable
+@using Microsoft.Extensions.DependencyInjection
 
 <MudThemeProvider />
 <MudPopoverProvider />
@@ -19,6 +21,8 @@
         </aside>
 
         <main class="radar-workbench">
+            <AppHeader />
+
             <MudPaper Elevation="0" Class="pa-2">
                 <AskPalette />
             </MudPaper>
@@ -47,6 +51,42 @@
     private ReviewStatus? _selectedStatus;
     private Commit? _selectedCommit;
     private CommitQueryFilter _filter = new();
+    private IReviewBroadcaster? _broadcaster;
+
+    protected override void OnInitialized()
+    {
+        _broadcaster = Services.GetService<IReviewBroadcaster>();
+        if (_broadcaster is not null)
+        {
+            _broadcaster.Reviewed += OnReviewed;
+        }
+    }
+
+    private async void OnReviewed(object? sender, EventArgs e)
+    {
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                // Replace the Filter reference so CommitList's OnParametersSetAsync
+                // detects the change and re-queries IRadarRepository.
+                _filter = new CommitQueryFilter { Status = _selectedStatus };
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+            // Component disposed mid-broadcast; safe to swallow.
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_broadcaster is not null)
+        {
+            _broadcaster.Reviewed -= OnReviewed;
+        }
+    }
 
     private Task HandleStatusChanged(ReviewStatus? status)
     {

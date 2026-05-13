@@ -1,0 +1,182 @@
+@using Microsoft.Extensions.DependencyInjection
+@using RepoSyncRadar.App.Auth
+@using RepoSyncRadar.Core.Services
+@implements IDisposable
+
+@*
+    AppHeader — top bar shown at the top of Workbench. Surfaces the current GitHub
+    auth state (Not configured / Not signed in / Signed in), exposes Sign in / Sign
+    out buttons, and the manual Sync trigger that runs ICommitIngestionService.
+    Without this header the app launches into an entirely empty inbox with no
+    visible action, which is what motivated this component.
+*@
+
+<MudPaper Elevation="1"
+          Class="pa-3 mb-2"
+          data-testid="app-header">
+    <header style="display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        @switch (_state)
+        {
+            case GitHubAuthState.SignedIn:
+                <span data-testid="app-header-state"
+                      data-state="SignedIn"
+                      style="color:#22c55e; font-weight:600;">● サインイン済み</span>
+                @if (!string.IsNullOrEmpty(_login))
+                {
+                    <span data-testid="app-header-login"
+                          style="font-weight:600; opacity:0.9;">@($"@{_login}")</span>
+                }
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           OnClick="OnSignOutAsync"
+                           Disabled="@_busy"
+                           data-testid="app-header-signout">Sign out</MudButton>
+                break;
+            case GitHubAuthState.NotSignedIn:
+                <span data-testid="app-header-state"
+                      data-state="NotSignedIn"
+                      style="color:#fbbf24; font-weight:600;">○ 未サインイン</span>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           Size="Size.Small"
+                           OnClick="OnSignInAsync"
+                           Disabled="@_busy"
+                           data-testid="app-header-signin">Sign in</MudButton>
+                break;
+            case GitHubAuthState.NotConfigured:
+                <span data-testid="app-header-state"
+                      data-state="NotConfigured"
+                      style="color:#ef4444; font-weight:600;">⚠ OAuth Client Id 未設定</span>
+                <span data-testid="app-header-config-hint"
+                      style="font-size:0.85em; opacity:0.8;">appsettings.Local.json の Copilot.OAuthClientId を設定 (docs/USAGE.md)</span>
+                break;
+        }
+    </div>
+
+    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        @if (_lastReport is { } report)
+        {
+            <span data-testid="app-header-last-sync" style="font-size:0.85em; opacity:0.8;">
+                直近 Sync: 取得 @report.Total / 新規 @report.Inserted / スキップ @report.Skipped
+            </span>
+        }
+        @if (_lastError is not null)
+        {
+            <span data-testid="app-header-error" style="color:#ef4444; font-size:0.85em;">@_lastError</span>
+        }
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="OnSyncAsync"
+                   Disabled="@(_busy || _state != GitHubAuthState.SignedIn)"
+                   data-testid="app-header-sync">
+            @(_busy ? "Sync 中…" : "Sync")
+        </MudButton>
+    </div>
+    </header>
+</MudPaper>
+
+@code {
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    private GitHubAuthState _state = GitHubAuthState.NotSignedIn;
+    private string? _login;
+    private bool _busy;
+    private IngestionReport? _lastReport;
+    private string? _lastError;
+    private IReviewBroadcaster? _broadcaster;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _broadcaster = Services.GetService<IReviewBroadcaster>();
+        await RefreshStateAsync();
+    }
+
+    private async Task RefreshStateAsync()
+    {
+        var session = Services.GetRequiredService<IGitHubAuthSession>();
+        _state = await session.GetStateAsync(CancellationToken.None);
+        if (_state == GitHubAuthState.SignedIn)
+        {
+            // Cached inside the session so we can call this on every refresh; failure
+            // returns null and we just hide the @login chip.
+            _login = await session.GetCurrentLoginAsync(CancellationToken.None);
+        }
+        else
+        {
+            _login = null;
+        }
+    }
+
+    private async Task OnSignInAsync()
+    {
+        _busy = true;
+        _lastError = null;
+        StateHasChanged();
+        try
+        {
+            var session = Services.GetRequiredService<IGitHubAuthSession>();
+            await session.SignInAsync(CancellationToken.None);
+            await RefreshStateAsync();
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"サインイン失敗: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task OnSignOutAsync()
+    {
+        _busy = true;
+        _lastError = null;
+        StateHasChanged();
+        try
+        {
+            var session = Services.GetRequiredService<IGitHubAuthSession>();
+            await session.SignOutAsync(CancellationToken.None);
+            await RefreshStateAsync();
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"サインアウト失敗: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task OnSyncAsync()
+    {
+        _busy = true;
+        _lastError = null;
+        _lastReport = null;
+        StateHasChanged();
+        try
+        {
+            var svc = Services.GetRequiredService<ICommitIngestionService>();
+            _lastReport = await svc.IngestAsync(CancellationToken.None);
+            // Reuse the review broadcaster so Sidebar/CommitList re-query their
+            // data the moment Sync finishes. The broadcaster is a no-op pub/sub
+            // so we can publish freely without coupling to a Sync-specific bus.
+            _broadcaster?.Publish();
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Sync 失敗: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        // Reserved for future broadcaster subscriptions (e.g. auth state changes).
+    }
+}

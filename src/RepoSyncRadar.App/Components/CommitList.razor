@@ -4,8 +4,9 @@
 
 @*
     CommitList — Phase 1 commit inbox view. Loads commits from IRadarRepository using the
-    supplied filter and renders one row per commit. Empty result yields an empty-state
-    message. Row clicks emit OnCommitSelected so the parent can drive CommitDetail.
+    supplied filter and renders one row per commit. Empty state explicitly tells the user
+    to press the Sync button rather than leaving them to guess. Sync-triggered refresh is
+    driven by Workbench via the Filter parameter reference changing.
 *@
 
 <section class="radar-commit-list" data-testid="commit-list">
@@ -15,7 +16,13 @@
     }
     else if (_commits.Count == 0)
     {
-        <p class="empty" data-testid="commit-list-empty">表示するコミットがありません。</p>
+        <p class="empty" data-testid="commit-list-empty">
+            表示するコミットがありません。<br />
+            <small class="empty-hint">
+                上部の <strong>Sync</strong> ボタンを押すと github/docs の最新 Repo sync コミットを取得します。
+                ボタンが無効の場合は、まず <strong>Sign in</strong> から GitHub にサインインしてください。
+            </small>
+        </p>
     }
     else
     {

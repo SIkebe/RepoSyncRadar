@@ -38,6 +38,8 @@ public static class AppServiceCollectionExtensions
             http.DefaultRequestHeaders.UserAgent.ParseAdd("RepoSyncRadar");
         });
         services.TryAddSingleton<IGitHubAccessTokenProvider, GitHubAccessTokenProvider>();
+        services.TryAddSingleton<IGitHubUserApi, OctokitGitHubUserApi>();
+        services.TryAddSingleton<IGitHubAuthSession, GitHubAuthSession>();
 
         services.TryAddSingleton<ICopilotSessionFactory, CopilotSessionFactory>();
         services.TryAddSingleton<MorningTriageSession>();

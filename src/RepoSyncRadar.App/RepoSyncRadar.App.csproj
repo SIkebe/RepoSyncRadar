@@ -23,6 +23,7 @@
     <PackageReference Include="MudBlazor" />
     <PackageReference Include="GitHub.Copilot.SDK" />
     <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Octokit" />
   </ItemGroup>
 
   <ItemGroup>

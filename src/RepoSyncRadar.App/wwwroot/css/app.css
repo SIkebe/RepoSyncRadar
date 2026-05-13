@@ -198,3 +198,72 @@ html, body {
     font-size: 0.9rem;
     margin: 0.25rem 0;
 }
+
+/* AskPalette — gives the Ctrl+K row a proper flex layout so the input, the
+   実行 button, and the SQL-debug toggle don't visually collide with the
+   AppHeader's Sync button above. */
+.ask-palette {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ask-palette-input {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.ask-palette-input input[type="text"] {
+    flex: 1 1 18rem;
+    min-width: 12rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font: inherit;
+}
+
+.ask-palette-input button {
+    padding: 0.4rem 0.9rem;
+    border: 1px solid #ced4da;
+    background: #f8f9fa;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+}
+
+.ask-palette-input button:hover:not([disabled]) {
+    background: #e9ecef;
+}
+
+.ask-palette-input button[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.ask-palette-input label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.85rem;
+    color: #555;
+    white-space: nowrap;
+}
+
+.ask-palette-busy {
+    color: #555;
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.ask-palette-result {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 4px;
+    padding: 0.6rem 0.8rem;
+    margin: 0;
+    white-space: pre-wrap;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 0.85rem;
+}

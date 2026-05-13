@@ -45,13 +45,13 @@ public sealed class BlazorShellE2ETests
         }
 
         // The empty-state placeholders are part of the contract when the DB is
-        // empty; their absence would also indicate a broken render path.
-        Assert.True(
-            await page.Locator("[data-testid='commit-list-empty']").IsVisibleAsync(),
-            "Empty commit list placeholder should be visible when DB has no rows");
-        Assert.True(
-            await page.Locator("[data-testid='commit-detail-empty']").IsVisibleAsync(),
-            "Empty commit detail placeholder should be visible when no commit is selected");
+        // empty; their absence would also indicate a broken render path. Wait for
+        // them — CommitList / CommitDetail run their own async reload separately
+        // from Sidebar, so the placeholders can land a moment after sidebar mounts.
+        await page.Locator("[data-testid='commit-list-empty']")
+            .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
+        await page.Locator("[data-testid='commit-detail-empty']")
+            .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
     }
 
     [Fact]
