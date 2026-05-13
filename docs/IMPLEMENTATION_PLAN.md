@@ -896,7 +896,8 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
   - 完了日 2026-05-13, テスト件数 8
 - [x] Step 6 — DocsGitHubClient
   - 完了日 2026-05-13, テスト件数 6
-- [ ] Step 7 — 取り込みパイプライン
+- [x] Step 7 — 取り込みパイプライン
+  - 完了日 2026-05-13, テスト件数 9
 - [ ] Step 8 — サニタイザ
 - [ ] Step 9 — Razor コンポーネント
 - [ ] Step 10 — WebView2 埋め込み

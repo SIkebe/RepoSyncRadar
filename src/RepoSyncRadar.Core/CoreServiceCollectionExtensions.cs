@@ -30,10 +30,12 @@ public static class CoreServiceCollectionExtensions
         services.AddHttpClient<IDocsApiClient, DocsApiClient>();
 
         // DocsGitHubClient is a thin Octokit wrapper. The host is expected to register
-        // IGitHubClient and IRadarRepository with the appropriate credentials/persistence
-        // (see Step 7 / Step 20 in docs/IMPLEMENTATION_PLAN.md). Resolving IDocsGitHubClient
-        // before those are wired up will throw at first use, not at host start.
+        // IGitHubClient with the appropriate credentials (see Step 20 in
+        // docs/IMPLEMENTATION_PLAN.md). Resolving IDocsGitHubClient before that
+        // registration will throw at first use, not at host start.
+        services.TryAddSingleton<IRadarRepository, RadarRepository>();
         services.TryAddSingleton<IDocsGitHubClient, DocsGitHubClient>();
+        services.TryAddSingleton<ICommitIngestionService, CommitIngestionService>();
 
         return services;
     }
