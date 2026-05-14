@@ -183,6 +183,22 @@ html, body {
     font-size: 0.85rem;
 }
 
+.radar-commit-detail .file-row .open-in-webview {
+    align-self: flex-start;
+    margin-top: 0.15rem;
+    padding: 0.15rem 0.55rem;
+    font-size: 0.8rem;
+    border: 1px solid #2f6fd0;
+    background: #eaf3ff;
+    color: #1f4f99;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.radar-commit-detail .file-row .open-in-webview:hover {
+    background: #d6e7ff;
+}
+
 .radar-commit-detail .urls {
     list-style: none;
     margin: 0.25rem 0 0 0;

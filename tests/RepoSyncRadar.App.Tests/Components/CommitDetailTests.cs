@@ -1,9 +1,12 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Models;
+using RepoSyncRadar.Core.Options;
 using RepoSyncRadar.Core.Services;
+using RepoSyncRadar.Core.Services.Preview;
 using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Components;
@@ -145,13 +148,96 @@ public class CommitDetailTests
         Assert.Equal("doc-fix", cut.Find("[data-testid=\"commit-detail-category\"]").TextContent);
     }
 
+    [Fact]
+    public void OpenInWebView_Button_Hidden_When_No_Mapping_And_No_Resolved_Url()
+    {
+        // GraphQL schema file → not a content/*.md page, resolver also returns nothing.
+        var commit = MakeCommit(("src/graphql/data/fpt/schema.docs.graphql", 3, 3));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]"));
+    }
+
+    [Fact]
+    public void OpenInWebView_Falls_Back_To_Official_Url_When_Preview_Inactive()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync("content/copilot/about-copilot.md", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(CopilotAboutUrls));
+
+        var navigator = new PreviewNavigator();
+        Uri? captured = null;
+        navigator.Requested += (_, url) => captured = url;
+        var session = new PreviewSession(); // inactive (no Activate call)
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, session);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+
+        Assert.NotNull(captured);
+        // Resolver returns a relative path; CommitDetail absolutises it against
+        // DocsApiOptions.BaseAddress so the WebView2 receives a fully-qualified URL.
+        Assert.Equal(
+            "https://docs.github.com/en/copilot/about-copilot",
+            captured!.AbsoluteUri);
+    }
+
+    [Fact]
+    public void OpenInWebView_Rewrites_To_Localhost_When_Preview_Active()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var navigator = new PreviewNavigator();
+        Uri? captured = null;
+        navigator.Requested += (_, url) => captured = url;
+        var session = new PreviewSession();
+        session.Activate(4500);
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, session);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+
+        Assert.NotNull(captured);
+        Assert.Equal("http://localhost:4500/en/copilot/about-copilot", captured!.AbsoluteUri);
+    }
+
     private static IRenderedComponent<CommitDetail> RenderDetailWith(
         Commit commit,
         IPathToUrlResolver resolver)
+        => RenderDetailWith(commit, resolver, navigator: null, session: null);
+
+    private static IRenderedComponent<CommitDetail> RenderDetailWith(
+        Commit commit,
+        IPathToUrlResolver resolver,
+        IPreviewNavigator? navigator,
+        PreviewSession? session)
     {
-        var sp = new ServiceCollection()
-            .AddSingleton(resolver)
-            .BuildServiceProvider();
+        var services = new ServiceCollection().AddSingleton(resolver);
+        if (navigator is not null)
+        {
+            services.AddSingleton<IPreviewNavigator>(navigator);
+        }
+        if (session is not null)
+        {
+            services.AddSingleton(session);
+        }
+        // Wire the docs base address so CommitDetail can absolutise the relative
+        // paths returned by IPathToUrlResolver — matches the production DI setup.
+        services.AddSingleton<IOptions<DocsApiOptions>>(
+            Options.Create(new DocsApiOptions
+            {
+                BaseAddress = new Uri("https://docs.github.com/"),
+            }));
+        var sp = services.BuildServiceProvider();
 
         var ctx = new Bunit.TestContext();
         return ctx.RenderComponent<CommitDetail>(parameters => parameters

@@ -1,6 +1,9 @@
 @using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
 @using RepoSyncRadar.Core.Models
+@using RepoSyncRadar.Core.Options
 @using RepoSyncRadar.Core.Services
+@using RepoSyncRadar.Core.Services.Preview
 
 @*
     CommitDetail — Phase 1 commit inspector. Shows the file list with +/- stats and any
@@ -8,6 +11,14 @@
     LLM-produced Scoring (score / category / audience / summary / why) so the morning
     triage output is visible to the user. Diff rendering and Adopt/Reject actions live
     in sibling components.
+
+    Each file row carries a "WebView2 で開く" button so the user can flip the right-side
+    docs surface to that file without going through the "ローカルプレビュー" button.
+    If a local preview server is active (PreviewSession.IsActive) we publish the
+    rewritten http://localhost:{port}{mapped} URL; otherwise we publish the first
+    resolved docs.github.com URL so the official rendering is shown directly. This
+    realises DESIGN.md §1.2 / §4.1 "公式ドキュメントとレンダリング上区別がつかない見た目で
+    差分を検証" — the right pane is always the canonical look, only the source changes.
 *@
 
 <section class="radar-commit-detail" data-testid="commit-detail">
@@ -50,10 +61,20 @@
         <ul class="files">
             @foreach (var file in Commit.Files)
             {
+                var previewTarget = ResolvePreviewTarget(file);
                 <li class="file-row" data-testid="commit-detail-file" data-path="@file.Path">
                     <span class="path">@file.Path</span>
                     <span class="stats"
                           data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
+                    @if (previewTarget is not null)
+                    {
+                        <button type="button"
+                                class="open-in-webview"
+                                data-testid="commit-detail-open-in-webview"
+                                data-path="@file.Path"
+                                title="@previewTarget.AbsoluteUri"
+                                @onclick="() => OpenInWebView(previewTarget)">@PreviewButtonLabel</button>
+                    }
                     @if (_urlsByPath.TryGetValue(file.Path, out var urls) && urls.Count > 0)
                     {
                         <ul class="urls">
@@ -73,6 +94,8 @@
 </section>
 
 @code {
+    private const string PreviewButtonLabel = "WebView2 で開く";
+
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
     [Parameter] public Commit? Commit { get; set; }
@@ -106,6 +129,46 @@
             _urlsByPath[file.Path] = urls;
         }
         _resolvedForSha = Commit.Sha;
+    }
+
+    /// <summary>
+    /// Picks the right URL for the "WebView2 で開く" button on a single file row.
+    /// Priority: (1) active local preview server + path mappable → http://localhost
+    /// rewrite, (2) any resolver-supplied docs.github.com URL (relative paths are
+    /// absolutised against <see cref="DocsApiOptions.BaseAddress"/>), (3) <c>null</c>
+    /// → button hidden (the file is not a publishable content page).
+    /// </summary>
+    private Uri? ResolvePreviewTarget(CommitFile file)
+    {
+        var session = Services.GetService<PreviewSession>();
+        var mapped = PreviewPathMapper.Map(file.Path, Language);
+        if (mapped is not null && session is { IsActive: true } && session.ActivePort is { } port)
+        {
+            return new Uri(
+                string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"http://localhost:{port}{mapped}"),
+                UriKind.Absolute);
+        }
+        if (_urlsByPath.TryGetValue(file.Path, out var urls) && urls.Count > 0)
+        {
+            var first = urls[0];
+            if (Uri.TryCreate(first, UriKind.Absolute, out var absolute))
+            {
+                return absolute;
+            }
+            var baseAddress = Services.GetService<IOptions<DocsApiOptions>>()?.Value.BaseAddress;
+            if (baseAddress is not null && Uri.TryCreate(baseAddress, first, out absolute))
+            {
+                return absolute;
+            }
+        }
+        return null;
+    }
+
+    private void OpenInWebView(Uri url)
+    {
+        var navigator = Services.GetService<IPreviewNavigator>();
+        navigator?.Publish(url);
     }
 
     private static string FormatStats(CommitFile file)
