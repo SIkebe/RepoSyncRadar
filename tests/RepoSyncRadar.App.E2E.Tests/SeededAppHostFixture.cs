@@ -59,7 +59,7 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
 
         await SeedAsync(_dbPath).ConfigureAwait(false);
 
-        _host = await AppHost.StartAsync(_dbPath).ConfigureAwait(false);
+        _host = await AppHost.StartAsync(_dbPath, AppHost.PreviewDisabledEnvironment).ConfigureAwait(false);
         _playwright = await Playwright.CreateAsync().ConfigureAwait(false);
         _blazorBrowser = await _playwright.Chromium.ConnectOverCDPAsync(
             $"http://127.0.0.1:{_host.BlazorCdpPort}").ConfigureAwait(false);

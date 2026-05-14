@@ -22,6 +22,27 @@ public sealed class AppHost : IAsyncDisposable
     private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// Environment overrides that force the optional preview pipeline OFF for any
+    /// fixture that does not explicitly need it. A developer's
+    /// <c>appsettings.Local.json</c> usually populates the <c>DocsRepository</c>
+    /// section with a real <c>github/docs</c> bare clone path, which would let an
+    /// accidental click on "ローカルプレビュー" shell out to <c>git clone --bare</c>
+    /// (5–15 min cold) or fail outright on CI runners without <c>git</c>. The App
+    /// composes configuration in the order JSON → JSON Local → env vars
+    /// (<c>RADAR_</c> prefix), so these trailing entries win and flip
+    /// <c>DocsWorktreeManager.IsEnabled</c> / <c>PreviewServerHost.IsEnabled</c> to
+    /// <c>false</c>.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string?> PreviewDisabledEnvironment { get; } =
+        new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            ["RADAR_DocsRepository__BareCloneDir"] = string.Empty,
+            ["RADAR_DocsRepository__CloneUrl"] = string.Empty,
+            ["RADAR_DocsRepository__WorktreeRoot"] = string.Empty,
+            ["RADAR_DocsRepository__PreviewCommand"] = string.Empty,
+        };
+
     private readonly Process _process;
 
     public int BlazorCdpPort { get; }
@@ -36,16 +57,26 @@ public sealed class AppHost : IAsyncDisposable
     }
 
     public static async Task<AppHost> StartAsync(CancellationToken cancellationToken = default)
-        => await StartAsync(dbPath: null, cancellationToken).ConfigureAwait(false);
+        => await StartAsync(dbPath: null, environment: null, cancellationToken).ConfigureAwait(false);
+
+    public static async Task<AppHost> StartAsync(string? dbPath, CancellationToken cancellationToken = default)
+        => await StartAsync(dbPath, environment: null, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
-    /// Starts the App with an optional override for the SQLite database path.
-    /// Tests that need to seed deterministic Commits/Scoring/Drafts (e.g. to verify
-    /// that the Score panel and the Teams draft tab actually render) point this at a
-    /// throwaway file under <c>Path.GetTempPath()</c> so the developer's real
-    /// <c>%LOCALAPPDATA%\RepoSyncRadar\radar.db</c> is left untouched.
+    /// Starts the App with an optional override for the SQLite database path and an
+    /// optional set of environment variables. Tests that need to seed deterministic
+    /// Commits/Scoring/Drafts (e.g. to verify that the Score panel and the Teams
+    /// draft tab actually render) point <paramref name="dbPath"/> at a throwaway file
+    /// under <c>Path.GetTempPath()</c> so the developer's real
+    /// <c>%LOCALAPPDATA%\RepoSyncRadar\radar.db</c> is left untouched. Pass
+    /// <paramref name="environment"/> to inject <c>RADAR_*</c> overrides that flip
+    /// configuration sections (e.g. force <c>DocsRepository</c> empty so the preview
+    /// pipeline stays disabled during E2E runs).
     /// </summary>
-    public static async Task<AppHost> StartAsync(string? dbPath, CancellationToken cancellationToken = default)
+    public static async Task<AppHost> StartAsync(
+        string? dbPath,
+        IReadOnlyDictionary<string, string?>? environment,
+        CancellationToken cancellationToken = default)
     {
         var exePath = ResolveAppExePath();
         if (!File.Exists(exePath))
@@ -69,6 +100,15 @@ public sealed class AppHost : IAsyncDisposable
         if (!string.IsNullOrWhiteSpace(dbPath))
         {
             psi.EnvironmentVariables["REPOSYNCRADAR_DB_PATH"] = dbPath;
+        }
+        if (environment is not null)
+        {
+            foreach (var kv in environment)
+            {
+                // Null values clear the variable so callers can also use this to
+                // explicitly unset something inherited from the parent process.
+                psi.EnvironmentVariables[kv.Key] = kv.Value;
+            }
         }
 
         var process = Process.Start(psi)
