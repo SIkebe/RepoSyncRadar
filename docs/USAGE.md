@@ -73,6 +73,10 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
     "PreviewCommand": "npm",
     "PreviewArguments": "run dev -- --port {port}",
     "PreviewInstallArguments": "install",
+      "PreviewEnvironment": {
+         "PORT": "{port}",
+         "REQUEST_TIMEOUT": "600000"
+      },
     "PreviewBasePort": 4500
   }
 }
@@ -200,6 +204,7 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 
 - Node.js + npm が PATH に通っていること(`PreviewCommand="npm"` を上書きすれば他ツールでも可)
 - worktree に `node_modules` が無い場合、`PreviewServerHost` が `PreviewCommand` + `PreviewInstallArguments` (既定: `npm install`) を自動実行してから preview server を起動します
+- `github/docs` の初回 Next.js コンパイルは 15 秒を超えることがあるため、`REQUEST_TIMEOUT=600000` を preview sidecar に渡します。これを短くすると PR HEAD 側が `Service Unavailable` になることがあります
 - WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中の `http://localhost:{port}` だけを動的に許可します
 
 #### node_modules の扱い (案 A / 案 B)

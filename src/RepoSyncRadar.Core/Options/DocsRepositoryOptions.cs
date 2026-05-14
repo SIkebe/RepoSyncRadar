@@ -49,11 +49,15 @@ public sealed class DocsRepositoryOptions
     /// before starting <see cref="PreviewCommand"/>. Values support the <c>{port}</c>
     /// placeholder. Defaults to <c>PORT={port}</c> so the <c>github/docs</c>
     /// server (<c>nodemon src/frame/server.ts</c>) listens on the requested port
-    /// rather than its built-in default of 4000.
+    /// rather than its built-in default of 4000. Also defaults
+    /// <c>REQUEST_TIMEOUT=600000</c> because <c>github/docs</c> returns a 503 after
+    /// 15 seconds in development mode, while the first Next.js page compile on
+    /// Windows ARM64 often takes longer than that.
     /// </summary>
     public Dictionary<string, string> PreviewEnvironment { get; set; } = new(System.StringComparer.Ordinal)
     {
         ["PORT"] = "{port}",
+        ["REQUEST_TIMEOUT"] = "600000",
     };
 
     /// <summary>First port to try when starting the preview server.</summary>

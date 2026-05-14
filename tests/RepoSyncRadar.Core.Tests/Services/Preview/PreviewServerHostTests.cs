@@ -90,6 +90,43 @@ public sealed class PreviewServerHostTests : IDisposable
         Assert.Null(PreviewServerHost.BuildEnvironment(new Dictionary<string, string>(), port: 4500));
     }
 
+    [Fact]
+    public void WithDefaultRequestTimeout_Adds_Default_For_Npm_When_Missing()
+    {
+        var template = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["PORT"] = "{port}",
+        };
+
+        var result = PreviewServerHost.WithDefaultRequestTimeout(template, "npm");
+
+        Assert.NotNull(result);
+        Assert.Equal("600000", result["REQUEST_TIMEOUT"]);
+        Assert.Equal("{port}", result["PORT"]);
+    }
+
+    [Fact]
+    public void WithDefaultRequestTimeout_Preserves_Configured_Value()
+    {
+        var template = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["REQUEST_TIMEOUT"] = "120000",
+        };
+
+        var result = PreviewServerHost.WithDefaultRequestTimeout(template, "npm.cmd");
+
+        Assert.NotNull(result);
+        Assert.Equal("120000", result["REQUEST_TIMEOUT"]);
+    }
+
+    [Fact]
+    public void WithDefaultRequestTimeout_Skips_Non_Npm_Commands()
+    {
+        var result = PreviewServerHost.WithDefaultRequestTimeout(null, "hugo");
+
+        Assert.Null(result);
+    }
+
     [Theory]
     [InlineData("npm", true)]
     [InlineData("NPM", true)]
@@ -164,6 +201,7 @@ public sealed class PreviewServerHostTests : IDisposable
         Assert.NotNull(call.Environment);
         Assert.Equal("4500", call.Environment!["PORT"]);
         Assert.Equal("development", call.Environment["NODE_ENV"]);
+        Assert.Equal("600000", call.Environment["REQUEST_TIMEOUT"]);
 
         var probed = Assert.Single(probe.Calls);
         Assert.Equal(4500, probed.Port);

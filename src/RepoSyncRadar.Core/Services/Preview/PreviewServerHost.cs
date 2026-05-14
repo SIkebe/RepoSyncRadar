@@ -16,6 +16,9 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 public sealed partial class PreviewServerHost : IAsyncDisposable
 {
+    private const string PreviewRequestTimeoutEnvironmentKey = "REQUEST_TIMEOUT";
+    private const string DefaultPreviewRequestTimeoutMilliseconds = "600000";
+
     private readonly IProcessRunner _runner;
     private readonly IPortReadyProbe _probe;
     private readonly DocsRepositoryOptions _options;
@@ -113,7 +116,9 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         await EnsureNodeModulesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
 
         var args = ReplacePort(_options.PreviewArguments, port);
-        var env = BuildEnvironment(_options.PreviewEnvironment, port);
+        var env = BuildEnvironment(
+            WithDefaultRequestTimeout(_options.PreviewEnvironment, _options.PreviewCommand),
+            port);
         var handle = _runner.Start(_options.PreviewCommand, args, worktreePath, env);
         _current = handle;
         _currentPort = port;
@@ -215,6 +220,22 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
             }
             result[key] = ReplacePort(value ?? string.Empty, port);
         }
+        return result;
+    }
+
+    internal static IReadOnlyDictionary<string, string>? WithDefaultRequestTimeout(
+        IReadOnlyDictionary<string, string>? template,
+        string? command)
+    {
+        if (!IsNpmCommand(command))
+        {
+            return template;
+        }
+
+        var result = template is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : new Dictionary<string, string>(template, StringComparer.Ordinal);
+        result.TryAdd(PreviewRequestTimeoutEnvironmentKey, DefaultPreviewRequestTimeoutMilliseconds);
         return result;
     }
 
