@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 
@@ -8,6 +9,14 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// <see cref="System.Diagnostics.Process"/>. Stdout/stderr are buffered into
 /// <see cref="StringBuilder"/> so callers can include them in errors.
 /// </summary>
+/// <remarks>
+/// Both <see cref="RunAsync"/> and <see cref="Start"/> wrap <see cref="Win32Exception"/>
+/// thrown by <see cref="Process.Start(ProcessStartInfo)"/> (typically "the system cannot
+/// find the file specified" when <c>git</c> or <c>npm</c> is missing from PATH) into a
+/// uniform <see cref="InvalidOperationException"/>. This lets the Blazor UI catch a
+/// single exception type and surface a friendly status without the WPF host process
+/// terminating from an unhandled exception.
+/// </remarks>
 public sealed class SystemProcessRunner : IProcessRunner
 {
     public async Task<ProcessRunResult> RunAsync(
@@ -29,16 +38,30 @@ public sealed class SystemProcessRunner : IProcessRunner
             CreateNoWindow = true,
         };
 
-        using var p = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
-        var stdout = new StringBuilder();
-        var stderr = new StringBuilder();
-        p.OutputDataReceived += (_, e) => { if (e.Data is not null) { stdout.AppendLine(e.Data); } };
-        p.ErrorDataReceived += (_, e) => { if (e.Data is not null) { stderr.AppendLine(e.Data); } };
-        p.BeginOutputReadLine();
-        p.BeginErrorReadLine();
-        await p.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-        return new ProcessRunResult(p.ExitCode, stdout.ToString(), stderr.ToString());
+        Process p;
+        try
+        {
+            p = Process.Start(psi)
+                ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
+        }
+        catch (Win32Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"'{fileName}' を起動できませんでした。PATH に追加されているか確認してください ({ex.Message})",
+                ex);
+        }
+
+        using (p)
+        {
+            var stdout = new StringBuilder();
+            var stderr = new StringBuilder();
+            p.OutputDataReceived += (_, e) => { if (e.Data is not null) { stdout.AppendLine(e.Data); } };
+            p.ErrorDataReceived += (_, e) => { if (e.Data is not null) { stderr.AppendLine(e.Data); } };
+            p.BeginOutputReadLine();
+            p.BeginErrorReadLine();
+            await p.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            return new ProcessRunResult(p.ExitCode, stdout.ToString(), stderr.ToString());
+        }
     }
 
     public IProcessHandle Start(string fileName, string arguments, string workingDirectory)
@@ -55,8 +78,18 @@ public sealed class SystemProcessRunner : IProcessRunner
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        var p = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
+        Process p;
+        try
+        {
+            p = Process.Start(psi)
+                ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
+        }
+        catch (Win32Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"'{fileName}' を起動できませんでした。PATH に追加されているか確認してください ({ex.Message})",
+                ex);
+        }
         return new ProcessHandle(p);
     }
 

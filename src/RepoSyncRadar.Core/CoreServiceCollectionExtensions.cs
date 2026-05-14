@@ -46,6 +46,8 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IProcessRunner, SystemProcessRunner>();
         services.TryAddSingleton<DocsWorktreeManager>();
         services.TryAddSingleton<PreviewServerHost>();
+        services.TryAddSingleton<PreviewSession>();
+        services.TryAddSingleton<IPreviewCoordinator, PreviewCoordinator>();
 
         return services;
     }

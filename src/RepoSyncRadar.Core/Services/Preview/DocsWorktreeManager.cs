@@ -18,6 +18,7 @@ public sealed partial class DocsWorktreeManager
     private readonly ILogger<DocsWorktreeManager> _logger;
     private readonly Dictionary<string, WorktreeEntry> _worktrees = new(StringComparer.OrdinalIgnoreCase);
     private long _tick;
+    private bool _restored;
 
     public DocsWorktreeManager(
         IProcessRunner runner,
@@ -95,6 +96,7 @@ public sealed partial class DocsWorktreeManager
         {
             return null;
         }
+        await RestoreFromDiskAsync(cancellationToken).ConfigureAwait(false);
         if (_worktrees.TryGetValue(commitSha, out var existing))
         {
             existing.LastUsed = ++_tick;
@@ -141,7 +143,156 @@ public sealed partial class DocsWorktreeManager
         public long LastUsed { get; set; } = lastUsed;
     }
 
+    /// <summary>
+    /// Populates the in-memory LRU from <c>git worktree list --porcelain</c> on first
+    /// use. Without this, restarting the app forgets every previously-created worktree
+    /// and <see cref="DocsRepositoryOptions.MaxWorktrees"/> never kicks in, so
+    /// <c>WorktreeRoot</c> grows without bound across sessions.
+    /// </summary>
+    /// <remarks>
+    /// The porcelain output is a sequence of blank-line-separated stanzas like
+    /// <c>worktree &lt;path&gt;\nHEAD &lt;sha&gt;\ndetached</c> (or a single
+    /// <c>bare</c> entry for the bare repo). We ignore the <c>bare</c> stanza and key
+    /// the dictionary by HEAD sha. LastUsed is ordered by filesystem mtime so the
+    /// oldest leftover gets evicted first.
+    /// </remarks>
+    private async Task RestoreFromDiskAsync(CancellationToken cancellationToken)
+    {
+        if (_restored || !IsEnabled)
+        {
+            return;
+        }
+        _restored = true;
+        if (!Directory.Exists(_options.BareCloneDir))
+        {
+            return;
+        }
+        ProcessRunResult result;
+        try
+        {
+            result = await _runner.RunAsync(
+                "git",
+                "worktree list --porcelain",
+                _options.BareCloneDir,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException ex)
+        {
+            LogRestoreFailed(_logger, ex.Message);
+            return;
+        }
+        if (result.ExitCode != 0)
+        {
+            LogRestoreFailed(_logger, result.StandardError);
+            return;
+        }
+
+        var entries = new List<(string Path, string Sha, DateTime Mtime)>();
+        string? path = null;
+        string? sha = null;
+        var isBare = false;
+        foreach (var rawLine in result.StandardOutput.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (line.Length == 0)
+            {
+                if (path is not null && sha is not null && !isBare)
+                {
+                    var mtime = SafeGetMtime(path);
+                    entries.Add((path, sha, mtime));
+                }
+                path = null;
+                sha = null;
+                isBare = false;
+                continue;
+            }
+            if (line.StartsWith("worktree ", StringComparison.Ordinal))
+            {
+                path = line["worktree ".Length..];
+            }
+            else if (line.StartsWith("HEAD ", StringComparison.Ordinal))
+            {
+                sha = line["HEAD ".Length..];
+            }
+            else if (string.Equals(line, "bare", StringComparison.Ordinal))
+            {
+                isBare = true;
+            }
+        }
+        if (path is not null && sha is not null && !isBare)
+        {
+            entries.Add((path, sha, SafeGetMtime(path)));
+        }
+
+        foreach (var entry in entries.OrderBy(e => e.Mtime))
+        {
+            _worktrees[entry.Sha] = new WorktreeEntry(entry.Path, ++_tick);
+        }
+        if (entries.Count > 0)
+        {
+            LogRestored(_logger, entries.Count);
+        }
+    }
+
+    private static DateTime SafeGetMtime(string path)
+    {
+        try
+        {
+            return Directory.Exists(path) ? Directory.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+        }
+        catch (IOException)
+        {
+            return DateTime.MinValue;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return DateTime.MinValue;
+        }
+    }
+
+    /// <summary>
+    /// Removes every tracked worktree via <c>git worktree remove --force</c> followed
+    /// by <c>git worktree prune</c>. Returns the number of worktrees removed. Intended
+    /// to be wired to a "Clean up cache" UI action / CLI script so users can free disk
+    /// space without dropping to the shell.
+    /// </summary>
+    public async Task<int> PruneAllAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsEnabled)
+        {
+            return 0;
+        }
+        await RestoreFromDiskAsync(cancellationToken).ConfigureAwait(false);
+
+        var paths = _worktrees.Values.Select(v => v.Path).ToList();
+        var removed = 0;
+        foreach (var p in paths)
+        {
+            var args = string.Create(CultureInfo.InvariantCulture, $"worktree remove --force {p}");
+            var res = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+            if (res.ExitCode == 0)
+            {
+                removed++;
+            }
+            else
+            {
+                LogWorktreeRemoveFailed(_logger, p, res.StandardError);
+            }
+        }
+        _worktrees.Clear();
+        await _runner.RunAsync("git", "worktree prune", _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        return removed;
+    }
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning,
         Message = "Failed to remove worktree {Path}: {StandardError}")]
     private static partial void LogWorktreeRemoveFailed(ILogger logger, string path, string standardError);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Debug,
+        Message = "Rehydrated {Count} worktree(s) from disk.")]
+    private static partial void LogRestored(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Warning,
+        Message = "git worktree list --porcelain failed: {StandardError}")]
+    private static partial void LogRestoreFailed(ILogger logger, string standardError);
 }
