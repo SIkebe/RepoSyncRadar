@@ -179,11 +179,54 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 
 ## 5. オプション機能
 
-### 5.1 ローカルプレビュー(Step 19)
+### 5.1 ローカルプレビュー(Step 19 / 19.5)
 
 `DocsRepository` セクションを埋めておくと、PR HEAD の見た目を bare clone + worktree で確認できます。空のままなら **完全に no-op** で他機能には影響しません。
 
-- 仕組み: [`DocsWorktreeManager`](../src/RepoSyncRadar.Core/Services/Preview/DocsWorktreeManager.cs) が `git clone --bare` した親リポから worktree を切り、[`PreviewServerHost`](../src/RepoSyncRadar.Core/Services/Preview/PreviewServerHost.cs) が `npm run dev` を sidecar 起動
+#### 使い方
+
+1. コミット一覧から PR を選び、右下の **「ローカルプレビュー」** ボタンを押す
+2. 内部で次が自動で走る:
+   - 初回のみ `git clone --bare <DocsRepoUrl> <BareCloneDir>`
+   - `git fetch origin +refs/pull/{PR}/head:...` で PR head を取得
+   - `git worktree add <WorktreeRoot>/<sha> <sha>` で作業ディレクトリを生成
+   - `npm run dev -- --port {port}` を sidecar として起動(同じ SHA に対しては再起動しない)
+3. 右側の WebView2 が `http://localhost:{port}/{言語}/{パス}` に切り替わり、変更されたファイル先頭の Markdown をその場で確認できます
+4. ボタン下に表示されている URL は外部ブラウザでも開けます
+
+#### 前提
+
+- Node.js + npm が PATH に通っていること(`PreviewCommand="npm"` を上書きすれば他ツールでも可)
+- 初回のみ `cd <BareCloneDir>` で `npm install` を済ませておく必要があります(`PreviewServerHost` は `npm install` を自動で実行しません)
+- WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中の `http://localhost:{port}` だけを動的に許可します
+
+#### node_modules の扱い (案 A / 案 B)
+
+worktree ごとに作業ディレクトリが分かれるため、`npm install` の置き場所を選ぶ必要があります。アプリのプレビュー画面で URL の下に表示される「worktree パス」を見て、状況に合わせてどちらかを使ってください。
+
+- **案 A — 各 worktree で個別に `npm install`** (デフォルト・確実):
+   1. プレビュー後にボタン下の `<details>` に出てくる `cd "<worktree>" && npm install` をそのまま実行
+   2. 初回 5〜15 分・1〜2 GB 消費。worktree を削除すれば一緒に消えます
+- **案 B — bare clone 親で 1 度だけ `npm install` → 各 worktree から junction で共有** (高速・ディスク節約):
+   1. `cd <BareCloneDir> && npm install` を 1 回だけ実行
+   2. 各 worktree で `cmd /c mklink /J node_modules "<BareCloneDir>\node_modules"` を作成
+   3. `next dev` の watch は junction を透過するため、PR head を切り替えるたびに `node_modules` を再生成しなくて済みます
+   - 注意: `package.json` の依存が PR 内で書き換わっている場合は案 A に戻るか、当該 worktree だけ junction を消して個別 install してください
+
+#### キャッシュ (worktree) のクリーンアップ
+
+放置すると `<WorktreeRoot>` 配下に PR head ごとの作業ディレクトリが溜まり続けます (1 件あたり 1〜2 GB)。次のいずれかで一括削除できます:
+
+- **アプリ内**: プレビューパネルの **「キャッシュをクリーンアップ」** ボタン
+   - 起動時に `git worktree list --porcelain` で既存 worktree を再ハイドレートしているため、前回プロセスで作られたものも含めて削除されます
+- **CLI**: `pwsh ./scripts/Clean-Worktrees.ps1` (確認だけしたい場合は `-WhatIf`)
+   - 既定で `appsettings.local.json → appsettings.json` の順に `DocsRepository:BareCloneDir` を読みます。明示指定したい場合は `-BareCloneDir <path>`
+
+#### 仕組み
+
+- [`DocsWorktreeManager`](../src/RepoSyncRadar.Core/Services/Preview/DocsWorktreeManager.cs) が `git clone --bare` した親リポから worktree を切り、[`PreviewServerHost`](../src/RepoSyncRadar.Core/Services/Preview/PreviewServerHost.cs) が `npm run dev` を sidecar 起動
+- [`PreviewCoordinator`](../src/RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs) が clone → fetch → checkout → start → `PreviewSession.Activate(port)` を 1 ステップで束ねます
+- [`PreviewPathMapper`](../src/RepoSyncRadar.Core/Services/Preview/PreviewPathMapper.cs) が `content/foo/bar.md` を `/en/foo/bar` に、`content/index.md` を `/en` に変換します
 - LRU で `MaxWorktrees` を超えたら最も古い worktree を `git worktree remove --force`
 - アプリ終了時に preview プロセスは確実に kill されます(`IAsyncDisposable`)
 

@@ -28,6 +28,7 @@
 - [Step 17. Adoption セッション + 媒体別下書き](#step-17-adoption-セッション--媒体別下書き)
 - [Step 18. `radar_query` と Ask Palette](#step-18-radar_query-と-ask-palette)
 - [Step 19. ローカルプレビュー(bare clone + worktree)](#step-19-ローカルプレビューbare-clone--worktree)
+- [Step 19.5. ローカルプレビューの UI 配線](#step-195-ローカルプレビューの-ui-配線)
 - [Step 20. 配布(Velopack)とシークレット保管(DPAPI)](#step-20-配布velopackとシークレット保管dpapi)
 - [付録 A — テスト命名規約](#付録-a--テスト命名規約)
 - [付録 B — テスト固定値 / フィクスチャ管理](#付録-b--テスト固定値--フィクスチャ管理)
@@ -819,6 +820,77 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
 - 上記 7 件が緑
 - 手動: `appsettings.Local.json` に `DocsRepository` セクションを書いた状態で、PR HEAD を Before/After 表示できる
 
+> **補足 (2026-05-14):** Step 19 では Core 層の `DocsWorktreeManager` / `PreviewServerHost` および単体テストまでが範囲。UI 配線 (ボタン → coordinator → WebView2) は Step 19.5 で扱う。
+
+---
+
+## Step 19.5. ローカルプレビューの UI 配線
+
+### 19.5.1 目的
+
+Step 19 で完成した Core サービスを **実際に画面から呼べる** ようにする。コミット詳細ペインに「ローカルプレビュー」ボタンを置き、bare clone + worktree + sidecar 起動を 1 クリックで実行し、右側の WebView2 に `http://localhost:{port}/...` を表示する。
+
+### 19.5.2 スコープ
+
+- `RepoSyncRadar.Core/Services/Preview/PreviewPathMapper.cs` — `content/foo/bar.md` → `/en/foo/bar`、`content/foo/index.md` → `/en/foo`。純粋関数。`data/...` や frontmatter 不要パスは `null`。
+- `RepoSyncRadar.Core/Services/Preview/PreviewSession.cs` — アクティブなプレビューの port 状態を保持するシングルトン。`Activate(int port)` / `Deactivate()` / `IsAllowed(Uri)` (loopback + 同 port のみ通す)。WebView2 リソースフィルタが allow-list の OR として使う。
+- `RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs` — `IPreviewCoordinator.PreparePreviewAsync(int prNumber, string sha, string filePath, CancellationToken)` を実装:
+  1. `DocsWorktreeManager.EnsureBareCloneAsync`
+  2. `DocsWorktreeManager.FetchPrAsync(prNumber)`
+  3. `DocsWorktreeManager.CheckoutAsync(sha)`
+  4. 同 SHA で前回起動していなければ `PreviewServerHost.StartAsync(worktree, port)` で sidecar 起動
+  5. `PreviewPathMapper` で `filePath` → URL パスを解決 (失敗時はトップへフォールバック)
+  6. `PreviewSession.Activate(port)` を呼んで allow-list を開ける
+  7. `PreviewLink(Uri Url, int Port, string WorktreePath)` を返す。disabled なら `null`。
+- `RepoSyncRadar.App/Components/IPreviewNavigator.cs` — Razor → WPF 用の event-based pub/sub (`IReviewBroadcaster` と同じパターン)。`event EventHandler<Uri>? Requested;` + `Publish(Uri)`。
+- `RepoSyncRadar.App/Components/PreviewActions.razor` — 選択中コミットの隣に表示するボタン。クリックで `IPreviewCoordinator` を呼び、戻り値の URL を `IPreviewNavigator.Publish` へ。状態 (idle / running / error) と最終 URL を表示。
+- `RepoSyncRadar.App/MainWindow.xaml.cs` — `IPreviewNavigator.Requested` を購読し、`Dispatcher` 経由で `DocsView.Source` を差し替え。`OnWebResourceRequested` を `_allowList.IsAllowed(uri) || _previewSession.IsAllowed(uri)` に変更。
+- DI 登録: Core 側 (`PreviewSession`, `PreviewCoordinator`) と App 側 (`IPreviewNavigator`) を追加。
+
+### 19.5.3 テスト
+
+`Core.Tests/Services/Preview/PreviewPathMapperTests.cs`
+
+| テスト | 内容 |
+|---|---|
+| `Maps_Markdown_To_Url` | `content/copilot/about-copilot.md` → `/en/copilot/about-copilot` |
+| `Strips_Index_Segment` | `content/actions/index.md` → `/en/actions` |
+| `Returns_Null_For_Non_Content_Path` | `data/release-notes/3.10.md` → `null` |
+| `Returns_Null_For_Empty_Body` | `content/index.md` → `/en` (ルート扱い) |
+
+`Core.Tests/Services/Preview/PreviewSessionTests.cs`
+
+| テスト | 内容 |
+|---|---|
+| `Inactive_Blocks_All` | `Activate` 前は `IsAllowed` がすべて `false` |
+| `Active_Allows_Matching_Localhost` | port 4500 で `Activate` → `http://localhost:4500/en/foo` が `true` |
+| `Active_Blocks_Different_Port` | port 4500 で `Activate` → `http://localhost:5000/...` が `false` |
+| `Active_Blocks_External_Host` | port 4500 で `Activate` → `https://docs.github.com/...` が `false` |
+
+`Integrations.Tests/Preview/PreviewCoordinatorTests.cs`
+
+| テスト | 内容 |
+|---|---|
+| `Disabled_Returns_Null` | `BareCloneDir` 空文字 → `null` を返し他のサービスは呼ばれない |
+| `Runs_Steps_In_Order` | Ensure → Fetch → Checkout → Start の呼び出し順を `Received.InOrder` で検証 |
+| `Same_Sha_Skips_Server_Restart` | 連続 2 回呼んでも `StartAsync` は 1 回だけ |
+| `Different_Sha_Restarts_Server` | SHA を切り替えると `StartAsync` が 2 回呼ばれる |
+| `Maps_File_Path_To_Url` | `filePath = content/foo/bar.md` → 戻り値の `Url.PathAndQuery` が `/en/foo/bar` |
+| `Activates_Preview_Session` | 成功時に `PreviewSession.IsAllowed(http://localhost:port)` が `true` になる |
+
+`App.Tests/Components/PreviewNavigatorTests.cs`
+
+| テスト | 内容 |
+|---|---|
+| `Publish_Raises_Event_With_Uri` | サブスクライバが `Uri` を受け取る |
+| `Publish_With_Null_Throws` | `ArgumentNullException` |
+
+### 19.5.4 完了基準
+
+- 上記 16 件が `Category!=Manual` で緑
+- `dotnet build -warnaserror` 緑
+- 手動: `appsettings.Local.json` に `DocsRepository` セクション + bare clone 済みのローカルパスを書いた状態で、コミット選択 → 「ローカルプレビュー」 → 右ペインに preview 画面が表示される
+
 ---
 
 ## Step 20. 配布(Velopack)とシークレット保管(DPAPI)
@@ -928,13 +1000,9 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
   - 完了日 2026-05-13, テスト件数 8
 - [x] Step 18 — Ask Palette / SqlGuard
   - 完了日 2026-05-13, テスト件数 12
-- [x] Step 19 — ローカルプレビュー
+- [x] Step 19 — ローカルプレビュー (Core のみ)
   - 完了日 2026-05-13, テスト件数 7
-- [ ] Step 15 — Morning Triage
-- [ ] Step 16 — Review UI
-- [ ] Step 17 — Adoption + 下書き
-- [ ] Step 18 — Ask Palette / SqlGuard
-- [ ] Step 19 — ローカルプレビュー
+- [x] Step 19.5 — ローカルプレビュー UI 配線
 - [ ] Step 20 — 配布 + DPAPI
 
 ---
