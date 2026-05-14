@@ -49,14 +49,26 @@ public sealed class DocsViewE2ETests
             throw new InvalidOperationException("Docs browser has no contexts.");
         }
 
-        var pages = contexts[0].Pages;
-        if (pages.Count == 0)
-        {
-            throw new InvalidOperationException("Docs page not found over CDP.");
-        }
-
-        var page = pages[0];
+        var page = await FindDocsPageAsync(contexts[0]);
         await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
         return page;
+    }
+
+    private static async Task<IPage> FindDocsPageAsync(IBrowserContext context)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        while (DateTime.UtcNow < deadline)
+        {
+            foreach (var page in context.Pages)
+            {
+                if (page.Url.Contains("docs.github.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    return page;
+                }
+            }
+            await Task.Delay(250, TestContext.Current.CancellationToken);
+        }
+
+        throw new InvalidOperationException("Docs page not found over CDP.");
     }
 }

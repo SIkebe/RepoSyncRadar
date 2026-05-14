@@ -30,16 +30,73 @@
                   HorizontalAlignment="Stretch"
                   Background="#DDDDDD" />
 
-    <!-- Right: the live docs.github.com surface. Source is assigned in code-behind
-         after CreationProperties (custom UserDataFolder) so DocsView does not collide
-         with BlazorWebView's internal WebView2 on the default folder. -->
+    <!-- Right: official docs surface + optional PR HEAD local preview surface.
+         Source is assigned in code-behind after CreationProperties (custom
+         UserDataFolder) so standalone WebView2 instances do not collide with
+         BlazorWebView's internal WebView2 on the default folder. -->
     <Grid Grid.Column="2">
-      <wv2:WebView2 x:Name="DocsView" />
+      <Grid.RowDefinitions>
+        <RowDefinition Height="28" />
+        <RowDefinition Height="*" />
+      </Grid.RowDefinitions>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition x:Name="OfficialDocsColumn" Width="*" />
+        <ColumnDefinition x:Name="PreviewDocsSplitterColumn" Width="0" />
+        <ColumnDefinition x:Name="PreviewDocsColumn" Width="0" />
+      </Grid.ColumnDefinitions>
+
+      <Border Grid.Row="0"
+              Grid.Column="0"
+              Background="#0D1117"
+              BorderBrush="#30363D"
+              BorderThickness="0,0,0,1"
+              Padding="10,0">
+        <TextBlock Text="公式 docs.github.com"
+                   Foreground="#C9D1D9"
+                   FontSize="12"
+                   VerticalAlignment="Center" />
+      </Border>
+
+      <GridSplitter x:Name="PreviewDocsSplitter"
+                    Grid.Row="0"
+                    Grid.RowSpan="2"
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
+                    Background="#DDDDDD"
+                    Visibility="Collapsed" />
+
+      <Border x:Name="PreviewDocsHeader"
+              Grid.Row="0"
+              Grid.Column="2"
+              Background="#0D1117"
+              BorderBrush="#30363D"
+              BorderThickness="0,0,0,1"
+              Padding="10,0"
+              Visibility="Collapsed">
+        <TextBlock Text="PR HEAD localhost"
+                   Foreground="#C9D1D9"
+                   FontSize="12"
+                   VerticalAlignment="Center" />
+      </Border>
+
+      <wv2:WebView2 x:Name="DocsView"
+                    Grid.Row="1"
+                    Grid.Column="0" />
+
+      <wv2:WebView2 x:Name="PreviewView"
+                    Grid.Row="1"
+                    Grid.Column="2"
+                    Visibility="Collapsed" />
+
       <!--
         Shown only when WebView2 init fails (Evergreen runtime missing, etc.).
         Kept inside the same grid cell so layout does not shift on fallback.
       -->
       <Border x:Name="DocsFallback"
+              Grid.Row="0"
+              Grid.RowSpan="2"
+              Grid.Column="0"
+              Grid.ColumnSpan="3"
               Background="#FFF8E1"
               BorderBrush="#E0C97A"
               BorderThickness="1"

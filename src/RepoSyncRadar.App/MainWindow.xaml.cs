@@ -38,6 +38,8 @@ namespace RepoSyncRadar.App;
 /// </remarks>
 public partial class MainWindow : Window
 {
+    private static readonly Uri InitialDocsUri = new("https://docs.github.com/en");
+
     /// <summary>
     /// Environment variable name. When set to a TCP port, BlazorWebView's WebView2
     /// will expose the Chrome DevTools Protocol on that port for E2E tests.
@@ -49,6 +51,13 @@ public partial class MainWindow : Window
     /// expose the Chrome DevTools Protocol on that port for E2E tests.
     /// </summary>
     private const string DocsCdpPortEnv = "REPOSYNCRADAR_DOCS_CDP_PORT";
+
+    /// <summary>
+    /// Optional root folder for standalone WebView2 user data. E2E tests set this
+    /// to a unique temp path so stale WebView2 processes cannot lock the shared
+    /// production folders between app launches.
+    /// </summary>
+    private const string WebViewUserDataRootEnv = "REPOSYNCRADAR_WEBVIEW_USER_DATA_ROOT";
 
     private readonly UrlAllowList _allowList;
     private readonly PreviewSession _previewSession;
@@ -71,11 +80,11 @@ public partial class MainWindow : Window
 
         // Use a dedicated user-data folder so DocsView and BlazorWebView do not
         // contend for the same default location. See class remarks for details.
-        var docsUserDataFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "RepoSyncRadar",
-            "DocsView");
+        var appDataFolder = GetWebViewUserDataRoot();
+        var docsUserDataFolder = Path.Combine(appDataFolder, "DocsView");
+        var previewUserDataFolder = Path.Combine(appDataFolder, "PreviewView");
         Directory.CreateDirectory(docsUserDataFolder);
+        Directory.CreateDirectory(previewUserDataFolder);
 
         DocsView.CreationProperties = new CoreWebView2CreationProperties
         {
@@ -89,13 +98,19 @@ public partial class MainWindow : Window
             // args clean).
             AdditionalBrowserArguments = BuildBrowserArguments(DocsCdpPortEnv),
         };
+        PreviewView.CreationProperties = new CoreWebView2CreationProperties
+        {
+            UserDataFolder = previewUserDataFolder,
+            Language = "en-US",
+        };
 
         DocsView.CoreWebView2InitializationCompleted += OnDocsViewInitializationCompleted;
+        PreviewView.CoreWebView2InitializationCompleted += OnPreviewViewInitializationCompleted;
 
         // Kick off DocsView initialization explicitly *after* CreationProperties
         // is set. Setting Source triggers the initialization pipeline. We also pin
         // the initial path to /en so the first navigation skips the locale redirect.
-        DocsView.Source = new Uri("https://docs.github.com/en");
+        DocsView.Source = InitialDocsUri;
     }
 
     /// <summary>
@@ -140,8 +155,31 @@ public partial class MainWindow : Window
         return $"--remote-debugging-port={port} --remote-allow-origins=*";
     }
 
+    private static string GetWebViewUserDataRoot()
+    {
+        var configuredRoot = Environment.GetEnvironmentVariable(WebViewUserDataRootEnv);
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        {
+            return Path.GetFullPath(configuredRoot);
+        }
+
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "RepoSyncRadar");
+    }
+
     private void OnDocsViewInitializationCompleted(
         object? sender,
+        CoreWebView2InitializationCompletedEventArgs e)
+        => OnDocsSurfaceInitializationCompleted(DocsView, e);
+
+    private void OnPreviewViewInitializationCompleted(
+        object? sender,
+        CoreWebView2InitializationCompletedEventArgs e)
+        => OnDocsSurfaceInitializationCompleted(PreviewView, e);
+
+    private void OnDocsSurfaceInitializationCompleted(
+        WebView2 view,
         CoreWebView2InitializationCompletedEventArgs e)
     {
         if (!e.IsSuccess)
@@ -155,10 +193,10 @@ public partial class MainWindow : Window
         // outside CopilotOptions.AllowedUrlHosts are dropped before they reach the
         // network. See DESIGN.md §9.3 (mode C) and the manual smoke entry in
         // IMPLEMENTATION_PLAN.md §Step 10.
-        DocsView.CoreWebView2.AddWebResourceRequestedFilter(
+        view.CoreWebView2.AddWebResourceRequestedFilter(
             "*",
             CoreWebView2WebResourceContext.All);
-        DocsView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
+        view.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
     }
 
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
@@ -173,7 +211,15 @@ public partial class MainWindow : Window
         }
 
         LogBlockedRequest(_logger, e.Request.Uri);
-        e.Response = DocsView.CoreWebView2.Environment.CreateWebResourceResponse(
+        var coreWebView = sender as CoreWebView2;
+        var environment = coreWebView?.Environment
+            ?? DocsView.CoreWebView2?.Environment
+            ?? PreviewView.CoreWebView2?.Environment;
+        if (environment is null)
+        {
+            return;
+        }
+        e.Response = environment.CreateWebResourceResponse(
             Content: Stream.Null,
             StatusCode: 403,
             ReasonPhrase: "Blocked by RepoSyncRadar allow-list",
@@ -200,12 +246,60 @@ public partial class MainWindow : Window
     {
         if (Dispatcher.CheckAccess())
         {
-            DocsView.Source = url;
+            NavigatePreviewRequest(url);
         }
         else
         {
-            Dispatcher.BeginInvoke(DispatcherPriority.Normal, () => DocsView.Source = url);
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, () => NavigatePreviewRequest(url));
         }
+    }
+
+    private void NavigatePreviewRequest(Uri url)
+    {
+        if (IsLocalPreviewUri(url))
+        {
+            ShowComparisonMode();
+            DocsView.Source = BuildOfficialComparisonUri(url);
+            PreviewView.Source = url;
+            return;
+        }
+
+        ShowOfficialOnlyMode();
+        DocsView.Source = url;
+    }
+
+    private void ShowComparisonMode()
+    {
+        PreviewDocsSplitter.Visibility = Visibility.Visible;
+        PreviewDocsHeader.Visibility = Visibility.Visible;
+        PreviewView.Visibility = Visibility.Visible;
+        PreviewDocsSplitterColumn.Width = new GridLength(5);
+        OfficialDocsColumn.Width = new GridLength(1, GridUnitType.Star);
+        PreviewDocsColumn.Width = new GridLength(1, GridUnitType.Star);
+    }
+
+    private void ShowOfficialOnlyMode()
+    {
+        PreviewDocsSplitter.Visibility = Visibility.Collapsed;
+        PreviewDocsHeader.Visibility = Visibility.Collapsed;
+        PreviewView.Visibility = Visibility.Collapsed;
+        PreviewDocsSplitterColumn.Width = new GridLength(0);
+        OfficialDocsColumn.Width = new GridLength(1, GridUnitType.Star);
+        PreviewDocsColumn.Width = new GridLength(0);
+    }
+
+    internal static bool IsLocalPreviewUri(Uri url)
+        => string.Equals(url.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && url.IsLoopback;
+
+    internal static Uri BuildOfficialComparisonUri(Uri localPreviewUrl)
+    {
+        var pathAndQuery = localPreviewUrl.PathAndQuery;
+        if (string.IsNullOrWhiteSpace(pathAndQuery) || string.Equals(pathAndQuery, "/", StringComparison.Ordinal))
+        {
+            pathAndQuery = "/en";
+        }
+        return new Uri($"https://docs.github.com{pathAndQuery}");
     }
 
     [LoggerMessage(

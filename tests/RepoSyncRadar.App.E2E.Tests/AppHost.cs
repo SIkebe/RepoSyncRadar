@@ -44,14 +44,16 @@ public sealed class AppHost : IAsyncDisposable
         };
 
     private readonly Process _process;
+    private readonly string? _webViewUserDataRoot;
 
     public int BlazorCdpPort { get; }
 
     public int DocsCdpPort { get; }
 
-    private AppHost(Process process, int blazorPort, int docsPort)
+    private AppHost(Process process, int blazorPort, int docsPort, string? webViewUserDataRoot)
     {
         _process = process;
+        _webViewUserDataRoot = webViewUserDataRoot;
         BlazorCdpPort = blazorPort;
         DocsCdpPort = docsPort;
     }
@@ -88,6 +90,10 @@ public sealed class AppHost : IAsyncDisposable
 
         var blazorPort = ReserveFreePort();
         var docsPort = ReserveFreePort();
+        var webViewUserDataRoot = Path.Combine(
+            Path.GetTempPath(),
+            "RepoSyncRadar-WebView2-E2E-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(webViewUserDataRoot);
 
         var psi = new ProcessStartInfo(exePath)
         {
@@ -97,6 +103,7 @@ public sealed class AppHost : IAsyncDisposable
         };
         psi.EnvironmentVariables["REPOSYNCRADAR_BLAZOR_CDP_PORT"] = blazorPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
         psi.EnvironmentVariables["REPOSYNCRADAR_DOCS_CDP_PORT"] = docsPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        psi.EnvironmentVariables["REPOSYNCRADAR_WEBVIEW_USER_DATA_ROOT"] = webViewUserDataRoot;
         if (!string.IsNullOrWhiteSpace(dbPath))
         {
             psi.EnvironmentVariables["REPOSYNCRADAR_DB_PATH"] = dbPath;
@@ -122,10 +129,11 @@ public sealed class AppHost : IAsyncDisposable
         catch
         {
             TryKill(process);
+            TryDeleteDirectory(webViewUserDataRoot);
             throw;
         }
 
-        return new AppHost(process, blazorPort, docsPort);
+        return new AppHost(process, blazorPort, docsPort, webViewUserDataRoot);
     }
 
     private static string ResolveAppExePath()
@@ -233,6 +241,26 @@ public sealed class AppHost : IAsyncDisposable
         finally
         {
             _process.Dispose();
+            TryDeleteDirectory(_webViewUserDataRoot);
+        }
+    }
+
+    private static void TryDeleteDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
         }
     }
 }
