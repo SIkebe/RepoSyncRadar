@@ -57,6 +57,14 @@ public sealed partial class SystemProcessRunner : IProcessRunner
             RedirectStandardOutput = true,
             UseShellExecute = false,
             CreateNoWindow = true,
+            // npm / next.js / git emit UTF-8 (including Unicode glyphs like
+            // "⚠") regardless of the active Windows code page. Without
+            // setting these explicitly, .NET decodes the redirected streams
+            // using Console.OutputEncoding (CP932 on Japanese Windows), which
+            // garbles diagnostics into "答口" style mojibake and makes
+            // failure messages unreadable in the UI.
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
 
         Process p;
@@ -131,6 +139,11 @@ public sealed partial class SystemProcessRunner : IProcessRunner
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // See RunAsync for rationale — force UTF-8 decoding so child
+            // process diagnostics with non-ASCII characters survive the
+            // pipe intact.
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
         if (environment is not null)
         {
@@ -277,8 +290,8 @@ public sealed partial class SystemProcessRunner : IProcessRunner
         private readonly string _label;
         private readonly object _stdoutGate = new();
         private readonly object _stderrGate = new();
-        private readonly Queue<string> _stdoutBuffer = new(MaxBufferedLines);
-        private readonly Queue<string> _stderrBuffer = new(MaxBufferedLines);
+        private readonly List<string> _stdoutBuffer = new(MaxBufferedLines);
+        private readonly List<string> _stderrBuffer = new(MaxBufferedLines);
 
         public ProcessHandle(Process process, ILogger logger, string label)
         {
@@ -347,28 +360,98 @@ public sealed partial class SystemProcessRunner : IProcessRunner
         private void OnStdout(object sender, DataReceivedEventArgs e)
         {
             if (e.Data is null) { return; }
-            AppendBuffered(_stdoutBuffer, _stdoutGate, e.Data);
+            AppendBuffered(_stdoutBuffer, _stdoutGate, e.Data, MaxBufferedLines);
             LogStdout(_logger, _label, e.Data);
         }
 
         private void OnStderr(object sender, DataReceivedEventArgs e)
         {
             if (e.Data is null) { return; }
-            AppendBuffered(_stderrBuffer, _stderrGate, e.Data);
+            AppendBuffered(_stderrBuffer, _stderrGate, e.Data, MaxBufferedLines);
             LogStderr(_logger, _label, e.Data);
         }
+    }
 
-        private static void AppendBuffered(Queue<string> buffer, object gate, string line)
+    // Marker used to collapse consecutive identical lines into a single
+    // "(x N)" tail. Chosen because ASCII " (x N)" is unambiguous (no real
+    // npm/next output ends with this exact suffix) and renders correctly
+    // regardless of the consumer's locale or font support.
+    internal const string RepeatPrefix = " (x ";
+    internal const string RepeatSuffix = ")";
+
+    /// <summary>
+    /// Appends <paramref name="line"/> to <paramref name="buffer"/>, but
+    /// collapses runs of identical consecutive lines into a single
+    /// <c>"&lt;line&gt; (x N)"</c> tail. Next.js' App Router emits the same
+    /// <c>i18n configuration ... unsupported</c> warning once per affected
+    /// page, which would otherwise flood the 64-line ring buffer and push
+    /// the real failure cause out before the UI samples it. Internal so unit
+    /// tests can exercise the collapse logic without a real Process.
+    /// </summary>
+    internal static void AppendBuffered(List<string> buffer, object gate, string line, int maxBufferedLines)
+    {
+        lock (gate)
         {
-            lock (gate)
+            if (buffer.Count > 0)
             {
-                if (buffer.Count >= MaxBufferedLines)
+                var tail = buffer[^1];
+                if (string.Equals(tail, line, StringComparison.Ordinal))
                 {
-                    buffer.Dequeue();
+                    buffer[^1] = line + RepeatPrefix + "2" + RepeatSuffix;
+                    return;
                 }
-                buffer.Enqueue(line);
+                if (TryParseRepeat(tail, out var baseLine, out var count)
+                    && string.Equals(baseLine, line, StringComparison.Ordinal))
+                {
+                    buffer[^1] = baseLine + RepeatPrefix
+                        + (count + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        + RepeatSuffix;
+                    return;
+                }
             }
+            if (buffer.Count >= maxBufferedLines)
+            {
+                buffer.RemoveAt(0);
+            }
+            buffer.Add(line);
         }
+    }
+
+    /// <summary>
+    /// Parses tails of the form <c>"&lt;baseLine&gt; (x N)"</c> produced by
+    /// <see cref="AppendBuffered"/> itself. Returns false for anything that
+    /// does not match exactly so unrelated lines that happen to contain
+    /// "(x " in the middle are not mistakenly mutated. Internal for tests.
+    /// </summary>
+    internal static bool TryParseRepeat(string tail, out string baseLine, out int count)
+    {
+        baseLine = string.Empty;
+        count = 0;
+        if (!tail.EndsWith(RepeatSuffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        var idx = tail.LastIndexOf(RepeatPrefix, StringComparison.Ordinal);
+        if (idx < 0)
+        {
+            return false;
+        }
+        var numStart = idx + RepeatPrefix.Length;
+        var numLen = tail.Length - numStart - RepeatSuffix.Length;
+        if (numLen <= 0)
+        {
+            return false;
+        }
+        var span = tail.AsSpan(numStart, numLen);
+        if (!int.TryParse(span, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            || parsed < 2)
+        {
+            return false;
+        }
+        baseLine = tail[..idx];
+        count = parsed;
+        return true;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "[{Process}] {Line}")]

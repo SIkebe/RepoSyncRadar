@@ -31,6 +31,23 @@ public sealed class SystemProcessRunnerStartInfoTests
     }
 
     [Fact]
+    public void Forces_Utf8_For_Redirected_Streams()
+    {
+        // Required so child diagnostics with non-ASCII glyphs (e.g. Next.js'
+        // "⚠ i18n configuration ... unsupported" App Router warning) survive
+        // the pipe intact on locales where Console.OutputEncoding defaults
+        // to a Windows code page (CP932 on Japanese Windows).
+        var psi = SystemProcessRunner.BuildStartInfo(
+            "where",
+            "PATH",
+            workingDirectory: AppContext.BaseDirectory,
+            environment: null);
+
+        Assert.Equal(System.Text.Encoding.UTF8, psi.StandardOutputEncoding);
+        Assert.Equal(System.Text.Encoding.UTF8, psi.StandardErrorEncoding);
+    }
+
+    [Fact]
     public void Merges_Environment_Overrides()
     {
         var psi = SystemProcessRunner.BuildStartInfo(

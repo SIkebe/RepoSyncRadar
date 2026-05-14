@@ -56,10 +56,13 @@ public sealed class DocsRepositoryOptions
     /// <summary>
     /// Maximum time the preview server is allowed to take before it must accept
     /// TCP connections on <see cref="PreviewBasePort"/>. <c>github/docs</c>'s
-    /// <c>nodemon</c> cold start can take 30–120 s on a warm machine and longer
-    /// on first run.
+    /// Next.js App Router cold start with full MDX content can comfortably take
+    /// 5–10 minutes on Windows ARM64 on the very first run after a
+    /// <c>node_modules</c> wipe, so the default is generous. Tune downwards via
+    /// <c>appsettings.local.json</c> on a warm machine where you want fast
+    /// feedback on real misconfigurations.
     /// </summary>
-    [Range(5, 600)]
-    public int PreviewReadyTimeoutSeconds { get; set; } = 240;
+    [Range(5, 1800)]
+    public int PreviewReadyTimeoutSeconds { get; set; } = 600;
 }
 
