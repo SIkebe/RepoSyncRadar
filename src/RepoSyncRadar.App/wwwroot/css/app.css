@@ -199,6 +199,12 @@ html, body {
     background: #d6e7ff;
 }
 
+.radar-commit-detail .preview-status {
+    margin: 0.5rem 0 0;
+    color: #555;
+    font-size: 0.85rem;
+}
+
 .radar-commit-detail .urls {
     list-style: none;
     margin: 0.25rem 0 0 0;

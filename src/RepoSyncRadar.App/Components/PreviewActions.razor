@@ -76,8 +76,8 @@
         @if (!string.IsNullOrEmpty(_worktreePath))
         {
             <details class="preview-hint" data-testid="preview-worktree">
-                <summary>初回は worktree で <code>npm install</code> が必要です</summary>
-                <p>WebView2 に「接続できません」と出る場合は、下のディレクトリで一度だけ依存をインストールしてください (初回 5〜15 分・1〜2 GB)。インストール後にこの「ローカルプレビュー」をもう一度押してください。</p>
+                <summary>プレビュー worktree</summary>
+                <p>初回はアプリがこのディレクトリで <code>npm install</code> を自動実行します (5〜15 分・1〜2 GB)。失敗した場合だけ、同じコマンドを手元で再現できます。</p>
                 <pre><code>cd "@_worktreePath"
 npm install</code></pre>
                 <p class="muted">node_modules を共有して高速化したい場合は <code>docs/USAGE.md §5.1</code> の案 B (junction) を参照してください。</p>
@@ -131,7 +131,13 @@ npm install</code></pre>
         try
         {
             var coordinator = Services.GetRequiredService<IPreviewCoordinator>();
-            var filePath = Commit.Files.Count > 0 ? Commit.Files[0].Path : null;
+            var filePath = ChoosePreviewFilePath(Commit);
+            if (filePath is null)
+            {
+                _status = "このコミットには公開ドキュメント記事がないため、ローカルプレビューで比較できません";
+                _worktreePath = null;
+                return;
+            }
             var progress = new Progress<string>(message =>
             {
                 _ = InvokeAsync(() =>
@@ -173,7 +179,7 @@ npm install</code></pre>
             _lastUrl = link.Url;
             _worktreePath = link.WorktreePath;
             Services.GetRequiredService<IPreviewNavigator>().Publish(link.Url);
-            _status = $"ポート {link.Port} で起動しました (起動完了まで 30 秒〜数分。失敗時は下記の手順を確認)";
+            _status = $"ポート {link.Port} で起動しました";
         }
         finally
         {
@@ -249,6 +255,18 @@ npm install</code></pre>
             result.Add(source[i]);
         }
         return result;
+    }
+
+    private static string? ChoosePreviewFilePath(Commit commit)
+    {
+        foreach (var file in commit.Files)
+        {
+            if (PreviewPathMapper.Map(file.Path, "en") is not null)
+            {
+                return file.Path;
+            }
+        }
+        return null;
     }
 
     private async Task CleanupAsync()

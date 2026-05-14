@@ -1,5 +1,6 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
+@using System.Threading
 @using RepoSyncRadar.Core.Models
 @using RepoSyncRadar.Core.Options
 @using RepoSyncRadar.Core.Services
@@ -12,13 +13,12 @@
     triage output is visible to the user. Diff rendering and Adopt/Reject actions live
     in sibling components.
 
-    Each file row carries a "WebView2 で開く" button so the user can flip the right-side
-    docs surface to that file without going through the "ローカルプレビュー" button.
-    If a local preview server is active (PreviewSession.IsActive) we publish the
-    rewritten http://localhost:{port}{mapped} URL; otherwise we publish the first
-    resolved docs.github.com URL so the official rendering is shown directly. This
-    realises DESIGN.md §1.2 / §4.1 "公式ドキュメントとレンダリング上区別がつかない見た目で
-    差分を検証" — the right pane is always the canonical look, only the source changes.
+    Each publishable file row carries a "WebView2 で開く" button. Clicking it starts
+    the local PR-HEAD preview pipeline when needed, then navigates the right-side
+    WebView2 to that exact file. If the local pipeline is disabled we fall back to
+    the resolved docs.github.com URL. This realises DESIGN.md §1.2 / §4.1
+    "公式ドキュメントとレンダリング上区別がつかない見た目で差分を検証" — the right pane
+    is always the canonical look, only the source changes.
 *@
 
 <section class="radar-commit-detail" data-testid="commit-detail">
@@ -62,18 +62,20 @@
             @foreach (var file in Commit.Files)
             {
                 var previewTarget = ResolvePreviewTarget(file);
+                var canOpenPreview = previewTarget is not null || IsPreviewMappable(file);
                 <li class="file-row" data-testid="commit-detail-file" data-path="@file.Path">
                     <span class="path">@file.Path</span>
                     <span class="stats"
                           data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
-                    @if (previewTarget is not null)
+                    @if (canOpenPreview)
                     {
                         <button type="button"
                                 class="open-in-webview"
                                 data-testid="commit-detail-open-in-webview"
                                 data-path="@file.Path"
-                                title="@previewTarget.AbsoluteUri"
-                                @onclick="() => OpenInWebView(previewTarget)">@PreviewButtonLabel</button>
+                                disabled="@(_previewBusyPath is not null)"
+                                title="@BuildPreviewTitle(file, previewTarget)"
+                                @onclick="() => OpenInWebViewAsync(file)">@BuildPreviewButtonLabel(file)</button>
                     }
                     @if (_urlsByPath.TryGetValue(file.Path, out var urls) && urls.Count > 0)
                     {
@@ -90,11 +92,48 @@
                 </li>
             }
         </ul>
+        @if (_previewBusyPath is not null)
+        {
+            <div class="preview-progress" data-testid="commit-detail-preview-progress">
+                <div class="preview-progress-row">
+                    <span class="preview-spinner" aria-hidden="true"></span>
+                    <span class="preview-progress-text" data-testid="commit-detail-preview-progress-text">
+                        @(_previewStatus ?? "起動中…")
+                        <span class="preview-progress-elapsed" data-testid="commit-detail-preview-progress-elapsed">
+                            ・ @_previewElapsedSec 秒経過 / 上限 @_previewTimeoutSec 秒
+                            @if (_previewPid is { } pid)
+                            {
+                                <span class="preview-progress-pid" data-testid="commit-detail-preview-progress-pid">・ PID @pid</span>
+                            }
+                        </span>
+                    </span>
+                    <button type="button"
+                            data-testid="commit-detail-preview-cancel-button"
+                            class="preview-cancel"
+                            disabled="@_previewCanceling"
+                            @onclick="CancelPreviewAsync">@(_previewCanceling ? "中止中…" : "中止")</button>
+                </div>
+                @if (_previewStdoutTail.Count > 0)
+                {
+                    <pre class="preview-log-tail preview-log-stdout" data-testid="commit-detail-preview-stdout">@string.Join('\n', _previewStdoutTail)</pre>
+                }
+                @if (_previewStderrTail.Count > 0)
+                {
+                    <pre class="preview-log-tail preview-log-stderr" data-testid="commit-detail-preview-stderr">@string.Join('\n', _previewStderrTail)</pre>
+                }
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(_previewStatus))
+        {
+            <p class="preview-status" data-testid="commit-detail-preview-status">@_previewStatus</p>
+        }
     }
 </section>
 
 @code {
     private const string PreviewButtonLabel = "WebView2 で開く";
+    private const int MaxLogTailLines = 10;
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
@@ -106,6 +145,17 @@
         new(StringComparer.Ordinal);
 
     private string? _resolvedForSha;
+    private string? _previewBusyPath;
+    private string? _previewStatus;
+    private bool _previewCanceling;
+    private CancellationTokenSource? _previewCts;
+    private DateTimeOffset _previewStartedAt;
+    private int _previewElapsedSec;
+    private int _previewTimeoutSec = 600;
+    private List<string> _previewStdoutTail = new();
+    private List<string> _previewStderrTail = new();
+    private int? _previewPid;
+    private Task? _previewPollTask;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -113,6 +163,9 @@
         {
             _urlsByPath.Clear();
             _resolvedForSha = null;
+            _previewBusyPath = null;
+            _previewStatus = null;
+            _previewCanceling = false;
             return;
         }
 
@@ -149,26 +202,185 @@
                     $"http://localhost:{port}{mapped}"),
                 UriKind.Absolute);
         }
-        if (_urlsByPath.TryGetValue(file.Path, out var urls) && urls.Count > 0)
-        {
-            var first = urls[0];
-            if (Uri.TryCreate(first, UriKind.Absolute, out var absolute))
-            {
-                return absolute;
-            }
-            var baseAddress = Services.GetService<IOptions<DocsApiOptions>>()?.Value.BaseAddress;
-            if (baseAddress is not null && Uri.TryCreate(baseAddress, first, out absolute))
-            {
-                return absolute;
-            }
-        }
-        return null;
+        return ResolveOfficialTarget(file);
     }
 
-    private void OpenInWebView(Uri url)
+    private bool IsPreviewMappable(CommitFile file)
+        => PreviewPathMapper.Map(file.Path, Language) is not null;
+
+    private string BuildPreviewTitle(CommitFile file, Uri? currentTarget)
+        => currentTarget?.AbsoluteUri
+            ?? (IsPreviewMappable(file)
+                ? "PR HEAD のローカルプレビューを起動して、このファイルを WebView2 で開きます"
+                : "公式ドキュメントを WebView2 で開きます");
+
+    private string BuildPreviewButtonLabel(CommitFile file)
+        => string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal)
+            ? "起動中…"
+            : PreviewButtonLabel;
+
+    private async Task OpenInWebViewAsync(CommitFile file)
     {
         var navigator = Services.GetService<IPreviewNavigator>();
-        navigator?.Publish(url);
+        if (navigator is null || _previewBusyPath is not null)
+        {
+            return;
+        }
+
+        if (ResolvePreviewTarget(file) is { } activeTarget
+            && string.Equals(activeTarget.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(activeTarget.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            navigator.Publish(activeTarget);
+            _previewStatus = null;
+            return;
+        }
+
+        if (Commit is not null && IsPreviewMappable(file)
+            && Services.GetService<IPreviewCoordinator>() is { } coordinator)
+        {
+            _previewBusyPath = file.Path;
+            _previewCanceling = false;
+            _previewStatus = $"{file.Path} のローカルプレビューを準備中…";
+            _previewStdoutTail = new List<string>();
+            _previewStderrTail = new List<string>();
+            _previewPid = null;
+            _previewStartedAt = DateTimeOffset.UtcNow;
+            _previewElapsedSec = 0;
+            _previewTimeoutSec = Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.PreviewReadyTimeoutSeconds ?? 600;
+            _previewCts = new CancellationTokenSource();
+            var token = _previewCts.Token;
+            var host = Services.GetService<PreviewServerHost>();
+            if (host is not null)
+            {
+                _previewPollTask = Task.Run(() => PollPreviewProgressAsync(host, token), CancellationToken.None);
+            }
+            try
+            {
+                var progress = new Progress<string>(message =>
+                {
+                    _ = InvokeAsync(() =>
+                    {
+                        _previewStatus = message;
+                        StateHasChanged();
+                    });
+                });
+                var link = await coordinator.PreparePreviewAsync(
+                    Commit.PrNumber,
+                    Commit.Sha,
+                    file.Path,
+                    progress,
+                    token);
+                if (link is not null)
+                {
+                    navigator.Publish(link.Url);
+                    _previewStatus = $"{file.Path} を WebView2 で開きました";
+                    return;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _previewStatus = "プレビュー起動を中止しました";
+                return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _previewStatus = ex.Message;
+                return;
+            }
+            finally
+            {
+                try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
+                if (_previewPollTask is not null)
+                {
+                    try { await _previewPollTask; }
+                    catch (OperationCanceledException) { }
+                    _previewPollTask = null;
+                }
+                _previewCts?.Dispose();
+                _previewCts = null;
+                _previewBusyPath = null;
+                _previewCanceling = false;
+            }
+        }
+
+        if (ResolveOfficialTarget(file) is { } officialTarget)
+        {
+            navigator.Publish(officialTarget);
+            _previewStatus = null;
+            return;
+        }
+
+        _previewStatus = "このファイルは公開ドキュメント URL に対応していません";
+    }
+
+    private Task CancelPreviewAsync()
+    {
+        if (_previewBusyPath is null || _previewCts is null || _previewCanceling)
+        {
+            return Task.CompletedTask;
+        }
+        _previewCanceling = true;
+        try { _previewCts.Cancel(); } catch (ObjectDisposedException) { }
+        return Task.CompletedTask;
+    }
+
+    private async Task PollPreviewProgressAsync(PreviewServerHost host, CancellationToken token)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(PollInterval);
+            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
+            {
+                var stdoutTail = TakeTail(host.RecentStdoutLines, MaxLogTailLines);
+                var stderrTail = TakeTail(host.RecentStderrLines, MaxLogTailLines);
+                var pid = host.CurrentProcessId;
+                var elapsed = (int)(DateTimeOffset.UtcNow - _previewStartedAt).TotalSeconds;
+                await InvokeAsync(() =>
+                {
+                    _previewStdoutTail = stdoutTail;
+                    _previewStderrTail = stderrTail;
+                    _previewPid = pid;
+                    _previewElapsedSec = elapsed;
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // expected when startup completes or the user cancels
+        }
+    }
+
+    private static List<string> TakeTail(IReadOnlyList<string> source, int take)
+    {
+        if (source.Count <= take)
+        {
+            return new List<string>(source);
+        }
+        var result = new List<string>(take);
+        for (var i = source.Count - take; i < source.Count; i++)
+        {
+            result.Add(source[i]);
+        }
+        return result;
+    }
+
+    private Uri? ResolveOfficialTarget(CommitFile file)
+    {
+        if (!_urlsByPath.TryGetValue(file.Path, out var urls) || urls.Count == 0)
+        {
+            return null;
+        }
+        var first = urls[0];
+        if (Uri.TryCreate(first, UriKind.Absolute, out var absolute))
+        {
+            return absolute;
+        }
+        var baseAddress = Services.GetService<IOptions<DocsApiOptions>>()?.Value.BaseAddress;
+        return baseAddress is not null && Uri.TryCreate(baseAddress, first, out absolute)
+            ? absolute
+            : null;
     }
 
     private static string FormatStats(CommitFile file)

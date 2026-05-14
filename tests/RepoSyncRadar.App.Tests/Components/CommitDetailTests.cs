@@ -189,6 +189,100 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void OpenInWebView_Starts_Local_Preview_For_Mappable_File_When_Inactive()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var navigator = new PreviewNavigator();
+        Uri? captured = null;
+        navigator.Requested += (_, url) => captured = url;
+        var session = new PreviewSession();
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PreparePreviewAsync(
+                commit.PrNumber,
+                commit.Sha,
+                "content/copilot/about-copilot.md",
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<PreviewLink?>(new PreviewLink(
+                new Uri("http://localhost:4500/en/copilot/about-copilot"),
+                4500,
+                @"C:\github\.cache\docs-worktrees\feedface")));
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, session, coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("http://localhost:4500/en/copilot/about-copilot", captured?.AbsoluteUri);
+            Assert.Contains(
+                "content/copilot/about-copilot.md",
+                cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
+                StringComparison.Ordinal);
+        });
+        _ = coordinator.Received(1).PreparePreviewAsync(
+            commit.PrNumber,
+            commit.Sha,
+            "content/copilot/about-copilot.md",
+            Arg.Any<IProgress<string>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void OpenInWebView_Shows_Progress_And_Cancel_While_Local_Preview_Starts()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var tcs = new TaskCompletionSource<PreviewLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken receivedToken = default;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PreparePreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                receivedToken = call.ArgAt<CancellationToken>(4);
+                receivedToken.Register(() =>
+                    tcs.TrySetException(new OperationCanceledException(receivedToken)));
+                return tcs.Task;
+            });
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            new PreviewNavigator(),
+            new PreviewSession(),
+            coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find("[data-testid=\"commit-detail-preview-progress\"]");
+            cut.Find("[data-testid=\"commit-detail-preview-cancel-button\"]");
+            Assert.Contains("経過", cut.Find("[data-testid=\"commit-detail-preview-progress-elapsed\"]").TextContent, StringComparison.Ordinal);
+        });
+
+        cut.Find("[data-testid=\"commit-detail-preview-cancel-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(receivedToken.IsCancellationRequested);
+            Assert.Contains("中止", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void OpenInWebView_Rewrites_To_Localhost_When_Preview_Active()
     {
         var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
@@ -220,6 +314,14 @@ public class CommitDetailTests
         IPathToUrlResolver resolver,
         IPreviewNavigator? navigator,
         PreviewSession? session)
+        => RenderDetailWith(commit, resolver, navigator, session, coordinator: null);
+
+    private static IRenderedComponent<CommitDetail> RenderDetailWith(
+        Commit commit,
+        IPathToUrlResolver resolver,
+        IPreviewNavigator? navigator,
+        PreviewSession? session,
+        IPreviewCoordinator? coordinator)
     {
         var services = new ServiceCollection().AddSingleton(resolver);
         if (navigator is not null)
@@ -229,6 +331,10 @@ public class CommitDetailTests
         if (session is not null)
         {
             services.AddSingleton(session);
+        }
+        if (coordinator is not null)
+        {
+            services.AddSingleton(coordinator);
         }
         // Wire the docs base address so CommitDetail can absolutise the relative
         // paths returned by IPathToUrlResolver — matches the production DI setup.

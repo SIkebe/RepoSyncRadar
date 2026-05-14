@@ -78,7 +78,83 @@ public sealed class PreviewActionsTests
     }
 
     [Fact]
-    public void Click_Shows_Worktree_Path_And_Npm_Install_Hint()
+    public void Click_Uses_First_Mappable_Content_File_For_Local_Preview()
+    {
+        string? capturedPath = null;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PreparePreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                capturedPath = call.ArgAt<string?>(2);
+                return Task.FromResult<PreviewLink?>(
+                    new PreviewLink(new Uri("http://localhost:4500/en/copilot/about-copilot"), 4500, "C:/wt"));
+            });
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.TestContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files =
+            {
+                new CommitFile { Sha = "deadbeef", Path = "data/ui.yml", Status = "modified" },
+                new CommitFile { Sha = "deadbeef", Path = "content/copilot/about-copilot.md", Status = "modified" },
+            },
+        };
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+            Assert.Equal("content/copilot/about-copilot.md", capturedPath));
+    }
+
+    [Fact]
+    public void Click_When_No_Mappable_Content_File_Does_Not_Start_Preview()
+    {
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.TestContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "GraphQL schema update",
+            Author = "docs-bot",
+            Files =
+            {
+                new CommitFile { Sha = "deadbeef", Path = "src/graphql/data/fpt/schema.docs.graphql", Status = "modified" },
+                new CommitFile { Sha = "deadbeef", Path = "src/graphql/data/fpt/schema.json", Status = "modified" },
+            },
+        };
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("公開ドキュメント記事がない", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal);
+            _ = coordinator.DidNotReceiveWithAnyArgs().PreparePreviewAsync(default, default!, default, default, default);
+        });
+    }
+
+    [Fact]
+    public void Click_Shows_Worktree_Path_And_Automatic_Npm_Install_Hint()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
         coordinator.PreparePreviewAsync(
@@ -113,6 +189,7 @@ public sealed class PreviewActionsTests
         {
             var hint = cut.Find("[data-testid=\"preview-worktree\"]");
             Assert.Contains(@"C:\github\.cache\docs-worktrees\deadbeef", hint.TextContent, StringComparison.Ordinal);
+            Assert.Contains("自動実行", hint.TextContent, StringComparison.Ordinal);
             Assert.Contains("npm install", hint.TextContent, StringComparison.Ordinal);
         });
     }
