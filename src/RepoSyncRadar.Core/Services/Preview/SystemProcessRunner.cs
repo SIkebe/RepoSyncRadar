@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace RepoSyncRadar.Core.Services.Preview;
 
@@ -8,18 +10,35 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// <summary>
 /// Default <see cref="IProcessRunner"/> implementation backed by
 /// <see cref="System.Diagnostics.Process"/>. Stdout/stderr are buffered into
-/// <see cref="StringBuilder"/> so callers can include them in errors.
+/// <see cref="StringBuilder"/> so callers can include them in errors, and
+/// long-running sidecars additionally tee each line into <see cref="ILogger"/>
+/// so failures inside <c>npm run dev</c> surface in the app's log file instead
+/// of vanishing.
 /// </summary>
 /// <remarks>
-/// Both <see cref="RunAsync"/> and <see cref="Start"/> wrap <see cref="Win32Exception"/>
+/// Both <see cref="RunAsync"/> and <see cref="Start(string, string, string, System.Collections.Generic.IReadOnlyDictionary{string, string?}?)"/>
+/// wrap <see cref="Win32Exception"/>
 /// thrown by <see cref="Process.Start(ProcessStartInfo)"/> (typically "the system cannot
 /// find the file specified" when <c>git</c> or <c>npm</c> is missing from PATH) into a
 /// uniform <see cref="InvalidOperationException"/>. This lets the Blazor UI catch a
 /// single exception type and surface a friendly status without the WPF host process
 /// terminating from an unhandled exception.
 /// </remarks>
-public sealed class SystemProcessRunner : IProcessRunner
+public sealed partial class SystemProcessRunner : IProcessRunner
 {
+    private readonly ILogger<SystemProcessRunner> _logger;
+
+    public SystemProcessRunner()
+        : this(NullLogger<SystemProcessRunner>.Instance)
+    {
+    }
+
+    public SystemProcessRunner(ILogger<SystemProcessRunner> logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        _logger = logger;
+    }
+
     public async Task<ProcessRunResult> RunAsync(
         string fileName,
         string arguments,
@@ -66,21 +85,17 @@ public sealed class SystemProcessRunner : IProcessRunner
         }
     }
 
-    public IProcessHandle Start(string fileName, string arguments, string workingDirectory)
+    public IProcessHandle Start(
+        string fileName,
+        string arguments,
+        string workingDirectory,
+        System.Collections.Generic.IReadOnlyDictionary<string, string?>? environment)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(workingDirectory);
 
-        var resolved = ResolveOnPath(fileName);
-        var psi = new ProcessStartInfo(resolved, arguments)
-        {
-            WorkingDirectory = workingDirectory,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
+        var psi = BuildStartInfo(fileName, arguments, workingDirectory, environment);
         Process p;
         try
         {
@@ -93,7 +108,49 @@ public sealed class SystemProcessRunner : IProcessRunner
                 $"'{fileName}' を起動できませんでした。PATH に追加されているか確認してください ({ex.Message})",
                 ex);
         }
-        return new ProcessHandle(p);
+        return new ProcessHandle(p, _logger, fileName);
+    }
+
+    /// <summary>
+    /// Builds the <see cref="ProcessStartInfo"/> used by <see cref="Start(string, string, string, System.Collections.Generic.IReadOnlyDictionary{string, string?}?)"/>.
+    /// Extracted so unit tests can verify <c>PATH</c> resolution, environment
+    /// merging, and the standard set of redirect flags without spawning a real
+    /// child process.
+    /// </summary>
+    internal static ProcessStartInfo BuildStartInfo(
+        string fileName,
+        string arguments,
+        string workingDirectory,
+        System.Collections.Generic.IReadOnlyDictionary<string, string?>? environment)
+    {
+        var resolved = ResolveOnPath(fileName);
+        var psi = new ProcessStartInfo(resolved, arguments)
+        {
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        if (environment is not null)
+        {
+            foreach (var (key, value) in environment)
+            {
+                if (string.IsNullOrEmpty(key))
+                {
+                    continue;
+                }
+                if (value is null)
+                {
+                    psi.Environment.Remove(key);
+                }
+                else
+                {
+                    psi.Environment[key] = value;
+                }
+            }
+        }
+        return psi;
     }
 
     /// <summary>
@@ -211,10 +268,22 @@ public sealed class SystemProcessRunner : IProcessRunner
     private sealed class ProcessHandle : IProcessHandle
     {
         private readonly Process _process;
+        private readonly ILogger _logger;
+        private readonly string _label;
 
-        public ProcessHandle(Process process)
+        public ProcessHandle(Process process, ILogger logger, string label)
         {
             _process = process;
+            _logger = logger;
+            _label = label;
+            _process.OutputDataReceived += OnStdout;
+            _process.ErrorDataReceived += OnStderr;
+            // Without BeginOutputReadLine / BeginErrorReadLine the OS pipes fill up
+            // quickly for chatty children (npm/next dev print megabytes of output
+            // during cold start) and the child eventually blocks on its next
+            // write. Always drain.
+            _process.BeginOutputReadLine();
+            _process.BeginErrorReadLine();
         }
 
         public int ProcessId => _process.Id;
@@ -251,7 +320,27 @@ public sealed class SystemProcessRunner : IProcessRunner
             {
                 // already exited — nothing to do
             }
+            _process.OutputDataReceived -= OnStdout;
+            _process.ErrorDataReceived -= OnStderr;
             _process.Dispose();
         }
+
+        private void OnStdout(object sender, DataReceivedEventArgs e)
+        {
+            if (e.Data is null) { return; }
+            LogStdout(_logger, _label, e.Data);
+        }
+
+        private void OnStderr(object sender, DataReceivedEventArgs e)
+        {
+            if (e.Data is null) { return; }
+            LogStderr(_logger, _label, e.Data);
+        }
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "[{Process}] {Line}")]
+    private static partial void LogStdout(ILogger logger, string process, string line);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information, Message = "[{Process}:err] {Line}")]
+    private static partial void LogStderr(ILogger logger, string process, string line);
 }

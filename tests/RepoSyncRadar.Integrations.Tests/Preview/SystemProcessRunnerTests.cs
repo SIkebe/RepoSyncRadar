@@ -30,7 +30,7 @@ public sealed class SystemProcessRunnerTests
     [Fact]
     public void Start_When_FileName_Missing_Throws_InvalidOperationException()
     {
-        var sut = new SystemProcessRunner();
+        IProcessRunner sut = new SystemProcessRunner();
         const string missing = "rsr_nonexistent_binary_for_test_zzz";
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
