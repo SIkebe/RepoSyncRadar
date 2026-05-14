@@ -278,6 +278,32 @@ public sealed class PreviewCoordinatorTests : IDisposable
             PreviewArguments = "run dev -- --port {port}",
             PreviewBasePort = previewBasePort,
         });
+        // The PreviewServerHost now pre-flight-checks for a node_modules folder
+        // in the worktree before launching npm. Tests use a fake IProcessRunner
+        // so `git worktree add` never actually materializes the directory;
+        // intercept that call (side-effect only — leave the per-test `Returns`
+        // configuration untouched) and stub it out on disk so the host check
+        // passes.
+        runner.WhenForAnyArgs(r => r.RunAsync(default!, default!, default!, default))
+            .Do(call =>
+            {
+                if (!string.Equals(call.ArgAt<string>(0), "git", StringComparison.Ordinal))
+                {
+                    return;
+                }
+                var args = call.ArgAt<string>(1);
+                if (!args.StartsWith("worktree add", StringComparison.Ordinal))
+                {
+                    return;
+                }
+                var parts = args.Split(' ', 4, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 3)
+                {
+                    var target = parts[2];
+                    Directory.CreateDirectory(target);
+                    Directory.CreateDirectory(Path.Combine(target, "node_modules"));
+                }
+            });
         var worktree = new DocsWorktreeManager(runner, options, NullLogger<DocsWorktreeManager>.Instance);
         var probe = Substitute.For<IPortReadyProbe>();
         probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),

@@ -66,6 +66,8 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         }
         await StopAsync(cancellationToken).ConfigureAwait(false);
 
+        EnsureNodeModulesIfNeeded(worktreePath);
+
         var args = ReplacePort(_options.PreviewArguments, port);
         var env = BuildEnvironment(_options.PreviewEnvironment, port);
         var handle = _runner.Start(_options.PreviewCommand, args, worktreePath, env);
@@ -83,10 +85,15 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         {
             var exited = handle.HasExited;
             LogReadyFailed(_logger, port, (int)timeout.TotalSeconds, exited);
+            var stderrTail = SnapshotTail(handle.RecentStderrLines, take: 8);
+            var stdoutTail = exited && stderrTail.Length == 0
+                ? SnapshotTail(handle.RecentStdoutLines, take: 8)
+                : string.Empty;
             await StopAsync(CancellationToken.None).ConfigureAwait(false);
-            throw new InvalidOperationException(exited
-                ? $"プレビューサーバが起動直後に終了しました (port {port.ToString(CultureInfo.InvariantCulture)})。ログを確認してください。"
-                : $"プレビューサーバが {timeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} 秒以内に port {port.ToString(CultureInfo.InvariantCulture)} で待ち受け状態になりませんでした。");
+            var header = exited
+                ? $"プレビューサーバが起動直後に終了しました (port {port.ToString(CultureInfo.InvariantCulture)})。"
+                : $"プレビューサーバが {timeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} 秒以内に port {port.ToString(CultureInfo.InvariantCulture)} で待ち受け状態になりませんでした。";
+            throw new InvalidOperationException(BuildFailureMessage(header, stderrTail, stdoutTail));
         }
         LogReady(_logger, port);
         return handle;
@@ -153,6 +160,84 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
             result[key] = ReplacePort(value ?? string.Empty, port);
         }
         return result;
+    }
+
+    /// <summary>
+    /// When the preview command is <c>npm</c>, fails fast if <c>node_modules</c>
+    /// is missing from <paramref name="worktreePath"/>. Without this guard the
+    /// child would spawn, fail with <c>cross-env: not found</c>, and the user
+    /// would only see the generic "did not become ready" timeout 240 seconds
+    /// later. The check is intentionally narrow to <c>npm</c> so non-Node
+    /// preview commands (e.g. <c>hugo</c>, <c>jekyll</c>) keep working.
+    /// </summary>
+    private void EnsureNodeModulesIfNeeded(string worktreePath)
+    {
+        if (!IsNpmCommand(_options.PreviewCommand))
+        {
+            return;
+        }
+        var nodeModules = Path.Combine(worktreePath, "node_modules");
+        if (Directory.Exists(nodeModules))
+        {
+            return;
+        }
+        throw new InvalidOperationException(
+            $"{worktreePath} に node_modules がありません。`cd \"{worktreePath}\"` してから `npm install` を実行してください。");
+    }
+
+    internal static bool IsNpmCommand(string? command)
+    {
+        if (string.IsNullOrWhiteSpace(command))
+        {
+            return false;
+        }
+        var name = Path.GetFileNameWithoutExtension(command);
+        return string.Equals(name, "npm", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "pnpm", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(name, "yarn", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Returns the last <paramref name="take"/> entries from <paramref name="lines"/>,
+    /// joined with newlines and indented for inclusion in the user-facing
+    /// failure message. Returns an empty string when there is nothing to show.
+    /// </summary>
+    internal static string SnapshotTail(IReadOnlyList<string>? lines, int take)
+    {
+        if (lines is null || lines.Count == 0 || take <= 0)
+        {
+            return string.Empty;
+        }
+        var start = Math.Max(0, lines.Count - take);
+        var sb = new System.Text.StringBuilder();
+        for (var i = start; i < lines.Count; i++)
+        {
+            sb.Append("  ").AppendLine(lines[i]);
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    internal static string BuildFailureMessage(string header, string stderrTail, string stdoutTail)
+    {
+        var hasStderr = !string.IsNullOrEmpty(stderrTail);
+        var hasStdout = !string.IsNullOrEmpty(stdoutTail);
+        if (!hasStderr && !hasStdout)
+        {
+            return header + " ログを確認してください。";
+        }
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(header);
+        if (hasStderr)
+        {
+            sb.AppendLine("最新の stderr:");
+            sb.AppendLine(stderrTail);
+        }
+        if (hasStdout)
+        {
+            sb.AppendLine("最新の stdout:");
+            sb.AppendLine(stdoutTail);
+        }
+        return sb.ToString().TrimEnd();
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information,

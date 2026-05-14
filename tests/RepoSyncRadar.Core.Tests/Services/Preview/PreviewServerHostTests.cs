@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,8 +21,42 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 /// before <c>nodemon</c>'s cold start finished, so WebView2 navigated to a port
 /// that was not yet accepting connections and showed "接続できません".
 /// </summary>
-public sealed class PreviewServerHostTests
+public sealed class PreviewServerHostTests : IDisposable
 {
+    private readonly string _sandboxRoot;
+
+    public PreviewServerHostTests()
+    {
+        _sandboxRoot = Path.Combine(Path.GetTempPath(),
+            "rsr-preview-host-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_sandboxRoot);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(_sandboxRoot))
+            {
+                Directory.Delete(_sandboxRoot, recursive: true);
+            }
+        }
+        catch (IOException) { /* best-effort cleanup */ }
+        catch (UnauthorizedAccessException) { /* best-effort cleanup */ }
+    }
+
+    /// <summary>Creates a worktree path under the test sandbox with <c>node_modules</c> stubbed in.</summary>
+    private string CreateWorktree(bool withNodeModules = true)
+    {
+        var wt = Path.Combine(_sandboxRoot, Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(wt);
+        if (withNodeModules)
+        {
+            Directory.CreateDirectory(Path.Combine(wt, "node_modules"));
+        }
+        return wt;
+    }
+
     [Fact]
     public void ReplacePort_Substitutes_All_Placeholders()
     {
@@ -55,6 +90,38 @@ public sealed class PreviewServerHostTests
         Assert.Null(PreviewServerHost.BuildEnvironment(new Dictionary<string, string>(), port: 4500));
     }
 
+    [Theory]
+    [InlineData("npm", true)]
+    [InlineData("NPM", true)]
+    [InlineData("npm.cmd", true)]
+    [InlineData("pnpm", true)]
+    [InlineData("yarn", true)]
+    [InlineData("C:\\Program Files\\nodejs\\npm.cmd", true)]
+    [InlineData("hugo", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void IsNpmCommand_Recognizes_Node_Package_Managers(string? command, bool expected)
+    {
+        Assert.Equal(expected, PreviewServerHost.IsNpmCommand(command));
+    }
+
+    [Fact]
+    public void SnapshotTail_Returns_Last_N_Lines_Indented()
+    {
+        var lines = new[] { "one", "two", "three", "four", "five" };
+
+        var tail = PreviewServerHost.SnapshotTail(lines, take: 3);
+
+        Assert.Equal("  three\r\n  four\r\n  five".Replace("\r\n", Environment.NewLine, StringComparison.Ordinal), tail);
+    }
+
+    [Fact]
+    public void SnapshotTail_Returns_Empty_For_No_Lines()
+    {
+        Assert.Equal(string.Empty, PreviewServerHost.SnapshotTail(null, 5));
+        Assert.Equal(string.Empty, PreviewServerHost.SnapshotTail(Array.Empty<string>(), 5));
+    }
+
     [Fact]
     public async Task StartAsync_Returns_Null_When_Disabled()
     {
@@ -73,6 +140,7 @@ public sealed class PreviewServerHostTests
     [Fact]
     public async Task StartAsync_Forwards_Port_To_Arguments_And_Environment()
     {
+        var worktree = CreateWorktree();
         var host = CreateHost(out var runner, out var probe, options =>
         {
             options.PreviewCommand = "npm";
@@ -86,13 +154,13 @@ public sealed class PreviewServerHostTests
         });
         probe.NextResult = true;
 
-        var handle = await host.StartAsync("C:\\worktree", 4500, TestContext.Current.CancellationToken);
+        var handle = await host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken);
 
         Assert.NotNull(handle);
         var call = Assert.Single(runner.StartCalls);
         Assert.Equal("npm", call.FileName);
         Assert.Equal("run dev -- --port 4500", call.Arguments);
-        Assert.Equal("C:\\worktree", call.WorkingDirectory);
+        Assert.Equal(worktree, call.WorkingDirectory);
         Assert.NotNull(call.Environment);
         Assert.Equal("4500", call.Environment!["PORT"]);
         Assert.Equal("development", call.Environment["NODE_ENV"]);
@@ -103,42 +171,93 @@ public sealed class PreviewServerHostTests
     }
 
     [Fact]
-    public async Task StartAsync_Throws_When_Probe_Times_Out()
+    public async Task StartAsync_Throws_With_Recent_Stderr_When_Probe_Times_Out()
     {
+        var worktree = CreateWorktree();
         var host = CreateHost(out var runner, out var probe, options =>
         {
             options.PreviewCommand = "npm";
             options.PreviewReadyTimeoutSeconds = 1;
         });
         probe.NextResult = false;
-        runner.NextHandle = new FakeHandle { HasExited = false };
+        runner.NextHandle = new FakeHandle
+        {
+            HasExited = false,
+            RecentStderrLines = new[] { "EADDRINUSE: address already in use :::4500" },
+        };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.StartAsync("C:\\worktree", 4500, TestContext.Current.CancellationToken));
+            () => host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken));
 
         Assert.Contains("4500", ex.Message);
         Assert.Contains("待ち受け状態", ex.Message);
+        Assert.Contains("EADDRINUSE", ex.Message);
         Assert.True(runner.NextHandle.Killed);
     }
 
     [Fact]
-    public async Task StartAsync_Throws_When_Child_Exits_Early()
+    public async Task StartAsync_Includes_Stdout_When_Stderr_Empty_And_Process_Exited()
     {
-        // Simulates the failure mode where npm script crashes before listening
-        // (e.g. missing dependency). The probe reports !ready but liveness check
-        // already returned false; the exception message must reflect that.
+        var worktree = CreateWorktree();
         var host = CreateHost(out var runner, out var probe, options =>
         {
             options.PreviewCommand = "npm";
             options.PreviewReadyTimeoutSeconds = 1;
         });
         probe.NextResult = false;
-        runner.NextHandle = new FakeHandle { HasExited = true };
+        runner.NextHandle = new FakeHandle
+        {
+            HasExited = true,
+            RecentStdoutLines = new[] { "npm warn config production", "Lifecycle script ended" },
+        };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => host.StartAsync("C:\\worktree", 4500, TestContext.Current.CancellationToken));
+            () => host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken));
 
         Assert.Contains("起動直後に終了", ex.Message);
+        Assert.Contains("Lifecycle script ended", ex.Message);
+    }
+
+    [Fact]
+    public async Task StartAsync_Throws_When_Node_Modules_Missing()
+    {
+        // Reproduces the failure mode behind the latest user report: cleanup
+        // wiped node_modules, the next StartAsync spawned npm anyway, and the
+        // server timed out 240s later with no actionable message. Pre-flight
+        // check should fail fast with a hint.
+        var worktree = CreateWorktree(withNodeModules: false);
+        var host = CreateHost(out var runner, out var probe, options =>
+        {
+            options.PreviewCommand = "npm";
+        });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken));
+
+        Assert.Contains("node_modules", ex.Message);
+        Assert.Contains("npm install", ex.Message);
+        Assert.Empty(runner.StartCalls);
+        Assert.Empty(probe.Calls);
+    }
+
+    [Fact]
+    public async Task StartAsync_Skips_Node_Modules_Check_For_Non_Npm_Command()
+    {
+        // Non-Node preview commands (hugo, jekyll, ...) must keep working
+        // without a node_modules directory.
+        var worktree = CreateWorktree(withNodeModules: false);
+        var host = CreateHost(out var runner, out var probe, options =>
+        {
+            options.PreviewCommand = "hugo";
+            options.PreviewArguments = "serve";
+            options.PreviewReadyTimeoutSeconds = 5;
+        });
+        probe.NextResult = true;
+
+        var handle = await host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(handle);
+        Assert.Single(runner.StartCalls);
     }
 
     private static PreviewServerHost CreateHost(
@@ -204,6 +323,8 @@ public sealed class PreviewServerHostTests
         public int ProcessId => 1234;
         public bool HasExited { get; set; }
         public bool Killed { get; private set; }
+        public IReadOnlyList<string> RecentStdoutLines { get; set; } = Array.Empty<string>();
+        public IReadOnlyList<string> RecentStderrLines { get; set; } = Array.Empty<string>();
         public Task<int> WaitForExitAsync(CancellationToken ct) => Task.FromResult(0);
         public Task KillAsync(CancellationToken ct = default)
         {

@@ -49,4 +49,21 @@ public interface IProcessHandle : IAsyncDisposable
     bool HasExited { get; }
     Task<int> WaitForExitAsync(CancellationToken cancellationToken = default);
     Task KillAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Most recent lines written to the child's <c>stdout</c>, oldest first.
+    /// Default implementation returns an empty list so test doubles do not need
+    /// to implement the buffer. Production implementations should cap the
+    /// buffer (ring buffer) to keep memory bounded for chatty children.
+    /// </summary>
+    IReadOnlyList<string> RecentStdoutLines => Array.Empty<string>();
+
+    /// <summary>
+    /// Most recent lines written to the child's <c>stderr</c>, oldest first.
+    /// <see cref="PreviewServerHost"/> surfaces these in the
+    /// <see cref="InvalidOperationException"/> it throws on startup failure so
+    /// the UI can show <c>cross-env: not found</c> / <c>ENOENT node_modules</c>
+    /// instead of the opaque "did not become ready" message.
+    /// </summary>
+    IReadOnlyList<string> RecentStderrLines => Array.Empty<string>();
 }

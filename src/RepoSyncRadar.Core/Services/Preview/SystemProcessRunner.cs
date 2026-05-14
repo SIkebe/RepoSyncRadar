@@ -267,9 +267,18 @@ public sealed partial class SystemProcessRunner : IProcessRunner
 
     private sealed class ProcessHandle : IProcessHandle
     {
+        // 64 lines × ~200 chars ≈ 12 KB upper bound per stream. Enough to catch
+        // a typical npm / next.js stack trace without unbounded growth for
+        // sidecars that may run for hours.
+        private const int MaxBufferedLines = 64;
+
         private readonly Process _process;
         private readonly ILogger _logger;
         private readonly string _label;
+        private readonly object _stdoutGate = new();
+        private readonly object _stderrGate = new();
+        private readonly Queue<string> _stdoutBuffer = new(MaxBufferedLines);
+        private readonly Queue<string> _stderrBuffer = new(MaxBufferedLines);
 
         public ProcessHandle(Process process, ILogger logger, string label)
         {
@@ -289,6 +298,16 @@ public sealed partial class SystemProcessRunner : IProcessRunner
         public int ProcessId => _process.Id;
 
         public bool HasExited => _process.HasExited;
+
+        public IReadOnlyList<string> RecentStdoutLines
+        {
+            get { lock (_stdoutGate) { return _stdoutBuffer.ToArray(); } }
+        }
+
+        public IReadOnlyList<string> RecentStderrLines
+        {
+            get { lock (_stderrGate) { return _stderrBuffer.ToArray(); } }
+        }
 
         public Task<int> WaitForExitAsync(CancellationToken cancellationToken = default)
         {
@@ -328,13 +347,27 @@ public sealed partial class SystemProcessRunner : IProcessRunner
         private void OnStdout(object sender, DataReceivedEventArgs e)
         {
             if (e.Data is null) { return; }
+            AppendBuffered(_stdoutBuffer, _stdoutGate, e.Data);
             LogStdout(_logger, _label, e.Data);
         }
 
         private void OnStderr(object sender, DataReceivedEventArgs e)
         {
             if (e.Data is null) { return; }
+            AppendBuffered(_stderrBuffer, _stderrGate, e.Data);
             LogStderr(_logger, _label, e.Data);
+        }
+
+        private static void AppendBuffered(Queue<string> buffer, object gate, string line)
+        {
+            lock (gate)
+            {
+                if (buffer.Count >= MaxBufferedLines)
+                {
+                    buffer.Dequeue();
+                }
+                buffer.Enqueue(line);
+            }
         }
     }
 
