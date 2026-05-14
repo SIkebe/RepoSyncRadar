@@ -72,6 +72,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
     "MaxWorktrees": 5,
     "PreviewCommand": "npm",
     "PreviewArguments": "run dev -- --port {port}",
+      "PreviewInstallArguments": "install",
     "PreviewBasePort": 4500
   }
 }
@@ -190,6 +191,7 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
    - 初回のみ `git clone --bare <DocsRepoUrl> <BareCloneDir>`
    - `git fetch origin +refs/pull/{PR}/head:...` で PR head を取得
    - `git worktree add <WorktreeRoot>/<sha> <sha>` で作業ディレクトリを生成
+   - worktree に `node_modules` が無ければ `npm install` を自動実行
    - `npm run dev -- --port {port}` を sidecar として起動(同じ SHA に対しては再起動しない)
 3. 右側の WebView2 が `http://localhost:{port}/{言語}/{パス}` に切り替わり、変更されたファイル先頭の Markdown をその場で確認できます
 4. ボタン下に表示されている URL は外部ブラウザでも開けます
@@ -197,15 +199,15 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 #### 前提
 
 - Node.js + npm が PATH に通っていること(`PreviewCommand="npm"` を上書きすれば他ツールでも可)
-- 初回のみ `cd <BareCloneDir>` で `npm install` を済ませておく必要があります(`PreviewServerHost` は `npm install` を自動で実行しません)
+- worktree に `node_modules` が無い場合、`PreviewServerHost` が `PreviewCommand` + `PreviewInstallArguments` (既定: `npm install`) を自動実行してから preview server を起動します
 - WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中の `http://localhost:{port}` だけを動的に許可します
 
 #### node_modules の扱い (案 A / 案 B)
 
-worktree ごとに作業ディレクトリが分かれるため、`npm install` の置き場所を選ぶ必要があります。アプリのプレビュー画面で URL の下に表示される「worktree パス」を見て、状況に合わせてどちらかを使ってください。
+worktree ごとに作業ディレクトリが分かれるため、`npm install` の置き場所を選ぶ必要があります。既定ではアプリが各 worktree で自動実行します。ディスク消費を抑えたい場合は案 B を使ってください。
 
 - **案 A — 各 worktree で個別に `npm install`** (デフォルト・確実):
-   1. プレビュー後にボタン下の `<details>` に出てくる `cd "<worktree>" && npm install` をそのまま実行
+   1. アプリが `node_modules` 不在を検知したら自動で `npm install` を実行
    2. 初回 5〜15 分・1〜2 GB 消費。worktree を削除すれば一緒に消えます
 - **案 B — bare clone 親で 1 度だけ `npm install` → 各 worktree から junction で共有** (高速・ディスク節約):
    1. `cd <BareCloneDir> && npm install` を 1 回だけ実行

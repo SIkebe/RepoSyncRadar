@@ -110,7 +110,7 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         }
         await StopAsync(cancellationToken).ConfigureAwait(false);
 
-        EnsureNodeModulesIfNeeded(worktreePath);
+        await EnsureNodeModulesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
 
         var args = ReplacePort(_options.PreviewArguments, port);
         var env = BuildEnvironment(_options.PreviewEnvironment, port);
@@ -219,16 +219,15 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// When the preview command is <c>npm</c>, fails fast if <c>node_modules</c>
-    /// is missing from <paramref name="worktreePath"/>. Without this guard the
-    /// child would spawn, fail with <c>cross-env: not found</c>, and the user
-    /// would only see the generic "did not become ready" timeout 240 seconds
-    /// later. The check is intentionally narrow to <c>npm</c> so non-Node
-    /// preview commands (e.g. <c>hugo</c>, <c>jekyll</c>) keep working.
+    /// When the preview command is Node-based, installs dependencies before
+    /// starting the sidecar if the worktree does not have <c>node_modules</c> yet.
+    /// The check is intentionally narrow so non-Node preview commands (e.g.
+    /// <c>hugo</c>, <c>jekyll</c>) keep working.
     /// </summary>
-    private void EnsureNodeModulesIfNeeded(string worktreePath)
+    private async Task EnsureNodeModulesAsync(string worktreePath, CancellationToken cancellationToken)
     {
-        if (!IsNpmCommand(_options.PreviewCommand))
+        if (!IsNpmCommand(_options.PreviewCommand)
+            || string.IsNullOrWhiteSpace(_options.PreviewInstallArguments))
         {
             return;
         }
@@ -237,8 +236,38 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         {
             return;
         }
-        throw new InvalidOperationException(
-            $"{worktreePath} に node_modules がありません。`cd \"{worktreePath}\"` してから `npm install` を実行してください。");
+
+        var installArgs = _options.PreviewInstallArguments;
+        LogInstallStarted(_logger, _options.PreviewCommand, installArgs, worktreePath);
+        var handle = _runner.Start(
+            _options.PreviewCommand,
+            installArgs,
+            worktreePath,
+            environment: null);
+        _current = handle;
+        var exitCode = 0;
+        try
+        {
+            exitCode = await handle.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            await StopAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+        if (exitCode != 0)
+        {
+            var stderrTail = SnapshotTail(handle.RecentStderrLines, take: 12);
+            var stdoutTail = SnapshotTail(handle.RecentStdoutLines, take: 12);
+            await StopAsync(CancellationToken.None).ConfigureAwait(false);
+            throw new InvalidOperationException(BuildFailureMessage(
+                $"{_options.PreviewCommand} {installArgs} が失敗しました (exit {exitCode.ToString(CultureInfo.InvariantCulture)})。",
+                stderrTail,
+                stdoutTail));
+        }
+        await handle.DisposeAsync().ConfigureAwait(false);
+        _current = null;
+        LogInstallCompleted(_logger, _options.PreviewCommand, installArgs, worktreePath);
     }
 
     internal static bool IsNpmCommand(string? command)
@@ -271,6 +300,17 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
             sb.Append("  ").AppendLine(lines[i]);
         }
         return sb.ToString().TrimEnd();
+    }
+
+    internal static string SnapshotTail(string? text, int take)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+        return SnapshotTail(
+            text.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries),
+            take);
     }
 
     internal static string BuildFailureMessage(string header, string stderrTail, string stdoutTail)
@@ -311,4 +351,12 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
     [LoggerMessage(EventId = 4, Level = LogLevel.Error,
         Message = "Preview server not ready on port {Port} after {TimeoutSeconds}s (process exited: {Exited}).")]
     private static partial void LogReadyFailed(ILogger logger, int port, int timeoutSeconds, bool exited);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Information,
+        Message = "Installing preview dependencies: {Command} {Arguments} (cwd: {WorktreePath}).")]
+    private static partial void LogInstallStarted(ILogger logger, string command, string arguments, string worktreePath);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information,
+        Message = "Preview dependencies installed: {Command} {Arguments} (cwd: {WorktreePath}).")]
+    private static partial void LogInstallCompleted(ILogger logger, string command, string arguments, string worktreePath);
 }

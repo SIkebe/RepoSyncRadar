@@ -88,7 +88,25 @@ public sealed partial class SystemProcessRunner : IProcessRunner
             p.ErrorDataReceived += (_, e) => { if (e.Data is not null) { stderr.AppendLine(e.Data); } };
             p.BeginOutputReadLine();
             p.BeginErrorReadLine();
-            await p.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await p.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                try
+                {
+                    if (!p.HasExited)
+                    {
+                        p.Kill(entireProcessTree: true);
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    // already exited between HasExited and Kill
+                }
+                throw;
+            }
             return new ProcessRunResult(p.ExitCode, stdout.ToString(), stderr.ToString());
         }
     }

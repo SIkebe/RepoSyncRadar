@@ -278,12 +278,9 @@ public sealed class PreviewCoordinatorTests : IDisposable
             PreviewArguments = "run dev -- --port {port}",
             PreviewBasePort = previewBasePort,
         });
-        // The PreviewServerHost now pre-flight-checks for a node_modules folder
-        // in the worktree before launching npm. Tests use a fake IProcessRunner
-        // so `git worktree add` never actually materializes the directory;
-        // intercept that call (side-effect only — leave the per-test `Returns`
-        // configuration untouched) and stub it out on disk so the host check
-        // passes.
+        // Tests mostly exercise the warm path where dependencies already exist.
+        // The fake IProcessRunner does not materialize the worktree, so intercept
+        // `git worktree add` and stub node_modules on disk.
         runner.WhenForAnyArgs(r => r.RunAsync(default!, default!, default!, default))
             .Do(call =>
             {

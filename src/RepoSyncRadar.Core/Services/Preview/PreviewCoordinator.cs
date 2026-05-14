@@ -123,7 +123,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         var port = _options.PreviewBasePort;
         if (!string.Equals(_activeSha, sha, StringComparison.Ordinal))
         {
-            progress?.Report($"プレビューサーバを起動中… (ポート {port.ToString(CultureInfo.InvariantCulture)} / npm 起動には 30 秒〜数分)");
+            progress?.Report(
+                $"依存関係を確認してプレビューサーバを起動中… (node_modules がなければ {_options.PreviewCommand} {_options.PreviewInstallArguments} を自動実行 / ポート {port.ToString(CultureInfo.InvariantCulture)})");
             await _server.StartAsync(worktreePath, port, cancellationToken).ConfigureAwait(false);
             _activeSha = sha;
         }

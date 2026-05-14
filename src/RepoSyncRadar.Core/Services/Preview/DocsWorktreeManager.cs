@@ -100,6 +100,7 @@ public sealed partial class DocsWorktreeManager
         if (_worktrees.TryGetValue(commitSha, out var existing))
         {
             existing.LastUsed = ++_tick;
+            await EnsureNextWebpackOptOutAsync(existing.Path, cancellationToken).ConfigureAwait(false);
             return existing.Path;
         }
 
@@ -112,6 +113,7 @@ public sealed partial class DocsWorktreeManager
             throw new InvalidOperationException($"git worktree add failed (exit {result.ExitCode}): {result.StandardError}");
         }
         _worktrees[commitSha] = new WorktreeEntry(path, ++_tick);
+        await EnsureNextWebpackOptOutAsync(path, cancellationToken).ConfigureAwait(false);
 
         while (_worktrees.Count > _options.MaxWorktrees)
         {
@@ -134,6 +136,33 @@ public sealed partial class DocsWorktreeManager
             _worktrees.Remove(oldest.Key);
         }
         return path;
+    }
+
+    private async Task EnsureNextWebpackOptOutAsync(string worktreePath, CancellationToken cancellationToken)
+    {
+        var nextMiddlewarePath = Path.Combine(worktreePath, "src", "frame", "middleware", "next.ts");
+        if (!File.Exists(nextMiddlewarePath))
+        {
+            return;
+        }
+
+        var text = await File.ReadAllTextAsync(nextMiddlewarePath, cancellationToken).ConfigureAwait(false);
+        if (text.Contains("webpack: true", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        const string singleLine = "export const nextApp = next({ dev: isDevelopment })";
+        const string singleLinePatched = "export const nextApp = next({ dev: isDevelopment, webpack: true })";
+        var updated = text.Replace(singleLine, singleLinePatched, StringComparison.Ordinal);
+        if (string.Equals(updated, text, StringComparison.Ordinal))
+        {
+            LogNextPatchSkipped(_logger, nextMiddlewarePath);
+            return;
+        }
+
+        await File.WriteAllTextAsync(nextMiddlewarePath, updated, cancellationToken).ConfigureAwait(false);
+        LogNextPatched(_logger, nextMiddlewarePath);
     }
 
     private sealed class WorktreeEntry(string path, long lastUsed)
@@ -295,4 +324,12 @@ public sealed partial class DocsWorktreeManager
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning,
         Message = "git worktree list --porcelain failed: {StandardError}")]
     private static partial void LogRestoreFailed(ILogger logger, string standardError);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information,
+        Message = "Patched github/docs Next.js custom server to use webpack: true at {Path}.")]
+    private static partial void LogNextPatched(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning,
+        Message = "Could not patch github/docs Next.js custom server at {Path}; expected next({{ dev: isDevelopment }}) shape was not found.")]
+    private static partial void LogNextPatchSkipped(ILogger logger, string path);
 }

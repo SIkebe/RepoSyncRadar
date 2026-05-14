@@ -118,7 +118,7 @@ public sealed class PreviewServerHostTests : IDisposable
     [Fact]
     public void SnapshotTail_Returns_Empty_For_No_Lines()
     {
-        Assert.Equal(string.Empty, PreviewServerHost.SnapshotTail(null, 5));
+        Assert.Equal(string.Empty, PreviewServerHost.SnapshotTail((IReadOnlyList<string>?)null, 5));
         Assert.Equal(string.Empty, PreviewServerHost.SnapshotTail(Array.Empty<string>(), 5));
     }
 
@@ -219,24 +219,58 @@ public sealed class PreviewServerHostTests : IDisposable
     }
 
     [Fact]
-    public async Task StartAsync_Throws_When_Node_Modules_Missing()
+    public async Task StartAsync_Runs_Install_When_Node_Modules_Missing()
     {
-        // Reproduces the failure mode behind the latest user report: cleanup
-        // wiped node_modules, the next StartAsync spawned npm anyway, and the
-        // server timed out 240s later with no actionable message. Pre-flight
-        // check should fail fast with a hint.
+        // If cleanup removed node_modules (or this SHA's worktree is new), the
+        // preview should repair itself instead of asking the user to run npm.
         var worktree = CreateWorktree(withNodeModules: false);
         var host = CreateHost(out var runner, out var probe, options =>
         {
             options.PreviewCommand = "npm";
+            options.PreviewInstallArguments = "install";
+            options.PreviewReadyTimeoutSeconds = 5;
         });
+        probe.NextResult = true;
+        var installHandle = new FakeHandle { WaitExitCode = 0 };
+        var serverHandle = new FakeHandle { HasExited = false };
+        runner.EnqueueHandles(installHandle, serverHandle);
+
+        var returned = await host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken);
+
+        Assert.Same(serverHandle, returned);
+        Assert.Empty(runner.RunCalls);
+        Assert.Equal(2, runner.StartCalls.Count);
+        var install = runner.StartCalls[0];
+        Assert.Equal("npm", install.FileName);
+        Assert.Equal("install", install.Arguments);
+        Assert.Equal(worktree, install.WorkingDirectory);
+        Assert.True(installHandle.Disposed);
+        Assert.Single(probe.Calls);
+    }
+
+    [Fact]
+    public async Task StartAsync_Throws_When_Install_Fails()
+    {
+        var worktree = CreateWorktree(withNodeModules: false);
+        var host = CreateHost(out var runner, out var probe, options =>
+        {
+            options.PreviewCommand = "npm";
+            options.PreviewInstallArguments = "install";
+        });
+        runner.NextHandle = new FakeHandle
+        {
+            WaitExitCode = 1,
+            RecentStdoutLines = new[] { "install stdout" },
+            RecentStderrLines = new[] { "npm ERR! install failed" },
+        };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken));
 
-        Assert.Contains("node_modules", ex.Message);
         Assert.Contains("npm install", ex.Message);
-        Assert.Empty(runner.StartCalls);
+        Assert.Contains("npm ERR!", ex.Message);
+        Assert.Empty(runner.RunCalls);
+        Assert.Single(runner.StartCalls);
         Assert.Empty(probe.Calls);
     }
 
@@ -257,6 +291,7 @@ public sealed class PreviewServerHostTests : IDisposable
         var handle = await host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken);
 
         Assert.NotNull(handle);
+        Assert.Empty(runner.RunCalls);
         Assert.Single(runner.StartCalls);
     }
 
@@ -380,12 +415,26 @@ public sealed class PreviewServerHostTests : IDisposable
 
     private sealed class FakeProcessRunner : IProcessRunner
     {
+        public List<RunCall> RunCalls { get; } = [];
         public List<StartCall> StartCalls { get; } = [];
+        public ProcessRunResult NextRunResult { get; set; } = new(0, string.Empty, string.Empty);
         public FakeHandle NextHandle { get; set; } = new();
+        private readonly Queue<FakeHandle> _queuedHandles = new();
+
+        public void EnqueueHandles(params FakeHandle[] handles)
+        {
+            foreach (var handle in handles)
+            {
+                _queuedHandles.Enqueue(handle);
+            }
+        }
 
         public Task<ProcessRunResult> RunAsync(
             string fileName, string arguments, string workingDirectory, CancellationToken ct)
-            => throw new NotSupportedException();
+        {
+            RunCalls.Add(new RunCall(fileName, arguments, workingDirectory));
+            return Task.FromResult(NextRunResult);
+        }
 
         public IProcessHandle Start(
             string fileName,
@@ -395,9 +444,11 @@ public sealed class PreviewServerHostTests : IDisposable
         {
             StartCalls.Add(new StartCall(fileName, arguments, workingDirectory,
                 environment is null ? null : environment.ToDictionary(kv => kv.Key, kv => kv.Value)));
-            return NextHandle;
+            return _queuedHandles.Count > 0 ? _queuedHandles.Dequeue() : NextHandle;
         }
     }
+
+    private sealed record RunCall(string FileName, string Arguments, string WorkingDirectory);
 
     private sealed record StartCall(
         string FileName,
@@ -432,15 +483,26 @@ public sealed class PreviewServerHostTests : IDisposable
         public int ProcessId => 1234;
         public bool HasExited { get; set; }
         public bool Killed { get; private set; }
+        public bool Disposed { get; private set; }
+        public int WaitExitCode { get; set; }
         public IReadOnlyList<string> RecentStdoutLines { get; set; } = Array.Empty<string>();
         public IReadOnlyList<string> RecentStderrLines { get; set; } = Array.Empty<string>();
-        public Task<int> WaitForExitAsync(CancellationToken ct) => Task.FromResult(0);
+        public Task<int> WaitForExitAsync(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            HasExited = true;
+            return Task.FromResult(WaitExitCode);
+        }
         public Task KillAsync(CancellationToken ct = default)
         {
             Killed = true;
             HasExited = true;
             return Task.CompletedTask;
         }
-        public ValueTask DisposeAsync() => default;
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return default;
+        }
     }
 }

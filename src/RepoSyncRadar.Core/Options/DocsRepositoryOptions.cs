@@ -38,6 +38,13 @@ public sealed class DocsRepositoryOptions
     public string PreviewArguments { get; set; } = "run dev";
 
     /// <summary>
+    /// Arguments used to install dependencies automatically when a Node-based
+    /// preview command is configured and the worktree has no <c>node_modules</c>
+    /// directory yet. Empty means the install step is skipped.
+    /// </summary>
+    public string PreviewInstallArguments { get; set; } = "install";
+
+    /// <summary>
     /// Environment variables to merge on top of the parent process environment
     /// before starting <see cref="PreviewCommand"/>. Values support the <c>{port}</c>
     /// placeholder. Defaults to <c>PORT={port}</c> so the <c>github/docs</c>

@@ -19,8 +19,7 @@ public sealed class PreviewServerHostTests : IDisposable
         _wt = Path.Combine(Path.GetTempPath(),
             "rsr-preview-server-host-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_wt);
-        // Satisfy the node_modules pre-flight check that PreviewServerHost now
-        // performs for npm preview commands.
+        // Most tests exercise the warm path where dependencies already exist.
         Directory.CreateDirectory(Path.Combine(_wt, "node_modules"));
     }
 

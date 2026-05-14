@@ -216,6 +216,42 @@ public sealed class DocsWorktreeManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckoutAsync_Patches_Next_Custom_Server_To_Use_Webpack()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "eeeeeeeeeeeeee05";
+        var expectedPath = Path.Combine(worktreeRoot, "eeeeeeeeeeee");
+        var nextFile = Path.Combine(expectedPath, "src", "frame", "middleware", "next.ts");
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+                bare,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(nextFile)!);
+                File.WriteAllText(nextFile, "export const nextApp = next({ dev: isDevelopment })\n");
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var path = await sut.CheckoutAsync(sha, ct);
+
+        Assert.Equal(expectedPath, path);
+        Assert.Contains(
+            "export const nextApp = next({ dev: isDevelopment, webpack: true })",
+            await File.ReadAllTextAsync(nextFile, ct));
+    }
+
+    [Fact]
     public async Task PruneAllAsync_Removes_All_Tracked_Worktrees()
     {
         // Surface from the UI / docs so users can deliberately wipe the cache.
