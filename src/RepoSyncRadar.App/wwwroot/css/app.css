@@ -350,3 +350,20 @@ html, body {
     white-space: pre-wrap;
     word-break: break-word;
 }
+/* P2: stdout / stderr のラベル + PID を区別表示。
+   stderr は黄色寄せにして warning だと一目で分かるようにする。 */
+.preview-progress-pid {
+    color: #777;
+    font-size: 0.85rem;
+    margin-left: 0.25rem;
+    white-space: nowrap;
+}
+
+.preview-log-stdout {
+    border-left: 3px solid #0d6efd;
+}
+
+.preview-log-stderr {
+    border-left: 3px solid #ffc107;
+    color: #f0b050;
+}

@@ -15,7 +15,10 @@
     @if (_busy)
     {
         @* P1: 起動中はスピナー + 経過秒 + ログ tail + 中止ボタンを表示。
-           silent な 600 秒待ちを潰すため。 *@
+           silent な 600 秒待ちを潰すため。
+           P2: stdout / stderr を別 pre で表示。stderr の warning が連続すると
+           stdout (Next.js の起動進捗) が押し出される問題を回避。PID も表示し、
+           Task Manager / netstat で外部確認できるようにする。 *@
         <div class="preview-progress" data-testid="preview-progress">
             <div class="preview-progress-row">
                 <span class="preview-spinner" aria-hidden="true"></span>
@@ -23,6 +26,10 @@
                     @(_status ?? "起動中…")
                     <span class="preview-progress-elapsed" data-testid="preview-progress-elapsed">
                         ・ @_elapsedSec 秒経過 / 上限 @_timeoutSec 秒
+                        @if (_pid is { } pid)
+                        {
+                            <span class="preview-progress-pid" data-testid="preview-progress-pid">・ PID @pid</span>
+                        }
                     </span>
                 </span>
                 <button type="button"
@@ -31,9 +38,13 @@
                         disabled="@_canceling"
                         @onclick="CancelAsync">@(_canceling ? "中止中…" : "中止")</button>
             </div>
-            @if (_logTail.Count > 0)
+            @if (_stdoutTail.Count > 0)
             {
-                <pre class="preview-log-tail" data-testid="preview-log-tail">@string.Join('\n', _logTail)</pre>
+                <pre class="preview-log-tail preview-log-stdout" data-testid="preview-log-stdout">@string.Join('\n', _stdoutTail)</pre>
+            }
+            @if (_stderrTail.Count > 0)
+            {
+                <pre class="preview-log-tail preview-log-stderr" data-testid="preview-log-stderr">@string.Join('\n', _stderrTail)</pre>
             }
         </div>
     }
@@ -92,7 +103,9 @@ npm install</code></pre>
     private DateTimeOffset _startedAt;
     private int _elapsedSec;
     private int _timeoutSec = 600;
-    private List<string> _logTail = new();
+    private List<string> _stdoutTail = new();
+    private List<string> _stderrTail = new();
+    private int? _pid;
     private Task? _pollTask;
 
     private async Task PreviewAsync()
@@ -105,7 +118,9 @@ npm install</code></pre>
         _canceling = false;
         _status = "リポジトリを準備中…";
         _lastUrl = null;
-        _logTail = new List<string>();
+        _stdoutTail = new List<string>();
+        _stderrTail = new List<string>();
+        _pid = null;
         _startedAt = DateTimeOffset.UtcNow;
         _elapsedSec = 0;
         _timeoutSec = Services.GetRequiredService<IOptions<DocsRepositoryOptions>>().Value.PreviewReadyTimeoutSeconds;
@@ -192,6 +207,8 @@ npm install</code></pre>
     /// <summary>
     /// 500 ms ごとに PreviewServerHost のログ tail と経過秒を読んで UI を再描画する。
     /// PreparePreviewAsync が完了 or キャンセルされた時点で OperationCanceledException で抜ける。
+    /// P2: stdout と stderr を独立に表示するため、結合せず別々に末尾 N 行を取る
+    /// (stderr 側の warning ループで stdout が押し出される問題を回避)。
     /// </summary>
     private async Task PollProgressAsync(PreviewServerHost host, CancellationToken token)
     {
@@ -200,19 +217,15 @@ npm install</code></pre>
             using var timer = new PeriodicTimer(PollInterval);
             while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
-                var stdout = host.RecentStdoutLines;
-                var stderr = host.RecentStderrLines;
-                var combined = new List<string>(stdout.Count + stderr.Count);
-                combined.AddRange(stdout);
-                combined.AddRange(stderr);
-                if (combined.Count > MaxLogTailLines)
-                {
-                    combined = combined.GetRange(combined.Count - MaxLogTailLines, MaxLogTailLines);
-                }
+                var stdoutTail = TakeTail(host.RecentStdoutLines, MaxLogTailLines);
+                var stderrTail = TakeTail(host.RecentStderrLines, MaxLogTailLines);
+                var pid = host.CurrentProcessId;
                 var elapsed = (int)(DateTimeOffset.UtcNow - _startedAt).TotalSeconds;
                 await InvokeAsync(() =>
                 {
-                    _logTail = combined;
+                    _stdoutTail = stdoutTail;
+                    _stderrTail = stderrTail;
+                    _pid = pid;
                     _elapsedSec = elapsed;
                     StateHasChanged();
                 });
@@ -222,6 +235,20 @@ npm install</code></pre>
         {
             // expected: PreviewAsync's finally block cancels _cts to stop us.
         }
+    }
+
+    private static List<string> TakeTail(IReadOnlyList<string> source, int take)
+    {
+        if (source.Count <= take)
+        {
+            return new List<string>(source);
+        }
+        var result = new List<string>(take);
+        for (var i = source.Count - take; i < source.Count; i++)
+        {
+            result.Add(source[i]);
+        }
+        return result;
     }
 
     private async Task CleanupAsync()

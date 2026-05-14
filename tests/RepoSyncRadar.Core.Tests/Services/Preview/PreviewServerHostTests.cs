@@ -272,6 +272,7 @@ public sealed class PreviewServerHostTests : IDisposable
         Assert.NotNull(host.RecentStderrLines);
         Assert.Empty(host.RecentStderrLines);
         Assert.False(host.IsProcessRunning);
+        Assert.Null(host.CurrentProcessId);
     }
 
     [Fact]
@@ -301,6 +302,8 @@ public sealed class PreviewServerHostTests : IDisposable
             Assert.True(host.IsProcessRunning);
             Assert.Equal(fakeHandle.RecentStdoutLines, host.RecentStdoutLines);
             Assert.Equal(fakeHandle.RecentStderrLines, host.RecentStderrLines);
+            // PID surfaced so the UI can show it for Task Manager / netstat lookup.
+            Assert.Equal(fakeHandle.ProcessId, host.CurrentProcessId);
         };
         probe.NextResult = true;
 

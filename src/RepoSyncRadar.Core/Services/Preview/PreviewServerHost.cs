@@ -67,6 +67,28 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
     public bool IsProcessRunning => _current is { } handle && !handle.HasExited;
 
     /// <summary>
+    /// OS process id of the currently-running child, or <c>null</c> when none.
+    /// Surfaced so the UI can show the PID and the user can confirm with Task
+    /// Manager / <c>netstat -ano | findstr :PORT</c> whether the npm tree is
+    /// alive when nothing else seems to be happening.
+    /// </summary>
+    public int? CurrentProcessId
+    {
+        get
+        {
+            try
+            {
+                return _current is { } h && !h.HasExited ? h.ProcessId : null;
+            }
+            catch (InvalidOperationException)
+            {
+                // Process has already exited between our HasExited check and ProcessId access.
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
     /// Starts the preview server in <paramref name="worktreePath"/> bound to
     /// <paramref name="port"/> and waits until the port accepts TCP connections
     /// (bounded by <see cref="DocsRepositoryOptions.PreviewReadyTimeoutSeconds"/>).
