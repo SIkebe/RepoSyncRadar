@@ -44,6 +44,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<ICommitIngestionService, CommitIngestionService>();
         services.TryAddSingleton<IPathToUrlResolver, NullPathToUrlResolver>();
         services.TryAddSingleton<IProcessRunner, SystemProcessRunner>();
+        services.TryAddSingleton<IPortReadyProbe, TcpPortReadyProbe>();
         services.TryAddSingleton<DocsWorktreeManager>();
         services.TryAddSingleton<PreviewServerHost>();
         services.TryAddSingleton<PreviewSession>();

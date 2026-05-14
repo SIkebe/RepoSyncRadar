@@ -36,7 +36,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Null(link);
         await runner.DidNotReceiveWithAnyArgs()
             .RunAsync(default!, default!, default!, Arg.Any<CancellationToken>());
-        runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!);
+        runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!, default);
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
             });
         var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
             .Returns(call =>
             {
                 calls.Add($"START {call.ArgAt<string>(0)} {call.ArgAt<string>(1)} cwd={call.ArgAt<string>(2)}");
@@ -93,7 +93,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
         var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(handle);
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
         var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
             worktreeRoot: Path.Combine(_tempRoot, "wt"));
 
@@ -101,7 +101,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         await sut.PreparePreviewAsync(1, "shaA", "content/b.md", cancellationToken: ct);
 
         // Start should only happen once for the same sha; worktree add only once too.
-        runner.Received(1).Start("npm", Arg.Any<string>(), Arg.Any<string>());
+        runner.Received(1).Start("npm", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>());
         await runner.Received(1).RunAsync(
             "git",
             Arg.Is<string>(s => s.StartsWith("worktree add", StringComparison.Ordinal)),
@@ -119,14 +119,14 @@ public sealed class PreviewCoordinatorTests : IDisposable
         runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
         var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(handle);
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
         var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
             worktreeRoot: Path.Combine(_tempRoot, "wt"));
 
         await sut.PreparePreviewAsync(1, "shaA", "content/a.md", cancellationToken: ct);
         await sut.PreparePreviewAsync(1, "shaB", "content/a.md", cancellationToken: ct);
 
-        runner.Received(2).Start("npm", Arg.Any<string>(), Arg.Any<string>());
+        runner.Received(2).Start("npm", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>());
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var runner = Substitute.For<IProcessRunner>();
         runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
             .Returns(Substitute.For<IProcessHandle>());
         var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
             worktreeRoot: Path.Combine(_tempRoot, "wt"));
@@ -159,7 +159,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
         var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(handle);
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
         var session = new PreviewSession();
         var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
             worktreeRoot: Path.Combine(_tempRoot, "wt"),
@@ -181,7 +181,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var runner = Substitute.For<IProcessRunner>();
         runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>())
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
             .Returns(Substitute.For<IProcessHandle>());
         var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
             worktreeRoot: Path.Combine(_tempRoot, "wt-progress"));
@@ -218,7 +218,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 $"worktree {leftover}\nHEAD abcdef0123456789\ndetached\n\n",
                 string.Empty)));
         var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(handle);
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
         var session = new PreviewSession();
         var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
             worktreeRoot: wtRoot, session: session);
@@ -279,7 +279,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
             PreviewBasePort = previewBasePort,
         });
         var worktree = new DocsWorktreeManager(runner, options, NullLogger<DocsWorktreeManager>.Instance);
-        var server = new PreviewServerHost(runner, options, NullLogger<PreviewServerHost>.Instance);
+        var probe = Substitute.For<IPortReadyProbe>();
+        probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
+            Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
+        var server = new PreviewServerHost(runner, probe, options, NullLogger<PreviewServerHost>.Instance);
         session ??= new PreviewSession();
         return new PreviewCoordinator(
             worktree,

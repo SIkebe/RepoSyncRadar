@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace RepoSyncRadar.Core.Options;
@@ -28,10 +29,37 @@ public sealed class DocsRepositoryOptions
     /// <summary>Command that launches the preview server (e.g. <c>npm</c>).</summary>
     public string PreviewCommand { get; set; } = "npm";
 
-    /// <summary>Arguments. The substring <c>{port}</c> is replaced with the chosen port.</summary>
-    public string PreviewArguments { get; set; } = "run dev -- --port {port}";
+    /// <summary>
+    /// Command arguments. The substring <c>{port}</c> is replaced with the chosen
+    /// port. Default is <c>run dev</c> which works for the <c>github/docs</c>
+    /// repo — that repo's <c>dev</c> script ignores <c>--port</c> and only honors
+    /// the <c>PORT</c> environment variable populated via <see cref="PreviewEnvironment"/>.
+    /// </summary>
+    public string PreviewArguments { get; set; } = "run dev";
+
+    /// <summary>
+    /// Environment variables to merge on top of the parent process environment
+    /// before starting <see cref="PreviewCommand"/>. Values support the <c>{port}</c>
+    /// placeholder. Defaults to <c>PORT={port}</c> so the <c>github/docs</c>
+    /// server (<c>nodemon src/frame/server.ts</c>) listens on the requested port
+    /// rather than its built-in default of 4000.
+    /// </summary>
+    public Dictionary<string, string> PreviewEnvironment { get; set; } = new(System.StringComparer.Ordinal)
+    {
+        ["PORT"] = "{port}",
+    };
 
     /// <summary>First port to try when starting the preview server.</summary>
     [Range(1024, 65535)]
     public int PreviewBasePort { get; set; } = 4500;
+
+    /// <summary>
+    /// Maximum time the preview server is allowed to take before it must accept
+    /// TCP connections on <see cref="PreviewBasePort"/>. <c>github/docs</c>'s
+    /// <c>nodemon</c> cold start can take 30–120 s on a warm machine and longer
+    /// on first run.
+    /// </summary>
+    [Range(5, 600)]
+    public int PreviewReadyTimeoutSeconds { get; set; } = 240;
 }
+

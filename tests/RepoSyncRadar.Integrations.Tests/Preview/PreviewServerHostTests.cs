@@ -18,13 +18,18 @@ public sealed class PreviewServerHostTests
         var ct = TestContext.Current.CancellationToken;
         var runner = Substitute.For<IProcessRunner>();
         var handle = Substitute.For<IProcessHandle>();
-        runner.Start("npm", "run dev -- --port 4500", "C:/wt").Returns(handle);
-        var sut = BuildSut(runner, command: "npm", arguments: "run dev -- --port {port}");
+        runner.Start("npm", "run dev -- --port 4500", "C:/wt",
+            Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
+        var probe = Substitute.For<IPortReadyProbe>();
+        probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
+            Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
+        var sut = BuildSut(runner, probe, command: "npm", arguments: "run dev -- --port {port}");
 
         var returned = await sut.StartAsync("C:/wt", 4500, ct);
 
         Assert.Same(handle, returned);
-        runner.Received(1).Start("npm", "run dev -- --port 4500", "C:/wt");
+        runner.Received(1).Start("npm", "run dev -- --port 4500", "C:/wt",
+            Arg.Any<IReadOnlyDictionary<string, string?>?>());
         Assert.Equal(4500, sut.CurrentPort);
     }
 
@@ -34,8 +39,12 @@ public sealed class PreviewServerHostTests
         var ct = TestContext.Current.CancellationToken;
         var runner = Substitute.For<IProcessRunner>();
         var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>()).Returns(handle);
-        var sut = BuildSut(runner, command: "npm", arguments: "run dev -- --port {port}");
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
+        var probe = Substitute.For<IPortReadyProbe>();
+        probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
+            Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
+        var sut = BuildSut(runner, probe, command: "npm", arguments: "run dev -- --port {port}");
         await sut.StartAsync("C:/wt", 4501, ct);
 
         await sut.DisposeAsync();
@@ -44,13 +53,18 @@ public sealed class PreviewServerHostTests
         await handle.Received(1).DisposeAsync();
     }
 
-    private static PreviewServerHost BuildSut(IProcessRunner runner, string command, string arguments)
+    private static PreviewServerHost BuildSut(
+        IProcessRunner runner,
+        IPortReadyProbe probe,
+        string command,
+        string arguments)
     {
         var options = Options.Create(new DocsRepositoryOptions
         {
             PreviewCommand = command,
             PreviewArguments = arguments,
+            PreviewEnvironment = new Dictionary<string, string>(),
         });
-        return new PreviewServerHost(runner, options, NullLogger<PreviewServerHost>.Instance);
+        return new PreviewServerHost(runner, probe, options, NullLogger<PreviewServerHost>.Instance);
     }
 }
