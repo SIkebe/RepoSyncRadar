@@ -72,7 +72,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
     "MaxWorktrees": 5,
     "PreviewCommand": "npm",
     "PreviewArguments": "run dev -- --port {port}",
-      "PreviewInstallArguments": "install",
+    "PreviewInstallArguments": "install",
     "PreviewBasePort": 4500
   }
 }

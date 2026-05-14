@@ -252,6 +252,72 @@ public sealed class DocsWorktreeManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckoutAsync_Reuses_Untracked_Existing_Directory_When_Head_Matches()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "ffffffffffff0006";
+        var existingPath = Path.Combine(worktreeRoot, "ffffffffffff");
+        Directory.CreateDirectory(existingPath);
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse HEAD", existingPath, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, sha + "\n", string.Empty)));
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var path = await sut.CheckoutAsync(sha, ct);
+
+        Assert.Equal(existingPath, path);
+        await runner.DidNotReceive().RunAsync(
+            "git",
+            Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+            bare,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckoutAsync_Deletes_Stale_Existing_Directory_Before_Adding_Worktree()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "9999999999990007";
+        var stalePath = Path.Combine(worktreeRoot, "999999999999");
+        Directory.CreateDirectory(stalePath);
+        var staleFile = Path.Combine(stalePath, "partial.txt");
+        File.WriteAllText(staleFile, "left from interrupted checkout");
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse HEAD", stalePath, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(128, string.Empty, "not a git repository")));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+                bare,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Assert.False(File.Exists(staleFile));
+                Directory.CreateDirectory(stalePath);
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var path = await sut.CheckoutAsync(sha, ct);
+
+        Assert.Equal(stalePath, path);
+    }
+
+    [Fact]
     public async Task PruneAllAsync_Removes_All_Tracked_Worktrees()
     {
         // Surface from the UI / docs so users can deliberately wipe the cache.

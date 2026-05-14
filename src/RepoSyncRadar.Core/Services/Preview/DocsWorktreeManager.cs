@@ -106,6 +106,17 @@ public sealed partial class DocsWorktreeManager
 
         var slug = commitSha.Length >= 12 ? commitSha[..12] : commitSha;
         var path = Path.Combine(_options.WorktreeRoot, slug);
+        if (Directory.Exists(path))
+        {
+            var recovered = await TryRecoverExistingPathAsync(path, commitSha, cancellationToken).ConfigureAwait(false);
+            if (recovered)
+            {
+                _worktrees[commitSha] = new WorktreeEntry(path, ++_tick);
+                await EnsureNextWebpackOptOutAsync(path, cancellationToken).ConfigureAwait(false);
+                return path;
+            }
+        }
+
         var args = string.Create(CultureInfo.InvariantCulture, $"worktree add {path} {commitSha}");
         var result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
@@ -136,6 +147,46 @@ public sealed partial class DocsWorktreeManager
             _worktrees.Remove(oldest.Key);
         }
         return path;
+    }
+
+    private async Task<bool> TryRecoverExistingPathAsync(
+        string path,
+        string commitSha,
+        CancellationToken cancellationToken)
+    {
+        var head = await _runner.RunAsync(
+            "git",
+            "rev-parse HEAD",
+            path,
+            cancellationToken).ConfigureAwait(false);
+        if (head.ExitCode == 0 && CommitMatches(head.StandardOutput, commitSha))
+        {
+            LogExistingWorktreeReused(_logger, path, commitSha);
+            return true;
+        }
+
+        try
+        {
+            Directory.Delete(path, recursive: true);
+            LogStaleWorktreeDeleted(_logger, path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException(
+                $"既存の preview worktree ディレクトリ '{path}' を削除できませんでした。起動中の npm/node プロセスを停止するか、キャッシュをクリーンアップしてから再試行してください。",
+                ex);
+        }
+
+        return false;
+    }
+
+    private static bool CommitMatches(string actualHead, string requestedSha)
+    {
+        var actual = actualHead.Trim();
+        var requested = requestedSha.Trim();
+        return string.Equals(actual, requested, StringComparison.OrdinalIgnoreCase)
+            || actual.StartsWith(requested, StringComparison.OrdinalIgnoreCase)
+            || requested.StartsWith(actual, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task EnsureNextWebpackOptOutAsync(string worktreePath, CancellationToken cancellationToken)
@@ -332,4 +383,12 @@ public sealed partial class DocsWorktreeManager
     [LoggerMessage(EventId = 5, Level = LogLevel.Warning,
         Message = "Could not patch github/docs Next.js custom server at {Path}; expected next({{ dev: isDevelopment }}) shape was not found.")]
     private static partial void LogNextPatchSkipped(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Information,
+        Message = "Reusing existing preview worktree directory {Path} for sha {Sha}.")]
+    private static partial void LogExistingWorktreeReused(ILogger logger, string path, string sha);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Warning,
+        Message = "Deleted stale preview worktree directory {Path} before recreating it.")]
+    private static partial void LogStaleWorktreeDeleted(ILogger logger, string path);
 }

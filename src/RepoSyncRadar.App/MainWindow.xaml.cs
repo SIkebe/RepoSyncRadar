@@ -114,12 +114,16 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Wires the same CDP-port opt-in into BlazorWebView's internal WebView2. Only
-    /// active when <see cref="BlazorCdpPortEnv"/> is set, so production builds keep
-    /// CDP closed.
+    /// Assigns BlazorWebView's internal WebView2 its own user-data folder and wires
+    /// the same CDP-port opt-in. CDP is only active when
+    /// <see cref="BlazorCdpPortEnv"/> is set, so production builds keep it closed.
     /// </summary>
     private void OnBlazorViewInitializing(object? sender, BlazorWebViewInitializingEventArgs e)
     {
+        var blazorUserDataFolder = Path.Combine(GetWebViewUserDataRoot(), "BlazorView");
+        Directory.CreateDirectory(blazorUserDataFolder);
+        e.UserDataFolder = blazorUserDataFolder;
+
         var args = BuildBrowserArguments(BlazorCdpPortEnv);
         if (args.Length == 0)
         {
