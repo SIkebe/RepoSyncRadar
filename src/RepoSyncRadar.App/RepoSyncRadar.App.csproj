@@ -38,6 +38,13 @@
     <Content Update="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <!-- appsettings.local.json は .gitignore 対象 (個人/環境固有の値・トークン置き場)。
+         Razor SDK が暗黙で Content に含めるが CopyToOutputDirectory が未指定なので、
+         ここで明示して保存毎に bin にコピーさせる。Publish 時は含めない。 -->
+    <Content Update="appsettings.local.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </Content>
     <Content Update="wwwroot\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

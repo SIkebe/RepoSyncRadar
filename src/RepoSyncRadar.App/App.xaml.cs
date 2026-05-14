@@ -39,6 +39,15 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Install global unhandled-exception sinks BEFORE the host is built so that
+        // exceptions during DI composition (or anywhere in the BlazorWebView) do not
+        // tear down the WPF process. The previous behaviour was that any non-
+        // InvalidOperationException raised inside the preview pipeline (Win32Exception,
+        // IOException, etc.) crashed the app silently.
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+
         var builder = Host.CreateApplicationBuilder(e.Args);
 
         builder.Configuration
@@ -141,6 +150,81 @@ public partial class App : Application
     [LoggerMessage(EventId = 2, Level = LogLevel.Warning,
         Message = "Eager GitHub sign-in failed on startup; will retry on next Copilot action.")]
     private static partial void LogStartupSignInFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Error,
+        Message = "Unhandled exception caught by global sink. Application kept alive; user should consider restarting.")]
+    private static partial void LogUnhandled(ILogger logger, Exception exception);
+
+    /// <summary>
+    /// Last-resort handler for any exception that escapes the BlazorWebView, a
+    /// fire-and-forget task, or the WPF dispatcher. Splits the WPF / dialog
+    /// concerns from the logging core so unit tests can drive it without
+    /// instantiating a <see cref="System.Windows.MessageBox"/>.
+    /// </summary>
+    /// <param name="exception">Exception to report, or <c>null</c> when the source
+    /// raised a non-<see cref="Exception"/> payload (AppDomain unhandled).</param>
+    /// <param name="logger">Optional logger; <c>null</c> is treated as a no-op so the
+    /// sink stays callable even during DI composition failure.</param>
+    /// <param name="showDialog">Optional UI callback invoked with the formatted
+    /// message. Tests pass a <c>List&lt;string&gt;</c>.Add; production passes
+    /// <see cref="ShowUnhandledDialog"/>.</param>
+    internal static void HandleUnhandled(Exception? exception, ILogger? logger, Action<string>? showDialog)
+    {
+        if (exception is null)
+        {
+            return;
+        }
+        if (logger is not null)
+        {
+            LogUnhandled(logger, exception);
+        }
+        if (showDialog is null)
+        {
+            return;
+        }
+        try
+        {
+            var message = $"想定外のエラーが発生しました。\n\n{exception.GetType().Name}: {exception.Message}";
+            showDialog(message);
+        }
+        catch
+        {
+            // Best-effort: do not throw from the global sink.
+        }
+    }
+
+    private void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+    {
+        HandleUnhandled(e.Exception, _host?.Services.GetService<ILogger<App>>(), ShowUnhandledDialog);
+        e.Handled = true; // Keep the WPF message pump alive.
+    }
+
+    private void OnDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        HandleUnhandled(e.ExceptionObject as Exception, _host?.Services.GetService<ILogger<App>>(), ShowUnhandledDialog);
+    }
+
+    private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        HandleUnhandled(e.Exception, _host?.Services.GetService<ILogger<App>>(), ShowUnhandledDialog);
+        e.SetObserved();
+    }
+
+    private static void ShowUnhandledDialog(string message)
+    {
+        try
+        {
+            MessageBox.Show(
+                message,
+                "RepoSyncRadar — 想定外のエラー",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+        catch
+        {
+            // Dispatcher may already be torn down — keep the sink quiet.
+        }
+    }
 
     protected override async void OnExit(ExitEventArgs e)
     {

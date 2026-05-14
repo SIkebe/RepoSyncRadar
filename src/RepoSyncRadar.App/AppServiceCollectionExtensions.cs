@@ -47,6 +47,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<AskSession>();
         services.TryAddSingleton<ICopilotAgent, CopilotAgent>();
         services.TryAddSingleton<IReviewBroadcaster, ReviewBroadcaster>();
+        services.TryAddSingleton<IPreviewNavigator, PreviewNavigator>();
 
         return services;
     }

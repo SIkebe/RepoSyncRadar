@@ -1,13 +1,16 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Threading;
 using Microsoft.AspNetCore.Components.WebView;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Options;
 using RepoSyncRadar.Core.Services;
+using RepoSyncRadar.Core.Services.Preview;
 
 namespace RepoSyncRadar.App;
 
@@ -48,6 +51,8 @@ public partial class MainWindow : Window
     private const string DocsCdpPortEnv = "REPOSYNCRADAR_DOCS_CDP_PORT";
 
     private readonly UrlAllowList _allowList;
+    private readonly PreviewSession _previewSession;
+    private readonly IPreviewNavigator _previewNavigator;
     private readonly ILogger<MainWindow> _logger;
 
     public MainWindow(IServiceProvider services)
@@ -58,6 +63,10 @@ public partial class MainWindow : Window
 
         var copilotOptions = services.GetRequiredService<IOptions<CopilotOptions>>().Value;
         _allowList = new UrlAllowList(copilotOptions.AllowedUrlHosts);
+        _previewSession = services.GetRequiredService<PreviewSession>();
+        _previewNavigator = services.GetRequiredService<IPreviewNavigator>();
+        _previewNavigator.Requested += OnPreviewRequested;
+        Closed += (_, _) => _previewNavigator.Requested -= OnPreviewRequested;
         _logger = services.GetRequiredService<ILoggerFactory>().CreateLogger<MainWindow>();
 
         // Use a dedicated user-data folder so DocsView and BlazorWebView do not
@@ -158,6 +167,10 @@ public partial class MainWindow : Window
         {
             return;
         }
+        if (Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out var uri) && _previewSession.IsAllowed(uri))
+        {
+            return;
+        }
 
         LogBlockedRequest(_logger, e.Request.Uri);
         e.Response = DocsView.CoreWebView2.Environment.CreateWebResourceResponse(
@@ -173,6 +186,26 @@ public partial class MainWindow : Window
         DocsFallback.Visibility = Visibility.Visible;
         DocsFallbackMessage.Text =
             $"WebView2 を初期化できませんでした。Edge WebView2 ランタイムを確認してください。\n\n詳細: {ex.Message}";
+    }
+
+    /// <summary>
+    /// Updates <see cref="DocsView"/>.Source to <paramref name="url"/> on the UI thread.
+    /// Raised by <see cref="IPreviewNavigator"/> when the Razor "ローカルプレビュー" button
+    /// has finished preparing a new preview (IMPLEMENTATION_PLAN.md §Step 19.5). The
+    /// companion <see cref="PreviewSession"/> is updated by <c>PreviewCoordinator</c>
+    /// before this fires, so the resource filter will already allow
+    /// <c>http://localhost:{port}/*</c> through.
+    /// </summary>
+    private void OnPreviewRequested(object? sender, Uri url)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            DocsView.Source = url;
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, () => DocsView.Source = url);
+        }
     }
 
     [LoggerMessage(

@@ -1,0 +1,146 @@
+@* PreviewActions — "ローカルプレビュー" ボタンを描画する小さなコンポーネント。
+   IPreviewCoordinator を呼び、戻ってきた URL を IPreviewNavigator で WPF 側に流して
+   右側の WebView2 を切り替えさせる。プレビュー機能が無効 (DocsRepository 未設定) の
+   場合は ヒントを表示。IMPLEMENTATION_PLAN.md §Step 19.5。 *@
+
+@using Microsoft.Extensions.DependencyInjection
+@using RepoSyncRadar.Core.Models
+@using RepoSyncRadar.Core.Services.Preview
+
+<div class="radar-preview-actions" data-testid="preview-actions">
+    <button type="button"
+            data-testid="preview-button"
+            class="preview"
+            disabled="@(_busy || Commit is null)"
+            @onclick="PreviewAsync">@(_busy ? "起動中…" : "ローカルプレビュー")</button>
+
+    <button type="button"
+            data-testid="preview-cleanup-button"
+            class="preview-cleanup"
+            title="キャッシュされた docs worktree をすべて削除します"
+            disabled="@_busy"
+            @onclick="CleanupAsync">キャッシュをクリーンアップ</button>
+
+    @if (_lastUrl is not null)
+    {
+        <a href="@_lastUrl.AbsoluteUri"
+           data-testid="preview-url"
+           target="_blank"
+           rel="noopener">@_lastUrl.AbsoluteUri</a>
+    }
+    @if (!string.IsNullOrEmpty(_status))
+    {
+        <p class="status" data-testid="preview-status">@_status</p>
+    }
+    @if (!string.IsNullOrEmpty(_worktreePath))
+    {
+        <details class="preview-hint" data-testid="preview-worktree">
+            <summary>初回は worktree で <code>npm install</code> が必要です</summary>
+            <p>WebView2 に「接続できません」と出る場合は、下のディレクトリで一度だけ依存をインストールしてください (初回 5〜15 分・1〜2 GB)。インストール後にこの「ローカルプレビュー」をもう一度押してください。</p>
+            <pre><code>cd "@_worktreePath"
+npm install</code></pre>
+            <p class="muted">node_modules を共有して高速化したい場合は <code>docs/USAGE.md §5.1</code> の案 B (junction) を参照してください。</p>
+        </details>
+    }
+</div>
+
+@code {
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    [Parameter] public Commit? Commit { get; set; }
+
+    private bool _busy;
+    private string? _status;
+    private Uri? _lastUrl;
+    private string? _worktreePath;
+
+    private async Task PreviewAsync()
+    {
+        if (Commit is null || _busy)
+        {
+            return;
+        }
+        _busy = true;
+        _status = "リポジトリを準備中…";
+        try
+        {
+            var coordinator = Services.GetRequiredService<IPreviewCoordinator>();
+            var filePath = Commit.Files.Count > 0 ? Commit.Files[0].Path : null;
+            var progress = new Progress<string>(message =>
+            {
+                _ = InvokeAsync(() =>
+                {
+                    _status = message;
+                    StateHasChanged();
+                });
+            });
+            PreviewLink? link;
+            try
+            {
+                link = await coordinator.PreparePreviewAsync(Commit.PrNumber, Commit.Sha, filePath, progress);
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutdown / user cancel — keep the last status message intact.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Catch every other failure (InvalidOperationException for git/npm
+                // process failures, Win32Exception when the binary is missing,
+                // IOException, etc.) so the WPF host does not terminate from an
+                // unhandled exception while we are inside the BlazorWebView.
+                _status = ex.Message;
+                _worktreePath = null;
+                return;
+            }
+
+            if (link is null)
+            {
+                _status = "プレビュー機能は無効です (DocsRepository 未設定)";
+                _worktreePath = null;
+                return;
+            }
+
+            _lastUrl = link.Url;
+            _worktreePath = link.WorktreePath;
+            Services.GetRequiredService<IPreviewNavigator>().Publish(link.Url);
+            _status = $"ポート {link.Port} で起動しました (起動完了まで 30 秒〜数分。失敗時は下記の手順を確認)";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+    private async Task CleanupAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+        _busy = true;
+        _status = "キャッシュをクリーンアップ中…";
+        _lastUrl = null;
+        _worktreePath = null;
+        StateHasChanged();
+        try
+        {
+            var coordinator = Services.GetRequiredService<IPreviewCoordinator>();
+            var removed = await coordinator.CleanupCacheAsync();
+            _status = $"{removed} 件の worktree を削除しました";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Surface the error inline rather than letting it escape into the host
+            // (same defense-in-depth as PreviewAsync).
+            _status = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }}
