@@ -267,3 +267,86 @@ html, body {
     font-family: "Cascadia Mono", "Consolas", monospace;
     font-size: 0.85rem;
 }
+
+/* PreviewActions — P1: 起動進捗 UI (スピナー / 経過秒 / ログ tail / 中止ボタン)。
+   600 秒に伸ばした PreviewReadyTimeoutSeconds の silent な待ち時間を可視化する。 */
+.preview-progress {
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background: #f8f9fa;
+    padding: 0.5rem 0.75rem;
+    margin: 0.25rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.preview-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.preview-progress-text {
+    flex: 1 1 auto;
+    font-size: 0.9rem;
+    color: #333;
+}
+
+.preview-progress-elapsed {
+    color: #777;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+.preview-cancel {
+    padding: 0.25rem 0.75rem;
+    border: 1px solid #c0392b;
+    background: #fff;
+    color: #c0392b;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.preview-cancel:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.preview-cancel:hover:not(:disabled) {
+    background: #c0392b;
+    color: #fff;
+}
+
+.preview-spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid #ced4da;
+    border-top-color: #0d6efd;
+    border-radius: 50%;
+    animation: preview-spinner-rotate 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes preview-spinner-rotate {
+    to { transform: rotate(360deg); }
+}
+
+.preview-log-tail {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    border-radius: 4px;
+    font-family: Consolas, "Cascadia Code", "Courier New", monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    max-height: 12rem;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

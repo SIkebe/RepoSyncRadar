@@ -260,6 +260,105 @@ public sealed class PreviewServerHostTests : IDisposable
         Assert.Single(runner.StartCalls);
     }
 
+    [Fact]
+    public void RecentStdoutLines_Is_Empty_When_No_Process_Running()
+    {
+        // Before any StartAsync the UI's polling loop must see an empty array,
+        // not a null reference — the Razor component renders this directly.
+        var host = CreateHost(out _, out _);
+
+        Assert.NotNull(host.RecentStdoutLines);
+        Assert.Empty(host.RecentStdoutLines);
+        Assert.NotNull(host.RecentStderrLines);
+        Assert.Empty(host.RecentStderrLines);
+        Assert.False(host.IsProcessRunning);
+    }
+
+    [Fact]
+    public async Task RecentLines_Reflect_Current_Process_While_Probe_Is_Waiting()
+    {
+        // The whole point of P1: while StartAsync is blocked inside
+        // WaitForListenAsync (npm starting up), the UI must be able to read
+        // RecentStdoutLines / RecentStderrLines so it can show a live tail.
+        var worktree = CreateWorktree();
+        var host = CreateHost(out var runner, out var probe, options =>
+        {
+            options.PreviewCommand = "npm";
+            options.PreviewReadyTimeoutSeconds = 5;
+        });
+        var fakeHandle = new FakeHandle
+        {
+            HasExited = false,
+            RecentStdoutLines = new[] { "  ▲ Next.js 15.5.4", "  - Local: http://localhost:4500" },
+            RecentStderrLines = new[] { "  ⚠ Compiled with warnings" },
+        };
+        runner.NextHandle = fakeHandle;
+
+        // FakeReadyProbe runs synchronously, but we intercept right before it
+        // returns: read the live snapshot via the host while _current is set.
+        probe.OnInvoked = () =>
+        {
+            Assert.True(host.IsProcessRunning);
+            Assert.Equal(fakeHandle.RecentStdoutLines, host.RecentStdoutLines);
+            Assert.Equal(fakeHandle.RecentStderrLines, host.RecentStderrLines);
+        };
+        probe.NextResult = true;
+
+        await host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task RecentLines_Return_Empty_After_StopAsync()
+    {
+        // After teardown the UI must not keep showing stale logs from the
+        // previous run.
+        var worktree = CreateWorktree();
+        var host = CreateHost(out var runner, out var probe, options =>
+        {
+            options.PreviewCommand = "npm";
+            options.PreviewReadyTimeoutSeconds = 5;
+        });
+        probe.NextResult = true;
+        runner.NextHandle = new FakeHandle
+        {
+            HasExited = false,
+            RecentStdoutLines = new[] { "old line" },
+        };
+
+        await host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken);
+        await host.StopAsync(TestContext.Current.CancellationToken);
+
+        Assert.Empty(host.RecentStdoutLines);
+        Assert.Empty(host.RecentStderrLines);
+        Assert.False(host.IsProcessRunning);
+    }
+
+    [Fact]
+    public async Task StartAsync_Kills_Child_When_Probe_Is_Cancelled()
+    {
+        // P1-F: cancel during the WaitForListenAsync stage must tear down the
+        // child process — otherwise an orphan npm keeps the port held and the
+        // next preview attempt fails with "EADDRINUSE".
+        var worktree = CreateWorktree();
+        var host = CreateHost(out var runner, out var probe, options =>
+        {
+            options.PreviewCommand = "npm";
+            options.PreviewReadyTimeoutSeconds = 60;
+        });
+        var fakeHandle = new FakeHandle { HasExited = false };
+        runner.NextHandle = fakeHandle;
+        using var cts = new CancellationTokenSource();
+        probe.OnInvoked = () => cts.Cancel();
+        probe.ThrowOnCancellation = true;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => host.StartAsync(worktree, 4500, cts.Token));
+
+        Assert.True(fakeHandle.Killed);
+        Assert.False(host.IsProcessRunning);
+        Assert.Empty(host.RecentStdoutLines);
+    }
+
     private static PreviewServerHost CreateHost(
         out FakeProcessRunner runner,
         out FakeReadyProbe probe,
@@ -307,11 +406,18 @@ public sealed class PreviewServerHostTests : IDisposable
     {
         public List<ProbeCall> Calls { get; } = [];
         public bool NextResult { get; set; } = true;
+        public Action? OnInvoked { get; set; }
+        public bool ThrowOnCancellation { get; set; }
 
         public Task<bool> WaitForListenAsync(
             int port, TimeSpan timeout, Func<bool>? processStillAlive, CancellationToken ct)
         {
             Calls.Add(new ProbeCall(port, timeout));
+            OnInvoked?.Invoke();
+            if (ThrowOnCancellation && ct.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(ct);
+            }
             return Task.FromResult(NextResult);
         }
     }

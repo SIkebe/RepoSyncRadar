@@ -1,58 +1,99 @@
 @* PreviewActions — "ローカルプレビュー" ボタンを描画する小さなコンポーネント。
    IPreviewCoordinator を呼び、戻ってきた URL を IPreviewNavigator で WPF 側に流して
    右側の WebView2 を切り替えさせる。プレビュー機能が無効 (DocsRepository 未設定) の
-   場合は ヒントを表示。IMPLEMENTATION_PLAN.md §Step 19.5。 *@
+   場合は ヒントを表示。IMPLEMENTATION_PLAN.md §Step 19.5 + 19.6 (P1)。 *@
 
+@using System.Threading
 @using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
 @using RepoSyncRadar.Core.Models
+@using RepoSyncRadar.Core.Options
 @using RepoSyncRadar.Core.Services.Preview
+@implements IDisposable
 
 <div class="radar-preview-actions" data-testid="preview-actions">
-    <button type="button"
-            data-testid="preview-button"
-            class="preview"
-            disabled="@(_busy || Commit is null)"
-            @onclick="PreviewAsync">@(_busy ? "起動中…" : "ローカルプレビュー")</button>
-
-    <button type="button"
-            data-testid="preview-cleanup-button"
-            class="preview-cleanup"
-            title="キャッシュされた docs worktree をすべて削除します"
-            disabled="@_busy"
-            @onclick="CleanupAsync">キャッシュをクリーンアップ</button>
-
-    @if (_lastUrl is not null)
+    @if (_busy)
     {
-        <a href="@_lastUrl.AbsoluteUri"
-           data-testid="preview-url"
-           target="_blank"
-           rel="noopener">@_lastUrl.AbsoluteUri</a>
+        @* P1: 起動中はスピナー + 経過秒 + ログ tail + 中止ボタンを表示。
+           silent な 600 秒待ちを潰すため。 *@
+        <div class="preview-progress" data-testid="preview-progress">
+            <div class="preview-progress-row">
+                <span class="preview-spinner" aria-hidden="true"></span>
+                <span class="preview-progress-text" data-testid="preview-progress-text">
+                    @(_status ?? "起動中…")
+                    <span class="preview-progress-elapsed" data-testid="preview-progress-elapsed">
+                        ・ @_elapsedSec 秒経過 / 上限 @_timeoutSec 秒
+                    </span>
+                </span>
+                <button type="button"
+                        data-testid="preview-cancel-button"
+                        class="preview-cancel"
+                        disabled="@_canceling"
+                        @onclick="CancelAsync">@(_canceling ? "中止中…" : "中止")</button>
+            </div>
+            @if (_logTail.Count > 0)
+            {
+                <pre class="preview-log-tail" data-testid="preview-log-tail">@string.Join('\n', _logTail)</pre>
+            }
+        </div>
     }
-    @if (!string.IsNullOrEmpty(_status))
+    else
     {
-        <p class="status" data-testid="preview-status">@_status</p>
-    }
-    @if (!string.IsNullOrEmpty(_worktreePath))
-    {
-        <details class="preview-hint" data-testid="preview-worktree">
-            <summary>初回は worktree で <code>npm install</code> が必要です</summary>
-            <p>WebView2 に「接続できません」と出る場合は、下のディレクトリで一度だけ依存をインストールしてください (初回 5〜15 分・1〜2 GB)。インストール後にこの「ローカルプレビュー」をもう一度押してください。</p>
-            <pre><code>cd "@_worktreePath"
+        <button type="button"
+                data-testid="preview-button"
+                class="preview"
+                disabled="@(Commit is null)"
+                @onclick="PreviewAsync">ローカルプレビュー</button>
+
+        <button type="button"
+                data-testid="preview-cleanup-button"
+                class="preview-cleanup"
+                title="キャッシュされた docs worktree をすべて削除します"
+                @onclick="CleanupAsync">キャッシュをクリーンアップ</button>
+
+        @if (_lastUrl is not null)
+        {
+            <a href="@_lastUrl.AbsoluteUri"
+               data-testid="preview-url"
+               target="_blank"
+               rel="noopener">@_lastUrl.AbsoluteUri</a>
+        }
+        @if (!string.IsNullOrEmpty(_status))
+        {
+            <p class="status" data-testid="preview-status">@_status</p>
+        }
+        @if (!string.IsNullOrEmpty(_worktreePath))
+        {
+            <details class="preview-hint" data-testid="preview-worktree">
+                <summary>初回は worktree で <code>npm install</code> が必要です</summary>
+                <p>WebView2 に「接続できません」と出る場合は、下のディレクトリで一度だけ依存をインストールしてください (初回 5〜15 分・1〜2 GB)。インストール後にこの「ローカルプレビュー」をもう一度押してください。</p>
+                <pre><code>cd "@_worktreePath"
 npm install</code></pre>
-            <p class="muted">node_modules を共有して高速化したい場合は <code>docs/USAGE.md §5.1</code> の案 B (junction) を参照してください。</p>
-        </details>
+                <p class="muted">node_modules を共有して高速化したい場合は <code>docs/USAGE.md §5.1</code> の案 B (junction) を参照してください。</p>
+            </details>
+        }
     }
 </div>
 
 @code {
+    private const int MaxLogTailLines = 10;
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
+
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
     [Parameter] public Commit? Commit { get; set; }
 
     private bool _busy;
+    private bool _canceling;
     private string? _status;
     private Uri? _lastUrl;
     private string? _worktreePath;
+    private CancellationTokenSource? _cts;
+    private DateTimeOffset _startedAt;
+    private int _elapsedSec;
+    private int _timeoutSec = 600;
+    private List<string> _logTail = new();
+    private Task? _pollTask;
 
     private async Task PreviewAsync()
     {
@@ -61,7 +102,17 @@ npm install</code></pre>
             return;
         }
         _busy = true;
+        _canceling = false;
         _status = "リポジトリを準備中…";
+        _lastUrl = null;
+        _logTail = new List<string>();
+        _startedAt = DateTimeOffset.UtcNow;
+        _elapsedSec = 0;
+        _timeoutSec = Services.GetRequiredService<IOptions<DocsRepositoryOptions>>().Value.PreviewReadyTimeoutSeconds;
+        _cts = new CancellationTokenSource();
+        var token = _cts.Token;
+        var host = Services.GetRequiredService<PreviewServerHost>();
+        _pollTask = Task.Run(() => PollProgressAsync(host, token), CancellationToken.None);
         try
         {
             var coordinator = Services.GetRequiredService<IPreviewCoordinator>();
@@ -77,12 +128,14 @@ npm install</code></pre>
             PreviewLink? link;
             try
             {
-                link = await coordinator.PreparePreviewAsync(Commit.PrNumber, Commit.Sha, filePath, progress);
+                link = await coordinator.PreparePreviewAsync(Commit.PrNumber, Commit.Sha, filePath, progress, token);
             }
             catch (OperationCanceledException)
             {
-                // Shutdown / user cancel — keep the last status message intact.
-                throw;
+                // P1-F: User pressed 中止. Surface a clean status, not the host's shutdown signal.
+                _status = "プレビュー起動を中止しました";
+                _worktreePath = null;
+                return;
             }
             catch (Exception ex)
             {
@@ -109,9 +162,68 @@ npm install</code></pre>
         }
         finally
         {
+            // Stop the polling loop before clearing _busy so the UI does not
+            // briefly show "起動中…" with a stale elapsed counter after success.
+            try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+            if (_pollTask is not null)
+            {
+                try { await _pollTask.ConfigureAwait(false); }
+                catch (OperationCanceledException) { /* expected */ }
+                _pollTask = null;
+            }
+            _cts?.Dispose();
+            _cts = null;
             _busy = false;
+            _canceling = false;
         }
     }
+
+    private Task CancelAsync()
+    {
+        if (!_busy || _cts is null || _canceling)
+        {
+            return Task.CompletedTask;
+        }
+        _canceling = true;
+        try { _cts.Cancel(); } catch (ObjectDisposedException) { }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 500 ms ごとに PreviewServerHost のログ tail と経過秒を読んで UI を再描画する。
+    /// PreparePreviewAsync が完了 or キャンセルされた時点で OperationCanceledException で抜ける。
+    /// </summary>
+    private async Task PollProgressAsync(PreviewServerHost host, CancellationToken token)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(PollInterval);
+            while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
+            {
+                var stdout = host.RecentStdoutLines;
+                var stderr = host.RecentStderrLines;
+                var combined = new List<string>(stdout.Count + stderr.Count);
+                combined.AddRange(stdout);
+                combined.AddRange(stderr);
+                if (combined.Count > MaxLogTailLines)
+                {
+                    combined = combined.GetRange(combined.Count - MaxLogTailLines, MaxLogTailLines);
+                }
+                var elapsed = (int)(DateTimeOffset.UtcNow - _startedAt).TotalSeconds;
+                await InvokeAsync(() =>
+                {
+                    _logTail = combined;
+                    _elapsedSec = elapsed;
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // expected: PreviewAsync's finally block cancels _cts to stop us.
+        }
+    }
+
     private async Task CleanupAsync()
     {
         if (_busy)
@@ -143,4 +255,12 @@ npm install</code></pre>
         {
             _busy = false;
         }
-    }}
+    }
+
+    public void Dispose()
+    {
+        try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+        _cts?.Dispose();
+        _cts = null;
+    }
+}

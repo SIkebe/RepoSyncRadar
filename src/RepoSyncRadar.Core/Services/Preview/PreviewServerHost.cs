@@ -45,6 +45,28 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
     public int CurrentPort => _currentPort;
 
     /// <summary>
+    /// Snapshot of the currently-running child's stdout tail. Empty array when
+    /// no child is running. UI components poll this during the startup wait to
+    /// surface npm/Next.js output to the user (P1 — IMPLEMENTATION_PLAN.md §Step 19.6).
+    /// </summary>
+    public IReadOnlyList<string> RecentStdoutLines
+        => _current?.RecentStdoutLines ?? Array.Empty<string>();
+
+    /// <summary>
+    /// Snapshot of the currently-running child's stderr tail. Empty array when
+    /// no child is running. See <see cref="RecentStdoutLines"/>.
+    /// </summary>
+    public IReadOnlyList<string> RecentStderrLines
+        => _current?.RecentStderrLines ?? Array.Empty<string>();
+
+    /// <summary>
+    /// True while a child preview process is alive. Lets the UI distinguish
+    /// "waiting for repo clone / npm install" (no process yet) from
+    /// "waiting for port to listen" (process running, polling logs).
+    /// </summary>
+    public bool IsProcessRunning => _current is { } handle && !handle.HasExited;
+
+    /// <summary>
     /// Starts the preview server in <paramref name="worktreePath"/> bound to
     /// <paramref name="port"/> and waits until the port accepts TCP connections
     /// (bounded by <see cref="DocsRepositoryOptions.PreviewReadyTimeoutSeconds"/>).
@@ -76,11 +98,23 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         LogStarted(_logger, _options.PreviewCommand, args, port);
 
         var timeout = TimeSpan.FromSeconds(_options.PreviewReadyTimeoutSeconds);
-        var ready = await _probe.WaitForListenAsync(
-            port,
-            timeout,
-            processStillAlive: () => !handle.HasExited,
-            cancellationToken).ConfigureAwait(false);
+        bool ready;
+        try
+        {
+            ready = await _probe.WaitForListenAsync(
+                port,
+                timeout,
+                processStillAlive: () => !handle.HasExited,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // P1-F: User cancelled mid-startup. Kill the orphan child and clear
+            // `_current` so the next StartAsync does not see stale state. Use a
+            // fresh token because the caller's token is already cancelled.
+            await StopAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
         if (!ready)
         {
             var exited = handle.HasExited;

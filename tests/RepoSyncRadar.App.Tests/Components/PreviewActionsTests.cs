@@ -1,8 +1,11 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Models;
+using RepoSyncRadar.Core.Options;
 using RepoSyncRadar.Core.Services.Preview;
 using Xunit;
 
@@ -277,6 +280,101 @@ public sealed class PreviewActionsTests
     }
 
     [Fact]
+    public void Click_Shows_Progress_Ui_With_Spinner_And_Cancel_Button_While_Coordinator_Is_Running()
+    {
+        // P1-A/B/F: while PreparePreviewAsync is still pending, the UI must
+        // show the progress card (spinner + 経過秒 + 中止 button + log tail
+        // container), not the silent "起動中…" button text.
+        var tcs = new TaskCompletionSource<PreviewLink?>();
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PreparePreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ => tcs.Task);
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.TestContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
+        };
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find("[data-testid=\"preview-progress\"]");
+            cut.Find("[data-testid=\"preview-cancel-button\"]");
+            var elapsed = cut.Find("[data-testid=\"preview-progress-elapsed\"]").TextContent;
+            Assert.Contains("経過", elapsed, StringComparison.Ordinal);
+            Assert.Contains("上限", elapsed, StringComparison.Ordinal);
+        });
+
+        // Release the coordinator so the test's finalizer is not blocked on the pending task.
+        tcs.SetResult(new PreviewLink(new Uri("http://localhost:4500/en/foo"), 4500, "C:/wt"));
+    }
+
+    [Fact]
+    public void Click_Cancel_Aborts_Coordinator_And_Shows_Cancelled_Status()
+    {
+        // P1-F: pressing 中止 must propagate cancellation to the coordinator
+        // (so PreviewServerHost can kill the npm child) and surface a "中止しました"
+        // status — not raise the OperationCanceledException into the host.
+        var tcs = new TaskCompletionSource<PreviewLink?>();
+        CancellationToken receivedToken = default;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PreparePreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                receivedToken = call.ArgAt<CancellationToken>(4);
+                receivedToken.Register(() =>
+                    tcs.TrySetException(new OperationCanceledException(receivedToken)));
+                return tcs.Task;
+            });
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.TestContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
+        };
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=\"preview-cancel-button\"]"));
+
+        cut.Find("[data-testid=\"preview-cancel-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(receivedToken.IsCancellationRequested);
+            var status = cut.Find("[data-testid=\"preview-status\"]").TextContent;
+            Assert.Contains("中止", status, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void Click_Cleanup_When_Coordinator_Throws_Shows_Error_Message()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
@@ -298,9 +396,19 @@ public sealed class PreviewActionsTests
 
     private static ServiceProvider BuildServices(IPreviewCoordinator coordinator, IPreviewNavigator navigator)
     {
+        // PreviewActions now also resolves IOptions<DocsRepositoryOptions> (for the
+        // P1 elapsed-vs-timeout label) and PreviewServerHost (for the live log tail
+        // it polls every 500 ms during startup). The fakes return empty data, which
+        // is what the test expects: no preview is actually running.
+        var options = Options.Create(new DocsRepositoryOptions());
         return new ServiceCollection()
             .AddSingleton(coordinator)
             .AddSingleton(navigator)
+            .AddSingleton(options)
+            .AddSingleton(Substitute.For<IProcessRunner>())
+            .AddSingleton(Substitute.For<IPortReadyProbe>())
+            .AddLogging()
+            .AddSingleton<PreviewServerHost>()
             .BuildServiceProvider();
     }
 }
