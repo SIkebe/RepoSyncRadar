@@ -41,12 +41,12 @@ public class SidebarTests
         var cut = ctx.RenderComponent<Sidebar>(
             parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
 
-        // Assert — UI reflects all five buckets, with the asserted counts on Unseen / Adopted.
+        // Assert — UI reflects the four user-facing buckets, with Seen folded out of the sidebar.
         Assert.Equal("3", cut.Find("[data-testid=\"sidebar-count-Unseen\"]").TextContent);
         Assert.Equal("1", cut.Find("[data-testid=\"sidebar-count-Adopted\"]").TextContent);
-        Assert.Equal("0", cut.Find("[data-testid=\"sidebar-count-Seen\"]").TextContent);
         Assert.Equal("0", cut.Find("[data-testid=\"sidebar-count-Rejected\"]").TextContent);
         Assert.Equal("0", cut.Find("[data-testid=\"sidebar-count-Later\"]").TextContent);
+        Assert.Empty(cut.FindAll("[data-testid=\"sidebar-item-Seen\"]"));
     }
 
     [Fact]
@@ -73,9 +73,9 @@ public class SidebarTests
             parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
 
         Assert.Contains("まだ確認していない", cut.Find("[data-testid=\"sidebar-description-Unseen\"]").TextContent);
-        Assert.Contains("Must read", cut.Find("[data-testid=\"sidebar-description-Seen\"]").TextContent);
         Assert.Contains("共有", cut.Find("[data-testid=\"sidebar-description-Adopted\"]").TextContent);
         Assert.Contains("今回は扱わない", cut.Find("[data-testid=\"sidebar-description-Rejected\"]").TextContent);
         Assert.Contains("保留", cut.Find("[data-testid=\"sidebar-description-Later\"]").TextContent);
+        Assert.DoesNotContain("スキム済み", cut.Markup, StringComparison.Ordinal);
     }
 }

@@ -160,7 +160,9 @@ public sealed class RadarRepository : IRadarRepository
         if (filter.Status is { } status)
         {
             query = status == ReviewStatus.Unseen
-                ? query.Where(c => c.Review == null || c.Review.Status == ReviewStatus.Unseen)
+                ? query.Where(c => c.Review == null
+                    || c.Review.Status == ReviewStatus.Unseen
+                    || c.Review.Status == ReviewStatus.Seen)
                 : query.Where(c => c.Review != null && c.Review.Status == status);
         }
 
@@ -204,6 +206,12 @@ public sealed class RadarRepository : IRadarRepository
 
         foreach (var entry in grouped)
         {
+            if (entry.Key == ReviewStatus.Seen)
+            {
+                counts[ReviewStatus.Unseen] = counts[ReviewStatus.Unseen] + entry.Count;
+                continue;
+            }
+
             counts[entry.Key] = counts[entry.Key] + entry.Count;
         }
 

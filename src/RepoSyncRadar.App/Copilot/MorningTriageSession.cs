@@ -25,7 +25,7 @@ public sealed partial class MorningTriageSession
         1. `radar_list_commits` を `status="Unseen"`, `limit=50` で呼び、未読コミット一覧を取得する。
         2. 各コミットについて必要に応じて `radar_get_diff` で差分を確認し、`radar_resolve_url` / `radar_fetch_rendered` で出典ページを確認する。
         3. 影響範囲・新規性・読者層を判断し、`radar_score_commit` でスコア・カテゴリ・読者・要約・理由を保存する。
-        4. スコア上位 5 件を Must read として未読のまま残し、次点の Skim 候補は `radar_save_review` で `Seen`、明らかに不要な Archive 候補は `Rejected` として保存する。
+        4. スコア上位 5 件と判断に迷う候補は未読のまま残し、明らかに不要な Archive 候補だけ `radar_save_review` で `Rejected` として保存する。
         5. 既に確立されたユーザー設定 (Ignore / Boost) を尊重し、無視対象はスキップする。
         6. 全件を処理し終えたら短い完了報告を返す。
 

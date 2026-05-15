@@ -54,6 +54,8 @@ public interface IRadarRepository
     /// Returns commits matching <paramref name="filter"/>, eagerly loading <see cref="Commit.Files"/>
     /// and <see cref="Commit.Review"/>, ordered by <see cref="Commit.AuthoredAt"/> descending.
     /// A commit without a <see cref="Review"/> row is treated as <see cref="ReviewStatus.Unseen"/>.
+    /// Legacy <see cref="ReviewStatus.Seen"/> rows are also returned by the
+    /// <see cref="ReviewStatus.Unseen"/> filter.
     /// </summary>
     Task<IReadOnlyList<Commit>> QueryCommitsAsync(
         CommitQueryFilter filter,
@@ -61,7 +63,7 @@ public interface IRadarRepository
 
     /// <summary>
     /// Returns a count per <see cref="ReviewStatus"/> across all persisted commits. Commits
-    /// without a <see cref="Review"/> row count toward <see cref="ReviewStatus.Unseen"/>. The
+    /// without a <see cref="Review"/> row and legacy <see cref="ReviewStatus.Seen"/> rows count toward <see cref="ReviewStatus.Unseen"/>. The
     /// returned dictionary is guaranteed to contain every <see cref="ReviewStatus"/> key (with
     /// <c>0</c> when no commits match) so the sidebar can render without null checks.
     /// </summary>

@@ -81,6 +81,8 @@ public sealed class MorningTriageSessionTests
         Assert.Contains("radar_list_commits", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("radar_score_commit", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("radar_save_review", capturedPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Skim", capturedPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("`Seen`", capturedPrompt, StringComparison.Ordinal);
     }
 
     [Fact]

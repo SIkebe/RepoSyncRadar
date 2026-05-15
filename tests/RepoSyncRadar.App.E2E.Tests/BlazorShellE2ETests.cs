@@ -18,7 +18,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 public sealed class BlazorShellE2ETests
 {
     private static readonly string[] StatusKeys =
-        ["Unseen", "Seen", "Adopted", "Rejected", "Later"];
+        ["Unseen", "Adopted", "Rejected", "Later"];
 
     private readonly AppHostFixture _fixture;
 
@@ -35,7 +35,7 @@ public sealed class BlazorShellE2ETests
         var sidebar = page.Locator("[data-testid='sidebar']");
         await sidebar.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
 
-        // All five status counters must render. If only one renders the Razor
+        // All user-facing status counters must render. If only one renders the Razor
         // components mounted partially and we want a clear failure here.
         foreach (var status in StatusKeys)
         {

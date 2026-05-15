@@ -10,7 +10,8 @@ public sealed record CommitQueryFilter
     /// <summary>
     /// When supplied, only commits whose <see cref="Review.Status"/> equals this value are
     /// returned. A commit without a <see cref="Review"/> row is treated as
-    /// <see cref="ReviewStatus.Unseen"/>.
+    /// <see cref="ReviewStatus.Unseen"/>. Legacy <see cref="ReviewStatus.Seen"/> rows are
+    /// also returned by the <see cref="ReviewStatus.Unseen"/> filter.
     /// </summary>
     public ReviewStatus? Status { get; init; }
 

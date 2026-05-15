@@ -16,7 +16,6 @@ public sealed class RadarRepositoryTests
     private static readonly string[] BulkShas = ["sha-a", "sha-b", "sha-c"];
     private static readonly string[] OnlyShaB = ["sha-b"];
     private static readonly string[] KnownIntersectionInput = ["sha-known", "sha-new-1", "sha-new-2"];
-    private static readonly string[] ExpectedQueryAllOrder = ["sha-adopt-new", "sha-adopt-old", "sha-unseen"];
 
     [Fact]
     public async Task UpsertCommitsAsync_Inserts_New()
@@ -185,16 +184,18 @@ public sealed class RadarRepositoryTests
         var repository = fixture.CreateRepository();
         var ct = TestContext.Current.CancellationToken;
 
-        // Three commits, two of which become Adopted; the unseen one has no Review row.
+        // Four commits, two of which become Adopted; unresolved includes missing Review and legacy Seen rows.
         var baseTime = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
         await repository.UpsertCommitsAsync(
             new[]
             {
                 MakeCommit("sha-unseen", prNumber: 1, authoredAt: baseTime),
+                MakeCommit("sha-seen", prNumber: 1, authoredAt: baseTime.AddHours(12)),
                 MakeCommit("sha-adopt-old", prNumber: 1, authoredAt: baseTime.AddDays(1)),
                 MakeCommit("sha-adopt-new", prNumber: 1, authoredAt: baseTime.AddDays(2)),
             },
             ct);
+        await repository.SetReviewAsync("sha-seen", ReviewStatus.Seen, null, ct);
         await repository.SetReviewAsync("sha-adopt-old", ReviewStatus.Adopted, null, ct);
         await repository.SetReviewAsync("sha-adopt-new", ReviewStatus.Adopted, null, ct);
 
@@ -206,16 +207,15 @@ public sealed class RadarRepositoryTests
         Assert.Single(adopted);
         Assert.Equal("sha-adopt-new", adopted[0].Sha);
 
-        // Unseen returns the commit without a Review row.
+        // Unseen returns both missing Review rows and legacy Seen rows.
         var unseen = await repository.QueryCommitsAsync(
             new CommitQueryFilter { Status = ReviewStatus.Unseen },
             ct);
-        Assert.Single(unseen);
-        Assert.Equal("sha-unseen", unseen[0].Sha);
+        Assert.Equal(["sha-seen", "sha-unseen"], unseen.Select(c => c.Sha).ToArray());
 
-        // No filter returns all three, newest first.
+        // No filter returns all four, newest first.
         var all = await repository.QueryCommitsAsync(new CommitQueryFilter(), ct);
-        Assert.Equal(ExpectedQueryAllOrder, all.Select(c => c.Sha).ToArray());
+        Assert.Equal(["sha-adopt-new", "sha-adopt-old", "sha-seen", "sha-unseen"], all.Select(c => c.Sha).ToArray());
     }
 
     [Fact]
@@ -269,16 +269,18 @@ public sealed class RadarRepositoryTests
                 MakeCommit("sha-2", prNumber: 1),
                 MakeCommit("sha-3", prNumber: 1),
                 MakeCommit("sha-4", prNumber: 1),
+                MakeCommit("sha-5", prNumber: 1),
             },
             ct);
         await repository.SetReviewAsync("sha-2", ReviewStatus.Adopted, null, ct);
         await repository.SetReviewAsync("sha-3", ReviewStatus.Rejected, null, ct);
         await repository.SetReviewAsync("sha-4", ReviewStatus.Later, null, ct);
+        await repository.SetReviewAsync("sha-5", ReviewStatus.Seen, null, ct);
 
         var counts = await repository.GetReviewCountsAsync(ct);
 
-        // sha-1 has no Review row → counts toward Unseen.
-        Assert.Equal(1, counts[ReviewStatus.Unseen]);
+        // sha-1 has no Review row, sha-5 is legacy Seen → both count toward Unseen.
+        Assert.Equal(2, counts[ReviewStatus.Unseen]);
         Assert.Equal(0, counts[ReviewStatus.Seen]);
         Assert.Equal(1, counts[ReviewStatus.Adopted]);
         Assert.Equal(1, counts[ReviewStatus.Rejected]);
