@@ -111,8 +111,13 @@
 
     private Task HandleReviewCompleted(ReviewStatus status)
     {
-        _selectedStatus = ReviewStatus.Unseen;
-        _filter = new CommitQueryFilter { Status = ReviewStatus.Unseen };
+        _selectedStatus = _selectedStatus switch
+        {
+            null => null,
+            ReviewStatus.Unseen => ReviewStatus.Unseen,
+            _ => status,
+        };
+        _filter = new CommitQueryFilter { Status = _selectedStatus };
         _selectedCommit = null;
         _listRefreshVersion++;
         return Task.CompletedTask;
