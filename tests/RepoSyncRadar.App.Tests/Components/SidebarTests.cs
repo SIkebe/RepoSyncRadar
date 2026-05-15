@@ -76,6 +76,7 @@ public class SidebarTests
         Assert.Contains("共有", cut.Find("[data-testid=\"sidebar-description-Adopted\"]").TextContent);
         Assert.Contains("今回は扱わない", cut.Find("[data-testid=\"sidebar-description-Rejected\"]").TextContent);
         Assert.Contains("保留", cut.Find("[data-testid=\"sidebar-description-Later\"]").TextContent);
+        Assert.DoesNotContain("title=", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("スキム済み", cut.Markup, StringComparison.Ordinal);
     }
 }
