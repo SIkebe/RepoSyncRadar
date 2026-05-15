@@ -60,6 +60,7 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 0.75rem;
     width: 100%;
     padding: 0.5rem 0.75rem;
     border: 1px solid transparent;
@@ -69,6 +70,24 @@ html, body {
     font: inherit;
     text-align: left;
     cursor: pointer;
+}
+
+.sidebar-item .sidebar-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.sidebar-item .label {
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.sidebar-item .description {
+    color: #666;
+    font-size: 0.75rem;
+    line-height: 1.3;
 }
 
 .sidebar-item:hover {
@@ -81,6 +100,7 @@ html, body {
 }
 
 .sidebar-item .count {
+    flex: 0 0 auto;
     font-variant-numeric: tabular-nums;
     color: #666;
     font-size: 0.85rem;
@@ -265,6 +285,400 @@ html, body {
     color: #777;
     font-size: 0.9rem;
     margin: 0.25rem 0;
+}
+
+.action-panel {
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    background: #fff;
+    padding: 0.75rem;
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.action-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.action-panel-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #24292f;
+}
+
+.action-panel-header p {
+    margin: 0.15rem 0 0;
+    color: #57606a;
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+
+.action-toolbar,
+.review-input-action {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.toolbar-button,
+.review-button {
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    background: #f6f8fa;
+    color: #24292f;
+    cursor: pointer;
+    font: inherit;
+    min-height: 2.25rem;
+}
+
+.toolbar-button {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.toolbar-button.compact {
+    min-height: 1.9rem;
+    padding: 0.25rem 0.6rem;
+}
+
+.toolbar-button.primary,
+.review-button.adopt {
+    background: #0969da;
+    border-color: #0969da;
+    color: #fff;
+}
+
+.toolbar-button.secondary:hover:not(:disabled),
+.review-button:hover:not(:disabled) {
+    background: #eef2f6;
+}
+
+.toolbar-button.primary:hover:not(:disabled),
+.review-button.adopt:hover:not(:disabled) {
+    background: #0759b8;
+}
+
+.toolbar-button:disabled,
+.review-button:disabled,
+.review-input-action input:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.review-primary-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+    gap: 0.5rem;
+}
+
+.review-button {
+    padding: 0.55rem 0.7rem;
+    text-align: left;
+}
+
+.review-button-title,
+.review-button-subtitle {
+    display: block;
+}
+
+.review-button-title {
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.review-button-subtitle {
+    margin-top: 0.1rem;
+    font-size: 0.75rem;
+    line-height: 1.25;
+    color: inherit;
+    opacity: 0.82;
+}
+
+.review-button.later {
+    background: #fff8c5;
+    border-color: #eac54f;
+}
+
+.review-button.reject {
+    flex: 0 0 auto;
+    background: #fff1f1;
+    border-color: #cf222e;
+    color: #a40e26;
+    font-weight: 700;
+    text-align: center;
+}
+
+.review-button.reject:hover:not(:disabled) {
+    background: #cf222e;
+    color: #fff;
+}
+
+.review-button.ignore {
+    flex: 0 0 auto;
+    font-weight: 600;
+}
+
+.review-reject-box,
+.review-ignore-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.review-field-label {
+    color: #24292f;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.review-field-label span {
+    color: #a40e26;
+    font-weight: 600;
+}
+
+.review-input-action input {
+    flex: 1 1 14rem;
+    min-width: 0;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 0.45rem 0.6rem;
+    font: inherit;
+}
+
+.review-input-action input:focus {
+    border-color: #0969da;
+    box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.14);
+    outline: none;
+}
+
+.review-ignore-panel {
+    border-top: 1px solid #eaeef2;
+    padding-top: 0.6rem;
+}
+
+.review-ignore-panel summary {
+    cursor: pointer;
+    color: #57606a;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.review-ignore-content {
+    margin-top: 0.5rem;
+}
+
+.review-ignore-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.review-suggestions-label {
+    color: #57606a;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.review-suggestion-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.review-suggestion-chip {
+    align-items: center;
+    border: 1px solid #b6d4ff;
+    border-radius: 999px;
+    background: #f0f6ff;
+    color: #1f4f99;
+    cursor: pointer;
+    display: inline-flex;
+    gap: 0.4rem;
+    font: inherit;
+    font-size: 0.76rem;
+    padding: 0.25rem 0.55rem;
+}
+
+.review-suggestion-pattern {
+    font-family: "Cascadia Mono", "Consolas", monospace;
+}
+
+.review-suggestion-meta {
+    color: #57606a;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.review-suggestion-chip:hover:not(:disabled) {
+    background: #dbeafe;
+    border-color: #80b6ff;
+}
+
+.review-suggestion-chip:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.action-status,
+.drafts-status,
+.drafts-empty,
+.drafts-busy {
+    margin: 0;
+    color: #57606a;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.radar-preview-actions .preview-url,
+.radar-preview-actions a[data-testid="preview-url"] {
+    overflow-wrap: anywhere;
+    font-size: 0.85rem;
+}
+
+.preview-file-switcher {
+    border-top: 1px solid #eaeef2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding-top: 0.6rem;
+}
+
+.preview-file-switcher-header {
+    align-items: center;
+    color: #57606a;
+    display: flex;
+    font-size: 0.78rem;
+    font-weight: 700;
+    justify-content: space-between;
+}
+
+.preview-file-switcher-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.preview-file-switch {
+    align-items: center;
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    color: #24292f;
+    cursor: pointer;
+    display: grid;
+    font: inherit;
+    gap: 0.45rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-height: 2rem;
+    padding: 0.35rem 0.55rem;
+    text-align: left;
+}
+
+.preview-file-switch:hover:not(:disabled) {
+    background: #eef2f6;
+}
+
+.preview-file-switch.active {
+    background: #f0f6ff;
+    border-color: #0969da;
+    box-shadow: inset 3px 0 0 #0969da;
+}
+
+.preview-file-switch:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.preview-file-switch-index,
+.preview-file-switch-kind {
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.25rem 0.45rem;
+    white-space: nowrap;
+}
+
+.preview-file-switch-index {
+    background: #0969da;
+    color: #fff;
+}
+
+.preview-file-switch-kind {
+    background: #fff8c5;
+    border: 1px solid #eac54f;
+    color: #7d4e00;
+}
+
+.preview-file-switch-path {
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 0.78rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.preview-hint {
+    border-top: 1px solid #eaeef2;
+    padding-top: 0.5rem;
+    color: #57606a;
+    font-size: 0.8rem;
+}
+
+.preview-hint summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.preview-hint pre {
+    overflow-x: auto;
+}
+
+.drafts-channel {
+    border: 1px solid #eaeef2;
+    border-radius: 6px;
+    background: #f6f8fa;
+    overflow: hidden;
+}
+
+.drafts-channel header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid #eaeef2;
+    background: #fff;
+}
+
+.drafts-channel h4 {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #24292f;
+}
+
+.drafts-channel pre {
+    min-height: 2.5rem;
+    max-height: 12rem;
+    overflow: auto;
+    margin: 0;
+    padding: 0.6rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: #24292f;
+    font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
+    font-size: 0.85rem;
+    line-height: 1.45;
 }
 
 /* AskPalette — gives the Ctrl+K row a proper flex layout so the input, the
