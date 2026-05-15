@@ -11,7 +11,7 @@ namespace RepoSyncRadar.Core.Services;
 public interface ICopilotAgent
 {
     /// <summary>Runs the morning triage session — fetch, score, summarise.</summary>
-    Task RunMorningTriageAsync(CancellationToken cancellationToken = default);
+    Task<IngestionReport> RunMorningTriageAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Generates the three media drafts for a single adopted commit.</summary>
     Task<DraftBundle> GenerateDraftsAsync(string commitSha, CancellationToken cancellationToken = default);

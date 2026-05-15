@@ -23,9 +23,9 @@ public sealed class CopilotAgent : ICopilotAgent
         _ask = ask;
     }
 
-    public async Task RunMorningTriageAsync(CancellationToken cancellationToken = default)
+    public async Task<IngestionReport> RunMorningTriageAsync(CancellationToken cancellationToken = default)
     {
-        await _triage.RunAsync(cancellationToken).ConfigureAwait(false);
+        return await _triage.RunAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public Task<DraftBundle> GenerateDraftsAsync(string commitSha, CancellationToken cancellationToken = default)

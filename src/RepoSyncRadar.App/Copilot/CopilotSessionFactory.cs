@@ -1,8 +1,10 @@
 using GitHub.Copilot.SDK;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Copilot.Audit;
+using RepoSyncRadar.App.Copilot.Tools;
 using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Options;
 
@@ -22,6 +24,8 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     private readonly RadarPermissionPolicy _permissionPolicy;
     private readonly IGitHubAccessTokenProvider _tokenProvider;
     private readonly ToolAuditHook? _auditHook;
+    private readonly RadarTools _radarTools;
+    private readonly RadarWriteTools _radarWriteTools;
     private readonly ILogger<CopilotSessionFactory> _logger;
     private readonly SemaphoreSlim _clientGate = new(1, 1);
     private CopilotClient? _client;
@@ -32,17 +36,23 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         RadarPermissionPolicy permissionPolicy,
         IGitHubAccessTokenProvider tokenProvider,
         ILogger<CopilotSessionFactory> logger,
+        RadarTools radarTools,
+        RadarWriteTools radarWriteTools,
         ToolAuditHook? auditHook = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(permissionPolicy);
         ArgumentNullException.ThrowIfNull(tokenProvider);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(radarTools);
+        ArgumentNullException.ThrowIfNull(radarWriteTools);
 
         _options = options;
         _permissionPolicy = permissionPolicy;
         _tokenProvider = tokenProvider;
         _logger = logger;
+        _radarTools = radarTools;
+        _radarWriteTools = radarWriteTools;
         _auditHook = auditHook;
     }
 
@@ -53,9 +63,31 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         ObjectDisposedException.ThrowIf(_disposed, this);
 
         var client = await GetOrCreateClientAsync(cancellationToken).ConfigureAwait(false);
-        var config = SessionConfigBuilder.Build(purpose, _options, _permissionPolicy.HandleAsync, _auditHook);
+        var config = SessionConfigBuilder.Build(
+            purpose,
+            _options,
+            _permissionPolicy.HandleAsync,
+            _auditHook,
+            CreateToolsFor(purpose));
         var session = await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
         return new SdkCopilotSession(session);
+    }
+
+    private List<AIFunction> CreateToolsFor(SessionPurpose purpose)
+    {
+        return purpose switch
+        {
+            SessionPurpose.Triage or SessionPurpose.Maintenance => CreateAllRadarTools(),
+            _ => [],
+        };
+    }
+
+    private List<AIFunction> CreateAllRadarTools()
+    {
+        var tools = new List<AIFunction>();
+        tools.AddRange(_radarTools.CreateAll());
+        tools.AddRange(_radarWriteTools.CreateAll());
+        return tools;
     }
 
     /// <summary>

@@ -11,14 +11,14 @@ namespace RepoSyncRadar.App.Tests.Components;
 
 /// <summary>
 /// bUnit tests for <see cref="AppHeader"/>. Verifies the three auth states render the
-/// right affordances and that the Sync button drives
-/// <see cref="ICommitIngestionService.IngestAsync"/> + republishes through
+/// right affordances and that the Morning Triage button drives
+/// <see cref="ICopilotAgent.RunMorningTriageAsync"/> + republishes through
 /// <see cref="IReviewBroadcaster"/> so Sidebar / CommitList refresh themselves.
 /// </summary>
 public sealed class AppHeaderTests
 {
     [Fact]
-    public void Renders_SignedIn_State_With_SignOut_And_Enabled_Sync()
+    public void Renders_SignedIn_State_With_SignOut_And_Enabled_Triage()
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -45,7 +45,7 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
-    public void Renders_NotSignedIn_State_With_SignIn_And_Disabled_Sync()
+    public void Renders_NotSignedIn_State_With_SignIn_And_Disabled_Triage()
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -66,7 +66,7 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
-    public void Renders_NotConfigured_State_With_Hint_And_Disabled_Sync()
+    public void Renders_NotConfigured_State_With_Hint_And_Disabled_Triage()
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -87,7 +87,7 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
-    public void Sync_Button_Calls_IngestAsync_And_Publishes_Broadcaster()
+    public void Triage_Button_Calls_Agent_And_Publishes_Broadcaster()
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -97,9 +97,9 @@ public sealed class AppHeaderTests
             .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>("octocat"));
 
-        var sp = BuildServices(session, out var ingestion, out var broadcaster);
-        ingestion
-            .IngestAsync(Arg.Any<CancellationToken>())
+        var sp = BuildServices(session, out var agent, out var broadcaster);
+        agent
+            .RunMorningTriageAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new IngestionReport(Total: 3, Inserted: 2, Skipped: 1)));
 
         using var ctx = new Bunit.TestContext();
@@ -108,13 +108,13 @@ public sealed class AppHeaderTests
 
         cut.Find("[data-testid=\"app-header-sync\"]").Click();
 
-        ingestion.Received(1).IngestAsync(Arg.Any<CancellationToken>());
+        agent.Received(1).RunMorningTriageAsync(Arg.Any<CancellationToken>());
         broadcaster.Received(1).Publish();
         Assert.Contains("新規 2", cut.Find("[data-testid=\"app-header-last-sync\"]").TextContent);
     }
 
     [Fact]
-    public void Sync_Failure_Shows_Error_Without_Publishing_Broadcaster()
+    public void Triage_Failure_Shows_Error_Without_Publishing_Broadcaster()
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -124,9 +124,9 @@ public sealed class AppHeaderTests
             .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>("octocat"));
 
-        var sp = BuildServices(session, out var ingestion, out var broadcaster);
-        ingestion
-            .IngestAsync(Arg.Any<CancellationToken>())
+        var sp = BuildServices(session, out var agent, out var broadcaster);
+        agent
+            .RunMorningTriageAsync(Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("network down"));
 
         using var ctx = new Bunit.TestContext();
@@ -136,7 +136,7 @@ public sealed class AppHeaderTests
         cut.Find("[data-testid=\"app-header-sync\"]").Click();
 
         var err = cut.Find("[data-testid=\"app-header-error\"]");
-        Assert.Contains("Sync 失敗", err.TextContent);
+        Assert.Contains("Triage 失敗", err.TextContent);
         Assert.Contains("network down", err.TextContent);
         broadcaster.DidNotReceive().Publish();
     }
@@ -190,7 +190,7 @@ public sealed class AppHeaderTests
         var cut = ctx.RenderComponent<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        // Still rendered as signed-in (Sync enabled), but no @login chip — the
+        // Still rendered as signed-in (Morning Triage enabled), but no @login chip — the
         // header must not crash just because /user 5xx'd or rate-limited.
         Assert.Equal(
             "SignedIn",
@@ -201,14 +201,14 @@ public sealed class AppHeaderTests
 
     private static ServiceProvider BuildServices(
         IGitHubAuthSession session,
-        out ICommitIngestionService ingestion,
+        out ICopilotAgent agent,
         out IReviewBroadcaster broadcaster)
     {
-        ingestion = Substitute.For<ICommitIngestionService>();
+        agent = Substitute.For<ICopilotAgent>();
         broadcaster = Substitute.For<IReviewBroadcaster>();
         return new ServiceCollection()
             .AddSingleton(session)
-            .AddSingleton(ingestion)
+            .AddSingleton(agent)
             .AddSingleton(broadcaster)
             .BuildServiceProvider();
     }

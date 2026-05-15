@@ -77,7 +77,10 @@ public sealed class MorningTriageSessionTests
 
         Assert.NotNull(capturedPrompt);
         Assert.Contains("Morning Triage", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("github/docs", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("radar_list_commits", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("radar_score_commit", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("radar_save_review", capturedPrompt, StringComparison.Ordinal);
     }
 
     [Fact]

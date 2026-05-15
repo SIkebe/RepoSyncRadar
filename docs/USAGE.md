@@ -141,10 +141,13 @@ dotnet run --project src/RepoSyncRadar.App
 
 [`MorningTriageSession`](../src/RepoSyncRadar.App/Copilot/MorningTriageSession.cs) が以下を順に実行します(Step 15)。
 
+画面上部でサインイン済みになっていることを確認し、**Morning Triage** ボタンを押します。
+
 1. `github/docs` の Repo sync PR を最大 `MaxPullRequests` 件取得
 2. 各 PR のコミットを SQLite に **冪等取り込み**(既知 SHA はスキップ)
 3. Copilot に「Must read 5 件 / Skim 15 件 / 残りは Archive」の方針でスコアリング
-4. `radar_save_review` を呼んで `Reviews` テーブルに保存
+4. `radar_score_commit` で `Scoring` テーブルに要約・理由・スコアを保存
+5. Skim / Archive 判定が明確なものは `radar_save_review` で `Reviews` テーブルに保存
 
 > 起動直後はサイドバーの **Inbox** に並びます。
 

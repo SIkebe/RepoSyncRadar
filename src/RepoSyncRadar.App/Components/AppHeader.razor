@@ -6,7 +6,7 @@
 @*
     AppHeader — top bar shown at the top of Workbench. Surfaces the current GitHub
     auth state (Not configured / Not signed in / Signed in), exposes Sign in / Sign
-    out buttons, and the manual Sync trigger that runs ICommitIngestionService.
+    out buttons, and the Morning Triage trigger that runs ICopilotAgent.
     Without this header the app launches into an entirely empty inbox with no
     visible action, which is what motivated this component.
 *@
@@ -58,7 +58,7 @@
         @if (_lastReport is { } report)
         {
             <span data-testid="app-header-last-sync" style="font-size:0.85em; opacity:0.8;">
-                直近 Sync: 取得 @report.Total / 新規 @report.Inserted / スキップ @report.Skipped
+                直近 Triage: 取得 @report.Total / 新規 @report.Inserted / スキップ @report.Skipped
             </span>
         }
         @if (_lastError is not null)
@@ -67,10 +67,10 @@
         }
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
-                   OnClick="OnSyncAsync"
+                   OnClick="OnTriageAsync"
                    Disabled="@(_busy || _state != GitHubAuthState.SignedIn)"
                    data-testid="app-header-sync">
-            @(_busy ? "Sync 中…" : "Sync")
+            @(_busy ? "Triage 中…" : "Morning Triage")
         </MudButton>
     </div>
     </header>
@@ -150,7 +150,7 @@
         }
     }
 
-    private async Task OnSyncAsync()
+    private async Task OnTriageAsync()
     {
         _busy = true;
         _lastError = null;
@@ -158,16 +158,16 @@
         StateHasChanged();
         try
         {
-            var svc = Services.GetRequiredService<ICommitIngestionService>();
-            _lastReport = await svc.IngestAsync(CancellationToken.None);
+            var agent = Services.GetRequiredService<ICopilotAgent>();
+            _lastReport = await agent.RunMorningTriageAsync(CancellationToken.None);
             // Reuse the review broadcaster so Sidebar/CommitList re-query their
-            // data the moment Sync finishes. The broadcaster is a no-op pub/sub
-            // so we can publish freely without coupling to a Sync-specific bus.
+            // data the moment Morning Triage finishes. The broadcaster is a no-op
+            // pub/sub so we can publish freely without coupling to a triage-specific bus.
             _broadcaster?.Publish();
         }
         catch (Exception ex)
         {
-            _lastError = $"Sync 失敗: {ex.Message}";
+            _lastError = $"Triage 失敗: {ex.Message}";
         }
         finally
         {
