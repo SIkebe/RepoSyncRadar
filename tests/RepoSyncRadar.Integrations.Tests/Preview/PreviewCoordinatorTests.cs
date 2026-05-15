@@ -371,8 +371,17 @@ public sealed class PreviewCoordinatorTests : IDisposable
             server,
             serverFactory,
             session,
+            new FixedPreviewPortAllocator(previewBasePort),
             options,
             NullLogger<PreviewCoordinator>.Instance);
+    }
+
+    private sealed class FixedPreviewPortAllocator(int basePort) : IPreviewPortAllocator
+    {
+        public int AllocateSingle(int preferredPort, IReadOnlyCollection<int> reusablePorts) => preferredPort;
+
+        public PreviewPortPair AllocateComparison(int preferredAfterPort, IReadOnlyCollection<int> reusablePorts)
+            => new(basePort, basePort + 1);
     }
 
     public void Dispose()

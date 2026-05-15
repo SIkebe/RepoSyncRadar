@@ -92,6 +92,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     private readonly PreviewServerHost _server;
     private readonly PreviewServerHost _beforeServer;
     private readonly PreviewSession _session;
+    private readonly IPreviewPortAllocator _portAllocator;
     private readonly DocsRepositoryOptions _options;
     private readonly ILogger<PreviewCoordinator> _logger;
     private string? _activeSha;
@@ -102,6 +103,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         PreviewServerHost server,
         IPreviewServerHostFactory serverFactory,
         PreviewSession session,
+        IPreviewPortAllocator portAllocator,
         IOptions<DocsRepositoryOptions> options,
         ILogger<PreviewCoordinator> logger)
     {
@@ -109,12 +111,14 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(serverFactory);
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(portAllocator);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
         _worktree = worktree;
         _server = server;
         _beforeServer = serverFactory.Create();
         _session = session;
+        _portAllocator = portAllocator;
         _options = options.Value;
         _logger = logger;
     }
@@ -148,8 +152,14 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
-        var port = _options.PreviewBasePort;
-        if (!string.Equals(_activeSha, sha, StringComparison.Ordinal))
+        var port = string.Equals(_activeSha, sha, StringComparison.Ordinal)
+            && _server.IsProcessRunning
+            && _server.CurrentPort > 0
+                ? _server.CurrentPort
+                : _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
+        if (!string.Equals(_activeSha, sha, StringComparison.Ordinal)
+            || _server.CurrentPort != port
+            || !_server.IsProcessRunning)
         {
             progress?.Report(
                 $"依存関係を確認してプレビューサーバを起動中… (node_modules がなければ {_options.PreviewCommand} {_options.PreviewInstallArguments} を自動実行 / ポート {port.ToString(CultureInfo.InvariantCulture)})");
@@ -214,8 +224,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
-        var afterPort = _options.PreviewBasePort;
-        var beforePort = GetBeforePreviewPort(afterPort);
+        var ports = _portAllocator.AllocateComparison(_options.PreviewBasePort, GetReusablePorts());
+        var afterPort = ports.AfterPort;
+        var beforePort = ports.BeforePort;
 
         if (!string.Equals(_activeBeforeSha, beforeSha, StringComparison.Ordinal)
             || _beforeServer.CurrentPort != beforePort
@@ -293,14 +304,19 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         Message = "Preview ready for sha {Sha}: {Url}")]
     private static partial void LogPreviewReady(ILogger logger, string sha, string url);
 
-    private static int GetBeforePreviewPort(int afterPort)
+    private int[] GetReusablePorts()
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(afterPort, 1);
-        if (afterPort >= 65535)
+        var ports = new List<int>(capacity: 2);
+        if (_server is { IsProcessRunning: true, CurrentPort: > 0 })
         {
-            throw new InvalidOperationException("PreviewBasePort は比較プレビュー用に +1 したポートも使うため、65534 以下にしてください。");
+            ports.Add(_server.CurrentPort);
         }
-        return afterPort + 1;
+        if (_beforeServer is { IsProcessRunning: true, CurrentPort: > 0 }
+            && !ports.Contains(_beforeServer.CurrentPort))
+        {
+            ports.Add(_beforeServer.CurrentPort);
+        }
+        return ports.ToArray();
     }
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information,
