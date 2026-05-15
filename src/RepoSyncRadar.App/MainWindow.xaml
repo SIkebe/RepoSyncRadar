@@ -10,9 +10,9 @@
         WindowStartupLocation="CenterScreen">
   <Grid>
     <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="2*" />
-      <ColumnDefinition Width="5" />
-      <ColumnDefinition Width="3*" />
+      <ColumnDefinition x:Name="WorkbenchColumn" Width="2*" />
+      <ColumnDefinition x:Name="WorkbenchPreviewSplitterColumn" Width="5" />
+      <ColumnDefinition x:Name="PreviewSurfaceColumn" Width="3*" />
     </Grid.ColumnDefinitions>
 
     <!-- Left + center: Blazor app shell (sidebar, workbench, drafts). -->
@@ -26,10 +26,12 @@
       </blazor:BlazorWebView.RootComponents>
     </blazor:BlazorWebView>
 
-    <GridSplitter Grid.Column="1"
+    <GridSplitter x:Name="WorkbenchPreviewSplitter"
+          Grid.Column="1"
                   HorizontalAlignment="Stretch"
                   Background="#DDDDDD"
                   Cursor="SizeWE"
+          ResizeDirection="Columns"
                   ResizeBehavior="PreviousAndNext"
                   ShowsPreview="False" />
 
@@ -53,7 +55,7 @@
               Background="#0D1117"
               BorderBrush="#30363D"
               BorderThickness="0,0,0,1"
-              Padding="10,4">
+              Padding="10,4,132,4">
         <Grid>
           <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
@@ -103,7 +105,7 @@
               Background="#0D1117"
               BorderBrush="#30363D"
               BorderThickness="0,0,0,1"
-              Padding="10,4"
+              Padding="10,4,132,4"
               Visibility="Collapsed">
         <Grid>
           <Grid.RowDefinitions>
@@ -222,6 +224,28 @@
                    VerticalAlignment="Center"
                    Text="WebView2 を初期化できませんでした。" />
       </Border>
+
+      <Button x:Name="PreviewFocusToggleButton"
+              Grid.Row="0"
+              Grid.Column="0"
+              Grid.ColumnSpan="3"
+              Panel.ZIndex="20"
+              HorizontalAlignment="Right"
+              VerticalAlignment="Center"
+              Margin="0,0,10,0"
+              MinWidth="112"
+              Padding="10,4"
+              Background="#21262D"
+              BorderBrush="#30363D"
+              Foreground="#F0F6FC"
+              Cursor="Hand"
+              FontSize="12"
+              FontWeight="SemiBold"
+              Content="プレビューだけ"
+              AutomationProperties.AutomationId="PreviewFocusToggleButton"
+              AutomationProperties.Name="プレビューだけ表示"
+              ToolTip="左の作業ペインを折りたたんでプレビューだけ表示します"
+              Click="OnPreviewFocusToggleClicked" />
     </Grid>
   </Grid>
 </Window>

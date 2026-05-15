@@ -1,3 +1,4 @@
+using System.Windows;
 using RepoSyncRadar.App;
 using Xunit;
 
@@ -62,6 +63,40 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(string.Empty, MainWindow.BuildComparisonFileIndexLabel(null, 6));
         Assert.Equal(string.Empty, MainWindow.BuildComparisonFileIndexLabel(3, null));
         Assert.Equal(string.Empty, MainWindow.BuildComparisonFileIndexLabel(0, 6));
+    }
+
+    [Fact]
+    public void ResolveWorkbenchColumnRestoreWidth_Preserves_User_Adjusted_Width()
+    {
+        var savedWidth = new GridLength(640);
+
+        var result = MainWindow.ResolveWorkbenchColumnRestoreWidth(savedWidth);
+
+        Assert.Equal(GridUnitType.Pixel, result.GridUnitType);
+        Assert.Equal(640, result.Value);
+    }
+
+    [Fact]
+    public void ResolveWorkbenchColumnRestoreWidth_Falls_Back_When_Saved_Width_Is_Collapsed()
+    {
+        var result = MainWindow.ResolveWorkbenchColumnRestoreWidth(new GridLength(0));
+
+        Assert.Equal(GridUnitType.Star, result.GridUnitType);
+        Assert.Equal(2, result.Value);
+    }
+
+    [Theory]
+    [InlineData(false, "プレビューだけ", "プレビューだけ表示", "左の作業ペインを折りたたんでプレビューだけ表示します")]
+    [InlineData(true, "作業ペインを戻す", "作業ペインを戻す", "折りたたんだ左の作業ペインを戻します")]
+    public void PreviewFocusToggleLabels_Describe_Current_Action(
+        bool isPreviewFocusMode,
+        string expectedText,
+        string expectedAutomationName,
+        string expectedToolTip)
+    {
+        Assert.Equal(expectedText, MainWindow.BuildPreviewFocusToggleText(isPreviewFocusMode));
+        Assert.Equal(expectedAutomationName, MainWindow.BuildPreviewFocusToggleAutomationName(isPreviewFocusMode));
+        Assert.Equal(expectedToolTip, MainWindow.BuildPreviewFocusToggleToolTip(isPreviewFocusMode));
     }
 
     [Fact]

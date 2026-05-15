@@ -1,6 +1,7 @@
 using System.IO;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Microsoft.AspNetCore.Components.WebView;
@@ -61,6 +62,10 @@ public partial class MainWindow : Window
     /// </summary>
     private const string WebViewUserDataRootEnv = "REPOSYNCRADAR_WEBVIEW_USER_DATA_ROOT";
 
+    private static readonly GridLength DefaultWorkbenchColumnWidth = new(2, GridUnitType.Star);
+    private static readonly GridLength ExpandedWorkbenchSplitterColumnWidth = new(5);
+    private static readonly GridLength CollapsedColumnWidth = new(0);
+
     private readonly UrlAllowList _allowList;
     private readonly PreviewSession _previewSession;
     private readonly IPreviewNavigator _previewNavigator;
@@ -69,11 +74,14 @@ public partial class MainWindow : Window
     private int _previewDiffGeneration;
     private bool _beforePreviewDiffReady;
     private bool _afterPreviewDiffReady;
+    private GridLength? _expandedWorkbenchColumnWidth = DefaultWorkbenchColumnWidth;
+    private bool _isPreviewFocusMode;
 
     public MainWindow(IServiceProvider services)
     {
         ArgumentNullException.ThrowIfNull(services);
         InitializeComponent();
+        UpdatePreviewFocusToggleButton();
         BlazorView.Services = services;
 
         var copilotOptions = services.GetRequiredService<IOptions<CopilotOptions>>().Value;
@@ -153,6 +161,49 @@ public partial class MainWindow : Window
         var existing = e.EnvironmentOptions.AdditionalBrowserArguments;
         e.EnvironmentOptions.AdditionalBrowserArguments =
             string.IsNullOrEmpty(existing) ? args : $"{existing} {args}";
+    }
+
+    private void OnPreviewFocusToggleClicked(object sender, RoutedEventArgs e)
+        => SetPreviewFocusMode(!_isPreviewFocusMode);
+
+    private void SetPreviewFocusMode(bool isPreviewFocusMode)
+    {
+        if (_isPreviewFocusMode == isPreviewFocusMode)
+        {
+            return;
+        }
+
+        _isPreviewFocusMode = isPreviewFocusMode;
+        if (isPreviewFocusMode)
+        {
+            if (WorkbenchColumn.ActualWidth > 1)
+            {
+                _expandedWorkbenchColumnWidth = WorkbenchColumn.Width;
+            }
+
+            BlazorView.Visibility = Visibility.Collapsed;
+            WorkbenchPreviewSplitter.Visibility = Visibility.Collapsed;
+            WorkbenchColumn.Width = CollapsedColumnWidth;
+            WorkbenchPreviewSplitterColumn.Width = CollapsedColumnWidth;
+        }
+        else
+        {
+            WorkbenchColumn.Width = ResolveWorkbenchColumnRestoreWidth(_expandedWorkbenchColumnWidth);
+            WorkbenchPreviewSplitterColumn.Width = ExpandedWorkbenchSplitterColumnWidth;
+            WorkbenchPreviewSplitter.Visibility = Visibility.Visible;
+            BlazorView.Visibility = Visibility.Visible;
+        }
+
+        UpdatePreviewFocusToggleButton();
+    }
+
+    private void UpdatePreviewFocusToggleButton()
+    {
+        PreviewFocusToggleButton.Content = BuildPreviewFocusToggleText(_isPreviewFocusMode);
+        PreviewFocusToggleButton.ToolTip = BuildPreviewFocusToggleToolTip(_isPreviewFocusMode);
+        AutomationProperties.SetName(
+            PreviewFocusToggleButton,
+            BuildPreviewFocusToggleAutomationName(_isPreviewFocusMode));
     }
 
     /// <summary>
@@ -558,6 +609,27 @@ public partial class MainWindow : Window
         => fileOrdinal is > 0 && fileCount is > 0
             ? string.Create(CultureInfo.InvariantCulture, $"{fileOrdinal}/{fileCount}")
             : string.Empty;
+
+    internal static GridLength ResolveWorkbenchColumnRestoreWidth(GridLength? savedWidth)
+    {
+        if (savedWidth.HasValue && savedWidth.Value.Value > 0)
+        {
+            return savedWidth.Value;
+        }
+
+        return DefaultWorkbenchColumnWidth;
+    }
+
+    internal static string BuildPreviewFocusToggleText(bool isPreviewFocusMode)
+        => isPreviewFocusMode ? "作業ペインを戻す" : "プレビューだけ";
+
+    internal static string BuildPreviewFocusToggleToolTip(bool isPreviewFocusMode)
+        => isPreviewFocusMode
+            ? "折りたたんだ左の作業ペインを戻します"
+            : "左の作業ペインを折りたたんでプレビューだけ表示します";
+
+    internal static string BuildPreviewFocusToggleAutomationName(bool isPreviewFocusMode)
+        => isPreviewFocusMode ? "作業ペインを戻す" : "プレビューだけ表示";
 
     private static void SetFileBadge(FrameworkElement badge, TextBlock textBlock, string value)
     {
