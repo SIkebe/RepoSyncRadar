@@ -51,7 +51,8 @@
               BorderBrush="#30363D"
               BorderThickness="0,0,0,1"
               Padding="10,0">
-        <TextBlock Text="公式 docs.github.com"
+        <TextBlock x:Name="OfficialDocsHeaderText"
+             Text="公式 docs.github.com"
                    Foreground="#C9D1D9"
                    FontSize="12"
                    VerticalAlignment="Center" />
@@ -73,7 +74,8 @@
               BorderThickness="0,0,0,1"
               Padding="10,0"
               Visibility="Collapsed">
-        <TextBlock Text="PR HEAD localhost"
+        <TextBlock x:Name="PreviewDocsHeaderText"
+             Text="PR HEAD localhost"
                    Foreground="#C9D1D9"
                    FontSize="12"
                    VerticalAlignment="Center" />

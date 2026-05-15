@@ -6,6 +6,21 @@ using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.Core.Services.Preview;
 
+public interface IPreviewServerHostFactory
+{
+    PreviewServerHost Create();
+}
+
+public sealed class PreviewServerHostFactory(
+    IProcessRunner runner,
+    IPortReadyProbe probe,
+    IOptions<DocsRepositoryOptions> options,
+    ILogger<PreviewServerHost> logger) : IPreviewServerHostFactory
+{
+    public PreviewServerHost Create()
+        => new(runner, probe, options, logger);
+}
+
 /// <summary>
 /// Runs a single sidecar preview server (e.g. <c>nodemon src/frame/server.ts</c>)
 /// for the docs worktree (IMPLEMENTATION_PLAN.md §Step 19). Owns at most one

@@ -11,6 +11,8 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 /// </summary>
 public sealed class PreviewSessionTests
 {
+    private static readonly int[] ComparisonPorts = [4500, 4501];
+
     [Fact]
     public void Inactive_Blocks_All()
     {
@@ -33,6 +35,19 @@ public sealed class PreviewSessionTests
         sut.Activate(4500);
 
         Assert.True(sut.IsAllowed(new Uri(url)));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:4500/en/foo")]
+    [InlineData("http://localhost:4501/en/foo")]
+    public void Active_Allows_Multiple_Matching_Loopback_Ports(string url)
+    {
+        var sut = new PreviewSession();
+        sut.Activate(4500, 4501);
+
+        Assert.True(sut.IsAllowed(new Uri(url)));
+        Assert.Equal(4500, sut.ActivePort);
+        Assert.Equal(ComparisonPorts, sut.ActivePorts);
     }
 
     [Theory]
@@ -68,5 +83,6 @@ public sealed class PreviewSessionTests
 
         Assert.Throws<ArgumentOutOfRangeException>(() => sut.Activate(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => sut.Activate(70000));
+        Assert.Throws<ArgumentException>(() => sut.Activate());
     }
 }

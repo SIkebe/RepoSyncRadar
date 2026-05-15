@@ -61,6 +61,22 @@ public sealed class DocsWorktreeManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolveFirstParentAsync_Uses_Git_RevParse()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        Directory.CreateDirectory(bare);
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "rev-parse abcdef^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parent123\n", string.Empty)));
+        var sut = BuildSut(runner, bareCloneDir: bare, cloneUrl: "https://example.invalid/docs.git");
+
+        var parent = await sut.ResolveFirstParentAsync("abcdef", ct);
+
+        Assert.Equal("parent123", parent);
+    }
+
+    [Fact]
     public async Task CheckoutAsync_Reuses_Existing_Worktree()
     {
         var ct = TestContext.Current.CancellationToken;

@@ -84,6 +84,26 @@ public sealed partial class DocsWorktreeManager
         }
     }
 
+    /// <summary>Resolves the first parent SHA for <paramref name="commitSha"/> inside the bare clone.</summary>
+    public async Task<string?> ResolveFirstParentAsync(string commitSha, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commitSha);
+        if (!IsEnabled)
+        {
+            return null;
+        }
+
+        var args = string.Create(CultureInfo.InvariantCulture, $"rev-parse {commitSha}^");
+        var result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"git rev-parse failed (exit {result.ExitCode}): {result.StandardError}");
+        }
+
+        var parent = result.StandardOutput.Trim();
+        return parent.Length == 0 ? null : parent;
+    }
+
     /// <summary>
     /// Adds a worktree for <paramref name="commitSha"/> if one does not already exist.
     /// Returns the path on disk. Calling with the same SHA twice in a row reuses the

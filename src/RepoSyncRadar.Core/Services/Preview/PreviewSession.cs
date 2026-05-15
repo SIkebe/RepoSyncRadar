@@ -1,14 +1,14 @@
 namespace RepoSyncRadar.Core.Services.Preview;
 
 /// <summary>
-/// Tracks the currently-active local preview server so that the WebView2 resource
+/// Tracks the currently-active local preview servers so that the WebView2 resource
 /// filter in <c>MainWindow</c> can let <c>http://localhost:{port}/*</c> through
 /// alongside the regular HTTPS allow-list (IMPLEMENTATION_PLAN.md §Step 19.5).
 /// </summary>
 /// <remarks>
 /// <para>
 /// Registered as a singleton. <see cref="PreviewCoordinator"/> calls
-/// <see cref="Activate(int)"/> after starting the sidecar, and <c>MainWindow</c>
+/// <see cref="Activate(int[])"/> after starting the sidecars, and <c>MainWindow</c>
 /// checks <see cref="IsAllowed(Uri)"/> from the WebView2 <c>WebResourceRequested</c>
 /// handler. Both operations are guarded by an internal lock — the writer (the
 /// Razor button on the dispatcher) and the reader (the WebView2 worker) live on
@@ -16,14 +16,14 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </para>
 /// <para>
 /// Only loopback hosts (<c>localhost</c>, <c>127.0.0.1</c>, <c>::1</c>) on the
-/// active port are accepted; everything else is rejected so a misconfigured
+/// active ports are accepted; everything else is rejected so a misconfigured
 /// preview server cannot accidentally widen the allow-list.
 /// </para>
 /// </remarks>
 public sealed class PreviewSession
 {
     private readonly Lock _gate = new();
-    private int? _port;
+    private readonly List<int> _ports = new(capacity: 2);
 
     /// <summary>True while a preview server is registered.</summary>
     public bool IsActive
@@ -32,31 +32,60 @@ public sealed class PreviewSession
         {
             lock (_gate)
             {
-                return _port.HasValue;
+                return _ports.Count > 0;
             }
         }
     }
 
-    /// <summary>The port assigned to the active preview server, or <c>null</c> when inactive.</summary>
+    /// <summary>The primary port assigned to the active preview server, or <c>null</c> when inactive.</summary>
     public int? ActivePort
     {
         get
         {
             lock (_gate)
             {
-                return _port;
+                return _ports.Count == 0 ? null : _ports[0];
             }
         }
     }
 
-    /// <summary>Marks the supplied port as the active preview.</summary>
-    public void Activate(int port)
+    /// <summary>All loopback preview ports currently allowed through WebView2 filtering.</summary>
+    public IReadOnlyList<int> ActivePorts
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan(port, 1);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(port, 65535);
+        get
+        {
+            lock (_gate)
+            {
+                return _ports.ToArray();
+            }
+        }
+    }
+
+    /// <summary>Marks the supplied ports as the active preview endpoints.</summary>
+    public void Activate(params int[] ports)
+    {
+        ArgumentNullException.ThrowIfNull(ports);
+        if (ports.Length == 0)
+        {
+            throw new ArgumentException("At least one preview port is required.", nameof(ports));
+        }
+
+        foreach (var port in ports)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(port, 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(port, 65535);
+        }
+
         lock (_gate)
         {
-            _port = port;
+            _ports.Clear();
+            foreach (var port in ports)
+            {
+                if (!_ports.Contains(port))
+                {
+                    _ports.Add(port);
+                }
+            }
         }
     }
 
@@ -65,7 +94,7 @@ public sealed class PreviewSession
     {
         lock (_gate)
         {
-            _port = null;
+            _ports.Clear();
         }
     }
 
@@ -76,12 +105,12 @@ public sealed class PreviewSession
     public bool IsAllowed(Uri uri)
     {
         ArgumentNullException.ThrowIfNull(uri);
-        int? port;
+        int[] ports;
         lock (_gate)
         {
-            port = _port;
+            ports = _ports.ToArray();
         }
-        if (port is null)
+        if (ports.Length == 0)
         {
             return false;
         }
@@ -89,7 +118,7 @@ public sealed class PreviewSession
         {
             return false;
         }
-        if (uri.Port != port.Value)
+        if (!ports.Contains(uri.Port))
         {
             return false;
         }

@@ -16,6 +16,8 @@ namespace RepoSyncRadar.Integrations.Tests.Preview;
 /// </summary>
 public sealed class PreviewCoordinatorTests : IDisposable
 {
+    private static readonly int[] ComparisonPorts = [4500, 4501];
+
     private readonly string _tempRoot;
 
     public PreviewCoordinatorTests()
@@ -81,6 +83,58 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.StartsWith("START npm run dev -- --port 4500", calls[3], StringComparison.Ordinal);
         Assert.True(session.IsActive);
         Assert.Equal(4500, session.ActivePort);
+    }
+
+    [Fact]
+    public async Task PrepareComparisonPreviewAsync_Uses_Parent_And_Head_Local_Servers()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-compare");
+        var runner = Substitute.For<IProcessRunner>();
+        var calls = new List<string>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"RUN {call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"RUN {call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty));
+            });
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
+            .Returns(call =>
+            {
+                calls.Add($"START {call.ArgAt<string>(0)} {call.ArgAt<string>(1)} cwd={call.ArgAt<string>(2)}");
+                var handle = Substitute.For<IProcessHandle>();
+                handle.HasExited.Returns(false);
+                return handle;
+            });
+        var session = new PreviewSession();
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            session: session);
+
+        var link = await sut.PrepareComparisonPreviewAsync(123, "headsha", "content/foo/bar.md", cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Equal(new Uri("http://localhost:4501/en/foo/bar"), link!.BeforeUrl);
+        Assert.Equal(new Uri("http://localhost:4500/en/foo/bar"), link.AfterUrl);
+        Assert.Equal("parentsha", link.BeforeSha);
+        Assert.Equal("headsha", link.AfterSha);
+        Assert.True(session.IsAllowed(link.BeforeUrl));
+        Assert.True(session.IsAllowed(link.AfterUrl));
+        Assert.Equal(ComparisonPorts, session.ActivePorts);
+        Assert.Contains(calls, c => c.StartsWith("RUN git rev-parse headsha^", StringComparison.Ordinal));
+        Assert.Contains(calls, c => c.StartsWith("START npm run dev -- --port 4501", StringComparison.Ordinal));
+        Assert.Contains(calls, c => c.StartsWith("START npm run dev -- --port 4500", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -306,10 +360,16 @@ public sealed class PreviewCoordinatorTests : IDisposable
         probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
             Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
         var server = new PreviewServerHost(runner, probe, options, NullLogger<PreviewServerHost>.Instance);
+        var serverFactory = new PreviewServerHostFactory(
+            runner,
+            probe,
+            options,
+            NullLogger<PreviewServerHost>.Instance);
         session ??= new PreviewSession();
         return new PreviewCoordinator(
             worktree,
             server,
+            serverFactory,
             session,
             options,
             NullLogger<PreviewCoordinator>.Instance);

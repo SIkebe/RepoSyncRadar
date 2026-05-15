@@ -198,33 +198,39 @@ public class CommitDetailTests
             .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
 
         var navigator = new PreviewNavigator();
-        Uri? captured = null;
-        navigator.Requested += (_, url) => captured = url;
+        PreviewComparisonRequest? captured = null;
+        navigator.ComparisonRequested += (_, request) => captured = request;
         var session = new PreviewSession();
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 commit.PrNumber,
                 commit.Sha,
                 "content/copilot/about-copilot.md",
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<PreviewLink?>(new PreviewLink(
+            .Returns(Task.FromResult<PreviewComparisonLink?>(new PreviewComparisonLink(
+                new Uri("http://localhost:4501/en/copilot/about-copilot"),
                 new Uri("http://localhost:4500/en/copilot/about-copilot"),
+                4501,
                 4500,
-                @"C:\github\.cache\docs-worktrees\feedface")));
+                @"C:\github\.cache\docs-worktrees\parent",
+                @"C:\github\.cache\docs-worktrees\feedface",
+                "parent1234567890",
+                commit.Sha)));
 
         using var cut = RenderDetailWith(commit, resolver, navigator, session, coordinator);
         cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Equal("http://localhost:4500/en/copilot/about-copilot", captured?.AbsoluteUri);
+            Assert.Equal("http://localhost:4501/en/copilot/about-copilot", captured?.BeforeUrl.AbsoluteUri);
+            Assert.Equal("http://localhost:4500/en/copilot/about-copilot", captured?.AfterUrl.AbsoluteUri);
             Assert.Contains(
                 "content/copilot/about-copilot.md",
                 cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
                 StringComparison.Ordinal);
         });
-        _ = coordinator.Received(1).PreparePreviewAsync(
+        _ = coordinator.Received(1).PrepareComparisonPreviewAsync(
             commit.PrNumber,
             commit.Sha,
             "content/copilot/about-copilot.md",
@@ -241,10 +247,10 @@ public class CommitDetailTests
             .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
 
-        var tcs = new TaskCompletionSource<PreviewLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tcs = new TaskCompletionSource<PreviewComparisonLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationToken receivedToken = default;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),

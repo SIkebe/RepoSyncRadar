@@ -194,10 +194,11 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 2. 内部で次が自動で走る:
    - 初回のみ `git clone --bare <DocsRepoUrl> <BareCloneDir>`
    - `git fetch origin +refs/pull/{PR}/head:...` で PR head を取得
-   - `git worktree add <WorktreeRoot>/<sha> <sha>` で作業ディレクトリを生成
+   - `git rev-parse <sha>^` で変更前の親コミットを解決
+   - `git worktree add <WorktreeRoot>/<parent-sha> <parent-sha>` と `git worktree add <WorktreeRoot>/<sha> <sha>` で変更前 / PR HEAD の作業ディレクトリを生成
    - worktree に `node_modules` が無ければ `npm install` を自動実行
-   - `npm run dev -- --port {port}` を sidecar として起動(同じ SHA に対しては再起動しない)
-3. 右側の WebView2 が `http://localhost:{port}/{言語}/{パス}` に切り替わり、変更されたファイル先頭の Markdown をその場で確認できます
+   - 変更前を `PreviewBasePort + 1`、PR HEAD を `PreviewBasePort` の sidecar として起動(同じ SHA に対しては再起動しない)
+3. 右側の WebView2 が左右 2 ペインになり、左に変更前 localhost、右に PR HEAD localhost を表示します。公式 `docs.github.com` が既に更新済みでも、コミット単位の見た目差分を確認できます
 4. ボタン下に表示されている URL は外部ブラウザでも開けます
 
 #### 前提
@@ -205,7 +206,7 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 - Node.js + npm が PATH に通っていること(`PreviewCommand="npm"` を上書きすれば他ツールでも可)
 - worktree に `node_modules` が無い場合、`PreviewServerHost` が `PreviewCommand` + `PreviewInstallArguments` (既定: `npm install`) を自動実行してから preview server を起動します
 - `github/docs` の初回 Next.js コンパイルは 15 秒を超えることがあるため、`REQUEST_TIMEOUT=600000` を preview sidecar に渡します。これを短くすると PR HEAD 側が `Service Unavailable` になることがあります
-- WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中の `http://localhost:{port}` だけを動的に許可します
+- WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中の `http://localhost:{PreviewBasePort}` と `http://localhost:{PreviewBasePort+1}` だけを動的に許可します
 
 #### node_modules の扱い (案 A / 案 B)
 
@@ -231,8 +232,8 @@ worktree ごとに作業ディレクトリが分かれるため、`npm install` 
 
 #### 仕組み
 
-- [`DocsWorktreeManager`](../src/RepoSyncRadar.Core/Services/Preview/DocsWorktreeManager.cs) が `git clone --bare` した親リポから worktree を切り、[`PreviewServerHost`](../src/RepoSyncRadar.Core/Services/Preview/PreviewServerHost.cs) が `npm run dev` を sidecar 起動
-- [`PreviewCoordinator`](../src/RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs) が clone → fetch → checkout → start → `PreviewSession.Activate(port)` を 1 ステップで束ねます
+- [`DocsWorktreeManager`](../src/RepoSyncRadar.Core/Services/Preview/DocsWorktreeManager.cs) が `git clone --bare` した親リポから変更前 / PR HEAD の worktree を切り、[`PreviewServerHost`](../src/RepoSyncRadar.Core/Services/Preview/PreviewServerHost.cs) がそれぞれ `npm run dev` を sidecar 起動
+- [`PreviewCoordinator`](../src/RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs) が clone → fetch → parent 解決 → checkout → start → `PreviewSession.Activate(port...)` を 1 ステップで束ねます
 - [`PreviewPathMapper`](../src/RepoSyncRadar.Core/Services/Preview/PreviewPathMapper.cs) が `content/foo/bar.md` を `/en/foo/bar` に、`content/index.md` を `/en` に変換します
 - LRU で `MaxWorktrees` を超えたら最も古い worktree を `git worktree remove --force`
 - アプリ終了時に preview プロセスは確実に kill されます(`IAsyncDisposable`)

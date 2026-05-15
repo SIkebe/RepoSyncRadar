@@ -209,10 +209,9 @@
         => PreviewPathMapper.Map(file.Path, Language) is not null;
 
     private string BuildPreviewTitle(CommitFile file, Uri? currentTarget)
-        => currentTarget?.AbsoluteUri
-            ?? (IsPreviewMappable(file)
-                ? "PR HEAD のローカルプレビューを起動して、このファイルを WebView2 で開きます"
-                : "公式ドキュメントを WebView2 で開きます");
+        => IsPreviewMappable(file)
+            ? "変更前コミットと PR HEAD のローカルプレビューを並べて、このファイルを WebView2 で開きます"
+            : currentTarget?.AbsoluteUri ?? "公式ドキュメントを WebView2 で開きます";
 
     private string BuildPreviewButtonLabel(CommitFile file)
         => string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal)
@@ -224,15 +223,6 @@
         var navigator = Services.GetService<IPreviewNavigator>();
         if (navigator is null || _previewBusyPath is not null)
         {
-            return;
-        }
-
-        if (ResolvePreviewTarget(file) is { } activeTarget
-            && string.Equals(activeTarget.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(activeTarget.Host, "localhost", StringComparison.OrdinalIgnoreCase))
-        {
-            navigator.Publish(activeTarget);
-            _previewStatus = null;
             return;
         }
 
@@ -265,7 +255,7 @@
                         StateHasChanged();
                     });
                 });
-                var link = await coordinator.PreparePreviewAsync(
+                var link = await coordinator.PrepareComparisonPreviewAsync(
                     Commit.PrNumber,
                     Commit.Sha,
                     file.Path,
@@ -273,8 +263,12 @@
                     token);
                 if (link is not null)
                 {
-                    navigator.Publish(link.Url);
-                    _previewStatus = $"{file.Path} を WebView2 で開きました";
+                    navigator.PublishComparison(new PreviewComparisonRequest(
+                        link.BeforeUrl,
+                        link.AfterUrl,
+                        $"変更前 {ShortSha(link.BeforeSha)} localhost",
+                        $"PR HEAD {ShortSha(link.AfterSha)} localhost"));
+                    _previewStatus = $"{file.Path} を変更前 / PR HEAD で比較表示しました";
                     return;
                 }
             }
@@ -302,6 +296,15 @@
                 _previewBusyPath = null;
                 _previewCanceling = false;
             }
+        }
+
+        if (ResolvePreviewTarget(file) is { } activeTarget
+            && string.Equals(activeTarget.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(activeTarget.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            navigator.Publish(activeTarget);
+            _previewStatus = null;
+            return;
         }
 
         if (ResolveOfficialTarget(file) is { } officialTarget)
@@ -385,6 +388,9 @@
 
     private static string FormatStats(CommitFile file)
         => $"+{file.Additions} -{file.Deletions}";
+
+    private static string ShortSha(string sha)
+        => sha.Length <= 7 ? sha : sha[..7];
 
     private static string FormatScore(double score)
         => score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);

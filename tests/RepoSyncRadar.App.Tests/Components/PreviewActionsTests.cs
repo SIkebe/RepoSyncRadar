@@ -40,6 +40,23 @@ public sealed class PreviewActionsTests
     }
 
     [Fact]
+    public void PreviewNavigator_PublishComparison_Raises_Event_With_Request()
+    {
+        var sut = new PreviewNavigator();
+        PreviewComparisonRequest? captured = null;
+        sut.ComparisonRequested += (_, request) => captured = request;
+        var request = new PreviewComparisonRequest(
+            new Uri("http://localhost:4501/en/foo"),
+            new Uri("http://localhost:4500/en/foo"),
+            "変更前",
+            "PR HEAD");
+
+        sut.PublishComparison(request);
+
+        Assert.Same(request, captured);
+    }
+
+    [Fact]
     public void Click_Publishes_Url_From_Coordinator()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();

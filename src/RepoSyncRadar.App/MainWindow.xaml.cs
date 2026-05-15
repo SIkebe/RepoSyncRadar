@@ -75,7 +75,12 @@ public partial class MainWindow : Window
         _previewSession = services.GetRequiredService<PreviewSession>();
         _previewNavigator = services.GetRequiredService<IPreviewNavigator>();
         _previewNavigator.Requested += OnPreviewRequested;
-        Closed += (_, _) => _previewNavigator.Requested -= OnPreviewRequested;
+        _previewNavigator.ComparisonRequested += OnPreviewComparisonRequested;
+        Closed += (_, _) =>
+        {
+            _previewNavigator.Requested -= OnPreviewRequested;
+            _previewNavigator.ComparisonRequested -= OnPreviewComparisonRequested;
+        };
         _logger = services.GetRequiredService<ILoggerFactory>().CreateLogger<MainWindow>();
 
         // Use a dedicated user-data folder so DocsView and BlazorWebView do not
@@ -258,6 +263,18 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnPreviewComparisonRequested(object? sender, PreviewComparisonRequest request)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            NavigatePreviewComparisonRequest(request);
+        }
+        else
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, () => NavigatePreviewComparisonRequest(request));
+        }
+    }
+
     private void NavigatePreviewRequest(Uri url)
     {
         if (IsLocalPreviewUri(url))
@@ -272,8 +289,20 @@ public partial class MainWindow : Window
         DocsView.Source = url;
     }
 
-    private void ShowComparisonMode()
+    private void NavigatePreviewComparisonRequest(PreviewComparisonRequest request)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        ShowComparisonMode(request.BeforeLabel, request.AfterLabel);
+        DocsView.Source = request.BeforeUrl;
+        PreviewView.Source = request.AfterUrl;
+    }
+
+    private void ShowComparisonMode(
+        string leftLabel = "公式 docs.github.com",
+        string rightLabel = "PR HEAD localhost")
+    {
+        OfficialDocsHeaderText.Text = leftLabel;
+        PreviewDocsHeaderText.Text = rightLabel;
         PreviewDocsSplitter.Visibility = Visibility.Visible;
         PreviewDocsHeader.Visibility = Visibility.Visible;
         PreviewView.Visibility = Visibility.Visible;
@@ -284,6 +313,8 @@ public partial class MainWindow : Window
 
     private void ShowOfficialOnlyMode()
     {
+        OfficialDocsHeaderText.Text = "公式 docs.github.com";
+        PreviewDocsHeaderText.Text = "PR HEAD localhost";
         PreviewDocsSplitter.Visibility = Visibility.Collapsed;
         PreviewDocsHeader.Visibility = Visibility.Collapsed;
         PreviewView.Visibility = Visibility.Collapsed;
