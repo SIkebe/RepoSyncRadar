@@ -242,6 +242,57 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void OpenInWebView_Starts_Markdown_Comparison_For_Non_Content_Markdown_File()
+    {
+        var commit = MakeCommit(("CHANGELOG.md", 4, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var navigator = new PreviewNavigator();
+        PreviewComparisonRequest? captured = null;
+        navigator.ComparisonRequested += (_, request) => captured = request;
+        var session = new PreviewSession();
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                commit.PrNumber,
+                commit.Sha,
+                "CHANGELOG.md",
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<PreviewComparisonLink?>(new PreviewComparisonLink(
+                new Uri("http://127.0.0.1:4500/markdown/before"),
+                new Uri("http://127.0.0.1:4500/markdown/after"),
+                4500,
+                4500,
+                @"C:\github\.cache\docs-worktrees\parent",
+                @"C:\github\.cache\docs-worktrees\feedface",
+                "parent1234567890",
+                commit.Sha)));
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, session, coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("http://127.0.0.1:4500/markdown/before", captured?.BeforeUrl.AbsoluteUri);
+            Assert.Equal("http://127.0.0.1:4500/markdown/after", captured?.AfterUrl.AbsoluteUri);
+            Assert.Equal("CHANGELOG.md", captured?.FilePath);
+            Assert.Equal(1, captured?.FileOrdinal);
+            Assert.Equal(1, captured?.FileCount);
+            Assert.Contains("Markdown", captured?.BeforeLabel, StringComparison.Ordinal);
+            Assert.Contains("Markdown", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
+        });
+        _ = coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+            commit.PrNumber,
+            commit.Sha,
+            "CHANGELOG.md",
+            Arg.Any<IProgress<string>?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void OpenInWebView_Shows_Progress_And_Cancel_While_Local_Preview_Starts()
     {
         var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));

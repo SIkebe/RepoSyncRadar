@@ -62,7 +62,7 @@
             @foreach (var file in Commit.Files)
             {
                 var previewTarget = ResolvePreviewTarget(file);
-                var canOpenPreview = previewTarget is not null || IsPreviewMappable(file);
+                var canOpenPreview = previewTarget is not null || IsLocalComparisonPreviewable(file);
                 var previewPosition = GetPreviewPosition(file);
                 var isActivePreview = IsActivePreviewFile(file);
                 <li class="@BuildFileRowClass(file)" data-testid="commit-detail-file" data-path="@file.Path">
@@ -223,10 +223,24 @@
     private bool IsPreviewMappable(CommitFile file)
         => PreviewPathMapper.Map(file.Path, Language) is not null;
 
+    private static bool IsMarkdownPreviewable(CommitFile file)
+        => PreviewPathMapper.IsMarkdown(file.Path);
+
+    private bool IsLocalComparisonPreviewable(CommitFile file)
+        => IsPreviewMappable(file) || IsMarkdownPreviewable(file);
+
     private string BuildPreviewTitle(CommitFile file, Uri? currentTarget)
-        => IsPreviewMappable(file)
-            ? "変更前コミットと PR HEAD のローカルプレビューを並べて、このファイルを WebView2 で開きます"
-            : currentTarget?.AbsoluteUri ?? "公式ドキュメントを WebView2 で開きます";
+    {
+        if (IsPreviewMappable(file))
+        {
+            return "変更前コミットと PR HEAD のローカルプレビューを並べて、このファイルを WebView2 で開きます";
+        }
+        if (IsMarkdownPreviewable(file))
+        {
+            return "Markdown をレンダリングして変更前コミットと PR HEAD の差分を WebView2 で開きます";
+        }
+        return currentTarget?.AbsoluteUri ?? "公式ドキュメントを WebView2 で開きます";
+    }
 
     private string BuildPreviewButtonLabel(CommitFile file)
         => string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal)
@@ -254,7 +268,7 @@
 
     private PreviewFilePosition GetPreviewPosition(CommitFile file)
     {
-        if (Commit is null || !IsPreviewMappable(file))
+        if (Commit is null || !IsLocalComparisonPreviewable(file))
         {
             return default;
         }
@@ -263,7 +277,7 @@
         var ordinal = 0;
         foreach (var candidate in Commit.Files)
         {
-            if (!IsPreviewMappable(candidate))
+            if (!IsLocalComparisonPreviewable(candidate))
             {
                 continue;
             }
@@ -333,6 +347,83 @@
                         previewPosition.Total));
                     _activePreviewPath = file.Path;
                     _previewStatus = $"{file.Path} を変更前 / PR HEAD で比較表示しました";
+                    return;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _previewStatus = "プレビュー起動を中止しました";
+                return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _previewStatus = ex.Message;
+                return;
+            }
+            finally
+            {
+                try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
+                if (_previewPollTask is not null)
+                {
+                    try { await _previewPollTask; }
+                    catch (OperationCanceledException) { }
+                    _previewPollTask = null;
+                }
+                _previewCts?.Dispose();
+                _previewCts = null;
+                _previewBusyPath = null;
+                _previewCanceling = false;
+            }
+        }
+
+        if (Commit is not null && IsMarkdownPreviewable(file)
+            && Services.GetService<IPreviewCoordinator>() is { } markdownCoordinator)
+        {
+            _previewBusyPath = file.Path;
+            _previewCanceling = false;
+            _previewStatus = $"{file.Path} を Markdown として比較準備中…";
+            _previewStdoutTail = new List<string>();
+            _previewStderrTail = new List<string>();
+            _previewPid = null;
+            _previewStartedAt = DateTimeOffset.UtcNow;
+            _previewElapsedSec = 0;
+            _previewTimeoutSec = Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.PreviewReadyTimeoutSeconds ?? 600;
+            _previewCts = new CancellationTokenSource();
+            var token = _previewCts.Token;
+            var host = Services.GetService<PreviewServerHost>();
+            if (host is not null)
+            {
+                _previewPollTask = Task.Run(() => PollPreviewProgressAsync(host, token), CancellationToken.None);
+            }
+            try
+            {
+                var progress = new Progress<string>(message =>
+                {
+                    _ = InvokeAsync(() =>
+                    {
+                        _previewStatus = message;
+                        StateHasChanged();
+                    });
+                });
+                var link = await markdownCoordinator.PrepareMarkdownComparisonPreviewAsync(
+                    Commit.PrNumber,
+                    Commit.Sha,
+                    file.Path,
+                    progress,
+                    token);
+                if (link is not null)
+                {
+                    var previewPosition = GetPreviewPosition(file);
+                    navigator.PublishComparison(new PreviewComparisonRequest(
+                        link.BeforeUrl,
+                        link.AfterUrl,
+                        $"変更前 {ShortSha(link.BeforeSha)} Markdown",
+                        $"PR HEAD {ShortSha(link.AfterSha)} Markdown",
+                        file.Path,
+                        previewPosition.Ordinal,
+                        previewPosition.Total));
+                    _activePreviewPath = file.Path;
+                    _previewStatus = $"{file.Path} を Markdown として変更前 / PR HEAD で比較表示しました";
                     return;
                 }
             }

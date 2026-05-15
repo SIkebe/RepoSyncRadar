@@ -4,7 +4,7 @@ using Xunit;
 namespace RepoSyncRadar.App.E2E.Tests;
 
 /// <summary>
-/// End-to-end checks for the "ローカルプレビュー" wiring added in
+/// End-to-end checks for the "比較プレビュー" wiring added in
 /// IMPLEMENTATION_PLAN.md §Step 19.5. The pipeline itself (git clone --bare,
 /// worktree, sidecar) is exercised by Core / Integrations tests with a stubbed
 /// <c>IProcessRunner</c>; running the real tool chain inside an E2E pass would
@@ -13,7 +13,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// <list type="bullet">
 ///   <item>Both action buttons render and become interactive once a commit is
 ///         selected.</item>
-///   <item>Clicking "ローカルプレビュー" with the preview pipeline disabled
+///   <item>Clicking "比較プレビューを開く" with the preview pipeline disabled
 ///         surfaces the inline disabled message instead of crashing, and the
 ///         button returns to its enabled state for retries.</item>
 ///   <item>Clicking "キャッシュをクリーンアップ" reports 0 removed when the
@@ -55,7 +55,7 @@ public sealed class PreviewE2ETests
         await previewButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await Assertions.Expect(previewButton).ToBeEnabledAsync(
             new() { Timeout = 5000 });
-        Assert.Equal("ローカルプレビュー", (await previewButton.InnerTextAsync()).Trim());
+        Assert.Equal("比較プレビューを開く", (await previewButton.InnerTextAsync()).Trim());
 
         var cleanupButton = page.Locator("[data-testid='preview-cleanup-button']");
         await cleanupButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });

@@ -1,7 +1,6 @@
-@* PreviewActions — "ローカルプレビュー" ボタンを描画する小さなコンポーネント。
-   IPreviewCoordinator を呼び、戻ってきた URL を IPreviewNavigator で WPF 側に流して
-   右側の WebView2 を切り替えさせる。プレビュー機能が無効 (DocsRepository 未設定) の
-   場合は ヒントを表示。IMPLEMENTATION_PLAN.md §Step 19.5 + 19.6 (P1)。 *@
+@* PreviewActions — selected commit preview controls. The main button opens a
+    before/after comparison (first parent vs PR HEAD) so the view stays useful even
+    after docs.github.com has already deployed the change. *@
 
 @using System.Threading
 @using Microsoft.Extensions.DependencyInjection
@@ -11,7 +10,14 @@
 @using RepoSyncRadar.Core.Services.Preview
 @implements IDisposable
 
-<div class="radar-preview-actions" data-testid="preview-actions">
+<div class="radar-preview-actions action-panel" data-testid="preview-actions">
+    <header class="action-panel-header">
+        <div>
+            <h3>プレビュー</h3>
+            <p>変更前と PR HEAD の docs 表示を右ペインで比較します。</p>
+        </div>
+    </header>
+
     @if (_busy)
     {
         @* P1: 起動中はスピナー + 経過秒 + ログ tail + 中止ボタンを表示。
@@ -50,17 +56,48 @@
     }
     else
     {
-        <button type="button"
+        var previewFiles = GetPreviewableFiles(Commit);
+        <div class="action-toolbar">
+            <button type="button"
                 data-testid="preview-button"
-                class="preview"
+                class="toolbar-button primary preview"
                 disabled="@(Commit is null)"
-                @onclick="PreviewAsync">ローカルプレビュー</button>
+                @onclick="PreviewAsync">比較プレビューを開く</button>
 
-        <button type="button"
+            <button type="button"
                 data-testid="preview-cleanup-button"
-                class="preview-cleanup"
+                class="toolbar-button secondary preview-cleanup"
                 title="キャッシュされた docs worktree をすべて削除します"
-                @onclick="CleanupAsync">キャッシュをクリーンアップ</button>
+                @onclick="CleanupAsync">キャッシュ削除</button>
+        </div>
+
+        @if (previewFiles.Count > 1)
+        {
+            <div class="preview-file-switcher" data-testid="preview-file-switcher">
+                <div class="preview-file-switcher-header">
+                    <span>ファイル</span>
+                    <span>@previewFiles.Count 件</span>
+                </div>
+                <div class="preview-file-switcher-list">
+                    @foreach (var previewFile in previewFiles)
+                    {
+                        <button type="button"
+                                class="@BuildPreviewFileButtonClass(previewFile.Path)"
+                                data-testid="preview-file-switch"
+                                data-path="@previewFile.Path"
+                                disabled="@_busy"
+                                @onclick="() => PreviewFileAsync(previewFile.Path)">
+                            <span class="preview-file-switch-index">@previewFile.Ordinal/@previewFile.Total</span>
+                            <span class="preview-file-switch-path">@previewFile.Path</span>
+                            @if (previewFile.IsMarkdownOnly)
+                            {
+                                <span class="preview-file-switch-kind">Markdown</span>
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+        }
 
         @if (_lastUrl is not null)
         {
@@ -71,7 +108,7 @@
         }
         @if (!string.IsNullOrEmpty(_status))
         {
-            <p class="status" data-testid="preview-status">@_status</p>
+            <p class="action-status" data-testid="preview-status">@_status</p>
         }
         @if (!string.IsNullOrEmpty(_worktreePath))
         {
@@ -99,6 +136,8 @@ npm install</code></pre>
     private string? _status;
     private Uri? _lastUrl;
     private string? _worktreePath;
+    private string? _activePreviewSha;
+    private string? _activePreviewPath;
     private CancellationTokenSource? _cts;
     private DateTimeOffset _startedAt;
     private int _elapsedSec;
@@ -108,7 +147,22 @@ npm install</code></pre>
     private int? _pid;
     private Task? _pollTask;
 
+    protected override void OnParametersSet()
+    {
+        var sha = Commit?.Sha;
+        if (string.Equals(_activePreviewSha, sha, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _activePreviewSha = sha;
+        _activePreviewPath = null;
+    }
+
     private async Task PreviewAsync()
+        => await PreviewFileAsync(filePath: null);
+
+    private async Task PreviewFileAsync(string? filePath)
     {
         if (Commit is null || _busy)
         {
@@ -131,13 +185,6 @@ npm install</code></pre>
         try
         {
             var coordinator = Services.GetRequiredService<IPreviewCoordinator>();
-            var filePath = ChoosePreviewFilePath(Commit);
-            if (filePath is null)
-            {
-                _status = "このコミットには公開ドキュメント記事がないため、ローカルプレビューで比較できません";
-                _worktreePath = null;
-                return;
-            }
             var progress = new Progress<string>(message =>
             {
                 _ = InvokeAsync(() =>
@@ -146,40 +193,27 @@ npm install</code></pre>
                     StateHasChanged();
                 });
             });
-            PreviewLink? link;
-            try
+            var targetFilePath = filePath ?? ChooseDefaultPreviewFilePath(Commit);
+            if (targetFilePath is null)
             {
-                link = await coordinator.PreparePreviewAsync(Commit.PrNumber, Commit.Sha, filePath, progress, token);
-            }
-            catch (OperationCanceledException)
-            {
-                // P1-F: User pressed 中止. Surface a clean status, not the host's shutdown signal.
-                _status = "プレビュー起動を中止しました";
-                _worktreePath = null;
-                return;
-            }
-            catch (Exception ex)
-            {
-                // Catch every other failure (InvalidOperationException for git/npm
-                // process failures, Win32Exception when the binary is missing,
-                // IOException, etc.) so the WPF host does not terminate from an
-                // unhandled exception while we are inside the BlazorWebView.
-                _status = ex.Message;
+                _status = "このコミットには公開ドキュメント記事または Markdown ファイルがないため、ローカルプレビューで比較できません";
                 _worktreePath = null;
                 return;
             }
 
-            if (link is null)
+            if (PreviewPathMapper.Map(targetFilePath, "en") is not null)
             {
-                _status = "プレビュー機能は無効です (DocsRepository 未設定)";
-                _worktreePath = null;
+                await PreviewContentComparisonAsync(coordinator, targetFilePath, progress, token);
                 return;
             }
 
-            _lastUrl = link.Url;
-            _worktreePath = link.WorktreePath;
-            Services.GetRequiredService<IPreviewNavigator>().Publish(link.Url);
-            _status = $"ポート {link.Port} で起動しました";
+            if (PreviewPathMapper.IsMarkdown(targetFilePath))
+            {
+                await PreviewMarkdownAsync(coordinator, targetFilePath, progress, token);
+                return;
+            }
+
+            _status = "このファイルはプレビュー対象ではありません";
         }
         finally
         {
@@ -257,17 +291,172 @@ npm install</code></pre>
         return result;
     }
 
-    private static string? ChoosePreviewFilePath(Commit commit)
+    private static string? ChooseDefaultPreviewFilePath(Commit commit)
     {
         foreach (var file in commit.Files)
         {
-            if (PreviewPathMapper.Map(file.Path, "en") is not null)
+            if (IsPreviewableFile(file.Path))
             {
                 return file.Path;
             }
         }
         return null;
     }
+
+    private async Task PreviewMarkdownAsync(
+        IPreviewCoordinator coordinator,
+        string filePath,
+        IProgress<string> progress,
+        CancellationToken token)
+    {
+        PreviewComparisonLink? link;
+        try
+        {
+            link = await coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Commit!.PrNumber,
+                Commit.Sha,
+                filePath,
+                progress,
+                token);
+        }
+        catch (OperationCanceledException)
+        {
+            _status = "プレビュー起動を中止しました";
+            _worktreePath = null;
+            return;
+        }
+        catch (Exception ex)
+        {
+            _status = ex.Message;
+            _worktreePath = null;
+            return;
+        }
+
+        if (link is null)
+        {
+            _status = "プレビュー機能は無効です (DocsRepository 未設定)";
+            _worktreePath = null;
+            return;
+        }
+
+        _lastUrl = link.AfterUrl;
+        _worktreePath = link.AfterWorktreePath;
+        _activePreviewPath = filePath;
+        var previewPosition = GetPreviewPosition(Commit!, filePath);
+        Services.GetRequiredService<IPreviewNavigator>().PublishComparison(new PreviewComparisonRequest(
+            link.BeforeUrl,
+            link.AfterUrl,
+            $"変更前 {ShortSha(link.BeforeSha)} Markdown",
+            $"PR HEAD {ShortSha(link.AfterSha)} Markdown",
+            filePath,
+            previewPosition.Ordinal,
+            previewPosition.Total));
+        _status = $"{filePath} を Markdown として変更前 / PR HEAD で比較表示しました";
+    }
+
+    private async Task PreviewContentComparisonAsync(
+        IPreviewCoordinator coordinator,
+        string filePath,
+        IProgress<string> progress,
+        CancellationToken token)
+    {
+        PreviewComparisonLink? link;
+        try
+        {
+            link = await coordinator.PrepareComparisonPreviewAsync(
+                Commit!.PrNumber,
+                Commit.Sha,
+                filePath,
+                progress,
+                token);
+        }
+        catch (OperationCanceledException)
+        {
+            _status = "プレビュー起動を中止しました";
+            _worktreePath = null;
+            return;
+        }
+        catch (Exception ex)
+        {
+            _status = ex.Message;
+            _worktreePath = null;
+            return;
+        }
+
+        if (link is null)
+        {
+            _status = "プレビュー機能は無効です (DocsRepository 未設定)";
+            _worktreePath = null;
+            return;
+        }
+
+        var previewPosition = GetPreviewPosition(Commit!, filePath);
+        _lastUrl = link.AfterUrl;
+        _worktreePath = link.AfterWorktreePath;
+        _activePreviewPath = filePath;
+        Services.GetRequiredService<IPreviewNavigator>().PublishComparison(new PreviewComparisonRequest(
+            link.BeforeUrl,
+            link.AfterUrl,
+            $"変更前 {ShortSha(link.BeforeSha)} localhost",
+            $"PR HEAD {ShortSha(link.AfterSha)} localhost",
+            filePath,
+            previewPosition.Ordinal,
+            previewPosition.Total));
+        _status = $"{filePath} を変更前 / PR HEAD で比較表示しました";
+    }
+
+    private static PreviewFilePosition GetPreviewPosition(Commit commit, string filePath)
+    {
+        var previewFiles = GetPreviewableFiles(commit);
+        var match = previewFiles.FirstOrDefault(file => string.Equals(file.Path, filePath, StringComparison.Ordinal));
+        return match is null
+            ? default
+            : new PreviewFilePosition(match.Ordinal, match.Total);
+    }
+
+    private static List<PreviewFileChoice> GetPreviewableFiles(Commit? commit)
+    {
+        var files = new List<PreviewFileChoice>();
+        if (commit is null)
+        {
+            return files;
+        }
+
+        foreach (var file in commit.Files)
+        {
+            if (!IsPreviewableFile(file.Path))
+            {
+                continue;
+            }
+            files.Add(new PreviewFileChoice(
+                files.Count + 1,
+                Total: 0,
+                file.Path,
+                IsMarkdownOnly: PreviewPathMapper.Map(file.Path, "en") is null));
+        }
+
+        var total = files.Count;
+        for (var index = 0; index < files.Count; index++)
+        {
+            files[index] = files[index] with { Total = total };
+        }
+        return files;
+    }
+
+    private static bool IsPreviewableFile(string filePath)
+        => PreviewPathMapper.Map(filePath, "en") is not null || PreviewPathMapper.IsMarkdown(filePath);
+
+    private string BuildPreviewFileButtonClass(string filePath)
+        => string.Equals(_activePreviewPath, filePath, StringComparison.Ordinal)
+            ? "preview-file-switch active"
+            : "preview-file-switch";
+
+    private static string ShortSha(string sha)
+        => sha.Length <= 7 ? sha : sha[..7];
+
+    private readonly record struct PreviewFilePosition(int Ordinal, int Total);
+
+    private sealed record PreviewFileChoice(int Ordinal, int Total, string Path, bool IsMarkdownOnly);
 
     private async Task CleanupAsync()
     {

@@ -14,6 +14,7 @@ public static class PreviewPathMapper
 {
     private const string ContentPrefix = "content/";
     private const string MarkdownExt = ".md";
+    private const string MarkdownLongExt = ".markdown";
     private const string IndexSegment = "/index";
     private const string DefaultLanguage = "en";
 
@@ -58,4 +59,10 @@ public static class PreviewPathMapper
             ? string.Create(CultureInfo.InvariantCulture, $"/{lang}")
             : string.Create(CultureInfo.InvariantCulture, $"/{lang}/{rel}");
     }
+
+    /// <summary>Returns true for repository-relative Markdown files, including non-publishable files such as CHANGELOG.md.</summary>
+    public static bool IsMarkdown(string repoPath)
+        => !string.IsNullOrWhiteSpace(repoPath)
+            && (repoPath.EndsWith(MarkdownExt, StringComparison.OrdinalIgnoreCase)
+                || repoPath.EndsWith(MarkdownLongExt, StringComparison.OrdinalIgnoreCase));
 }

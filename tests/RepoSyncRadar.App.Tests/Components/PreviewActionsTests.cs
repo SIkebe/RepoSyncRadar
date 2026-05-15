@@ -57,20 +57,21 @@ public sealed class PreviewActionsTests
     }
 
     [Fact]
-    public void Click_Publishes_Url_From_Coordinator()
+    public void Click_Publishes_Comparison_From_Coordinator()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<PreviewLink?>(
-                new PreviewLink(new Uri("http://localhost:4500/en/foo"), 4500, "C:/wt")));
+            .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
+                beforeUrl: "http://localhost:4501/en/foo",
+                afterUrl: "http://localhost:4500/en/foo")));
         var navigator = new PreviewNavigator();
-        Uri? capturedNav = null;
-        navigator.Requested += (_, url) => capturedNav = url;
+        PreviewComparisonRequest? captured = null;
+        navigator.ComparisonRequested += (_, request) => captured = request;
         var sp = BuildServices(coordinator, navigator);
         using var ctx = new Bunit.TestContext();
 
@@ -89,7 +90,12 @@ public sealed class PreviewActionsTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Equal(new Uri("http://localhost:4500/en/foo"), capturedNav);
+            Assert.Equal("http://localhost:4501/en/foo", captured?.BeforeUrl.AbsoluteUri);
+            Assert.Equal("http://localhost:4500/en/foo", captured?.AfterUrl.AbsoluteUri);
+            Assert.Equal("content/foo/bar.md", captured?.FilePath);
+            Assert.Equal(1, captured?.FileOrdinal);
+            Assert.Equal(1, captured?.FileCount);
+            Assert.Contains("変更前", captured?.BeforeLabel, StringComparison.Ordinal);
             Assert.Contains("http://localhost:4500/en/foo", cut.Find("[data-testid=\"preview-url\"]").TextContent, StringComparison.Ordinal);
         });
     }
@@ -99,7 +105,7 @@ public sealed class PreviewActionsTests
     {
         string? capturedPath = null;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
@@ -108,8 +114,9 @@ public sealed class PreviewActionsTests
             .Returns(call =>
             {
                 capturedPath = call.ArgAt<string?>(2);
-                return Task.FromResult<PreviewLink?>(
-                    new PreviewLink(new Uri("http://localhost:4500/en/copilot/about-copilot"), 4500, "C:/wt"));
+                return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
+                    beforeUrl: "http://localhost:4501/en/copilot/about-copilot",
+                    afterUrl: "http://localhost:4500/en/copilot/about-copilot"));
             });
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
@@ -135,6 +142,64 @@ public sealed class PreviewActionsTests
 
         cut.WaitForAssertion(() =>
             Assert.Equal("content/copilot/about-copilot.md", capturedPath));
+    }
+
+    [Fact]
+    public void File_Switcher_Opens_Selected_File_Comparison()
+    {
+        string? capturedPath = null;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                capturedPath = call.ArgAt<string?>(2);
+                return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
+                    beforeUrl: "http://localhost:4501/en/second",
+                    afterUrl: "http://localhost:4500/en/second"));
+            });
+        var navigator = new PreviewNavigator();
+        PreviewComparisonRequest? captured = null;
+        navigator.ComparisonRequested += (_, request) => captured = request;
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.TestContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files =
+            {
+                new CommitFile { Sha = "deadbeef", Path = "content/copilot/first.md", Status = "modified" },
+                new CommitFile { Sha = "deadbeef", Path = "src/schema.json", Status = "modified" },
+                new CommitFile { Sha = "deadbeef", Path = "content/copilot/second.md", Status = "modified" },
+            },
+        };
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+
+        var switchButtons = cut.FindAll("[data-testid=\"preview-file-switch\"]");
+        Assert.Equal(2, switchButtons.Count);
+        Assert.Contains("1/2", switchButtons[0].TextContent, StringComparison.Ordinal);
+        Assert.Contains("2/2", switchButtons[1].TextContent, StringComparison.Ordinal);
+
+        switchButtons[1].Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("content/copilot/second.md", capturedPath);
+            Assert.Equal("content/copilot/second.md", captured?.FilePath);
+            Assert.Equal(2, captured?.FileOrdinal);
+            Assert.Equal(2, captured?.FileCount);
+            Assert.Contains("active", cut.Find("[data-path=\"content/copilot/second.md\"]").ClassList);
+        });
     }
 
     [Fact]
@@ -165,26 +230,90 @@ public sealed class PreviewActionsTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("公開ドキュメント記事がない", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal);
-            _ = coordinator.DidNotReceiveWithAnyArgs().PreparePreviewAsync(default, default!, default, default, default);
+            Assert.Contains("公開ドキュメント記事または Markdown", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal);
+            _ = coordinator.DidNotReceive().PreparePreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>());
+            _ = coordinator.DidNotReceive().PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>());
         });
+    }
+
+    [Fact]
+    public void Click_When_No_Content_File_Publishes_Markdown_Comparison()
+    {
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<PreviewComparisonLink?>(new PreviewComparisonLink(
+                new Uri("http://127.0.0.1:4500/markdown/before"),
+                new Uri("http://127.0.0.1:4500/markdown/after"),
+                4500,
+                4500,
+                "C:/wt-before",
+                "C:/wt-after",
+                "parent123456",
+                "deadbeef")));
+        var navigator = new PreviewNavigator();
+        PreviewComparisonRequest? captured = null;
+        navigator.ComparisonRequested += (_, request) => captured = request;
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.TestContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "Update changelog",
+            Author = "alice",
+            Files = { new CommitFile { Sha = "deadbeef", Path = "CHANGELOG.md", Status = "modified" } },
+        };
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("http://127.0.0.1:4500/markdown/before", captured?.BeforeUrl.AbsoluteUri);
+            Assert.Equal("http://127.0.0.1:4500/markdown/after", captured?.AfterUrl.AbsoluteUri);
+            Assert.Equal("CHANGELOG.md", captured?.FilePath);
+            Assert.Contains("Markdown", captured?.BeforeLabel, StringComparison.Ordinal);
+            Assert.Contains("Markdown", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal);
+        });
+        _ = coordinator.DidNotReceive().PreparePreviewAsync(
+            Arg.Any<int>(),
+            Arg.Any<string>(),
+            Arg.Any<string?>(),
+            Arg.Any<IProgress<string>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public void Click_Shows_Worktree_Path_And_Automatic_Npm_Install_Hint()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<PreviewLink?>(
-                new PreviewLink(
-                    new Uri("http://localhost:4500/en/foo"),
-                    4500,
-                    @"C:\github\.cache\docs-worktrees\deadbeef")));
+            .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
+                beforeUrl: "http://localhost:4501/en/foo",
+                afterUrl: "http://localhost:4500/en/foo",
+                afterWorktreePath: @"C:\github\.cache\docs-worktrees\deadbeef")));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
         using var ctx = new Bunit.TestContext();
@@ -215,13 +344,13 @@ public sealed class PreviewActionsTests
     public void Click_When_Disabled_Shows_Hint()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<PreviewLink?>(null));
+            .Returns(Task.FromResult<PreviewComparisonLink?>(null));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
         using var ctx = new Bunit.TestContext();
@@ -247,13 +376,13 @@ public sealed class PreviewActionsTests
     public void Click_When_Coordinator_Throws_Shows_Error()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
-            .Returns<Task<PreviewLink?>>(_ => throw new InvalidOperationException("git fetch failed"));
+            .Returns<Task<PreviewComparisonLink?>>(_ => throw new InvalidOperationException("git fetch failed"));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
         using var ctx = new Bunit.TestContext();
@@ -283,13 +412,13 @@ public sealed class PreviewActionsTests
         // host process terminated. The component must swallow any non-cancellation
         // exception and surface its Message in the status.
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
-            .Returns<Task<PreviewLink?>>(_ =>
+            .Returns<Task<PreviewComparisonLink?>>(_ =>
                 throw new System.ComponentModel.Win32Exception(2, "指定されたファイルが見つかりません"));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
@@ -317,7 +446,7 @@ public sealed class PreviewActionsTests
     {
         IProgress<string>? capturedProgress = null;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
@@ -327,8 +456,7 @@ public sealed class PreviewActionsTests
             {
                 capturedProgress = call.ArgAt<IProgress<string>?>(3);
                 capturedProgress?.Report("worktree を作成中…");
-                return Task.FromResult<PreviewLink?>(
-                    new PreviewLink(new Uri("http://localhost:4500/en/foo"), 4500, "C:/wt"));
+                return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink());
             });
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
@@ -376,12 +504,12 @@ public sealed class PreviewActionsTests
     [Fact]
     public void Click_Shows_Progress_Ui_With_Spinner_And_Cancel_Button_While_Coordinator_Is_Running()
     {
-        // P1-A/B/F: while PreparePreviewAsync is still pending, the UI must
+        // P1-A/B/F: while the comparison preview is still pending, the UI must
         // show the progress card (spinner + 経過秒 + 中止 button + log tail
         // container), not the silent "起動中…" button text.
-        var tcs = new TaskCompletionSource<PreviewLink?>();
+        var tcs = new TaskCompletionSource<PreviewComparisonLink?>();
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
@@ -415,7 +543,7 @@ public sealed class PreviewActionsTests
         });
 
         // Release the coordinator so the test's finalizer is not blocked on the pending task.
-        tcs.SetResult(new PreviewLink(new Uri("http://localhost:4500/en/foo"), 4500, "C:/wt"));
+        tcs.SetResult(MakeComparisonLink());
     }
 
     [Fact]
@@ -424,10 +552,10 @@ public sealed class PreviewActionsTests
         // P1-F: pressing 中止 must propagate cancellation to the coordinator
         // (so PreviewServerHost can kill the npm child) and surface a "中止しました"
         // status — not raise the OperationCanceledException into the host.
-        var tcs = new TaskCompletionSource<PreviewLink?>();
+        var tcs = new TaskCompletionSource<PreviewComparisonLink?>();
         CancellationToken receivedToken = default;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PreparePreviewAsync(
+        coordinator.PrepareComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
                 Arg.Any<string?>(),
@@ -505,4 +633,19 @@ public sealed class PreviewActionsTests
             .AddSingleton<PreviewServerHost>()
             .BuildServiceProvider();
     }
+
+    private static PreviewComparisonLink MakeComparisonLink(
+        string beforeUrl = "http://localhost:4501/en/foo",
+        string afterUrl = "http://localhost:4500/en/foo",
+        string beforeWorktreePath = "C:/wt-before",
+        string afterWorktreePath = "C:/wt-after")
+        => new(
+            new Uri(beforeUrl),
+            new Uri(afterUrl),
+            4501,
+            4500,
+            beforeWorktreePath,
+            afterWorktreePath,
+            "parent123456",
+            "deadbeef");
 }

@@ -138,6 +138,66 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Renders_Markdown_Without_Npm_Server()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-markdown");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+        var session = new PreviewSession();
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            session: session,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, sha) =>
+            {
+                var markdown = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "# Changelog\n\nOld entry"
+                    : "# Changelog\n\nNew entry";
+                File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), markdown);
+            });
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", "CHANGELOG.md", cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/before"), link!.BeforeUrl);
+        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after"), link.AfterUrl);
+        Assert.True(session.IsAllowed(link.BeforeUrl));
+        Assert.True(session.IsAllowed(link.AfterUrl));
+        Assert.Contains("Old entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
+        Assert.Contains("New entry", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!, default);
+        await contentServer.Received(1).StartAsync(
+            4500,
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task PreparePreviewAsync_With_Same_Sha_Skips_Server_Restart()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -321,7 +381,9 @@ public sealed class PreviewCoordinatorTests : IDisposable
         string cloneUrl,
         string? worktreeRoot = null,
         int previewBasePort = 4500,
-        PreviewSession? session = null)
+        PreviewSession? session = null,
+        ILocalPreviewContentServer? contentServer = null,
+        Action<string, string>? onWorktreeAdd = null)
     {
         var options = Options.Create(new DocsRepositoryOptions
         {
@@ -353,6 +415,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
                     var target = parts[2];
                     Directory.CreateDirectory(target);
                     Directory.CreateDirectory(Path.Combine(target, "node_modules"));
+                    if (parts.Length >= 4)
+                    {
+                        onWorktreeAdd?.Invoke(target, parts[3]);
+                    }
                 }
             });
         var worktree = new DocsWorktreeManager(runner, options, NullLogger<DocsWorktreeManager>.Instance);
@@ -370,6 +436,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             worktree,
             server,
             serverFactory,
+            contentServer ?? Substitute.For<ILocalPreviewContentServer>(),
             session,
             new FixedPreviewPortAllocator(previewBasePort),
             options,

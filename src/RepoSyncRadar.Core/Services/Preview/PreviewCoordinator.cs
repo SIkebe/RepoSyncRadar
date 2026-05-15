@@ -56,6 +56,17 @@ public interface IPreviewCoordinator
         IProgress<string>? progress = null,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Renders a non-publishable Markdown file from the first parent and PR HEAD
+    /// worktrees, hosts both rendered pages on localhost, and returns before/after URLs.
+    /// </summary>
+    Task<PreviewComparisonLink?> PrepareMarkdownComparisonPreviewAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Stops the running preview server (if any) and clears the active session.</summary>
     Task StopAsync(CancellationToken cancellationToken = default);
 
@@ -91,6 +102,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     private readonly DocsWorktreeManager _worktree;
     private readonly PreviewServerHost _server;
     private readonly PreviewServerHost _beforeServer;
+    private readonly ILocalPreviewContentServer _contentServer;
     private readonly PreviewSession _session;
     private readonly IPreviewPortAllocator _portAllocator;
     private readonly DocsRepositoryOptions _options;
@@ -102,6 +114,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         DocsWorktreeManager worktree,
         PreviewServerHost server,
         IPreviewServerHostFactory serverFactory,
+        ILocalPreviewContentServer contentServer,
         PreviewSession session,
         IPreviewPortAllocator portAllocator,
         IOptions<DocsRepositoryOptions> options,
@@ -110,6 +123,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         ArgumentNullException.ThrowIfNull(worktree);
         ArgumentNullException.ThrowIfNull(server);
         ArgumentNullException.ThrowIfNull(serverFactory);
+        ArgumentNullException.ThrowIfNull(contentServer);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(portAllocator);
         ArgumentNullException.ThrowIfNull(options);
@@ -117,6 +131,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         _worktree = worktree;
         _server = server;
         _beforeServer = serverFactory.Create();
+        _contentServer = contentServer;
         _session = session;
         _portAllocator = portAllocator;
         _options = options.Value;
@@ -273,8 +288,85 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             sha);
     }
 
+    public async Task<PreviewComparisonLink?> PrepareMarkdownComparisonPreviewAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(prNumber);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        if (!PreviewPathMapper.IsMarkdown(filePath))
+        {
+            throw new InvalidOperationException($"'{filePath}' は Markdown ファイルではありません。");
+        }
+
+        if (!_worktree.IsEnabled)
+        {
+            LogDisabled(_logger);
+            return null;
+        }
+
+        progress?.Report("リポジトリを準備中… (初回は git clone --bare で 1〜2 分)");
+        await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
+
+        progress?.Report($"PR #{prNumber.ToString(CultureInfo.InvariantCulture)} を取得中… (git fetch)");
+        await _worktree.FetchPrAsync(prNumber, cancellationToken).ConfigureAwait(false);
+
+        progress?.Report("比較元の親コミットを解決中… (git rev-parse <sha>^)");
+        var beforeSha = await _worktree.ResolveFirstParentAsync(sha, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(beforeSha))
+        {
+            throw new InvalidOperationException("比較元になる親コミットを解決できませんでした。");
+        }
+
+        progress?.Report("変更前 worktree を作成中… (git worktree add)");
+        var beforeWorktreePath = await _worktree.CheckoutAsync(beforeSha, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(beforeWorktreePath))
+        {
+            return null;
+        }
+
+        progress?.Report("PR HEAD worktree を作成中… (git worktree add)");
+        var afterWorktreePath = await _worktree.CheckoutAsync(sha, cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(afterWorktreePath))
+        {
+            return null;
+        }
+
+        progress?.Report($"{filePath} を Markdown としてレンダリング中…");
+        var beforeMarkdown = await ReadWorktreeFileOrNullAsync(beforeWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
+        var afterMarkdown = await ReadWorktreeFileOrNullAsync(afterWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
+        var pages = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["/markdown/before"] = MarkdownPreviewRenderer.RenderDocument(filePath, beforeMarkdown, beforeSha, "変更前"),
+            ["/markdown/after"] = MarkdownPreviewRenderer.RenderDocument(filePath, afterMarkdown, sha, "PR HEAD"),
+        };
+
+        var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
+        progress?.Report($"Markdown 比較プレビューを起動中… (ポート {port.ToString(CultureInfo.InvariantCulture)})");
+        await _contentServer.StartAsync(port, pages, cancellationToken).ConfigureAwait(false);
+        _session.Activate(port);
+
+        var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before"));
+        var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after"));
+        LogMarkdownComparisonReady(_logger, beforeSha, sha, filePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
+        return new PreviewComparisonLink(
+            beforeUrl,
+            afterUrl,
+            port,
+            port,
+            beforeWorktreePath,
+            afterWorktreePath,
+            beforeSha,
+            sha);
+    }
+
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
+        await _contentServer.StopAsync(cancellationToken).ConfigureAwait(false);
         await _beforeServer.StopAsync(cancellationToken).ConfigureAwait(false);
         await _server.StopAsync(cancellationToken).ConfigureAwait(false);
         _session.Deactivate();
@@ -316,7 +408,39 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             ports.Add(_beforeServer.CurrentPort);
         }
+        if (_contentServer is { IsRunning: true, CurrentPort: > 0 }
+            && !ports.Contains(_contentServer.CurrentPort))
+        {
+            ports.Add(_contentServer.CurrentPort);
+        }
         return ports.ToArray();
+    }
+
+    private static async Task<string?> ReadWorktreeFileOrNullAsync(
+        string worktreePath,
+        string repoPath,
+        CancellationToken cancellationToken)
+    {
+        var fullPath = ResolveWorktreeFilePath(worktreePath, repoPath);
+        return File.Exists(fullPath)
+            ? await File.ReadAllTextAsync(fullPath, cancellationToken).ConfigureAwait(false)
+            : null;
+    }
+
+    private static string ResolveWorktreeFilePath(string worktreePath, string repoPath)
+    {
+        var root = Path.GetFullPath(worktreePath);
+        var relative = repoPath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+        var fullPath = Path.GetFullPath(Path.Combine(root, relative));
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"worktree 外のパスはプレビューできません: {repoPath}");
+        }
+        return fullPath;
     }
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information,
@@ -325,6 +449,16 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         ILogger logger,
         string beforeSha,
         string afterSha,
+        string beforeUrl,
+        string afterUrl);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information,
+        Message = "Markdown preview comparison ready for {FilePath} before {BeforeSha} / after {AfterSha}: {BeforeUrl} -> {AfterUrl}")]
+    private static partial void LogMarkdownComparisonReady(
+        ILogger logger,
+        string beforeSha,
+        string afterSha,
+        string filePath,
         string beforeUrl,
         string afterUrl);
 }

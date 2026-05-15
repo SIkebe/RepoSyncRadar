@@ -42,6 +42,23 @@ public sealed class PreviewPathMapperTests
         Assert.Null(actual);
     }
 
+    [Theory]
+    [InlineData("CHANGELOG.md")]
+    [InlineData("docs/internal/release-notes.markdown")]
+    [InlineData("content/copilot/about-copilot.md")]
+    public void Detects_Markdown_Files(string repoPath)
+    {
+        Assert.True(PreviewPathMapper.IsMarkdown(repoPath));
+    }
+
+    [Theory]
+    [InlineData("src/schema.json")]
+    [InlineData("content/actions/style.css")]
+    public void Detects_Non_Markdown_Files(string repoPath)
+    {
+        Assert.False(PreviewPathMapper.IsMarkdown(repoPath));
+    }
+
     [Fact]
     public void Defaults_Language_To_En_When_Empty()
     {
