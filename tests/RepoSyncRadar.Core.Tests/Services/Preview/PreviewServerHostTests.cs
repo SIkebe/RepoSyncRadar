@@ -209,6 +209,60 @@ public sealed class PreviewServerHostTests : IDisposable
     }
 
     [Fact]
+    public async Task StartAsync_Cleans_Stale_Next_Server_Before_Npm_Start()
+    {
+        var worktree = CreateWorktree();
+        var cleaner = new FakeProcessCleaner(1);
+        var host = CreateHost(out var runner, out var probe, options =>
+        {
+            options.PreviewCommand = "npm";
+            options.PreviewReadyTimeoutSeconds = 5;
+        }, cleaner);
+        probe.NextResult = true;
+
+        await host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken);
+
+        var call = Assert.Single(cleaner.Calls);
+        Assert.Equal(worktree, call.WorktreePath);
+        Assert.Null(call.StartupFailureOutput);
+        Assert.Single(runner.StartCalls);
+    }
+
+    [Fact]
+    public async Task StartAsync_Retries_Once_When_Next_Reports_Duplicate_Server()
+    {
+        var worktree = CreateWorktree();
+        var cleaner = new FakeProcessCleaner(0, 1);
+        var host = CreateHost(out var runner, out var probe, options =>
+        {
+            options.PreviewCommand = "npm";
+            options.PreviewReadyTimeoutSeconds = 5;
+        }, cleaner);
+        var failedHandle = new FakeHandle
+        {
+            HasExited = true,
+            RecentStderrLines = new[]
+            {
+                "× Another next dev server is already running. - Local: http://localhost:3000 - PID: 32776 - Dir: "
+                    + worktree + " - Log: .next\\dev\\logs\\next-development.log Run taskkill /PID 32776 /F to stop it.",
+            },
+        };
+        var successHandle = new FakeHandle { HasExited = false };
+        runner.EnqueueHandles(failedHandle, successHandle);
+        probe.OnInvoked = () => probe.NextResult = probe.Calls.Count > 1;
+
+        var returned = await host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken);
+
+        Assert.Same(successHandle, returned);
+        Assert.True(failedHandle.Killed);
+        Assert.Equal(2, runner.StartCalls.Count);
+        Assert.Equal(2, probe.Calls.Count);
+        Assert.Equal(2, cleaner.Calls.Count);
+        Assert.Null(cleaner.Calls[0].StartupFailureOutput);
+        Assert.Contains("Another next dev server", cleaner.Calls[1].StartupFailureOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StartAsync_Throws_With_Recent_Stderr_When_Probe_Times_Out()
     {
         var worktree = CreateWorktree();
@@ -438,7 +492,8 @@ public sealed class PreviewServerHostTests : IDisposable
     private static PreviewServerHost CreateHost(
         out FakeProcessRunner runner,
         out FakeReadyProbe probe,
-        Action<DocsRepositoryOptions>? configure = null)
+        Action<DocsRepositoryOptions>? configure = null,
+        IPreviewServerProcessCleaner? processCleaner = null)
     {
         var options = new DocsRepositoryOptions();
         configure?.Invoke(options);
@@ -448,8 +503,27 @@ public sealed class PreviewServerHostTests : IDisposable
             runner,
             probe,
             Microsoft.Extensions.Options.Options.Create(options),
-            NullLogger<PreviewServerHost>.Instance);
+            NullLogger<PreviewServerHost>.Instance,
+            processCleaner ?? NoopPreviewServerProcessCleaner.Instance);
     }
+
+    private sealed class FakeProcessCleaner(params int[] results) : IPreviewServerProcessCleaner
+    {
+        private readonly Queue<int> _results = new(results);
+
+        public List<CleanCall> Calls { get; } = [];
+
+        public Task<int> StopStaleServersAsync(
+            string worktreePath,
+            string? startupFailureOutput = null,
+            CancellationToken cancellationToken = default)
+        {
+            Calls.Add(new CleanCall(worktreePath, startupFailureOutput));
+            return Task.FromResult(_results.Count > 0 ? _results.Dequeue() : 0);
+        }
+    }
+
+    private sealed record CleanCall(string WorktreePath, string? StartupFailureOutput);
 
     private sealed class FakeProcessRunner : IProcessRunner
     {

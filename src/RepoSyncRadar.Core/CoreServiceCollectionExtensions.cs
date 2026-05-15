@@ -46,6 +46,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IProcessRunner, SystemProcessRunner>();
         services.TryAddSingleton<IPortReadyProbe, TcpPortReadyProbe>();
         services.TryAddSingleton<IPreviewPortAllocator, TcpPreviewPortAllocator>();
+        services.TryAddSingleton<IPreviewServerProcessCleaner, NextDevServerProcessCleaner>();
         services.TryAddSingleton<DocsWorktreeManager>();
         services.TryAddSingleton<PreviewServerHost>();
         services.TryAddSingleton<IPreviewServerHostFactory, PreviewServerHostFactory>();

@@ -11,14 +11,44 @@ public interface IPreviewServerHostFactory
     PreviewServerHost Create();
 }
 
-public sealed class PreviewServerHostFactory(
-    IProcessRunner runner,
-    IPortReadyProbe probe,
-    IOptions<DocsRepositoryOptions> options,
-    ILogger<PreviewServerHost> logger) : IPreviewServerHostFactory
+public sealed class PreviewServerHostFactory : IPreviewServerHostFactory
 {
+    private readonly IProcessRunner _runner;
+    private readonly IPortReadyProbe _probe;
+    private readonly IOptions<DocsRepositoryOptions> _options;
+    private readonly ILogger<PreviewServerHost> _logger;
+    private readonly IPreviewServerProcessCleaner _processCleaner;
+
+    public PreviewServerHostFactory(
+        IProcessRunner runner,
+        IPortReadyProbe probe,
+        IOptions<DocsRepositoryOptions> options,
+        ILogger<PreviewServerHost> logger)
+        : this(runner, probe, options, logger, NoopPreviewServerProcessCleaner.Instance)
+    {
+    }
+
+    public PreviewServerHostFactory(
+        IProcessRunner runner,
+        IPortReadyProbe probe,
+        IOptions<DocsRepositoryOptions> options,
+        ILogger<PreviewServerHost> logger,
+        IPreviewServerProcessCleaner processCleaner)
+    {
+        ArgumentNullException.ThrowIfNull(runner);
+        ArgumentNullException.ThrowIfNull(probe);
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(processCleaner);
+        _runner = runner;
+        _probe = probe;
+        _options = options;
+        _logger = logger;
+        _processCleaner = processCleaner;
+    }
+
     public PreviewServerHost Create()
-        => new(runner, probe, options, logger);
+        => new(_runner, _probe, _options, _logger, _processCleaner);
 }
 
 /// <summary>
@@ -36,6 +66,7 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
 
     private readonly IProcessRunner _runner;
     private readonly IPortReadyProbe _probe;
+    private readonly IPreviewServerProcessCleaner _processCleaner;
     private readonly DocsRepositoryOptions _options;
     private readonly ILogger<PreviewServerHost> _logger;
     private IProcessHandle? _current;
@@ -46,13 +77,25 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         IPortReadyProbe probe,
         IOptions<DocsRepositoryOptions> options,
         ILogger<PreviewServerHost> logger)
+        : this(runner, probe, options, logger, NoopPreviewServerProcessCleaner.Instance)
+    {
+    }
+
+    public PreviewServerHost(
+        IProcessRunner runner,
+        IPortReadyProbe probe,
+        IOptions<DocsRepositoryOptions> options,
+        ILogger<PreviewServerHost> logger,
+        IPreviewServerProcessCleaner processCleaner)
     {
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(probe);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(processCleaner);
         _runner = runner;
         _probe = probe;
+        _processCleaner = processCleaner;
         _options = options.Value;
         _logger = logger;
     }
@@ -128,37 +171,50 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         }
         await StopAsync(cancellationToken).ConfigureAwait(false);
 
+        if (IsNpmCommand(_options.PreviewCommand))
+        {
+            await _processCleaner.StopStaleServersAsync(worktreePath, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         await EnsureNodeModulesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
 
         var args = ReplacePort(_options.PreviewArguments, port);
         var env = BuildEnvironment(
             WithDefaultRequestTimeout(_options.PreviewEnvironment, _options.PreviewCommand),
             port);
-        var handle = _runner.Start(_options.PreviewCommand, args, worktreePath, env);
-        _current = handle;
-        _currentPort = port;
-        LogStarted(_logger, _options.PreviewCommand, args, port);
 
-        var timeout = TimeSpan.FromSeconds(_options.PreviewReadyTimeoutSeconds);
-        bool ready;
-        try
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            ready = await _probe.WaitForListenAsync(
-                port,
-                timeout,
-                processStillAlive: () => !handle.HasExited,
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // P1-F: User cancelled mid-startup. Kill the orphan child and clear
-            // `_current` so the next StartAsync does not see stale state. Use a
-            // fresh token because the caller's token is already cancelled.
-            await StopAsync(CancellationToken.None).ConfigureAwait(false);
-            throw;
-        }
-        if (!ready)
-        {
+            var handle = _runner.Start(_options.PreviewCommand, args, worktreePath, env);
+            _current = handle;
+            _currentPort = port;
+            LogStarted(_logger, _options.PreviewCommand, args, port);
+
+            var timeout = TimeSpan.FromSeconds(_options.PreviewReadyTimeoutSeconds);
+            bool ready;
+            try
+            {
+                ready = await _probe.WaitForListenAsync(
+                    port,
+                    timeout,
+                    processStillAlive: () => !handle.HasExited,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // P1-F: User cancelled mid-startup. Kill the orphan child and clear
+                // `_current` so the next StartAsync does not see stale state. Use a
+                // fresh token because the caller's token is already cancelled.
+                await StopAsync(CancellationToken.None).ConfigureAwait(false);
+                throw;
+            }
+            if (ready)
+            {
+                LogReady(_logger, port);
+                return handle;
+            }
+
             var exited = handle.HasExited;
             LogReadyFailed(_logger, port, (int)timeout.TotalSeconds, exited);
             var stderrTail = SnapshotTail(handle.RecentStderrLines, take: 8);
@@ -166,13 +222,25 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
                 ? SnapshotTail(handle.RecentStdoutLines, take: 8)
                 : string.Empty;
             await StopAsync(CancellationToken.None).ConfigureAwait(false);
+            if (attempt == 0
+                && IsNpmCommand(_options.PreviewCommand)
+                && NextDevServerProcessCleaner.IsDuplicateNextDevServerMessage(stderrTail)
+                && await _processCleaner.StopStaleServersAsync(
+                        worktreePath,
+                        stderrTail,
+                        CancellationToken.None).ConfigureAwait(false) > 0)
+            {
+                LogRetryAfterStaleNextDevCleanup(_logger, port);
+                continue;
+            }
+
             var header = exited
                 ? $"プレビューサーバが起動直後に終了しました (port {port.ToString(CultureInfo.InvariantCulture)})。"
                 : $"プレビューサーバが {timeout.TotalSeconds.ToString(CultureInfo.InvariantCulture)} 秒以内に port {port.ToString(CultureInfo.InvariantCulture)} で待ち受け状態になりませんでした。";
             throw new InvalidOperationException(BuildFailureMessage(header, stderrTail, stdoutTail));
         }
-        LogReady(_logger, port);
-        return handle;
+
+        throw new InvalidOperationException("プレビューサーバの起動に失敗しました。");
     }
 
     /// <summary>Stops the current process, if any. Safe to call multiple times.</summary>
@@ -395,4 +463,8 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
     [LoggerMessage(EventId = 6, Level = LogLevel.Information,
         Message = "Preview dependencies installed: {Command} {Arguments} (cwd: {WorktreePath}).")]
     private static partial void LogInstallCompleted(ILogger logger, string command, string arguments, string worktreePath);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Information,
+        Message = "Retrying preview server startup on port {Port} after stopping stale Next dev server.")]
+    private static partial void LogRetryAfterStaleNextDevCleanup(ILogger logger, int port);
 }
