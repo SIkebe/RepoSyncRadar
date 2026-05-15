@@ -50,23 +50,29 @@
 
     [Parameter] public CommitQueryFilter? Filter { get; set; }
 
+    [Parameter] public int RefreshToken { get; set; }
+
     [Parameter] public string? SelectedSha { get; set; }
 
     [Parameter] public EventCallback<Commit> OnCommitSelected { get; set; }
 
     private IReadOnlyList<Commit>? _commits;
     private CommitQueryFilter? _appliedFilter;
+    private int _appliedRefreshToken = -1;
 
     protected override async Task OnParametersSetAsync()
     {
         // Re-query only when the filter reference (or any of its values) changes.
-        if (_commits is not null && Equals(_appliedFilter, Filter))
+        if (_commits is not null
+            && _appliedRefreshToken == RefreshToken
+            && Equals(_appliedFilter, Filter))
         {
             return;
         }
 
         var repo = Services.GetRequiredService<IRadarRepository>();
         _appliedFilter = Filter;
+        _appliedRefreshToken = RefreshToken;
         _commits = await repo.QueryCommitsAsync(Filter ?? new CommitQueryFilter());
     }
 

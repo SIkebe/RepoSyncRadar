@@ -54,6 +54,82 @@ public sealed class ReviewActionsTests
     }
 
     [Fact]
+    public void Renders_Clear_Action_Groups()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.TestContext();
+
+        var cut = ctx.RenderComponent<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc"));
+
+        Assert.NotNull(cut.Find("[data-testid=\"review-primary-actions\"]"));
+        Assert.Contains("採用する", cut.Find("[data-testid=\"review-adopt\"]").TextContent);
+        Assert.Contains("あとで見る", cut.Find("[data-testid=\"review-later\"]").TextContent);
+        Assert.Contains("理由を付けて却下", cut.Find("[data-testid=\"review-reject\"]").TextContent);
+        Assert.Contains("類似ディレクトリ", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
+    }
+
+    [Fact]
+    public void Suggests_Ignore_Patterns_From_Selected_Files()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.TestContext();
+
+        var cut = ctx.RenderComponent<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, [
+                "content/copilot/concepts/billing.md",
+                "data/reusables/actions/cache.md",
+            ]));
+
+        var suggestions = cut.FindAll("[data-testid=\"review-ignore-suggestion\"]")
+            .Select(static button => button.GetAttribute("data-pattern"))
+            .ToArray();
+
+        Assert.Contains("content/copilot/concepts/**", suggestions);
+        Assert.Contains("content/copilot/**", suggestions);
+        Assert.Contains("data/reusables/actions/**", suggestions);
+        Assert.Contains("data/reusables/**", suggestions);
+    }
+
+    [Fact]
+    public void Ignore_Suggestion_Fills_Input_And_Can_Be_Submitted()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.AddIgnoreRuleAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+        repo.BulkRejectByPathPrefixAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(0));
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.TestContext();
+
+        var cut = ctx.RenderComponent<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
+
+        var suggestion = cut.FindAll("[data-testid=\"review-ignore-suggestion\"]")
+            .First(button => button.GetAttribute("data-pattern") == "content/copilot/concepts/**");
+        suggestion.Click();
+
+        var input = cut.Find("[data-testid=\"review-ignore-pattern\"]");
+        Assert.Equal("content/copilot/concepts/**", input.GetAttribute("value"));
+
+        cut.Find("[data-testid=\"review-ignore\"]").Click();
+
+        repo.Received(1).AddIgnoreRuleAsync("content/copilot/concepts/**", "ignore-directory", Arg.Any<CancellationToken>());
+        repo.Received(1).BulkRejectByPathPrefixAsync("content/copilot/concepts", "auto-ignored", Arg.Any<CancellationToken>());
+        broadcaster.Received(1).Publish();
+    }
+
+    [Fact]
     public void Later_Sets_Status_And_Closes()
     {
         var repo = Substitute.For<IRadarRepository>();
@@ -85,15 +161,18 @@ public sealed class ReviewActionsTests
         var sp = BuildServices(repo, broadcaster);
         using var ctx = new Bunit.TestContext();
 
+        ReviewStatus? capturedFromCallback = null;
         var cut = ctx.RenderComponent<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
-            .Add(c => c.Sha, "abc"));
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.Reviewed, (ReviewStatus status) => { capturedFromCallback = status; }));
         cut.Find("[data-testid=\"review-ignore-pattern\"]").Input("aspnet/security/**");
         cut.Find("[data-testid=\"review-ignore\"]").Click();
 
         repo.Received(1).AddIgnoreRuleAsync("aspnet/security/**", "ignore-directory", Arg.Any<CancellationToken>());
         repo.Received(1).BulkRejectByPathPrefixAsync("aspnet/security", "auto-ignored", Arg.Any<CancellationToken>());
         broadcaster.Received(1).Publish();
+        Assert.Equal(ReviewStatus.Rejected, capturedFromCallback);
     }
 
     [Fact]

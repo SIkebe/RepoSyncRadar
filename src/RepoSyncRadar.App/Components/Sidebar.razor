@@ -22,8 +22,13 @@
                     class="sidebar-item @(Selected == entry.Status ? "active" : null)"
                     data-status="@entry.Status"
                     data-testid="sidebar-item-@entry.Status"
+                    aria-label="@entry.AriaLabel"
+                    title="@entry.Description"
                     @onclick="() => OnSelectAsync(entry.Status)">
-                <span class="label">@entry.Label</span>
+                <span class="sidebar-copy">
+                    <span class="label">@entry.Label</span>
+                    <span class="description" data-testid="sidebar-description-@entry.Status">@entry.Description</span>
+                </span>
                 <span class="count" data-testid="sidebar-count-@entry.Status">@_counts[entry.Status]</span>
             </button>
         }
@@ -31,14 +36,19 @@
 </nav>
 
 @code {
-    private static readonly (ReviewStatus Status, string Label)[] Entries = new[]
+    private static readonly SidebarEntry[] Entries =
     {
-        (ReviewStatus.Unseen, "未読"),
-        (ReviewStatus.Seen, "スキム"),
-        (ReviewStatus.Adopted, "採用済み"),
-        (ReviewStatus.Rejected, "却下済み"),
-        (ReviewStatus.Later, "あとで"),
+        new(ReviewStatus.Unseen, "未読", "Triage 後、まだ確認していない候補"),
+        new(ReviewStatus.Seen, "スキム済み", "軽く確認し、Must read ではない候補"),
+        new(ReviewStatus.Adopted, "採用済み", "下書き作成や共有の対象にした候補"),
+        new(ReviewStatus.Rejected, "却下済み", "今回は扱わないと判断した候補"),
+        new(ReviewStatus.Later, "あとで", "判断を保留して後で見る候補"),
     };
+
+    private sealed record SidebarEntry(ReviewStatus Status, string Label, string Description)
+    {
+        public string AriaLabel => $"{Label}: {Description}";
+    }
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 

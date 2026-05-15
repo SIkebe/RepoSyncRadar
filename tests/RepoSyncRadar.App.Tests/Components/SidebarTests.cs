@@ -48,4 +48,34 @@ public class SidebarTests
         Assert.Equal("0", cut.Find("[data-testid=\"sidebar-count-Rejected\"]").TextContent);
         Assert.Equal("0", cut.Find("[data-testid=\"sidebar-count-Later\"]").TextContent);
     }
+
+    [Fact]
+    public void Sidebar_Explains_Status_Buckets()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(
+                new Dictionary<ReviewStatus, int>
+                {
+                    [ReviewStatus.Unseen] = 0,
+                    [ReviewStatus.Seen] = 0,
+                    [ReviewStatus.Adopted] = 0,
+                    [ReviewStatus.Rejected] = 0,
+                    [ReviewStatus.Later] = 0,
+                }));
+
+        var sp = new ServiceCollection()
+            .AddSingleton(repo)
+            .BuildServiceProvider();
+
+        using var ctx = new Bunit.TestContext();
+        var cut = ctx.RenderComponent<Sidebar>(
+            parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
+
+        Assert.Contains("まだ確認していない", cut.Find("[data-testid=\"sidebar-description-Unseen\"]").TextContent);
+        Assert.Contains("Must read", cut.Find("[data-testid=\"sidebar-description-Seen\"]").TextContent);
+        Assert.Contains("共有", cut.Find("[data-testid=\"sidebar-description-Adopted\"]").TextContent);
+        Assert.Contains("今回は扱わない", cut.Find("[data-testid=\"sidebar-description-Rejected\"]").TextContent);
+        Assert.Contains("保留", cut.Find("[data-testid=\"sidebar-description-Later\"]").TextContent);
+    }
 }

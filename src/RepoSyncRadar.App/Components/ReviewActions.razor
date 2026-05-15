@@ -9,42 +9,91 @@
     session, and emits an IReviewBroadcaster event so the Sidebar updates immediately.
 *@
 
-<div class="radar-review-actions" data-testid="review-actions">
-    <button type="button"
-            data-testid="review-adopt"
-            class="adopt"
-            disabled="@_busy"
-            @onclick="AdoptAsync">採用</button>
+<div class="radar-review-actions action-panel" data-testid="review-actions">
+    <header class="action-panel-header">
+        <div>
+            <h3>レビュー判断</h3>
+            <p>選択中の通知をどのキューへ移すかを決めます。</p>
+        </div>
+    </header>
 
-    <input type="text"
-           data-testid="review-reject-reason"
-           placeholder="却下理由 (必須)"
-           value="@_rejectReason"
-           @oninput="OnRejectReasonChanged" />
-    <button type="button"
-            data-testid="review-reject"
-            class="reject"
-            disabled="@(_busy || string.IsNullOrWhiteSpace(_rejectReason))"
-            @onclick="RejectAsync">却下</button>
-
-    <button type="button"
-            data-testid="review-later"
-            class="later"
-            disabled="@_busy"
-            @onclick="LaterAsync">あとで</button>
-
-    <details data-testid="review-ignore-details">
-        <summary>ディレクトリを無視</summary>
-        <input type="text"
-               data-testid="review-ignore-pattern"
-               placeholder="例: aspnet/security/**"
-               value="@_ignorePattern"
-               @oninput="OnIgnorePatternChanged" />
+    <div class="review-primary-actions" data-testid="review-primary-actions">
         <button type="button"
-                data-testid="review-ignore"
-                class="ignore"
-                disabled="@(_busy || string.IsNullOrWhiteSpace(_ignorePattern))"
-                @onclick="IgnoreDirectoryAsync">無視リストへ追加</button>
+                data-testid="review-adopt"
+                class="review-button adopt"
+                disabled="@_busy"
+                @onclick="AdoptAsync">
+            <span class="review-button-title">採用する</span>
+            <span class="review-button-subtitle">共有・下書きへ進める</span>
+        </button>
+
+        <button type="button"
+                data-testid="review-later"
+                class="review-button later"
+                disabled="@_busy"
+                @onclick="LaterAsync">
+            <span class="review-button-title">あとで見る</span>
+            <span class="review-button-subtitle">判断を保留する</span>
+        </button>
+    </div>
+
+    <div class="review-reject-box">
+        <label class="review-field-label" for="review-reject-reason">却下理由 <span>必須</span></label>
+        <div class="review-input-action">
+            <input id="review-reject-reason"
+                   type="text"
+                   data-testid="review-reject-reason"
+                   placeholder="例: 既存情報のみ / 対象外"
+                   value="@_rejectReason"
+                   disabled="@_busy"
+                   @oninput="OnRejectReasonChanged" />
+            <button type="button"
+                    data-testid="review-reject"
+                    class="review-button reject"
+                    disabled="@(_busy || string.IsNullOrWhiteSpace(_rejectReason))"
+                    @onclick="RejectAsync">理由を付けて却下</button>
+        </div>
+    </div>
+
+    <details class="review-ignore-panel" data-testid="review-ignore-details" open="@(_suggestedIgnorePatterns.Count > 0)">
+        <summary>類似ディレクトリをまとめて却下</summary>
+        <div class="review-ignore-content">
+            @if (_suggestedIgnorePatterns.Count > 0)
+            {
+                <div class="review-ignore-suggestions" data-testid="review-ignore-suggestions">
+                    <span class="review-suggestions-label">候補</span>
+                    <div class="review-suggestion-list">
+                        @foreach (var pattern in _suggestedIgnorePatterns)
+                        {
+                            <button type="button"
+                                    class="review-suggestion-chip"
+                                    data-testid="review-ignore-suggestion"
+                                    data-pattern="@pattern.Pattern"
+                                    disabled="@_busy"
+                                    @onclick="() => SelectIgnorePattern(pattern.Pattern)">
+                                <span class="review-suggestion-pattern">@pattern.Pattern</span>
+                                <span class="review-suggestion-meta">@pattern.MatchCount 件</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+            <label class="review-field-label" for="review-ignore-pattern">パスパターン</label>
+            <div class="review-input-action">
+                <input id="review-ignore-pattern"
+                       type="text"
+                       data-testid="review-ignore-pattern"
+                       placeholder="例: aspnet/security/**"
+                       value="@_ignorePattern"
+                       disabled="@_busy"
+                       @oninput="OnIgnorePatternChanged" />
+                <button type="button"
+                        data-testid="review-ignore"
+                        class="review-button ignore"
+                        disabled="@(_busy || string.IsNullOrWhiteSpace(_ignorePattern))"
+                        @onclick="IgnoreDirectoryAsync">無視リストへ追加</button>
+            </div>
+        </div>
     </details>
 </div>
 
@@ -53,17 +102,29 @@
 
     [Parameter] public string? Sha { get; set; }
 
+    [Parameter] public IReadOnlyList<string> FilePaths { get; set; } = [];
+
     [Parameter] public EventCallback<ReviewStatus> Reviewed { get; set; }
 
+    private const int MaxSuggestedIgnorePatterns = 6;
     private string _rejectReason = string.Empty;
     private string _ignorePattern = string.Empty;
+    private List<IgnorePatternSuggestion> _suggestedIgnorePatterns = [];
     private bool _busy;
+
+    protected override void OnParametersSet()
+    {
+        _suggestedIgnorePatterns = BuildIgnorePatternSuggestions(FilePaths);
+    }
 
     private void OnRejectReasonChanged(ChangeEventArgs e)
         => _rejectReason = e.Value as string ?? string.Empty;
 
     private void OnIgnorePatternChanged(ChangeEventArgs e)
         => _ignorePattern = e.Value as string ?? string.Empty;
+
+    private void SelectIgnorePattern(string pattern)
+        => _ignorePattern = pattern;
 
     private async Task AdoptAsync()
         => await SetReviewAsync(ReviewStatus.Adopted, reason: null);
@@ -111,10 +172,80 @@
             }
             Services.GetRequiredService<IReviewBroadcaster>().Publish();
             _ignorePattern = string.Empty;
+            await Reviewed.InvokeAsync(ReviewStatus.Rejected);
         }
         finally
         {
             _busy = false;
         }
     }
+
+    private static List<IgnorePatternSuggestion> BuildIgnorePatternSuggestions(IReadOnlyList<string> filePaths)
+    {
+        var normalizedPaths = filePaths
+            .Select(NormalizePath)
+            .Where(static path => !string.IsNullOrEmpty(path))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var suggestions = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var normalized in normalizedPaths)
+        {
+            AddSuggestionsForPath(suggestions, normalized);
+        }
+
+        return suggestions
+            .Select(pattern => new IgnorePatternSuggestion(pattern, CountMatchingPaths(pattern, normalizedPaths)))
+            .Where(static suggestion => suggestion.MatchCount > 0)
+            .OrderByDescending(static suggestion => suggestion.MatchCount)
+            .ThenByDescending(static suggestion => CountPathSegments(suggestion.Pattern))
+            .ThenBy(static suggestion => suggestion.Pattern, StringComparer.Ordinal)
+            .Take(MaxSuggestedIgnorePatterns)
+            .ToList();
+    }
+
+    private static void AddSuggestionsForPath(HashSet<string> suggestions, string normalized)
+    {
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            return;
+        }
+
+        var directoryParts = parts[..^1];
+        AddSuggestion(suggestions, string.Join("/", directoryParts) + "/**");
+
+        if (directoryParts.Length >= 3)
+        {
+            AddSuggestion(suggestions, string.Join("/", directoryParts[..3]) + "/**");
+        }
+
+        if (directoryParts.Length >= 2)
+        {
+            AddSuggestion(suggestions, string.Join("/", directoryParts[..2]) + "/**");
+        }
+    }
+
+    private static int CountMatchingPaths(string pattern, IReadOnlyList<string> normalizedPaths)
+    {
+        var prefix = pattern.TrimEnd('*', '/');
+        return normalizedPaths.Count(path => path.Equals(prefix, StringComparison.Ordinal)
+            || path.StartsWith(prefix + "/", StringComparison.Ordinal));
+    }
+
+    private static int CountPathSegments(string pattern)
+        => pattern.Split('/', StringSplitOptions.RemoveEmptyEntries).Length;
+
+    private static string NormalizePath(string path)
+        => path.Replace('\\', '/').Trim().Trim('/');
+
+    private static void AddSuggestion(HashSet<string> suggestions, string pattern)
+    {
+        if (!string.IsNullOrWhiteSpace(pattern))
+        {
+            suggestions.Add(pattern);
+        }
+    }
+
+    private sealed record IgnorePatternSuggestion(string Pattern, int MatchCount);
 }

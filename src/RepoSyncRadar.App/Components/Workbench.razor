@@ -29,6 +29,7 @@
 
             <MudPaper Elevation="0" Class="pa-2">
                 <CommitList Filter="@_filter"
+                            RefreshToken="_listRefreshVersion"
                             SelectedSha="@_selectedCommit?.Sha"
                             OnCommitSelected="HandleCommitSelected" />
             </MudPaper>
@@ -39,7 +40,9 @@
                 <CommitDetail Commit="_selectedCommit" />
                 @if (_selectedCommit is not null)
                 {
-                    <ReviewActions Sha="@_selectedCommit.Sha" />
+                    <ReviewActions Sha="@_selectedCommit.Sha"
+                                   FilePaths="@_selectedCommit.Files.Select(static file => file.Path).ToArray()"
+                                   Reviewed="HandleReviewCompleted" />
                     <PreviewActions Commit="_selectedCommit" />
                     <DraftsPanel Sha="@_selectedCommit.Sha" />
                 }
@@ -49,9 +52,10 @@
 </CascadingValue>
 
 @code {
-    private ReviewStatus? _selectedStatus;
+    private ReviewStatus? _selectedStatus = ReviewStatus.Unseen;
     private Commit? _selectedCommit;
-    private CommitQueryFilter _filter = new();
+    private CommitQueryFilter _filter = new() { Status = ReviewStatus.Unseen };
+    private int _listRefreshVersion;
     private IReviewBroadcaster? _broadcaster;
 
     protected override void OnInitialized()
@@ -72,6 +76,7 @@
                 // Replace the Filter reference so CommitList's OnParametersSetAsync
                 // detects the change and re-queries IRadarRepository.
                 _filter = new CommitQueryFilter { Status = _selectedStatus };
+                _listRefreshVersion++;
                 StateHasChanged();
             });
         }
@@ -94,12 +99,22 @@
         _selectedStatus = status;
         _filter = new CommitQueryFilter { Status = status };
         _selectedCommit = null;
+        _listRefreshVersion++;
         return Task.CompletedTask;
     }
 
     private Task HandleCommitSelected(Commit commit)
     {
         _selectedCommit = commit;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleReviewCompleted(ReviewStatus status)
+    {
+        _selectedStatus = ReviewStatus.Unseen;
+        _filter = new CommitQueryFilter { Status = ReviewStatus.Unseen };
+        _selectedCommit = null;
+        _listRefreshVersion++;
         return Task.CompletedTask;
     }
 }

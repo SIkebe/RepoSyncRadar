@@ -11,7 +11,22 @@
 
 @implements IDisposable
 
-<div class="drafts-panel" data-testid="drafts-panel">
+<div class="drafts-panel action-panel" data-testid="drafts-panel">
+    <header class="action-panel-header">
+        <div>
+            <h3>共有下書き</h3>
+            <p>採用済み通知から生成した投稿文を確認・コピーします。</p>
+        </div>
+        @if (!string.IsNullOrEmpty(Sha) && !_busy)
+        {
+            <button type="button"
+                    class="toolbar-button secondary"
+                    data-testid="drafts-regenerate"
+                    disabled="@_busy"
+                    @onclick="RegenerateAsync">下書きを再生成</button>
+        }
+    </header>
+
     @if (string.IsNullOrEmpty(Sha))
     {
         <p class="drafts-empty">採用済みコミットを選択してください。</p>
@@ -22,9 +37,6 @@
     }
     else
     {
-        <div class="drafts-actions">
-            <button type="button" data-testid="drafts-regenerate" disabled="@_busy" @onclick="RegenerateAsync">再生成</button>
-        </div>
         @RenderChannel("twitter", "Twitter", _bundle?.TwitterJa)
         @RenderChannel("teams", "Teams", _bundle?.TeamsJa)
         @RenderChannel("customer", "顧客向け", _bundle?.CustomerJa)
@@ -152,21 +164,23 @@
         builder.AddAttribute(2, "data-testid", $"drafts-section-{channel}");
 
         builder.OpenElement(3, "header");
-        builder.AddContent(4, label);
-        builder.AddMarkupContent(5, " ");
+        builder.OpenElement(4, "h4");
+        builder.AddContent(5, label);
+        builder.CloseElement();
         builder.OpenElement(6, "button");
         builder.AddAttribute(7, "type", "button");
-        builder.AddAttribute(8, "data-testid", $"drafts-copy-{channel}");
-        builder.AddAttribute(9, "disabled", string.IsNullOrEmpty(body));
-        builder.AddAttribute(10, "onclick",
+        builder.AddAttribute(8, "class", "toolbar-button secondary compact");
+        builder.AddAttribute(9, "data-testid", $"drafts-copy-{channel}");
+        builder.AddAttribute(10, "disabled", string.IsNullOrEmpty(body));
+        builder.AddAttribute(11, "onclick",
             Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => CopyAsync(body, label)));
-        builder.AddContent(11, "コピー");
+        builder.AddContent(12, "コピー");
         builder.CloseElement();
         builder.CloseElement();
 
-        builder.OpenElement(12, "pre");
-        builder.AddAttribute(13, "data-testid", $"drafts-body-{channel}");
-        builder.AddContent(14, body ?? string.Empty);
+        builder.OpenElement(13, "pre");
+        builder.AddAttribute(14, "data-testid", $"drafts-body-{channel}");
+        builder.AddContent(15, body ?? string.Empty);
         builder.CloseElement();
 
         builder.CloseElement();
