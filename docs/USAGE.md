@@ -198,7 +198,7 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
    - `git worktree add <WorktreeRoot>/<parent-sha> <parent-sha>` と `git worktree add <WorktreeRoot>/<sha> <sha>` で変更前 / PR HEAD の作業ディレクトリを生成
    - worktree に `node_modules` が無ければ `npm install` を自動実行
    - `PreviewBasePort` から空いている連続 2 port を探し、PR HEAD と変更前の sidecar として起動(同じ SHA / 同じ port に対しては再起動しない)
-3. 右側の WebView2 が左右 2 ペインになり、左に変更前 localhost、右に PR HEAD localhost を表示します。公式 `docs.github.com` が既に更新済みでも、コミット単位の見た目差分を確認できます
+3. 右側の WebView2 が左右 2 ペインになり、左に変更前 localhost、右に PR HEAD localhost を表示します。読み込み完了後、変更された本文ブロックは左側に取り消し線、右側に淡いハイライトで表示されます。公式 `docs.github.com` が既に更新済みでも、コミット単位の見た目差分を確認できます
 4. ボタン下に表示されている URL は外部ブラウザでも開けます
 
 #### 前提
@@ -206,7 +206,7 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 - Node.js + npm が PATH に通っていること(`PreviewCommand="npm"` を上書きすれば他ツールでも可)
 - worktree に `node_modules` が無い場合、`PreviewServerHost` が `PreviewCommand` + `PreviewInstallArguments` (既定: `npm install`) を自動実行してから preview server を起動します
 - `github/docs` の初回 Next.js コンパイルは 15 秒を超えることがあるため、`REQUEST_TIMEOUT=600000` を preview sidecar に渡します。これを短くすると PR HEAD 側が `Service Unavailable` になることがあります
-- WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中に割り当てた `http://localhost:<port>` だけを動的に許可します。前回プロセスの異常終了などで `PreviewBasePort` が既に使われている場合は、次の空き port にずらします
+- WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中に割り当てた `http://localhost:<port>` だけを動的に許可します。前回プロセスの異常終了などで `PreviewBasePort` が既に使われている場合は、次の空き port にずらします。同じ worktree で古い Next dev server が残っている場合も、起動前に `.next/dev/logs/next-development.log` の PID を確認して停止し、`Another next dev server is already running` の再発を防ぎます
 
 #### node_modules の扱い (案 A / 案 B)
 
