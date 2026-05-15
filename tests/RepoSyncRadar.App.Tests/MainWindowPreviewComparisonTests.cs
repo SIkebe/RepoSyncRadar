@@ -86,8 +86,8 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Theory]
-    [InlineData(false, "プレビューだけ", "プレビューだけ表示", "左の作業ペインを折りたたんでプレビューだけ表示します")]
-    [InlineData(true, "作業ペインを戻す", "作業ペインを戻す", "折りたたんだ左の作業ペインを戻します")]
+    [InlineData(false, "‹‹", "プレビューだけ表示", "左の作業ペインを折りたたんでプレビューだけ表示します")]
+    [InlineData(true, "››", "作業ペインを戻す", "折りたたんだ左の作業ペインを戻します")]
     public void PreviewFocusToggleLabels_Describe_Current_Action(
         bool isPreviewFocusMode,
         string expectedText,
