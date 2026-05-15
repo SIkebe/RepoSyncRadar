@@ -45,6 +45,17 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void BuildComparisonFilePathLabel_Trims_Path_And_Allows_Empty()
+    {
+        Assert.Equal(
+            "content/copilot/how-tos/configure-access-to-ai-models.md",
+            MainWindow.BuildComparisonFilePathLabel(
+                " content/copilot/how-tos/configure-access-to-ai-models.md "));
+        Assert.Equal(string.Empty, MainWindow.BuildComparisonFilePathLabel(null));
+        Assert.Equal(string.Empty, MainWindow.BuildComparisonFilePathLabel("   "));
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildPlan_Ignores_Whitespace_Only_Differences()
     {
         var beforeBlocks = new[]

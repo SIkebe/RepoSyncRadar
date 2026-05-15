@@ -225,6 +225,7 @@ public class CommitDetailTests
         {
             Assert.Equal("http://localhost:4501/en/copilot/about-copilot", captured?.BeforeUrl.AbsoluteUri);
             Assert.Equal("http://localhost:4500/en/copilot/about-copilot", captured?.AfterUrl.AbsoluteUri);
+            Assert.Equal("content/copilot/about-copilot.md", captured?.FilePath);
             Assert.Contains(
                 "content/copilot/about-copilot.md",
                 cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,

@@ -36,7 +36,7 @@
          BlazorWebView's internal WebView2 on the default folder. -->
     <Grid Grid.Column="2">
       <Grid.RowDefinitions>
-        <RowDefinition Height="28" />
+        <RowDefinition Height="46" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
       <Grid.ColumnDefinitions>
@@ -50,12 +50,23 @@
               Background="#0D1117"
               BorderBrush="#30363D"
               BorderThickness="0,0,0,1"
-              Padding="10,0">
-        <TextBlock x:Name="OfficialDocsHeaderText"
-             Text="公式 docs.github.com"
+                Padding="10,4">
+              <Grid>
+                <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="OfficialDocsHeaderText"
+                   Text="公式 docs.github.com"
                    Foreground="#C9D1D9"
                    FontSize="12"
-                   VerticalAlignment="Center" />
+                   TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="OfficialDocsFilePathText"
+                   Grid.Row="1"
+                   Foreground="#8B949E"
+                   FontSize="11"
+                   TextTrimming="CharacterEllipsis" />
+              </Grid>
       </Border>
 
       <GridSplitter x:Name="PreviewDocsSplitter"
@@ -72,13 +83,24 @@
               Background="#0D1117"
               BorderBrush="#30363D"
               BorderThickness="0,0,0,1"
-              Padding="10,0"
+                Padding="10,4"
               Visibility="Collapsed">
-        <TextBlock x:Name="PreviewDocsHeaderText"
-             Text="PR HEAD localhost"
+              <Grid>
+                <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock x:Name="PreviewDocsHeaderText"
+                   Text="PR HEAD localhost"
                    Foreground="#C9D1D9"
                    FontSize="12"
-                   VerticalAlignment="Center" />
+                   TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="PreviewDocsFilePathText"
+                   Grid.Row="1"
+                   Foreground="#8B949E"
+                   FontSize="11"
+                   TextTrimming="CharacterEllipsis" />
+              </Grid>
       </Border>
 
       <wv2:WebView2 x:Name="DocsView"

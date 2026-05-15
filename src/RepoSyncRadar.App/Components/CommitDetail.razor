@@ -267,7 +267,8 @@
                         link.BeforeUrl,
                         link.AfterUrl,
                         $"変更前 {ShortSha(link.BeforeSha)} localhost",
-                        $"PR HEAD {ShortSha(link.AfterSha)} localhost"));
+                        $"PR HEAD {ShortSha(link.AfterSha)} localhost",
+                        file.Path));
                     _previewStatus = $"{file.Path} を変更前 / PR HEAD で比較表示しました";
                     return;
                 }

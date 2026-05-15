@@ -294,7 +294,10 @@ public partial class MainWindow : Window
                 "公式 docs.github.com",
                 "PR HEAD localhost");
             StartPreviewDiffTracking(comparisonRequest);
-            ShowComparisonMode(comparisonRequest.BeforeLabel, comparisonRequest.AfterLabel);
+            ShowComparisonMode(
+                comparisonRequest.BeforeLabel,
+                comparisonRequest.AfterLabel,
+                comparisonRequest.FilePath);
             DocsView.Source = comparisonRequest.BeforeUrl;
             PreviewView.Source = url;
             return;
@@ -309,7 +312,7 @@ public partial class MainWindow : Window
     {
         ArgumentNullException.ThrowIfNull(request);
         StartPreviewDiffTracking(request);
-        ShowComparisonMode(request.BeforeLabel, request.AfterLabel);
+        ShowComparisonMode(request.BeforeLabel, request.AfterLabel, request.FilePath);
         DocsView.Source = request.BeforeUrl;
         PreviewView.Source = request.AfterUrl;
     }
@@ -413,10 +416,12 @@ public partial class MainWindow : Window
 
     private void ShowComparisonMode(
         string leftLabel = "公式 docs.github.com",
-        string rightLabel = "PR HEAD localhost")
+        string rightLabel = "PR HEAD localhost",
+        string? filePath = null)
     {
         OfficialDocsHeaderText.Text = leftLabel;
         PreviewDocsHeaderText.Text = rightLabel;
+        SetComparisonFilePath(filePath);
         PreviewDocsSplitter.Visibility = Visibility.Visible;
         PreviewDocsHeader.Visibility = Visibility.Visible;
         PreviewView.Visibility = Visibility.Visible;
@@ -429,6 +434,7 @@ public partial class MainWindow : Window
     {
         OfficialDocsHeaderText.Text = "公式 docs.github.com";
         PreviewDocsHeaderText.Text = "PR HEAD localhost";
+        SetComparisonFilePath(null);
         PreviewDocsSplitter.Visibility = Visibility.Collapsed;
         PreviewDocsHeader.Visibility = Visibility.Collapsed;
         PreviewView.Visibility = Visibility.Collapsed;
@@ -457,6 +463,18 @@ public partial class MainWindow : Window
             : string.Create(
                 CultureInfo.InvariantCulture,
                 $"{label}・差分 {changedBlockCount}");
+
+    private void SetComparisonFilePath(string? filePath)
+    {
+        var text = BuildComparisonFilePathLabel(filePath);
+        OfficialDocsFilePathText.Text = text;
+        OfficialDocsFilePathText.ToolTip = text.Length == 0 ? null : text;
+        PreviewDocsFilePathText.Text = text;
+        PreviewDocsFilePathText.ToolTip = text.Length == 0 ? null : text;
+    }
+
+    internal static string BuildComparisonFilePathLabel(string? filePath)
+        => string.IsNullOrWhiteSpace(filePath) ? string.Empty : filePath.Trim();
 
     private static bool IsSameNavigationTarget(Uri? actualUrl, Uri expectedUrl)
         => actualUrl is not null
