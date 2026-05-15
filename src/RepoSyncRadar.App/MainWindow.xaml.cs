@@ -1,4 +1,5 @@
 using System.IO;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.AspNetCore.Components.WebView;
@@ -63,6 +64,10 @@ public partial class MainWindow : Window
     private readonly PreviewSession _previewSession;
     private readonly IPreviewNavigator _previewNavigator;
     private readonly ILogger<MainWindow> _logger;
+    private PreviewComparisonRequest? _activePreviewDiffRequest;
+    private int _previewDiffGeneration;
+    private bool _beforePreviewDiffReady;
+    private bool _afterPreviewDiffReady;
 
     public MainWindow(IServiceProvider services)
     {
@@ -76,10 +81,14 @@ public partial class MainWindow : Window
         _previewNavigator = services.GetRequiredService<IPreviewNavigator>();
         _previewNavigator.Requested += OnPreviewRequested;
         _previewNavigator.ComparisonRequested += OnPreviewComparisonRequested;
+        DocsView.NavigationCompleted += OnDocsViewNavigationCompleted;
+        PreviewView.NavigationCompleted += OnPreviewViewNavigationCompleted;
         Closed += (_, _) =>
         {
             _previewNavigator.Requested -= OnPreviewRequested;
             _previewNavigator.ComparisonRequested -= OnPreviewComparisonRequested;
+            DocsView.NavigationCompleted -= OnDocsViewNavigationCompleted;
+            PreviewView.NavigationCompleted -= OnPreviewViewNavigationCompleted;
         };
         _logger = services.GetRequiredService<ILoggerFactory>().CreateLogger<MainWindow>();
 
@@ -279,12 +288,19 @@ public partial class MainWindow : Window
     {
         if (IsLocalPreviewUri(url))
         {
-            ShowComparisonMode();
-            DocsView.Source = BuildOfficialComparisonUri(url);
+            var comparisonRequest = new PreviewComparisonRequest(
+                BuildOfficialComparisonUri(url),
+                url,
+                "公式 docs.github.com",
+                "PR HEAD localhost");
+            StartPreviewDiffTracking(comparisonRequest);
+            ShowComparisonMode(comparisonRequest.BeforeLabel, comparisonRequest.AfterLabel);
+            DocsView.Source = comparisonRequest.BeforeUrl;
             PreviewView.Source = url;
             return;
         }
 
+        StopPreviewDiffTracking();
         ShowOfficialOnlyMode();
         DocsView.Source = url;
     }
@@ -292,9 +308,107 @@ public partial class MainWindow : Window
     private void NavigatePreviewComparisonRequest(PreviewComparisonRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        StartPreviewDiffTracking(request);
         ShowComparisonMode(request.BeforeLabel, request.AfterLabel);
         DocsView.Source = request.BeforeUrl;
         PreviewView.Source = request.AfterUrl;
+    }
+
+    private void StartPreviewDiffTracking(PreviewComparisonRequest request)
+    {
+        _activePreviewDiffRequest = request;
+        _previewDiffGeneration++;
+        _beforePreviewDiffReady = false;
+        _afterPreviewDiffReady = false;
+    }
+
+    private void StopPreviewDiffTracking()
+    {
+        _activePreviewDiffRequest = null;
+        _previewDiffGeneration++;
+        _beforePreviewDiffReady = false;
+        _afterPreviewDiffReady = false;
+    }
+
+    private void OnDocsViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+        => OnPreviewDiffPaneNavigationCompleted(DocsView, isBeforePane: true, e);
+
+    private void OnPreviewViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+        => OnPreviewDiffPaneNavigationCompleted(PreviewView, isBeforePane: false, e);
+
+    private void OnPreviewDiffPaneNavigationCompleted(
+        WebView2 view,
+        bool isBeforePane,
+        CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (!e.IsSuccess || _activePreviewDiffRequest is not { } request)
+        {
+            return;
+        }
+
+        var expectedUrl = isBeforePane ? request.BeforeUrl : request.AfterUrl;
+        if (!IsSameNavigationTarget(view.Source, expectedUrl))
+        {
+            return;
+        }
+
+        if (isBeforePane)
+        {
+            _beforePreviewDiffReady = true;
+        }
+        else
+        {
+            _afterPreviewDiffReady = true;
+        }
+
+        if (_beforePreviewDiffReady && _afterPreviewDiffReady)
+        {
+            var generation = _previewDiffGeneration;
+            _ = ApplyPreviewDiffHighlightsAsync(generation);
+        }
+    }
+
+    private async Task ApplyPreviewDiffHighlightsAsync(int generation)
+    {
+        try
+        {
+            var request = _activePreviewDiffRequest;
+            if (request is null || generation != _previewDiffGeneration)
+            {
+                return;
+            }
+
+            var beforeBlocks = await PreviewDiffHighlighter.ExtractBlocksAsync(DocsView);
+            var afterBlocks = await PreviewDiffHighlighter.ExtractBlocksAsync(PreviewView);
+            if (!ReferenceEquals(request, _activePreviewDiffRequest) || generation != _previewDiffGeneration)
+            {
+                return;
+            }
+
+            var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+            await PreviewDiffHighlighter.ApplyPlanAsync(
+                DocsView,
+                plan.BeforeChangedIndexes,
+                PreviewDiffPane.Before);
+            await PreviewDiffHighlighter.ApplyPlanAsync(
+                PreviewView,
+                plan.AfterChangedIndexes,
+                PreviewDiffPane.After);
+
+            if (ReferenceEquals(request, _activePreviewDiffRequest) && generation == _previewDiffGeneration)
+            {
+                OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
+                    request.BeforeLabel,
+                    plan.BeforeChangedIndexes.Count);
+                PreviewDocsHeaderText.Text = BuildDiffHeaderLabel(
+                    request.AfterLabel,
+                    plan.AfterChangedIndexes.Count);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPreviewDiffFailed(_logger, ex);
+        }
     }
 
     private void ShowComparisonMode(
@@ -337,6 +451,20 @@ public partial class MainWindow : Window
         return new Uri($"https://docs.github.com{pathAndQuery}");
     }
 
+    internal static string BuildDiffHeaderLabel(string label, int changedBlockCount)
+        => changedBlockCount <= 0
+            ? $"{label}・差分なし"
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}・差分 {changedBlockCount}");
+
+    private static bool IsSameNavigationTarget(Uri? actualUrl, Uri expectedUrl)
+        => actualUrl is not null
+            && string.Equals(
+                actualUrl.GetComponents(UriComponents.SchemeAndServer | UriComponents.PathAndQuery, UriFormat.UriEscaped),
+                expectedUrl.GetComponents(UriComponents.SchemeAndServer | UriComponents.PathAndQuery, UriFormat.UriEscaped),
+                StringComparison.OrdinalIgnoreCase);
+
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Warning,
@@ -348,4 +476,10 @@ public partial class MainWindow : Window
         Level = LogLevel.Debug,
         Message = "Blocked WebView2 request to disallowed host: {Uri}")]
     private static partial void LogBlockedRequest(ILogger logger, string uri);
+
+    [LoggerMessage(
+        EventId = 3,
+        Level = LogLevel.Debug,
+        Message = "Preview diff highlight failed.")]
+    private static partial void LogPreviewDiffFailed(ILogger logger, Exception exception);
 }
