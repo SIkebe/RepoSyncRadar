@@ -54,6 +54,31 @@ public sealed class ReviewActionsTests
     }
 
     [Fact]
+    public void Reject_Reason_Preset_Fills_Input_And_Can_Be_Submitted()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.TestContext();
+
+        var cut = ctx.RenderComponent<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc"));
+
+        var preset = cut.FindAll("[data-testid=\"review-reject-reason-option\"]")
+            .Single(button => button.GetAttribute("data-reason") == "既存情報のみ");
+        preset.Click();
+
+        Assert.Equal("既存情報のみ", cut.Find("[data-testid=\"review-reject-reason\"]").GetAttribute("value"));
+        Assert.Contains("active", cut.Find("[data-reason=\"既存情報のみ\"]").ClassList);
+
+        cut.Find("[data-testid=\"review-reject\"]").Click();
+
+        repo.Received(1).SetReviewAsync("abc", ReviewStatus.Rejected, "既存情報のみ", Arg.Any<CancellationToken>());
+        broadcaster.Received(1).Publish();
+    }
+
+    [Fact]
     public void Renders_Clear_Action_Groups()
     {
         var repo = Substitute.For<IRadarRepository>();
@@ -68,6 +93,7 @@ public sealed class ReviewActionsTests
         Assert.NotNull(cut.Find("[data-testid=\"review-primary-actions\"]"));
         Assert.Contains("採用する", cut.Find("[data-testid=\"review-adopt\"]").TextContent);
         Assert.Contains("あとで見る", cut.Find("[data-testid=\"review-later\"]").TextContent);
+        Assert.Contains("既存情報のみ", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
         Assert.Contains("理由を付けて却下", cut.Find("[data-testid=\"review-reject\"]").TextContent);
         Assert.Contains("類似ディレクトリ", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
     }

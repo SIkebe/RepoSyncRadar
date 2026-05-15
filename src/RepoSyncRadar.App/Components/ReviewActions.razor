@@ -39,6 +39,17 @@
 
     <div class="review-reject-box">
         <label class="review-field-label" for="review-reject-reason">却下理由 <span>必須</span></label>
+        <div class="review-reject-presets" data-testid="review-reject-reason-options">
+            @foreach (var reason in RejectReasonPresets)
+            {
+                <button type="button"
+                        class="@BuildRejectReasonPresetClass(reason)"
+                        data-testid="review-reject-reason-option"
+                        data-reason="@reason"
+                        disabled="@_busy"
+                        @onclick="() => SelectRejectReason(reason)">@reason</button>
+            }
+        </div>
         <div class="review-input-action">
             <input id="review-reject-reason"
                    type="text"
@@ -107,6 +118,15 @@
     [Parameter] public EventCallback<ReviewStatus> Reviewed { get; set; }
 
     private const int MaxSuggestedIgnorePatterns = 6;
+    private static readonly IReadOnlyList<string> RejectReasonPresets =
+    [
+        "対象外",
+        "既存情報のみ",
+        "重複",
+        "軽微な表記変更",
+        "自動生成差分",
+        "フォロー不要",
+    ];
     private string _rejectReason = string.Empty;
     private string _ignorePattern = string.Empty;
     private List<IgnorePatternSuggestion> _suggestedIgnorePatterns = [];
@@ -123,8 +143,16 @@
     private void OnIgnorePatternChanged(ChangeEventArgs e)
         => _ignorePattern = e.Value as string ?? string.Empty;
 
+    private void SelectRejectReason(string reason)
+        => _rejectReason = reason;
+
     private void SelectIgnorePattern(string pattern)
         => _ignorePattern = pattern;
+
+    private string BuildRejectReasonPresetClass(string reason)
+        => string.Equals(_rejectReason, reason, StringComparison.Ordinal)
+            ? "review-reason-chip active"
+            : "review-reason-chip";
 
     private async Task AdoptAsync()
         => await SetReviewAsync(ReviewStatus.Adopted, reason: null);
