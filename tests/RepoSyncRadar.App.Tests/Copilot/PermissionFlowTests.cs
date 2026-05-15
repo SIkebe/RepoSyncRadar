@@ -9,9 +9,9 @@ using Xunit;
 namespace RepoSyncRadar.App.Tests.Copilot;
 
 /// <summary>
-/// Validates that <see cref="RadarPermissionPolicy"/> routes write-flavoured
-/// <see cref="PermissionRequestCustomTool"/> events through <see cref="IPermissionPrompt"/>
-/// instead of auto-approving them.
+/// Validates that <see cref="RadarPermissionPolicy"/> still routes stronger
+/// write-flavoured <see cref="PermissionRequestCustomTool"/> events through
+/// <see cref="IPermissionPrompt"/> instead of auto-approving them.
 /// </summary>
 public sealed class PermissionFlowTests
 {
@@ -35,28 +35,28 @@ public sealed class PermissionFlowTests
     };
 
     [Fact]
-    public async Task WriteTool_Triggers_Permission_Prompt()
+    public async Task NonTriageWriteTool_Triggers_Permission_Prompt()
     {
         var prompt = Substitute.For<IPermissionPrompt>();
         prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(true);
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewCustomTool("radar_save_review"), Invocation);
+        var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), Invocation);
 
         Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
         await prompt.Received(1).ConfirmAsync(
-            Arg.Is<PermissionRequestCustomTool>(t => t.ToolName == "radar_save_review"),
+            Arg.Is<PermissionRequestCustomTool>(t => t.ToolName == "radar_post_draft"),
             Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task WriteTool_Denied_Returns_DeniedByUser()
+    public async Task NonTriageWriteTool_Denied_Returns_DeniedByUser()
     {
         var prompt = Substitute.For<IPermissionPrompt>();
         prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(false);
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewCustomTool("radar_save_review"), Invocation);
+        var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), Invocation);
 
         Assert.Equal(PermissionRequestResultKind.DeniedInteractivelyByUser, result.Kind);
     }

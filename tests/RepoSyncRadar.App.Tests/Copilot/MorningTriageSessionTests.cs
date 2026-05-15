@@ -31,7 +31,7 @@ public sealed class MorningTriageSessionTests
             });
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns("ok");
 
         var factory = Substitute.For<ICopilotSessionFactory>();
@@ -61,7 +61,7 @@ public sealed class MorningTriageSessionTests
 
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 capturedPrompt = call.Arg<string>();
@@ -84,6 +84,62 @@ public sealed class MorningTriageSessionTests
     }
 
     [Fact]
+    public async Task Run_Uses_Long_Triage_Timeout()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ingestion = Substitute.For<ICommitIngestionService>();
+        ingestion.IngestAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IngestionReport(0, 0, 0)));
+
+        TimeSpan? capturedTimeout = null;
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                capturedTimeout = call.ArgAt<TimeSpan?>(1);
+                return Task.FromResult("done");
+            });
+
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(Arg.Any<SessionPurpose>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var triage = new MorningTriageSession(ingestion, factory, NullLogger<MorningTriageSession>.Instance);
+        await triage.RunAsync(ct);
+
+        Assert.NotNull(capturedTimeout);
+        Assert.True(capturedTimeout > TimeSpan.FromMinutes(1));
+        Assert.Equal(MorningTriageSession.TriageSendTimeout, capturedTimeout);
+    }
+
+    [Fact]
+    public async Task Run_Reports_Progress_Through_Stages()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var progress = new CapturingProgress();
+        var ingestion = Substitute.For<ICommitIngestionService>();
+        ingestion.IngestAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IngestionReport(Total: 5, Inserted: 2, Skipped: 3)));
+
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("done"));
+
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(Arg.Any<SessionPurpose>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var triage = new MorningTriageSession(ingestion, factory, NullLogger<MorningTriageSession>.Instance);
+        await triage.RunAsync(progress, ct);
+
+        Assert.Contains(progress.Messages, message => message.Contains("取得", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("新規 2", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("セッション", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("スコアリング", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("完了", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Run_Waits_For_Idle()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -93,7 +149,7 @@ public sealed class MorningTriageSessionTests
 
         var gate = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(gate.Task);
 
         var factory = Substitute.For<ICopilotSessionFactory>();
@@ -122,7 +178,7 @@ public sealed class MorningTriageSessionTests
 
         var gate = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(callInfo =>
             {
                 var innerCt = callInfo.Arg<CancellationToken>();
@@ -154,7 +210,7 @@ public sealed class MorningTriageSessionTests
             .Returns(Task.FromResult(new IngestionReport(0, 0, 0)));
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("boom"));
 
         var factory = Substitute.For<ICopilotSessionFactory>();
@@ -165,5 +221,12 @@ public sealed class MorningTriageSessionTests
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await triage.RunAsync(ct));
         Assert.Equal("boom", ex.Message);
+    }
+
+    private sealed class CapturingProgress : IProgress<string>
+    {
+        public List<string> Messages { get; } = [];
+
+        public void Report(string value) => Messages.Add(value);
     }
 }

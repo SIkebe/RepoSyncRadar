@@ -28,6 +28,13 @@ public sealed class CopilotAgent : ICopilotAgent
         return await _triage.RunAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<IngestionReport> RunMorningTriageAsync(
+        IProgress<string>? progress,
+        CancellationToken cancellationToken = default)
+    {
+        return await _triage.RunAsync(progress, cancellationToken).ConfigureAwait(false);
+    }
+
     public Task<DraftBundle> GenerateDraftsAsync(string commitSha, CancellationToken cancellationToken = default)
     {
         return _adoption.GenerateDraftsAsync(commitSha, cancellationToken);

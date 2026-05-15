@@ -8,7 +8,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// intentionally restrictive — see <c>docs/DESIGN.md §8.1</c> and the Step 11 entry of
 /// <c>docs/IMPLEMENTATION_PLAN.md</c>:
 /// <list type="bullet">
-///   <item><description><c>custom-tool</c> on the read-only allow-list is approved without prompting; everything else is prompted (Step 14).</description></item>
+///   <item><description><c>custom-tool</c> on the local allow-list is approved without prompting; everything else is prompted (Step 14).</description></item>
 ///   <item><description><c>read</c> is approved without prompting.</description></item>
 ///   <item><description><c>url</c> is approved if the host is on <see cref="UrlAllowList"/>; otherwise the UI is asked.</description></item>
 ///   <item><description><c>write</c> always goes through the UI prompt.</description></item>
@@ -19,15 +19,18 @@ namespace RepoSyncRadar.App.Copilot;
 public sealed partial class RadarPermissionPolicy
 {
     /// <summary>
-    /// Custom-tool names that are pre-approved without prompting. Keep in sync with the
-    /// read-only set registered by <c>RadarTools</c> (Step 13).
+    /// Custom-tool names that are pre-approved without prompting. The read-only tools
+    /// are harmless, and the two triage write tools only update the local scoring/review
+    /// rows that Morning Triage is expected to maintain automatically.
     /// </summary>
-    internal static readonly IReadOnlySet<string> ReadOnlyToolNames = new HashSet<string>(StringComparer.Ordinal)
+    internal static readonly IReadOnlySet<string> AutoApprovedToolNames = new HashSet<string>(StringComparer.Ordinal)
     {
         "radar_list_commits",
         "radar_get_diff",
         "radar_resolve_url",
         "radar_fetch_rendered",
+        "radar_score_commit",
+        "radar_save_review",
     };
 
     private readonly UrlAllowList _urlAllowList;
@@ -63,7 +66,7 @@ public sealed partial class RadarPermissionPolicy
         switch (request)
         {
             case PermissionRequestCustomTool customTool:
-                if (customTool.ToolName is not null && ReadOnlyToolNames.Contains(customTool.ToolName))
+                if (customTool.ToolName is not null && AutoApprovedToolNames.Contains(customTool.ToolName))
                 {
                     LogApprovingCustomTool(_logger, customTool.ToolName, sessionId);
                     return Approved();

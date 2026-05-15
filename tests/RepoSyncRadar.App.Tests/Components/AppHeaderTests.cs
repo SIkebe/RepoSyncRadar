@@ -99,7 +99,7 @@ public sealed class AppHeaderTests
 
         var sp = BuildServices(session, out var agent, out var broadcaster);
         agent
-            .RunMorningTriageAsync(Arg.Any<CancellationToken>())
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new IngestionReport(Total: 3, Inserted: 2, Skipped: 1)));
 
         using var ctx = new Bunit.TestContext();
@@ -108,9 +108,48 @@ public sealed class AppHeaderTests
 
         cut.Find("[data-testid=\"app-header-sync\"]").Click();
 
-        agent.Received(1).RunMorningTriageAsync(Arg.Any<CancellationToken>());
+        agent.Received(1).RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>());
         broadcaster.Received(1).Publish();
         Assert.Contains("新規 2", cut.Find("[data-testid=\"app-header-last-sync\"]").TextContent);
+    }
+
+    [Fact]
+    public void Triage_Progress_Is_Rendered_While_Agent_Is_Running()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var gate = new TaskCompletionSource<IngestionReport>();
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                call.Arg<IProgress<string>?>()?.Report("Copilot が未読コミットをスコアリングしています…");
+                return gate.Task;
+            });
+
+        using var ctx = new Bunit.TestContext();
+        var cut = ctx.RenderComponent<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent;
+            Assert.Contains("スコアリング", status, StringComparison.Ordinal);
+            Assert.Contains("経過", status, StringComparison.Ordinal);
+        });
+
+        gate.SetResult(new IngestionReport(Total: 1, Inserted: 1, Skipped: 0));
+        cut.WaitForAssertion(() =>
+            Assert.Contains("Triage 完了", cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent));
     }
 
     [Fact]
@@ -126,7 +165,7 @@ public sealed class AppHeaderTests
 
         var sp = BuildServices(session, out var agent, out var broadcaster);
         agent
-            .RunMorningTriageAsync(Arg.Any<CancellationToken>())
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("network down"));
 
         using var ctx = new Bunit.TestContext();

@@ -65,6 +65,16 @@
         {
             <span data-testid="app-header-error" style="color:#ef4444; font-size:0.85em;">@_lastError</span>
         }
+        @if (_triageStatus is not null)
+        {
+            <span data-testid="app-header-triage-status" style="font-size:0.85em; opacity:0.85;">
+                @_triageStatus
+                @if (_busy)
+                {
+                    <span>（経過 @FormatElapsed(_triageElapsed)）</span>
+                }
+            </span>
+        }
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
                    OnClick="OnTriageAsync"
@@ -84,6 +94,10 @@
     private bool _busy;
     private IngestionReport? _lastReport;
     private string? _lastError;
+    private string? _triageStatus;
+    private DateTimeOffset? _triageStartedAt;
+    private TimeSpan _triageElapsed;
+    private CancellationTokenSource? _triageTimerCts;
     private IReviewBroadcaster? _broadcaster;
 
     protected override async Task OnInitializedAsync()
@@ -155,28 +169,86 @@
         _busy = true;
         _lastError = null;
         _lastReport = null;
+        _triageStartedAt = DateTimeOffset.UtcNow;
+        _triageElapsed = TimeSpan.Zero;
+        _triageStatus = "Triage を開始しています…";
+        StartTriageTimer();
         StateHasChanged();
         try
         {
             var agent = Services.GetRequiredService<ICopilotAgent>();
-            _lastReport = await agent.RunMorningTriageAsync(CancellationToken.None);
+            var progress = new Progress<string>(message =>
+            {
+                _triageStatus = message;
+                _ = InvokeAsync(StateHasChanged);
+            });
+            _lastReport = await agent.RunMorningTriageAsync(progress, CancellationToken.None);
             // Reuse the review broadcaster so Sidebar/CommitList re-query their
             // data the moment Morning Triage finishes. The broadcaster is a no-op
             // pub/sub so we can publish freely without coupling to a triage-specific bus.
             _broadcaster?.Publish();
+            _triageStatus = "Triage 完了";
         }
         catch (Exception ex)
         {
             _lastError = $"Triage 失敗: {ex.Message}";
+            _triageStatus = "Triage は失敗しました。詳細はエラーを確認してください。";
         }
         finally
         {
             _busy = false;
+            StopTriageTimer();
         }
+    }
+
+    private void StartTriageTimer()
+    {
+        StopTriageTimer();
+        var cts = new CancellationTokenSource();
+        _triageTimerCts = cts;
+        _ = UpdateTriageElapsedAsync(cts.Token);
+    }
+
+    private void StopTriageTimer()
+    {
+        if (_triageTimerCts is null)
+        {
+            return;
+        }
+
+        _triageTimerCts.Cancel();
+        _triageTimerCts.Dispose();
+        _triageTimerCts = null;
+    }
+
+    private async Task UpdateTriageElapsedAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                if (_triageStartedAt is { } startedAt)
+                {
+                    _triageElapsed = DateTimeOffset.UtcNow - startedAt;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed)
+    {
+        return elapsed.TotalHours >= 1
+            ? $"{(int)elapsed.TotalHours}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}"
+            : $"{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
     }
 
     public void Dispose()
     {
-        // Reserved for future broadcaster subscriptions (e.g. auth state changes).
+        StopTriageTimer();
     }
 }

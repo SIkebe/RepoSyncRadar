@@ -14,6 +14,8 @@ namespace RepoSyncRadar.App.Copilot;
 /// </summary>
 public sealed partial class MorningTriageSession
 {
+    internal static readonly TimeSpan TriageSendTimeout = TimeSpan.FromMinutes(10);
+
     /// <summary>The prompt body appended to the SDK system message (kept in code so unit tests can grep for the marker).</summary>
     internal const string TriagePrompt = """
         # Morning Triage
@@ -50,20 +52,31 @@ public sealed partial class MorningTriageSession
 
     /// <summary>Runs the full Morning Triage workflow. Returns the ingestion stats for status display.</summary>
     public async Task<IngestionReport> RunAsync(CancellationToken cancellationToken = default)
+        => await RunAsync(progress: null, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Runs the full Morning Triage workflow. Returns the ingestion stats for status display.</summary>
+    public async Task<IngestionReport> RunAsync(
+        IProgress<string>? progress,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         LogStarting(_logger);
 
+        progress?.Report("Repo sync PR を取得しています…");
         var report = await _ingestion.IngestAsync(cancellationToken).ConfigureAwait(false);
         LogIngested(_logger, report.Total, report.Inserted, report.Skipped);
+        progress?.Report($"取り込み完了: 取得 {report.Total} / 新規 {report.Inserted} / スキップ {report.Skipped}");
 
+        progress?.Report("Copilot セッションを準備しています…");
         var session = await _sessionFactory.CreateSessionAsync(SessionPurpose.Triage, cancellationToken).ConfigureAwait(false);
         await using (session.ConfigureAwait(false))
         {
             try
             {
                 LogSending(_logger, session.SessionId);
-                _ = await session.SendAsync(TriagePrompt, cancellationToken).ConfigureAwait(false);
+                progress?.Report("Copilot が未読コミットをスコアリングしています…");
+                _ = await session.SendAsync(TriagePrompt, TriageSendTimeout, cancellationToken).ConfigureAwait(false);
+                progress?.Report("Triage が完了しました。画面を更新しています…");
                 LogFinished(_logger, session.SessionId);
             }
             catch (OperationCanceledException)

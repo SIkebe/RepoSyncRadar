@@ -13,6 +13,11 @@ public interface ICopilotAgent
     /// <summary>Runs the morning triage session — fetch, score, summarise.</summary>
     Task<IngestionReport> RunMorningTriageAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Runs the morning triage session and reports coarse-grained UI progress.</summary>
+    Task<IngestionReport> RunMorningTriageAsync(
+        IProgress<string>? progress,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Generates the three media drafts for a single adopted commit.</summary>
     Task<DraftBundle> GenerateDraftsAsync(string commitSha, CancellationToken cancellationToken = default);
 

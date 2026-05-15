@@ -84,6 +84,20 @@ public class RadarPermissionPolicyTests
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("radar_score_commit")]
+    [InlineData("radar_save_review")]
+    public async Task TriageWriteCustomTool_Is_Approved_Without_Prompt(string toolName)
+    {
+        var prompt = Substitute.For<IPermissionPrompt>();
+        var policy = CreatePolicy(prompt);
+
+        var result = await policy.HandleAsync(NewCustomTool("tc-triage-write", toolName), Invocation);
+
+        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+        await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task Read_Is_Approved()
     {

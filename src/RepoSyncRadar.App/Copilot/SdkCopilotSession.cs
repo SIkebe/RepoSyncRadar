@@ -19,10 +19,16 @@ internal sealed class SdkCopilotSession : ICopilotSession
     public string SessionId => _session.SessionId;
 
     public async Task<string> SendAsync(string prompt, CancellationToken cancellationToken = default)
+        => await SendAsync(prompt, timeout: null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<string> SendAsync(
+        string prompt,
+        TimeSpan? timeout,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
         var options = new MessageOptions { Prompt = prompt };
-        var assistant = await _session.SendAndWaitAsync(options, null, cancellationToken).ConfigureAwait(false);
+        var assistant = await _session.SendAndWaitAsync(options, timeout, cancellationToken).ConfigureAwait(false);
         return assistant?.ToString() ?? string.Empty;
     }
 

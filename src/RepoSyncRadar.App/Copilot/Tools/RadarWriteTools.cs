@@ -10,8 +10,8 @@ namespace RepoSyncRadar.App.Copilot.Tools;
 /// <summary>
 /// Registers the side-effecting <c>radar_*</c> Copilot tools (Step 14). All tools here
 /// have <c>skip_permission</c> intentionally NOT set, so the SDK routes them through
-/// <see cref="RadarPermissionPolicy"/>, which prompts the user via
-/// <see cref="IPermissionPrompt"/> for any tool name not on its read-only allow-list.
+/// <see cref="RadarPermissionPolicy"/>. Morning Triage scoring/review writes are
+/// pre-approved there; stronger side effects such as draft/rule writes still prompt.
 /// </summary>
 public sealed class RadarWriteTools
 {

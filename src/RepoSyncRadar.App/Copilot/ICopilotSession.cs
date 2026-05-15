@@ -17,6 +17,14 @@ public interface ICopilotSession : IAsyncDisposable
     /// </summary>
     Task<string> SendAsync(string prompt, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Sends a single user prompt and waits for completion using the supplied idle timeout.
+    /// </summary>
+    Task<string> SendAsync(
+        string prompt,
+        TimeSpan? timeout,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Aborts the current turn. Safe to call after the session has already ended.</summary>
     Task AbortAsync(CancellationToken cancellationToken = default);
 }
