@@ -179,6 +179,7 @@ npm install</code></pre>
         _elapsedSec = 0;
         _timeoutSec = Services.GetRequiredService<IOptions<DocsRepositoryOptions>>().Value.PreviewReadyTimeoutSeconds;
         _cts = new CancellationTokenSource();
+        ArmPreviewTimeout(_cts);
         var token = _cts.Token;
         var host = Services.GetRequiredService<PreviewServerHost>();
         _pollTask = Task.Run(() => PollProgressAsync(host, token), CancellationToken.None);
@@ -243,6 +244,19 @@ npm install</code></pre>
         try { _cts.Cancel(); } catch (ObjectDisposedException) { }
         return Task.CompletedTask;
     }
+
+    private void ArmPreviewTimeout(CancellationTokenSource cts)
+    {
+        if (_timeoutSec > 0)
+        {
+            cts.CancelAfter(TimeSpan.FromSeconds(_timeoutSec));
+        }
+    }
+
+    private string BuildCancellationStatus()
+        => _canceling
+            ? "プレビュー起動を中止しました"
+            : $"プレビュー起動が上限 {_timeoutSec} 秒を超えたため中止しました";
 
     /// <summary>
     /// 500 ms ごとに PreviewServerHost のログ tail と経過秒を読んで UI を再描画する。
@@ -321,7 +335,7 @@ npm install</code></pre>
         }
         catch (OperationCanceledException)
         {
-            _status = "プレビュー起動を中止しました";
+            _status = BuildCancellationStatus();
             _worktreePath = null;
             return;
         }
@@ -372,7 +386,7 @@ npm install</code></pre>
         }
         catch (OperationCanceledException)
         {
-            _status = "プレビュー起動を中止しました";
+            _status = BuildCancellationStatus();
             _worktreePath = null;
             return;
         }

@@ -597,6 +597,50 @@ public sealed class PreviewActionsTests
     }
 
     [Fact]
+    public void Click_Times_Out_When_Coordinator_Exceeds_Preview_Limit()
+    {
+        var tcs = new TaskCompletionSource<PreviewComparisonLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken receivedToken = default;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                receivedToken = call.ArgAt<CancellationToken>(4);
+                receivedToken.Register(() =>
+                    tcs.TrySetException(new OperationCanceledException(receivedToken)));
+                return tcs.Task;
+            });
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator, previewReadyTimeoutSeconds: 1);
+        using var ctx = new Bunit.TestContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
+        };
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(receivedToken.IsCancellationRequested);
+            var status = cut.Find("[data-testid=\"preview-status\"]").TextContent;
+            Assert.Contains("上限 1 秒", status, StringComparison.Ordinal);
+        }, timeout: TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
     public void Click_Cleanup_When_Coordinator_Throws_Shows_Error_Message()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
@@ -616,13 +660,19 @@ public sealed class PreviewActionsTests
         });
     }
 
-    private static ServiceProvider BuildServices(IPreviewCoordinator coordinator, IPreviewNavigator navigator)
+    private static ServiceProvider BuildServices(
+        IPreviewCoordinator coordinator,
+        IPreviewNavigator navigator,
+        int previewReadyTimeoutSeconds = 600)
     {
         // PreviewActions now also resolves IOptions<DocsRepositoryOptions> (for the
         // P1 elapsed-vs-timeout label) and PreviewServerHost (for the live log tail
         // it polls every 500 ms during startup). The fakes return empty data, which
         // is what the test expects: no preview is actually running.
-        var options = Options.Create(new DocsRepositoryOptions());
+        var options = Options.Create(new DocsRepositoryOptions
+        {
+            PreviewReadyTimeoutSeconds = previewReadyTimeoutSeconds,
+        });
         return new ServiceCollection()
             .AddSingleton(coordinator)
             .AddSingleton(navigator)

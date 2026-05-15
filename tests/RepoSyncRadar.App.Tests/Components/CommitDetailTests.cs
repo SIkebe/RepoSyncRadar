@@ -66,6 +66,23 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void CommitDetail_Formats_Header_For_Scannability()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        var sha = cut.Find("[data-testid=\"commit-detail-sha\"]");
+        Assert.Equal("feedfac", sha.TextContent);
+        Assert.Equal(commit.Sha, sha.GetAttribute("title"));
+        Assert.Equal("Repo sync", cut.Find("h3[data-testid=\"commit-detail-message\"]").TextContent);
+    }
+
+    [Fact]
     public void CommitDetail_Shows_Scoring_When_Present()
     {
         var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
@@ -88,6 +105,8 @@ public class CommitDetailTests
 
         using var cut = RenderDetailWith(commit, resolver);
 
+        Assert.NotNull(cut.Find(".score-tile"));
+        Assert.Equal("スコア", cut.Find(".score-label").TextContent);
         var score = cut.Find("[data-testid=\"commit-detail-score\"]");
         Assert.Contains("0.72", score.TextContent);
         Assert.Equal("feature-update", cut.Find("[data-testid=\"commit-detail-category\"]").TextContent);
@@ -343,6 +362,49 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void OpenInWebView_Times_Out_When_Local_Preview_Exceeds_Limit()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var tcs = new TaskCompletionSource<PreviewComparisonLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken receivedToken = default;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                receivedToken = call.ArgAt<CancellationToken>(4);
+                receivedToken.Register(() =>
+                    tcs.TrySetException(new OperationCanceledException(receivedToken)));
+                return tcs.Task;
+            });
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            new PreviewNavigator(),
+            new PreviewSession(),
+            coordinator,
+            previewReadyTimeoutSeconds: 1);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(receivedToken.IsCancellationRequested);
+            var status = cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent;
+            Assert.Contains("上限 1 秒", status, StringComparison.Ordinal);
+        }, timeout: TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
     public void OpenInWebView_Rewrites_To_Localhost_When_Preview_Active()
     {
         var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
@@ -381,7 +443,8 @@ public class CommitDetailTests
         IPathToUrlResolver resolver,
         IPreviewNavigator? navigator,
         PreviewSession? session,
-        IPreviewCoordinator? coordinator)
+        IPreviewCoordinator? coordinator,
+        int previewReadyTimeoutSeconds = 600)
     {
         var services = new ServiceCollection().AddSingleton(resolver);
         if (navigator is not null)
@@ -402,6 +465,11 @@ public class CommitDetailTests
             Options.Create(new DocsApiOptions
             {
                 BaseAddress = new Uri("https://docs.github.com/"),
+            }));
+        services.AddSingleton<IOptions<DocsRepositoryOptions>>(
+            Options.Create(new DocsRepositoryOptions
+            {
+                PreviewReadyTimeoutSeconds = previewReadyTimeoutSeconds,
             }));
         var sp = services.BuildServiceProvider();
 

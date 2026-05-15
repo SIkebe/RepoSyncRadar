@@ -206,14 +206,163 @@ html, body {
 .radar-commit-detail .commit-header {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
-    margin-bottom: 0.5rem;
+    gap: 0.35rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 1px solid #eaeef2;
+}
+
+.radar-commit-detail .commit-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    flex-wrap: wrap;
 }
 
 .radar-commit-detail .commit-header .sha {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid #d0d7de;
+    border-radius: 999px;
+    background: #f6f8fa;
+    padding: 0.12rem 0.45rem;
     font-family: "Cascadia Mono", "Consolas", monospace;
-    font-size: 0.8rem;
-    color: #555;
+    font-size: 0.76rem;
+    color: #57606a;
+    line-height: 1.3;
+}
+
+.radar-commit-detail .commit-header .author {
+    color: #57606a;
+    font-size: 0.82rem;
+}
+
+.radar-commit-detail .commit-header .message {
+    margin: 0;
+    color: #24292f;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.radar-commit-detail .scoring {
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    background: #fff;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.radar-commit-detail .scoring-summary-row {
+    display: grid;
+    grid-template-columns: minmax(4.75rem, auto) minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: stretch;
+}
+
+.radar-commit-detail .score-tile {
+    border: 1px solid #b6d4ff;
+    border-radius: 6px;
+    background: #f0f6ff;
+    color: #1f4f99;
+    padding: 0.45rem 0.6rem;
+    min-width: 4.75rem;
+}
+
+.radar-commit-detail .score-label,
+.radar-commit-detail .scoring-meta dt,
+.radar-commit-detail .scoring-note dt {
+    display: block;
+    color: #57606a;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.radar-commit-detail .score-value {
+    display: block;
+    color: #1f4f99;
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.15;
+    margin-top: 0.12rem;
+}
+
+.radar-commit-detail .scoring-meta,
+.radar-commit-detail .scoring-notes {
+    margin: 0;
+    min-width: 0;
+}
+
+.radar-commit-detail .scoring-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    gap: 0.5rem;
+    align-content: start;
+}
+
+.radar-commit-detail .scoring-meta dd,
+.radar-commit-detail .scoring-note dd {
+    margin: 0;
+}
+
+.radar-commit-detail .scoring-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.radar-commit-detail .meta-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    border-radius: 999px;
+    padding: 0.16rem 0.5rem;
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.radar-commit-detail .category-chip {
+    background: #fff8c5;
+    color: #7d4e00;
+}
+
+.radar-commit-detail .audience-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.radar-commit-detail .audience-chip {
+    background: #e6f6ff;
+    color: #0550ae;
+}
+
+.radar-commit-detail .scoring-notes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.55rem;
+}
+
+.radar-commit-detail .scoring-note {
+    border-top: 1px solid #eaeef2;
+    padding-top: 0.55rem;
+}
+
+.radar-commit-detail .scoring-note dd {
+    color: #24292f;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    margin-top: 0.18rem;
+    overflow-wrap: anywhere;
 }
 
 .radar-commit-detail .files {

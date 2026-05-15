@@ -29,28 +29,49 @@
     else
     {
         <header class="commit-header">
-            <span class="sha" data-testid="commit-detail-sha">@Commit.Sha</span>
-            <span class="message" data-testid="commit-detail-message">@Commit.Message</span>
-            <span class="author">@Commit.Author</span>
+            <div class="commit-meta-row">
+                <span class="sha" data-testid="commit-detail-sha" title="@Commit.Sha">@ShortSha(Commit.Sha)</span>
+                <span class="author">@Commit.Author</span>
+            </div>
+            <h3 class="message" data-testid="commit-detail-message">@Commit.Message</h3>
         </header>
         @if (Commit.Scoring is { } scoring)
         {
             var audience = TryParseAudience(scoring.AudienceJson);
             <section class="scoring" data-testid="commit-detail-scoring">
-                <dl>
-                    <dt>Score</dt>
-                    <dd data-testid="commit-detail-score">@FormatScore(scoring.Score)</dd>
-                    <dt>Category</dt>
-                    <dd data-testid="commit-detail-category">@scoring.Category</dd>
-                    @if (audience is { Count: > 0 })
-                    {
-                        <dt>Audience</dt>
-                        <dd data-testid="commit-detail-audience">@string.Join(" / ", audience)</dd>
-                    }
-                    <dt>Summary</dt>
-                    <dd data-testid="commit-detail-summary">@scoring.SummaryJa</dd>
-                    <dt>Why</dt>
-                    <dd data-testid="commit-detail-why">@scoring.WhyJa</dd>
+                <div class="scoring-summary-row">
+                    <div class="score-tile">
+                        <span class="score-label">スコア</span>
+                        <span class="score-value" data-testid="commit-detail-score">@FormatScore(scoring.Score)</span>
+                    </div>
+                    <dl class="scoring-meta">
+                        <div class="scoring-meta-item">
+                            <dt>カテゴリ</dt>
+                            <dd data-testid="commit-detail-category"><span class="meta-chip category-chip">@scoring.Category</span></dd>
+                        </div>
+                        @if (audience is { Count: > 0 })
+                        {
+                            <div class="scoring-meta-item">
+                                <dt>対象</dt>
+                                <dd class="audience-chips" data-testid="commit-detail-audience">
+                                    @foreach (var item in audience)
+                                    {
+                                        <span class="meta-chip audience-chip">@item</span>
+                                    }
+                                </dd>
+                            </div>
+                        }
+                    </dl>
+                </div>
+                <dl class="scoring-notes">
+                    <div class="scoring-note">
+                        <dt>要約</dt>
+                        <dd data-testid="commit-detail-summary">@scoring.SummaryJa</dd>
+                    </div>
+                    <div class="scoring-note">
+                        <dt>理由</dt>
+                        <dd data-testid="commit-detail-why">@scoring.WhyJa</dd>
+                    </div>
                 </dl>
             </section>
         }
@@ -312,6 +333,7 @@
             _previewElapsedSec = 0;
             _previewTimeoutSec = Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.PreviewReadyTimeoutSeconds ?? 600;
             _previewCts = new CancellationTokenSource();
+            ArmPreviewTimeout(_previewCts);
             var token = _previewCts.Token;
             var host = Services.GetService<PreviewServerHost>();
             if (host is not null)
@@ -352,7 +374,7 @@
             }
             catch (OperationCanceledException)
             {
-                _previewStatus = "プレビュー起動を中止しました";
+                _previewStatus = BuildPreviewCancellationStatus();
                 return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -389,6 +411,7 @@
             _previewElapsedSec = 0;
             _previewTimeoutSec = Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.PreviewReadyTimeoutSeconds ?? 600;
             _previewCts = new CancellationTokenSource();
+            ArmPreviewTimeout(_previewCts);
             var token = _previewCts.Token;
             var host = Services.GetService<PreviewServerHost>();
             if (host is not null)
@@ -429,7 +452,7 @@
             }
             catch (OperationCanceledException)
             {
-                _previewStatus = "プレビュー起動を中止しました";
+                _previewStatus = BuildPreviewCancellationStatus();
                 return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -484,6 +507,19 @@
         try { _previewCts.Cancel(); } catch (ObjectDisposedException) { }
         return Task.CompletedTask;
     }
+
+    private void ArmPreviewTimeout(CancellationTokenSource cts)
+    {
+        if (_previewTimeoutSec > 0)
+        {
+            cts.CancelAfter(TimeSpan.FromSeconds(_previewTimeoutSec));
+        }
+    }
+
+    private string BuildPreviewCancellationStatus()
+        => _previewCanceling
+            ? "プレビュー起動を中止しました"
+            : $"プレビュー起動が上限 {_previewTimeoutSec} 秒を超えたため中止しました";
 
     private async Task PollPreviewProgressAsync(PreviewServerHost host, CancellationToken token)
     {
