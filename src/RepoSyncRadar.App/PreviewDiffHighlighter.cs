@@ -181,20 +181,23 @@ internal static class PreviewDiffHighlighter
 .rsr-preview-diff-block {
   position: relative !important;
   border-radius: 4px !important;
-  padding: 0.12rem 0.35rem 0.12rem 0.65rem !important;
+  padding: 0.14rem 0.45rem 0.14rem 0.65rem !important;
   margin-left: -0.65rem !important;
+  color: inherit !important;
 }
 .rsr-preview-diff-before {
-  background: rgba(255, 235, 232, 0.94) !important;
-  border-left: 4px solid #cf222e !important;
+  background-color: rgba(207, 34, 46, 0.18) !important;
+  border-left: 4px solid #f85149 !important;
+  box-shadow: inset 0 0 0 1px rgba(248, 81, 73, 0.28) !important;
   text-decoration-line: line-through !important;
-  text-decoration-color: rgba(207, 34, 46, 0.78) !important;
-  text-decoration-thickness: 1.4px !important;
+  text-decoration-color: rgba(248, 81, 73, 0.85) !important;
+  text-decoration-thickness: 1.2px !important;
+  text-decoration-skip-ink: none !important;
 }
 .rsr-preview-diff-after {
-  background: rgba(221, 244, 228, 0.94) !important;
-  border-left: 4px solid #1f883d !important;
-  box-shadow: 0 0 0 1px rgba(31, 136, 61, 0.18) !important;
+  background-color: rgba(35, 134, 54, 0.22) !important;
+  border-left: 4px solid #3fb950 !important;
+  box-shadow: inset 0 0 0 1px rgba(63, 185, 80, 0.28) !important;
 }
 `;
     document.head.appendChild(style);
