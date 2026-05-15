@@ -20,6 +20,45 @@ namespace RepoSyncRadar.App.Tests.Components;
 public sealed class WorkbenchTests
 {
     [Fact]
+    public void Workbench_Renders_Resizable_Three_Column_Shell()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(CountsFor(ReviewStatus.Unseen)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Commit>>([]));
+
+        var broadcaster = new ReviewBroadcaster();
+        var auth = Substitute.For<IGitHubAuthSession>();
+        auth.GetStateAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        auth.GetCurrentLoginAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("octocat"));
+
+        using var ctx = new Bunit.TestContext();
+        ctx.JSInterop.Mode = JSRuntimeMode.Loose;
+        ctx.Services.AddMudServices();
+        ctx.Services
+            .AddSingleton(repo)
+            .AddSingleton<IReviewBroadcaster>(broadcaster)
+            .AddSingleton(auth)
+            .AddSingleton(Substitute.For<ICopilotAgent>())
+            .AddSingleton(Substitute.For<IPathToUrlResolver>())
+            .AddSingleton<IOptions<DocsApiOptions>>(Options.Create(new DocsApiOptions
+            {
+                BaseAddress = new Uri("https://docs.github.com/"),
+            }));
+
+        var cut = ctx.RenderComponent<Workbench>();
+
+        var shell = cut.Find("[data-testid=\"radar-shell\"]");
+        var splitter = cut.Find("[data-testid=\"radar-sidebar-resizer\"]");
+        Assert.Contains("radar-shell", shell.ClassList);
+        Assert.Equal("separator", splitter.GetAttribute("role"));
+        Assert.Equal("vertical", splitter.GetAttribute("aria-orientation"));
+        Assert.Equal("0", splitter.GetAttribute("tabindex"));
+        Assert.Contains("幅を変更", splitter.GetAttribute("aria-label"), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Rejecting_Selected_Commit_Returns_To_Unseen_Queue_And_Clears_Detail()
     {
         var target = new Commit

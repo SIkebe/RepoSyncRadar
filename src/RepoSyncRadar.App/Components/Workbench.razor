@@ -4,8 +4,10 @@
     later steps. *@
 
 @inject IServiceProvider Services
+@inject IJSRuntime JS
 @implements IDisposable
 @using Microsoft.Extensions.DependencyInjection
+@using Microsoft.JSInterop
 
 <MudThemeProvider />
 <MudPopoverProvider />
@@ -13,12 +15,19 @@
 <MudSnackbarProvider />
 
 <CascadingValue Value="Services" IsFixed="true">
-    <div class="radar-shell">
+    <div class="radar-shell" data-testid="radar-shell">
         <aside class="radar-sidebar-pane">
             <MudText Typo="Typo.h6" Class="mb-2">Inbox</MudText>
             <Sidebar Selected="_selectedStatus"
                      SelectedChanged="HandleStatusChanged" />
         </aside>
+
+        <div class="radar-sidebar-resizer"
+             role="separator"
+             aria-orientation="vertical"
+             aria-label="サイドバーと作業ペインの幅を変更"
+             tabindex="0"
+             data-testid="radar-sidebar-resizer"></div>
 
         <main class="radar-workbench">
             <AppHeader />
@@ -64,6 +73,23 @@
         if (_broadcaster is not null)
         {
             _broadcaster.Reviewed += OnReviewed;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("repoSyncRadarLayout.initSidebarSplitter", "[data-testid='radar-shell']");
+        }
+        catch (JSException)
+        {
+            // The fixed fallback layout remains usable if the helper script is unavailable.
         }
     }
 

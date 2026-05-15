@@ -28,7 +28,10 @@
 
     <GridSplitter Grid.Column="1"
                   HorizontalAlignment="Stretch"
-                  Background="#DDDDDD" />
+                  Background="#DDDDDD"
+                  Cursor="SizeWE"
+                  ResizeBehavior="PreviousAndNext"
+                  ShowsPreview="False" />
 
     <!-- Right: official docs surface + optional PR HEAD local preview surface.
          Source is assigned in code-behind after CreationProperties (custom
@@ -89,6 +92,9 @@
                     Grid.Column="1"
                     HorizontalAlignment="Stretch"
                     Background="#DDDDDD"
+                    Cursor="SizeWE"
+                    ResizeBehavior="PreviousAndNext"
+                    ShowsPreview="False"
                     Visibility="Collapsed" />
 
       <Border x:Name="PreviewDocsHeader"
