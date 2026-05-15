@@ -178,6 +178,52 @@ html, body {
     gap: 0.2rem;
 }
 
+.radar-commit-detail .file-row.preview-active {
+    border-color: #2f6fd0;
+    background: #eaf3ff;
+    box-shadow: inset 3px 0 0 #2f6fd0;
+}
+
+.radar-commit-detail .file-row.preview-busy {
+    border-color: #b6d4ff;
+}
+
+.radar-commit-detail .file-main {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.radar-commit-detail .file-main .path {
+    overflow-wrap: anywhere;
+}
+
+.radar-commit-detail .preview-file-index,
+.radar-commit-detail .preview-active-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    line-height: 1.1;
+    font-weight: 600;
+}
+
+.radar-commit-detail .preview-file-index {
+    min-width: 1.15rem;
+    padding: 0.12rem 0.25rem;
+    background: #1f6feb;
+    color: #fff;
+}
+
+.radar-commit-detail .preview-active-badge {
+    padding: 0.12rem 0.35rem;
+    background: #d6e7ff;
+    color: #1f4f99;
+}
+
 .radar-commit-detail .file-row .stats {
     color: #777;
     font-size: 0.85rem;

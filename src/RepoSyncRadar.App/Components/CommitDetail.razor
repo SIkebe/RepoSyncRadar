@@ -63,8 +63,20 @@
             {
                 var previewTarget = ResolvePreviewTarget(file);
                 var canOpenPreview = previewTarget is not null || IsPreviewMappable(file);
-                <li class="file-row" data-testid="commit-detail-file" data-path="@file.Path">
-                    <span class="path">@file.Path</span>
+                var previewPosition = GetPreviewPosition(file);
+                var isActivePreview = IsActivePreviewFile(file);
+                <li class="@BuildFileRowClass(file)" data-testid="commit-detail-file" data-path="@file.Path">
+                    <span class="file-main">
+                        @if (previewPosition.Ordinal > 0)
+                        {
+                            <span class="preview-file-index" title="プレビュー対象 @previewPosition.Ordinal / @previewPosition.Total">@previewPosition.Ordinal</span>
+                        }
+                        <span class="path">@file.Path</span>
+                        @if (isActivePreview)
+                        {
+                            <span class="preview-active-badge">表示中</span>
+                        }
+                    </span>
                     <span class="stats"
                           data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
                     @if (canOpenPreview)
@@ -146,6 +158,7 @@
 
     private string? _resolvedForSha;
     private string? _previewBusyPath;
+    private string? _activePreviewPath;
     private string? _previewStatus;
     private bool _previewCanceling;
     private CancellationTokenSource? _previewCts;
@@ -164,6 +177,7 @@
             _urlsByPath.Clear();
             _resolvedForSha = null;
             _previewBusyPath = null;
+            _activePreviewPath = null;
             _previewStatus = null;
             _previewCanceling = false;
             return;
@@ -174,6 +188,7 @@
             return;
         }
 
+        _activePreviewPath = null;
         _urlsByPath.Clear();
         var resolver = Services.GetRequiredService<IPathToUrlResolver>();
         foreach (var file in Commit.Files)
@@ -216,7 +231,51 @@
     private string BuildPreviewButtonLabel(CommitFile file)
         => string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal)
             ? "起動中…"
+            : IsActivePreviewFile(file)
+                ? "表示中"
             : PreviewButtonLabel;
+
+    private string BuildFileRowClass(CommitFile file)
+    {
+        var classes = new List<string> { "file-row" };
+        if (IsActivePreviewFile(file))
+        {
+            classes.Add("preview-active");
+        }
+        if (string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal))
+        {
+            classes.Add("preview-busy");
+        }
+        return string.Join(' ', classes);
+    }
+
+    private bool IsActivePreviewFile(CommitFile file)
+        => string.Equals(_activePreviewPath, file.Path, StringComparison.Ordinal);
+
+    private PreviewFilePosition GetPreviewPosition(CommitFile file)
+    {
+        if (Commit is null || !IsPreviewMappable(file))
+        {
+            return default;
+        }
+
+        var total = 0;
+        var ordinal = 0;
+        foreach (var candidate in Commit.Files)
+        {
+            if (!IsPreviewMappable(candidate))
+            {
+                continue;
+            }
+            total++;
+            if (string.Equals(candidate.Path, file.Path, StringComparison.Ordinal))
+            {
+                ordinal = total;
+            }
+        }
+
+        return new PreviewFilePosition(ordinal, total);
+    }
 
     private async Task OpenInWebViewAsync(CommitFile file)
     {
@@ -263,12 +322,16 @@
                     token);
                 if (link is not null)
                 {
+                    var previewPosition = GetPreviewPosition(file);
                     navigator.PublishComparison(new PreviewComparisonRequest(
                         link.BeforeUrl,
                         link.AfterUrl,
                         $"変更前 {ShortSha(link.BeforeSha)} localhost",
                         $"PR HEAD {ShortSha(link.AfterSha)} localhost",
-                        file.Path));
+                        file.Path,
+                        previewPosition.Ordinal,
+                        previewPosition.Total));
+                    _activePreviewPath = file.Path;
                     _previewStatus = $"{file.Path} を変更前 / PR HEAD で比較表示しました";
                     return;
                 }
@@ -304,6 +367,7 @@
             && string.Equals(activeTarget.Host, "localhost", StringComparison.OrdinalIgnoreCase))
         {
             navigator.Publish(activeTarget);
+            _activePreviewPath = file.Path;
             _previewStatus = null;
             return;
         }
@@ -311,6 +375,7 @@
         if (ResolveOfficialTarget(file) is { } officialTarget)
         {
             navigator.Publish(officialTarget);
+            _activePreviewPath = file.Path;
             _previewStatus = null;
             return;
         }
@@ -392,6 +457,8 @@
 
     private static string ShortSha(string sha)
         => sha.Length <= 7 ? sha : sha[..7];
+
+    private readonly record struct PreviewFilePosition(int Ordinal, int Total);
 
     private static string FormatScore(double score)
         => score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);

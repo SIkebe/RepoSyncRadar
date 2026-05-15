@@ -27,7 +27,9 @@ public sealed record PreviewComparisonRequest(
     Uri AfterUrl,
     string BeforeLabel,
     string AfterLabel,
-    string? FilePath = null);
+    string? FilePath = null,
+    int? FileOrdinal = null,
+    int? FileCount = null);
 
 /// <inheritdoc cref="IPreviewNavigator" />
 public sealed class PreviewNavigator : IPreviewNavigator

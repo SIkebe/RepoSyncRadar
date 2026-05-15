@@ -36,7 +36,7 @@
          BlazorWebView's internal WebView2 on the default folder. -->
     <Grid Grid.Column="2">
       <Grid.RowDefinitions>
-        <RowDefinition Height="46" />
+        <RowDefinition Height="50" />
         <RowDefinition Height="*" />
       </Grid.RowDefinitions>
       <Grid.ColumnDefinitions>
@@ -50,23 +50,37 @@
               Background="#0D1117"
               BorderBrush="#30363D"
               BorderThickness="0,0,0,1"
-                Padding="10,4">
-              <Grid>
-                <Grid.RowDefinitions>
+              Padding="10,4">
+        <Grid>
+          <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <TextBlock x:Name="OfficialDocsHeaderText"
-                   Text="公式 docs.github.com"
-                   Foreground="#C9D1D9"
-                   FontSize="12"
-                   TextTrimming="CharacterEllipsis" />
-                <TextBlock x:Name="OfficialDocsFilePathText"
-                   Grid.Row="1"
-                   Foreground="#8B949E"
-                   FontSize="11"
-                   TextTrimming="CharacterEllipsis" />
-              </Grid>
+          </Grid.RowDefinitions>
+          <TextBlock x:Name="OfficialDocsHeaderText"
+                     Text="公式 docs.github.com"
+                     Foreground="#C9D1D9"
+                     FontSize="12"
+                     TextTrimming="CharacterEllipsis" />
+          <DockPanel Grid.Row="1"
+                     LastChildFill="True">
+            <Border x:Name="OfficialDocsFileBadge"
+                    DockPanel.Dock="Left"
+                    Background="#1F6FEB"
+                    CornerRadius="3"
+                    Padding="4,0"
+                    Margin="0,1,6,0"
+                    Visibility="Collapsed">
+              <TextBlock x:Name="OfficialDocsFileBadgeText"
+                         Foreground="#FFFFFF"
+                         FontSize="10"
+                         FontWeight="SemiBold" />
+            </Border>
+            <TextBlock x:Name="OfficialDocsFilePathText"
+                       Foreground="#8B949E"
+                       FontSize="11"
+                       TextTrimming="CharacterEllipsis" />
+          </DockPanel>
+        </Grid>
       </Border>
 
       <GridSplitter x:Name="PreviewDocsSplitter"
@@ -83,34 +97,105 @@
               Background="#0D1117"
               BorderBrush="#30363D"
               BorderThickness="0,0,0,1"
-                Padding="10,4"
+              Padding="10,4"
               Visibility="Collapsed">
-              <Grid>
-                <Grid.RowDefinitions>
+        <Grid>
+          <Grid.RowDefinitions>
               <RowDefinition Height="Auto" />
               <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <TextBlock x:Name="PreviewDocsHeaderText"
-                   Text="PR HEAD localhost"
-                   Foreground="#C9D1D9"
-                   FontSize="12"
-                   TextTrimming="CharacterEllipsis" />
-                <TextBlock x:Name="PreviewDocsFilePathText"
-                   Grid.Row="1"
-                   Foreground="#8B949E"
-                   FontSize="11"
-                   TextTrimming="CharacterEllipsis" />
-              </Grid>
+          </Grid.RowDefinitions>
+          <TextBlock x:Name="PreviewDocsHeaderText"
+                     Text="PR HEAD localhost"
+                     Foreground="#C9D1D9"
+                     FontSize="12"
+                     TextTrimming="CharacterEllipsis" />
+          <DockPanel Grid.Row="1"
+                     LastChildFill="True">
+            <Border x:Name="PreviewDocsFileBadge"
+                    DockPanel.Dock="Left"
+                    Background="#1F6FEB"
+                    CornerRadius="3"
+                    Padding="4,0"
+                    Margin="0,1,6,0"
+                    Visibility="Collapsed">
+              <TextBlock x:Name="PreviewDocsFileBadgeText"
+                         Foreground="#FFFFFF"
+                         FontSize="10"
+                         FontWeight="SemiBold" />
+            </Border>
+            <TextBlock x:Name="PreviewDocsFilePathText"
+                       Foreground="#8B949E"
+                       FontSize="11"
+                       TextTrimming="CharacterEllipsis" />
+          </DockPanel>
+        </Grid>
       </Border>
 
-      <wv2:WebView2 x:Name="DocsView"
-                    Grid.Row="1"
-                    Grid.Column="0" />
+      <Grid Grid.Row="1"
+            Grid.Column="0">
+        <wv2:WebView2 x:Name="DocsView" />
+        <Border x:Name="DocsPreviewStatusOverlay"
+                Panel.ZIndex="1"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                Margin="10"
+                Padding="10,8"
+                Background="#E60D1117"
+                BorderBrush="#30363D"
+                BorderThickness="1"
+                CornerRadius="4"
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
+          <StackPanel>
+            <TextBlock x:Name="DocsPreviewStatusText"
+                       Foreground="#F0F6FC"
+                       FontWeight="SemiBold"
+                       FontSize="12"
+                       TextWrapping="Wrap" />
+            <TextBlock x:Name="DocsPreviewStatusDetailText"
+                       Foreground="#8B949E"
+                       FontSize="11"
+                       Margin="0,2,0,6"
+                       TextWrapping="Wrap" />
+            <ProgressBar Height="3"
+                         IsIndeterminate="True" />
+          </StackPanel>
+        </Border>
+      </Grid>
 
-      <wv2:WebView2 x:Name="PreviewView"
-                    Grid.Row="1"
-                    Grid.Column="2"
-                    Visibility="Collapsed" />
+      <Grid Grid.Row="1"
+            Grid.Column="2"
+            x:Name="PreviewViewHost"
+            Visibility="Collapsed">
+        <wv2:WebView2 x:Name="PreviewView" />
+        <Border x:Name="PreviewStatusOverlay"
+                Panel.ZIndex="1"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                Margin="10"
+                Padding="10,8"
+                Background="#E60D1117"
+                BorderBrush="#30363D"
+                BorderThickness="1"
+                CornerRadius="4"
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
+          <StackPanel>
+            <TextBlock x:Name="PreviewStatusText"
+                       Foreground="#F0F6FC"
+                       FontWeight="SemiBold"
+                       FontSize="12"
+                       TextWrapping="Wrap" />
+            <TextBlock x:Name="PreviewStatusDetailText"
+                       Foreground="#8B949E"
+                       FontSize="11"
+                       Margin="0,2,0,6"
+                       TextWrapping="Wrap" />
+            <ProgressBar Height="3"
+                         IsIndeterminate="True" />
+          </StackPanel>
+        </Border>
+      </Grid>
 
       <!--
         Shown only when WebView2 init fails (Evergreen runtime missing, etc.).

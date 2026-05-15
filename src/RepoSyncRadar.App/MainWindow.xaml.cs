@@ -1,6 +1,7 @@
 using System.IO;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
 using Microsoft.AspNetCore.Components.WebView;
 using Microsoft.Extensions.DependencyInjection;
@@ -81,12 +82,16 @@ public partial class MainWindow : Window
         _previewNavigator = services.GetRequiredService<IPreviewNavigator>();
         _previewNavigator.Requested += OnPreviewRequested;
         _previewNavigator.ComparisonRequested += OnPreviewComparisonRequested;
+        DocsView.NavigationStarting += OnDocsViewNavigationStarting;
+        PreviewView.NavigationStarting += OnPreviewViewNavigationStarting;
         DocsView.NavigationCompleted += OnDocsViewNavigationCompleted;
         PreviewView.NavigationCompleted += OnPreviewViewNavigationCompleted;
         Closed += (_, _) =>
         {
             _previewNavigator.Requested -= OnPreviewRequested;
             _previewNavigator.ComparisonRequested -= OnPreviewComparisonRequested;
+            DocsView.NavigationStarting -= OnDocsViewNavigationStarting;
+            PreviewView.NavigationStarting -= OnPreviewViewNavigationStarting;
             DocsView.NavigationCompleted -= OnDocsViewNavigationCompleted;
             PreviewView.NavigationCompleted -= OnPreviewViewNavigationCompleted;
         };
@@ -297,7 +302,10 @@ public partial class MainWindow : Window
             ShowComparisonMode(
                 comparisonRequest.BeforeLabel,
                 comparisonRequest.AfterLabel,
-                comparisonRequest.FilePath);
+                comparisonRequest.FilePath,
+                comparisonRequest.FileOrdinal,
+                comparisonRequest.FileCount);
+            ShowInitialComparisonLoadingStatus(comparisonRequest);
             DocsView.Source = comparisonRequest.BeforeUrl;
             PreviewView.Source = url;
             return;
@@ -312,7 +320,13 @@ public partial class MainWindow : Window
     {
         ArgumentNullException.ThrowIfNull(request);
         StartPreviewDiffTracking(request);
-        ShowComparisonMode(request.BeforeLabel, request.AfterLabel, request.FilePath);
+        ShowComparisonMode(
+            request.BeforeLabel,
+            request.AfterLabel,
+            request.FilePath,
+            request.FileOrdinal,
+            request.FileCount);
+        ShowInitialComparisonLoadingStatus(request);
         DocsView.Source = request.BeforeUrl;
         PreviewView.Source = request.AfterUrl;
     }
@@ -331,6 +345,34 @@ public partial class MainWindow : Window
         _previewDiffGeneration++;
         _beforePreviewDiffReady = false;
         _afterPreviewDiffReady = false;
+        HidePreviewPaneStatus(isBeforePane: true);
+        HidePreviewPaneStatus(isBeforePane: false);
+    }
+
+    private void OnDocsViewNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+        => OnPreviewDiffPaneNavigationStarting(isBeforePane: true, e.Uri);
+
+    private void OnPreviewViewNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+        => OnPreviewDiffPaneNavigationStarting(isBeforePane: false, e.Uri);
+
+    private void OnPreviewDiffPaneNavigationStarting(bool isBeforePane, string navigationUri)
+    {
+        if (_activePreviewDiffRequest is not { } request
+            || !Uri.TryCreate(navigationUri, UriKind.Absolute, out var actualUrl))
+        {
+            return;
+        }
+
+        var expectedUrl = isBeforePane ? request.BeforeUrl : request.AfterUrl;
+        if (!IsSameNavigationTarget(actualUrl, expectedUrl))
+        {
+            return;
+        }
+
+        ShowPreviewPaneStatus(
+            isBeforePane,
+            isBeforePane ? "変更前ページを読み込み中…" : "PR HEAD ページを読み込み中…",
+            "localhost の応答と WebView2 の描画完了を待っています。初回は Next.js のページコンパイルで時間がかかることがあります。");
     }
 
     private void OnDocsViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -344,7 +386,7 @@ public partial class MainWindow : Window
         bool isBeforePane,
         CoreWebView2NavigationCompletedEventArgs e)
     {
-        if (!e.IsSuccess || _activePreviewDiffRequest is not { } request)
+        if (_activePreviewDiffRequest is not { } request)
         {
             return;
         }
@@ -352,6 +394,15 @@ public partial class MainWindow : Window
         var expectedUrl = isBeforePane ? request.BeforeUrl : request.AfterUrl;
         if (!IsSameNavigationTarget(view.Source, expectedUrl))
         {
+            return;
+        }
+
+        if (!e.IsSuccess)
+        {
+            ShowPreviewPaneStatus(
+                isBeforePane,
+                isBeforePane ? "変更前ページの読み込みに失敗しました" : "PR HEAD ページの読み込みに失敗しました",
+                $"WebView2: {e.WebErrorStatus}");
             return;
         }
 
@@ -364,9 +415,18 @@ public partial class MainWindow : Window
             _afterPreviewDiffReady = true;
         }
 
+        ShowPreviewPaneStatus(
+            isBeforePane,
+            isBeforePane ? "変更前ページの読み込み完了" : "PR HEAD ページの読み込み完了",
+            _beforePreviewDiffReady && _afterPreviewDiffReady
+                ? "両方のページが揃いました。差分を解析します。"
+                : "もう片方のページ読み込みを待っています。");
+
         if (_beforePreviewDiffReady && _afterPreviewDiffReady)
         {
             var generation = _previewDiffGeneration;
+            ShowPreviewPaneStatus(isBeforePane: true, "差分を解析中…", "本文ブロックを抽出してハイライトを適用しています。");
+            ShowPreviewPaneStatus(isBeforePane: false, "差分を解析中…", "本文ブロックを抽出してハイライトを適用しています。");
             _ = ApplyPreviewDiffHighlightsAsync(generation);
         }
     }
@@ -406,25 +466,31 @@ public partial class MainWindow : Window
                 PreviewDocsHeaderText.Text = BuildDiffHeaderLabel(
                     request.AfterLabel,
                     plan.AfterChangedIndexes.Count);
+                HidePreviewPaneStatus(isBeforePane: true);
+                HidePreviewPaneStatus(isBeforePane: false);
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogPreviewDiffFailed(_logger, ex);
+            ShowPreviewPaneStatus(isBeforePane: true, "差分解析に失敗しました", ex.Message);
+            ShowPreviewPaneStatus(isBeforePane: false, "差分解析に失敗しました", ex.Message);
         }
     }
 
     private void ShowComparisonMode(
         string leftLabel = "公式 docs.github.com",
         string rightLabel = "PR HEAD localhost",
-        string? filePath = null)
+        string? filePath = null,
+        int? fileOrdinal = null,
+        int? fileCount = null)
     {
         OfficialDocsHeaderText.Text = leftLabel;
         PreviewDocsHeaderText.Text = rightLabel;
-        SetComparisonFilePath(filePath);
+        SetComparisonFilePath(filePath, fileOrdinal, fileCount);
         PreviewDocsSplitter.Visibility = Visibility.Visible;
         PreviewDocsHeader.Visibility = Visibility.Visible;
-        PreviewView.Visibility = Visibility.Visible;
+        PreviewViewHost.Visibility = Visibility.Visible;
         PreviewDocsSplitterColumn.Width = new GridLength(5);
         OfficialDocsColumn.Width = new GridLength(1, GridUnitType.Star);
         PreviewDocsColumn.Width = new GridLength(1, GridUnitType.Star);
@@ -434,10 +500,12 @@ public partial class MainWindow : Window
     {
         OfficialDocsHeaderText.Text = "公式 docs.github.com";
         PreviewDocsHeaderText.Text = "PR HEAD localhost";
-        SetComparisonFilePath(null);
+        SetComparisonFilePath(null, null, null);
+        HidePreviewPaneStatus(isBeforePane: true);
+        HidePreviewPaneStatus(isBeforePane: false);
         PreviewDocsSplitter.Visibility = Visibility.Collapsed;
         PreviewDocsHeader.Visibility = Visibility.Collapsed;
-        PreviewView.Visibility = Visibility.Collapsed;
+        PreviewViewHost.Visibility = Visibility.Collapsed;
         PreviewDocsSplitterColumn.Width = new GridLength(0);
         OfficialDocsColumn.Width = new GridLength(1, GridUnitType.Star);
         PreviewDocsColumn.Width = new GridLength(0);
@@ -464,17 +532,54 @@ public partial class MainWindow : Window
                 CultureInfo.InvariantCulture,
                 $"{label}・差分 {changedBlockCount}");
 
-    private void SetComparisonFilePath(string? filePath)
+    private void ShowInitialComparisonLoadingStatus(PreviewComparisonRequest request)
+    {
+        var detail = "サーバ起動後、WebView2 のナビゲーションと Next.js のページコンパイル完了を待っています。";
+        ShowPreviewPaneStatus(isBeforePane: true, "変更前ページを準備中…", detail);
+        ShowPreviewPaneStatus(isBeforePane: false, "PR HEAD ページを準備中…", detail);
+    }
+
+    private void SetComparisonFilePath(string? filePath, int? fileOrdinal, int? fileCount)
     {
         var text = BuildComparisonFilePathLabel(filePath);
+        var indexText = BuildComparisonFileIndexLabel(fileOrdinal, fileCount);
         OfficialDocsFilePathText.Text = text;
         OfficialDocsFilePathText.ToolTip = text.Length == 0 ? null : text;
         PreviewDocsFilePathText.Text = text;
         PreviewDocsFilePathText.ToolTip = text.Length == 0 ? null : text;
+        SetFileBadge(OfficialDocsFileBadge, OfficialDocsFileBadgeText, indexText);
+        SetFileBadge(PreviewDocsFileBadge, PreviewDocsFileBadgeText, indexText);
     }
 
     internal static string BuildComparisonFilePathLabel(string? filePath)
         => string.IsNullOrWhiteSpace(filePath) ? string.Empty : filePath.Trim();
+
+    internal static string BuildComparisonFileIndexLabel(int? fileOrdinal, int? fileCount)
+        => fileOrdinal is > 0 && fileCount is > 0
+            ? string.Create(CultureInfo.InvariantCulture, $"{fileOrdinal}/{fileCount}")
+            : string.Empty;
+
+    private static void SetFileBadge(FrameworkElement badge, TextBlock textBlock, string value)
+    {
+        textBlock.Text = value;
+        badge.Visibility = value.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void ShowPreviewPaneStatus(bool isBeforePane, string text, string detail)
+    {
+        var overlay = isBeforePane ? DocsPreviewStatusOverlay : PreviewStatusOverlay;
+        var textBlock = isBeforePane ? DocsPreviewStatusText : PreviewStatusText;
+        var detailBlock = isBeforePane ? DocsPreviewStatusDetailText : PreviewStatusDetailText;
+        textBlock.Text = text;
+        detailBlock.Text = detail;
+        overlay.Visibility = Visibility.Visible;
+    }
+
+    private void HidePreviewPaneStatus(bool isBeforePane)
+    {
+        var overlay = isBeforePane ? DocsPreviewStatusOverlay : PreviewStatusOverlay;
+        overlay.Visibility = Visibility.Collapsed;
+    }
 
     private static bool IsSameNavigationTarget(Uri? actualUrl, Uri expectedUrl)
         => actualUrl is not null

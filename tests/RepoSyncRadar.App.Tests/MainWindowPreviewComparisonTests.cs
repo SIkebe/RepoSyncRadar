@@ -56,6 +56,15 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void BuildComparisonFileIndexLabel_Shows_Ordinal_When_Available()
+    {
+        Assert.Equal("3/6", MainWindow.BuildComparisonFileIndexLabel(3, 6));
+        Assert.Equal(string.Empty, MainWindow.BuildComparisonFileIndexLabel(null, 6));
+        Assert.Equal(string.Empty, MainWindow.BuildComparisonFileIndexLabel(3, null));
+        Assert.Equal(string.Empty, MainWindow.BuildComparisonFileIndexLabel(0, 6));
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildPlan_Ignores_Whitespace_Only_Differences()
     {
         var beforeBlocks = new[]
