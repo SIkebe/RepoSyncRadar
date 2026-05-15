@@ -30,6 +30,16 @@
     <ProjectReference Include="..\RepoSyncRadar.Core\RepoSyncRadar.Core.csproj" />
   </ItemGroup>
 
+  <Target Name="StopRunningDebugAppBeforeBuild"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(Configuration)' == 'Debug' and '$(DesignTimeBuild)' != 'true' and '$(RepoSyncRadarStopRunningAppBeforeBuild)' != 'false'">
+    <PropertyGroup>
+      <_RepoSyncRadarDebugExePath>$(TargetDir)$(AssemblyName).exe</_RepoSyncRadarDebugExePath>
+    </PropertyGroup>
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\scripts\Stop-RepoSyncRadarDebugProcess.ps1&quot; -TargetPath &quot;$(_RepoSyncRadarDebugExePath)&quot;"
+          IgnoreExitCode="true" />
+  </Target>
+
   <ItemGroup>
     <InternalsVisibleTo Include="RepoSyncRadar.App.Tests" />
   </ItemGroup>
