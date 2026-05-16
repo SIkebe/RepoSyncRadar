@@ -226,6 +226,7 @@ public class CommitDetailTests
                 commit.Sha,
                 "content/copilot/about-copilot.md",
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(new PreviewComparisonLink(
                 new Uri("http://localhost:4501/en/copilot/about-copilot"),
@@ -257,6 +258,7 @@ public class CommitDetailTests
             commit.Sha,
             "content/copilot/about-copilot.md",
             Arg.Any<IProgress<string>?>(),
+            Arg.Any<DocsVersion?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -279,6 +281,7 @@ public class CommitDetailTests
                 commit.Sha,
                 "CHANGELOG.md",
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(new PreviewComparisonLink(
                 new Uri("http://127.0.0.1:4500/markdown/before"),
@@ -308,6 +311,7 @@ public class CommitDetailTests
             commit.Sha,
             "CHANGELOG.md",
             Arg.Any<IProgress<string>?>(),
+            Arg.Any<DocsVersion?>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -328,10 +332,11 @@ public class CommitDetailTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                receivedToken = call.ArgAt<CancellationToken>(4);
+                receivedToken = call.ArgAt<CancellationToken>(5);
                 receivedToken.Register(() =>
                     tcs.TrySetException(new OperationCanceledException(receivedToken)));
                 return tcs.Task;
@@ -378,10 +383,11 @@ public class CommitDetailTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                receivedToken = call.ArgAt<CancellationToken>(4);
+                receivedToken = call.ArgAt<CancellationToken>(5);
                 receivedToken.Register(() =>
                     tcs.TrySetException(new OperationCanceledException(receivedToken)));
                 return tcs.Task;

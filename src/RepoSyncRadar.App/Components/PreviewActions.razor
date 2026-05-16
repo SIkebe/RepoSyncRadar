@@ -138,6 +138,12 @@ npm install</code></pre>
     private string? _worktreePath;
     private string? _activePreviewSha;
     private string? _activePreviewPath;
+    // §Step 19.9: 現在 WebView2 に表示中の docs version。
+    // ホスト (MainWindow) の ComboBox 選択変更を汏ぐため、アクティブな Markdown
+    // プレビューだけが反応するよう、このコンポーネント側で active version を保持し、
+    // 同一 path/sha のみ再 render を許可する。
+    private DocsVersion? _activeVersion;
+    private IPreviewNavigator? _subscribedNavigator;
     private string _busyCancellationSubject = "プレビュー起動";
     private CancellationTokenSource? _cts;
     private DateTimeOffset _startedAt;
@@ -149,6 +155,18 @@ npm install</code></pre>
     private Task? _pollTask;
     private CancellationTokenSource? _predictivePrewarmCts;
 
+    protected override void OnInitialized()
+    {
+        // §Step 19.9: ホストからの version 切替リクエストを購読。
+        // Services が未初期化の状態 (一部テスト) では Navigator を取得できないため try で抱える。
+        var navigator = Services?.GetService<IPreviewNavigator>();
+        if (navigator is not null)
+        {
+            navigator.VersionChangeRequested += OnVersionChangeRequested;
+            _subscribedNavigator = navigator;
+        }
+    }
+
     protected override void OnParametersSet()
     {
         var sha = Commit?.Sha;
@@ -159,6 +177,7 @@ npm install</code></pre>
 
         _activePreviewSha = sha;
         _activePreviewPath = null;
+        _activeVersion = null;
 
         // Predictive prewarm: the moment the user selects a different PR/commit we
         // start the bare-clone+fetch in the background so the eventual
@@ -185,9 +204,12 @@ npm install</code></pre>
     }
 
     private async Task PreviewAsync()
-        => await PreviewFileAsync(filePath: null);
+        => await PreviewFileAsync(filePath: null, version: null);
 
-    private async Task PreviewFileAsync(string? filePath)
+    private Task PreviewFileAsync(string? filePath)
+        => PreviewFileAsync(filePath, version: null);
+
+    private async Task PreviewFileAsync(string? filePath, DocsVersion? version)
     {
         if (Commit is null || _busy)
         {
@@ -223,7 +245,7 @@ npm install</code></pre>
             // 表示できる。
             if (PreviewPathMapper.IsMarkdown(targetFilePath))
             {
-                await PreviewMarkdownAsync(coordinator, targetFilePath, progress, token);
+                await PreviewMarkdownAsync(coordinator, targetFilePath, progress, token, version);
                 return;
             }
 
@@ -373,7 +395,8 @@ npm install</code></pre>
         IPreviewCoordinator coordinator,
         string filePath,
         IProgress<string> progress,
-        CancellationToken token)
+        CancellationToken token,
+        DocsVersion? version)
     {
         PreviewComparisonLink? link;
         try
@@ -383,7 +406,8 @@ npm install</code></pre>
                 Commit.Sha,
                 filePath,
                 progress,
-                token);
+                version: version,
+                cancellationToken: token);
         }
         catch (OperationCanceledException)
         {
@@ -408,6 +432,7 @@ npm install</code></pre>
         _lastUrl = link.AfterUrl;
         _worktreePath = link.AfterWorktreePath;
         _activePreviewPath = filePath;
+        _activeVersion = link.CurrentVersion;
         var previewPosition = GetPreviewPosition(Commit!, filePath);
         Services.GetRequiredService<IPreviewNavigator>().PublishComparison(new PreviewComparisonRequest(
             link.BeforeUrl,
@@ -416,7 +441,9 @@ npm install</code></pre>
             $"PR HEAD {ShortSha(link.AfterSha)} Markdown",
             filePath,
             previewPosition.Ordinal,
-            previewPosition.Total));
+            previewPosition.Total,
+            CurrentVersion: link.CurrentVersion,
+            AffectedVersions: link.AffectedVersions));
         _status = $"{filePath} を Markdown として変更前 / PR HEAD で比較表示しました";
     }
 
@@ -556,8 +583,38 @@ npm install</code></pre>
         }
     }
 
+    /// <summary>
+    /// §Step 19.9: ホストの Version ComboBox 変更を受けて、このアクティブ Markdown
+    /// プレビューを同じ path ・同じ sha で新しい version に切り替えて再 renderする。
+    /// 実際に active な path がない/起動中の場合は何もしない (ホスト側のイベントは
+    /// すべての PreviewActions インスタンスに broadcast されるため)。
+    /// </summary>
+    private void OnVersionChangeRequested(object? sender, DocsVersion version)
+    {
+        if (_busy || _activePreviewPath is null || Commit is null)
+        {
+            return;
+        }
+
+        if (_activeVersion is not null && _activeVersion == version)
+        {
+            return;
+        }
+
+        var capturedPath = _activePreviewPath;
+        _ = InvokeAsync(async () =>
+        {
+            await PreviewFileAsync(capturedPath, version);
+        });
+    }
+
     public void Dispose()
     {
+        if (_subscribedNavigator is not null)
+        {
+            _subscribedNavigator.VersionChangeRequested -= OnVersionChangeRequested;
+            _subscribedNavigator = null;
+        }
         try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
         _cts?.Dispose();
         _cts = null;

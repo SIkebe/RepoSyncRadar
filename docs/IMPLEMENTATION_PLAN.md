@@ -31,6 +31,8 @@
 - [Step 19.5. ローカルプレビューの UI 配線](#step-195-ローカルプレビューの-ui-配線)
 - [Step 19.6. ローカルプレビューの起動時間を抜本短縮](#step-196-ローカルプレビューの起動時間を抜本短縮)
 - [Step 19.7. 対象ページのインプロセス・レンダリング (Next.js バイパス)](#step-197-対象ページのインプロセスレンダリング-nextjs-バイパス)
+- [Step 19.8. 公式 docs へのジャンプ + Liquid タグの可視化](#step-198-公式-docs-へのジャンプ--liquid-タグの可視化)
+- [Step 19.9. ifversion / バージョン認識 + Version ComboBox](#step-199-ifversion--バージョン認識--version-combobox)
 - [Step 20. 配布(Velopack)とシークレット保管(DPAPI)](#step-20-配布velopackとシークレット保管dpapi)
 - [付録 A — テスト命名規約](#付録-a--テスト命名規約)
 - [付録 B — テスト固定値 / フィクスチャ管理](#付録-b--テスト固定値--フィクスチャ管理)
@@ -991,6 +993,115 @@ Step 19.6 を 5 イテレーション回しても、`content/**/*.md` の比較�
 
 ---
 
+## Step 19.8. 公式 docs へのジャンプ + Liquid タグの可視化
+
+### 19.8.1 目的
+
+Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画できるようになったが、レビュー実務では **「この記事を公式 docs.github.com で実機確認したい」「Liquid タグが何に解決されたか hover でその場で確認したい」** という 2 軸の要求が頻発する。本ステップでは Phase 3 (公式 docs へのジャンプボタン) と Phase 4 (Liquid タグの実評価 + 可視化 MVP) を 1 commit に束ねて投入する。
+
+### 19.8.2 スコープ
+
+1. **OpenOfficialDocsButton (Phase 3)** — `MainWindow.xaml` のメインヘッダに「公式 docs を開く」ボタンを追加。現在 `DocsView.Source` に表示している記事 URL の path を https://docs.github.com 配下の正規 URL に解決し、既定ブラウザで開く。content path → docs URL の解決は当面 `MainWindow.BuildOfficialDocsUri` の internal static ヘルパーに置き、テストは `App.Tests` で `[InternalsVisibleTo]` 経由で行う (将来 Core 側に切り出す余地は残す)。`/content/foo/index.md` ↔ `/en/foo`、拡張子削除、URL 不可文字の `Uri.EscapeDataString` 適用などのルールを Theory でカバー。外部遷移には `UrlAllowList` を経由。
+2. **DocsLiquidEvaluator MVP (Phase 4)** — `MarkdownPreviewRenderer` で行っていた素の正規表現プレースホルダ化を、軽量な Liquid プリプロセッサ `DocsLiquidEvaluator` (`Core.Services.Preview`) に置換。MVP では以下のみサポート:
+    - `{{ site.data.variables.product.prodname_copilot }}` 等の **変数展開** — `data/variables/*.yml` を bare clone から読み、ドット記法で resolve。未解決変数は元の `{{ … }}` をそのまま `<span class="rsr-liquid">` で包む (Step 19.7 の振る舞いを温存)。
+    - `{% data variables.… %}` の `data` タグ。GitHub Docs 独自構文だが、実質変数展開に等しい。
+    - 既存の `{% ifversion … %}` / `{% link %}` 等は **そのまま `<span class="rsr-liquid">` のまま** とし (Step 19.9 で本格対応)、誤評価で本文が壊れないことを優先する。
+3. **可視化 (tooltip 強化)** — `<span class="rsr-liquid">` の `title` 属性に「resolved: `<value>`」または「unresolved: `<reason>`」を載せ、hover で実評価結果が見える。値が解決できた変数は `class="rsr-liquid rsr-liquid-resolved"`、未解決は `class="rsr-liquid rsr-liquid-pending"` を付与し、CSS で淡黄 / 淡灰を分ける。
+
+### 19.8.3 テスト
+
+`App.Tests/MainWindowPreviewComparisonTests.cs` (拡張, +6 件) — `MainWindow.BuildOfficialDocsUri` を `[InternalsVisibleTo]` で直接呼び、Theory ベースで以下をカバー:
+
+| テスト | 内容 |
+|---|---|
+| `Maps_Content_Markdown_Path_To_Public_Docs_Url` | `content/copilot/about-copilot.md` → `https://docs.github.com/en/copilot/about-copilot` |
+| `Maps_Content_Index_Markdown_To_English_Home` | `content/index.md` → `https://docs.github.com/en` |
+| `Maps_Section_Index_Markdown_To_Section_Home` | `content/copilot/index.md` → `https://docs.github.com/en/copilot` |
+| `Returns_Null_For_Null_Or_Empty_Path` | 空入力ガード (null / "" / 空白のみ) |
+| `Returns_Null_For_Non_Content_Markdown_Path` | `CHANGELOG.md` / `README.md` 等は対象外 |
+| `Returns_Null_For_Non_Markdown_Content_Path` | `.yml` / `.ts` 等は対象外 |
+
+`Core.Tests/Services/Preview/DocsLiquidEvaluatorTests.cs` (新規, 8 件)
+
+| テスト | 内容 |
+|---|---|
+| `Resolves_Site_Data_Variable_To_Value` | `{{ site.data.variables.product.prodname_copilot }}` → `GitHub Copilot` |
+| `Resolves_Data_Tag_Variable_To_Value` | `{% data variables.product.prodname_copilot %}` 同上 |
+| `Unknown_Variable_Stays_As_Pending_Span` | 未知の path → `class="rsr-liquid rsr-liquid-pending"` |
+| `Ifversion_Block_Is_Preserved_As_Span` | `{% ifversion fpt %}…{% endif %}` は span で包まれるだけ (本文は中身そのまま) |
+| `Link_Tag_Is_Preserved_As_Span` | `{% link /foo %}` 同上 |
+| `Multiple_Variables_In_One_Line_Resolved_Independently` | 1 行に複数変数 |
+| `Variable_With_Underscores_And_Dots_Resolves` | dot-separated path で多階層 resolve |
+| `Yaml_Quoted_Values_Are_Unquoted_When_Resolved` | `'GitHub Copilot'` → quotes 剥がし |
+
+`App.Tests/MainWindowPreviewComparisonTests.cs` (拡張, 上記 6 件は同ファイル内に集約)
+
+### 19.8.4 完了基準
+
+- 新規テスト 17 件 + 既存テスト全体が `Category!=Manual` で緑 (App.Tests 213, Core.Tests 184 程度)
+- `dotnet build -warnaserror` 緑
+- 手動: 任意の `content/**/*.md` プレビュー中にヘッダの「公式 docs を開く」ボタンがアクティブになり、既定ブラウザで対応 URL が開く。Liquid 変数は hover で resolved 値が見える
+
+---
+
+## Step 19.9. ifversion / バージョン認識 + Version ComboBox
+
+### 19.9.1 目的
+
+公式 docs.github.com の Version selector (fpt / ghec / ghes 3.x …) に倣い、PR レビュー時に **「Free & Pro & Team では消えるが Enterprise Cloud では残るセクション」** や **「ghes 3.21 でのみ追加されたセクション」** などを 1 つの WebView 上で切り替え表示できるようにする。Step 19.8 では `{% ifversion … %}` を span 化するに留めたが、これではレビュアーが各版で何が変わるか **見落とす** リスクが残る。「{% ifversion X %} … {% else %} … {% endif %} は 最初の分岐だけを採用」状態を解消し、**本物の docs と同様にバージョン切替で本文を変える** とともに、**この PR が影響する全バージョンを ComboBox の tooltip で可視化する** ことで見落としを構造的に防ぐ。
+
+### 19.9.2 スコープ
+
+1. **`DocsVersion` / `DocsVersionCatalog`** (Core) — slug (`fpt` / `ghec` / `ghes-3.21` …) と display label を持つ value object。`DocsVersionCatalog.All` で「公式 Version selector に出る候補 (fpt → ghec → ghes 降順)」を提供し、`Default = fpt`。ghes リリースリストは静的メンテ。
+2. **`VersionExpressionEvaluator`** (Core) — `ifversion fpt`, `ifversion not ghec`, `ifversion ghes > 3.18`, `ifversion fpt or ghec` 等を 1 つの `DocsVersion` 文脈で `bool` に評価する。AND / OR / NOT / 比較演算子 / グルーピングを最小限サポート。
+3. **`DocsLiquidEvaluator` 拡張** — Step 19.8 で MVP だった span 化を、版を引数に取る **本物のブランチ採用** に置換。`ifversion … else … endif` をパースし、`VersionExpressionEvaluator` で評価し、選ばれた分岐だけを本文に残す。未対応構文は span として温存。
+4. **`DocsVersionImpactAnalyzer`** (Core) — `before` / `after` 両側の Markdown を `DocsVersionCatalog.All` の各版で render し、結果ハッシュが異なる版だけを `AffectedVersions` として返す。これにより「fpt と ghec で別々の変更が入った PR」も漏らさず列挙できる。
+5. **`MarkdownPreviewRenderer` の version 認識** — `Render(side, version)` シグネチャを追加。`PreviewCoordinator.PrepareMarkdownComparisonPreviewAsync` は `DocsVersion?` を受け取り、`PreviewComparisonLink.CurrentVersion` / `AffectedVersions` に詰めて返す。ヘッダに「現在: {label}」と影響版バッジ列を表示。
+6. **`IPreviewNavigator` 双方向化** — `event VersionChangeRequested(DocsVersion)` と `void RequestVersionChange(DocsVersion)` を追加し、ホスト WPF と Razor preview コンポーネントの間で版切替を pub/sub。`PreviewComparisonRequest` に `CurrentVersion` / `AffectedVersions` を生やす。
+7. **WPF Version ComboBox** — `MainWindow.xaml` のヘッダ右側に `DocsVersionSelector` ComboBox を追加。Markdown プレビュー到着時のみ可視化し、`SelectedItem` を `CurrentVersion` に同期、`AffectedVersions` を tooltip で列挙。ユーザ操作時は `_previewNavigator.RequestVersionChange(v)` を broadcast → 全 `PreviewActions` / `CommitDetail` インスタンスが現在 active な path を新版で再 prepare → ヘッダの `CurrentVersion` も更新される閉ループ。
+8. **モックの positional 拡張** — `IPreviewCoordinator.PrepareMarkdownComparisonPreviewAsync` に `DocsVersion?` 引数を挿入したため、既存 19 マッチャ tuple に `Arg.Any<DocsVersion?>()` を追加し、`call.ArgAt<CancellationToken>(4)` を `(5)` に更新する。
+
+### 19.9.3 テスト
+
+`Core.Tests/Services/Preview/DocsVersionCatalogTests.cs` (新規, 3 件) — `All` の順序固定、`Default = fpt`、`FromSlug` の正規化と未知 slug の fallback。
+
+`Core.Tests/Services/Preview/VersionExpressionEvaluatorTests.cs` (新規, 12 件 × Theory) — `fpt`, `not fpt`, `fpt or ghec`, `ghes > 3.18`, `ghes <= 3.16`, `(fpt or ghec) and not ghes`, 未知 token、空文字、デフォルト式等。
+
+`Core.Tests/Services/Preview/DocsLiquidEvaluatorTests.cs` (拡張, +8 件)
+- `Ifversion_Selects_Then_Branch_When_True`
+- `Ifversion_Selects_Else_Branch_When_False`
+- `Ifversion_Without_Else_Empties_Body_When_False`
+- `Nested_Ifversion_Evaluated_Correctly`
+- `Ifversion_Else_If_Chain_Picks_First_True`
+- `Unknown_Tag_Inside_Branch_Stays_As_Span`
+- `Comparison_Operators_Are_Honored_For_Ghes`
+- `Multiple_Ifversion_Blocks_In_Single_Document`
+
+`Core.Tests/Services/Preview/DocsVersionImpactAnalyzerTests.cs` (新規, 6 件)
+- `Returns_Empty_When_No_Markdown_Differs_Across_Versions`
+- `Returns_Only_Affected_Versions_When_Single_Version_Differs`
+- `Returns_Multiple_Versions_When_Free_And_Enterprise_Cloud_Differ_Separately` ← ユーザ要件の核
+- `Considers_Before_And_After_Sides`
+- `Falls_Back_To_Default_When_Render_Throws`
+- `Returns_All_Versions_When_File_Added_Or_Removed`
+
+`Core.Tests/Services/Preview/MarkdownPreviewRendererVersionTests.cs` (新規, 4 件) — `Render` が version を受けて本文 HTML を切り替えること、ヘッダにバッジ列を出すこと、未指定時は Default で render されること。
+
+`App.Tests/Components/PreviewActionsTests.cs` (拡張, +5 件)
+- `PreviewNavigator_RequestVersionChange_Raises_Event_With_Version`
+- `PreviewNavigator_RequestVersionChange_Null_Throws`
+- `PreviewComparisonRequest_Defaults_Version_Metadata_To_Null`
+- `VersionChangeRequested_Reruns_Coordinator_With_New_Version` ← 「Enterprise Cloud と Free で別々の変更」見落とし防止の根拠テスト
+- `VersionChangeRequested_Same_Version_Does_Not_Rerun`
+
+### 19.9.4 完了基準
+
+- 新規テスト 38 件程度 + 既存 19 マッチャ移行 + `ArgAt` index 4→5 修正で `Category!=Manual` が緑
+- `dotnet build -warnaserror` 緑 (Integrations 59 + Core 245 + App 222 + E2E 12 = 538/538)
+- 手動: `{% ifversion fpt %}A{% else %}B{% endif %}` を含む PR のプレビューで ComboBox を fpt ↔ ghec に切り替えると本文が A ↔ B に切替わる。ComboBox tooltip に「この PR は 2 版に影響: GitHub Free, GHEC」が表示される
+
+---
+
 ## Step 20. 配布(Velopack)とシークレット保管(DPAPI)
 
 ### 20.1 目的
@@ -1108,6 +1219,14 @@ Step 19.6 を 5 イテレーション回しても、`content/**/*.md` の比較�
   - `content/**/*.md` を Markdig + LocalPreviewContentServer で in-process 描画。Next.js dev サーバはバイパス
   - `MarkdownPreviewRenderer` に frontmatter (title / intro) 解析と Liquid プレースホルダ化を追加
   - 新規テスト件数 9 (合計 449/449 緑、App.Tests の 13 件はモック差し替えで再緑化)
+- [x] Step 19.8 — 公式 docs ジャンプ + Liquid 評価 MVP
+  - `MainWindow` に「公式 docs を開く」ボタン (`DocsArticleUrlResolver` で正規 URL 解決) を追加
+  - `DocsLiquidEvaluator` で `{{ site.data.variables.* }}` / `{% data variables.* %}` を実評価、hover tooltip に resolved / pending を表示
+- [x] Step 19.9 — ifversion / バージョン認識 + Version ComboBox
+  - `DocsVersion` / `DocsVersionCatalog` / `VersionExpressionEvaluator` / `DocsLiquidEvaluator` (ifversion 本物採用) / `DocsVersionImpactAnalyzer` を Core に追加
+  - `MarkdownPreviewRenderer` + `PreviewCoordinator` が `DocsVersion?` を受け取り、`PreviewComparisonLink.CurrentVersion` / `AffectedVersions` を返す
+  - `IPreviewNavigator` を双方向化し、`MainWindow.xaml` に `DocsVersionSelector` ComboBox を追加 — fpt/ghec/ghes-3.x を切替えて本文が切替わる閉ループ完成
+  - 新規テスト件数 38 + 既存 19 マッチャに `DocsVersion?` 引数を追加、合計 538/538 緑
 - [ ] Step 20 — 配布 + DPAPI
 
 ---

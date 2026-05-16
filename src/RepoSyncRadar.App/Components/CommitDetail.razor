@@ -5,6 +5,7 @@
 @using RepoSyncRadar.Core.Options
 @using RepoSyncRadar.Core.Services
 @using RepoSyncRadar.Core.Services.Preview
+@implements IDisposable
 
 @*
     CommitDetail — Phase 1 commit inspector. Shows the file list with +/- stats and any
@@ -180,6 +181,9 @@
     private string? _resolvedForSha;
     private string? _previewBusyPath;
     private string? _activePreviewPath;
+    // §Step 19.9: 現在表示中の Markdown プレビューの docs version。
+    private DocsVersion? _activeVersion;
+    private IPreviewNavigator? _subscribedNavigator;
     private string? _previewStatus;
     private bool _previewCanceling;
     private CancellationTokenSource? _previewCts;
@@ -190,6 +194,52 @@
     private List<string> _previewStderrTail = new();
     private int? _previewPid;
     private Task? _previewPollTask;
+
+    protected override void OnInitialized()
+    {
+        var navigator = Services?.GetService<IPreviewNavigator>();
+        if (navigator is not null)
+        {
+            navigator.VersionChangeRequested += OnVersionChangeRequested;
+            _subscribedNavigator = navigator;
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_subscribedNavigator is not null)
+        {
+            _subscribedNavigator.VersionChangeRequested -= OnVersionChangeRequested;
+            _subscribedNavigator = null;
+        }
+        try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
+        _previewCts?.Dispose();
+        _previewCts = null;
+    }
+
+    /// <summary>
+    /// §Step 19.9: ホストの ComboBox で version 切替が起きた場合、アクティブな
+    /// Markdown プレビューを同じ path / sha で新しい version を使って再 render する。
+    /// PreviewActions 側と同じ購読者パターン。
+    /// </summary>
+    private void OnVersionChangeRequested(object? sender, DocsVersion version)
+    {
+        if (_previewBusyPath is not null || _activePreviewPath is null || Commit is null)
+        {
+            return;
+        }
+        if (_activeVersion is not null && _activeVersion == version)
+        {
+            return;
+        }
+
+        var file = Commit.Files.FirstOrDefault(f => string.Equals(f.Path, _activePreviewPath, StringComparison.Ordinal));
+        if (file is null)
+        {
+            return;
+        }
+        _ = InvokeAsync(async () => await OpenInWebViewAsync(file, version));
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -313,6 +363,9 @@
     }
 
     private async Task OpenInWebViewAsync(CommitFile file)
+        => await OpenInWebViewAsync(file, version: null);
+
+    private async Task OpenInWebViewAsync(CommitFile file, DocsVersion? version)
     {
         var navigator = Services.GetService<IPreviewNavigator>();
         if (navigator is null || _previewBusyPath is not null)
@@ -436,7 +489,8 @@
                     Commit.Sha,
                     file.Path,
                     progress,
-                    token);
+                    version: version,
+                    cancellationToken: token);
                 if (link is not null)
                 {
                     var previewPosition = GetPreviewPosition(file);
@@ -447,8 +501,11 @@
                         $"PR HEAD {ShortSha(link.AfterSha)} Markdown",
                         file.Path,
                         previewPosition.Ordinal,
-                        previewPosition.Total));
+                        previewPosition.Total,
+                        CurrentVersion: link.CurrentVersion,
+                        AffectedVersions: link.AffectedVersions));
                     _activePreviewPath = file.Path;
+                    _activeVersion = link.CurrentVersion;
                     _previewStatus = $"{file.Path} を Markdown として変更前 / PR HEAD で比較表示しました";
                     return;
                 }

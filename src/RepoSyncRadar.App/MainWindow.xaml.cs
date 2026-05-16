@@ -1,5 +1,6 @@
 using System.IO;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Automation;
@@ -89,6 +90,7 @@ public partial class MainWindow : Window
     private int _previewDiffGeneration;
     private bool _beforePreviewDiffReady;
     private bool _afterPreviewDiffReady;
+    private Uri? _openOfficialDocsUri;
     private GridLength? _expandedWorkbenchColumnWidth = DefaultWorkbenchColumnWidth;
     private bool _isPreviewFocusMode;
     private bool _previewFocusToggleMouseActivated;
@@ -96,6 +98,10 @@ public partial class MainWindow : Window
     private bool _previewFocusModeChangeScheduled;
     private DocsThemeMode _docsTheme = DocsThemeMode.Dark;
     private readonly DispatcherTimer _previewFocusLayoutShieldTimer;
+    // §Step 19.9: DocsVersionSelector を code で SelectedItem を設定したときの
+    // SelectionChanged をスキップするためのガード。ユーザー操作でだけ
+    // navigator.RequestVersionChange を発火し、セレクション同期のループを防ぐ。
+    private bool _suppressDocsVersionSelectionChanged;
 
     public MainWindow(IServiceProvider services)
     {
@@ -512,8 +518,64 @@ public partial class MainWindow : Window
             request.FileOrdinal,
             request.FileCount);
         ShowInitialComparisonLoadingStatus(request);
+        UpdateDocsVersionSelector(request);
         DocsView.Source = request.BeforeUrl;
         PreviewView.Source = request.AfterUrl;
+    }
+
+    /// <summary>
+    /// §Step 19.9: ヘッダーの Version ComboBox を request.CurrentVersion / AffectedVersions に
+    /// 同期させる。Markdown プレビュー (= CurrentVersion もう) のときにのみ
+    /// 可視にし、Next.js 経路や URL 取照表示時は隠す。
+    /// </summary>
+    private void UpdateDocsVersionSelector(PreviewComparisonRequest request)
+    {
+        if (request.CurrentVersion is null)
+        {
+            DocsVersionSelector.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        _suppressDocsVersionSelectionChanged = true;
+        try
+        {
+            if (DocsVersionSelector.ItemsSource is null)
+            {
+                DocsVersionSelector.ItemsSource = DocsVersionCatalog.All;
+            }
+            DocsVersionSelector.SelectedItem = DocsVersionCatalog.All
+                .FirstOrDefault(v => v == request.CurrentVersion) ?? DocsVersionCatalog.Default;
+        }
+        finally
+        {
+            _suppressDocsVersionSelectionChanged = false;
+        }
+
+        DocsVersionSelector.ToolTip = BuildDocsVersionSelectorTooltip(request);
+        DocsVersionSelector.Visibility = Visibility.Visible;
+    }
+
+    private static string BuildDocsVersionSelectorTooltip(PreviewComparisonRequest request)
+    {
+        var affected = request.AffectedVersions;
+        if (affected is null || affected.Count == 0)
+        {
+            return "この PR ではどの版にも差分はありません。プレビューを表示する版を選んでください。";
+        }
+        var labels = string.Join(", ", affected.Select(v => v.DisplayLabel));
+        return $"この PR は {affected.Count} 版に影響: {labels}。プレビューを表示する版を選んでください。";
+    }
+
+    private void OnDocsVersionSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_suppressDocsVersionSelectionChanged)
+        {
+            return;
+        }
+        if (DocsVersionSelector.SelectedItem is DocsVersion version)
+        {
+            _previewNavigator.RequestVersionChange(version);
+        }
     }
 
     private void StartPreviewDiffTracking(PreviewComparisonRequest request)
@@ -801,6 +863,8 @@ public partial class MainWindow : Window
         PreviewDocsSplitterColumn.Width = new GridLength(0);
         OfficialDocsColumn.Width = new GridLength(1, GridUnitType.Star);
         PreviewDocsColumn.Width = new GridLength(0);
+        // §Step 19.9: 公式 docs 単独表示では Version ComboBox を隠す。
+        DocsVersionSelector.Visibility = Visibility.Collapsed;
     }
 
     internal static bool IsLocalPreviewUri(Uri url)
@@ -841,6 +905,64 @@ public partial class MainWindow : Window
         PreviewDocsFilePathText.ToolTip = text.Length == 0 ? null : text;
         SetFileBadge(OfficialDocsFileBadge, OfficialDocsFileBadgeText, indexText);
         SetFileBadge(PreviewDocsFileBadge, PreviewDocsFileBadgeText, indexText);
+        UpdateOpenOfficialDocsButton(filePath);
+    }
+
+    private void UpdateOpenOfficialDocsButton(string? filePath)
+    {
+        _openOfficialDocsUri = BuildOfficialDocsUri(filePath);
+        if (_openOfficialDocsUri is null)
+        {
+            OpenOfficialDocsButton.Visibility = Visibility.Collapsed;
+            OpenOfficialDocsButton.ToolTip = null;
+            AutomationProperties.SetName(OpenOfficialDocsButton, "公式ドキュメントを開く");
+        }
+        else
+        {
+            OpenOfficialDocsButton.Visibility = Visibility.Visible;
+            OpenOfficialDocsButton.ToolTip = $"公式 docs.github.com を既定ブラウザで開く: {_openOfficialDocsUri.AbsoluteUri}";
+            AutomationProperties.SetName(OpenOfficialDocsButton, $"公式ドキュメントを開く: {_openOfficialDocsUri.AbsoluteUri}");
+        }
+    }
+
+    private void OnOpenOfficialDocsClicked(object sender, RoutedEventArgs e)
+    {
+        if (_openOfficialDocsUri is null)
+        {
+            return;
+        }
+        try
+        {
+            using var browserProcess = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_openOfficialDocsUri.AbsoluteUri)
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            LogOpenOfficialDocsFailed(_logger, ex, _openOfficialDocsUri.AbsoluteUri);
+        }
+    }
+
+    /// <summary>
+    /// Builds the public <c>docs.github.com</c> URL for the file currently
+    /// shown in the comparison preview. Returns <c>null</c> when the file is
+    /// not a publishable content Markdown page (e.g. <c>CHANGELOG.md</c>,
+    /// <c>data/*.yml</c>) — the "公式を開く" affordance is hidden in that case
+    /// because there is no canonical public page to navigate to.
+    /// </summary>
+    internal static Uri? BuildOfficialDocsUri(string? filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            return null;
+        }
+        var path = PreviewPathMapper.Map(filePath.Trim(), "en");
+        if (path is null)
+        {
+            return null;
+        }
+        return new Uri($"https://docs.github.com{path}");
     }
 
     internal static string BuildComparisonFilePathLabel(string? filePath)
@@ -1238,4 +1360,10 @@ public partial class MainWindow : Window
         Level = LogLevel.Debug,
         Message = "Docs theme apply failed.")]
     private static partial void LogDocsThemeApplyFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 6,
+        Level = LogLevel.Warning,
+        Message = "Failed to open official docs in default browser: {Url}")]
+    private static partial void LogOpenOfficialDocsFailed(ILogger logger, Exception exception, string url);
 }

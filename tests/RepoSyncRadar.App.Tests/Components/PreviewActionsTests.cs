@@ -65,6 +65,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
                 beforeUrl: "http://localhost:4501/en/foo",
@@ -110,6 +111,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
@@ -154,6 +156,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
@@ -242,6 +245,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>());
         });
     }
@@ -255,6 +259,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(new PreviewComparisonLink(
                 new Uri("http://127.0.0.1:4500/markdown/before"),
@@ -309,6 +314,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
                 beforeUrl: "http://localhost:4501/en/foo",
@@ -349,6 +355,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(null));
         var navigator = new PreviewNavigator();
@@ -381,6 +388,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns<Task<PreviewComparisonLink?>>(_ => throw new InvalidOperationException("git fetch failed"));
         var navigator = new PreviewNavigator();
@@ -417,6 +425,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns<Task<PreviewComparisonLink?>>(_ =>
                 throw new System.ComponentModel.Win32Exception(2, "指定されたファイルが見つかりません"));
@@ -451,6 +460,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
@@ -514,6 +524,7 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(_ => tcs.Task);
         var navigator = new PreviewNavigator();
@@ -560,10 +571,11 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                receivedToken = call.ArgAt<CancellationToken>(4);
+                receivedToken = call.ArgAt<CancellationToken>(5);
                 receivedToken.Register(() =>
                     tcs.TrySetException(new OperationCanceledException(receivedToken)));
                 return tcs.Task;
@@ -607,10 +619,11 @@ public sealed class PreviewActionsTests
                 Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                receivedToken = call.ArgAt<CancellationToken>(4);
+                receivedToken = call.ArgAt<CancellationToken>(5);
                 receivedToken.Register(() =>
                     tcs.TrySetException(new OperationCanceledException(receivedToken)));
                 return tcs.Task;
@@ -727,6 +740,172 @@ public sealed class PreviewActionsTests
             var status = cut.Find("[data-testid=\"preview-status\"]").TextContent;
             Assert.Contains("キャッシュ削除が上限 1 秒", status, StringComparison.Ordinal);
         }, timeout: TimeSpan.FromSeconds(3));
+    }
+
+    // §Step 19.9: ホストの Version ComboBox → PreviewActions の broadcast 経路。
+    // 「Enterprise Cloud と Free でそれぞれ別々の変更が入っていた場合、ちゃんと
+    // それを見落とさずに差分確認できるような仕組み」 を支える pub/sub をテストで固める。
+    [Fact]
+    public void PreviewNavigator_RequestVersionChange_Raises_Event_With_Version()
+    {
+        var sut = new PreviewNavigator();
+        DocsVersion? captured = null;
+        sut.VersionChangeRequested += (_, v) => captured = v;
+
+        sut.RequestVersionChange(DocsVersionCatalog.All.First(v => v.Slug == "ghec"));
+
+        Assert.NotNull(captured);
+        Assert.Equal("ghec", captured!.Slug);
+    }
+
+    [Fact]
+    public void PreviewNavigator_RequestVersionChange_Null_Throws()
+    {
+        var sut = new PreviewNavigator();
+
+        Assert.Throws<ArgumentNullException>(() => sut.RequestVersionChange(null!));
+    }
+
+    [Fact]
+    public void PreviewComparisonRequest_Defaults_Version_Metadata_To_Null()
+    {
+        var sut = new PreviewComparisonRequest(
+            new Uri("http://localhost:4501/en/foo"),
+            new Uri("http://localhost:4500/en/foo"),
+            "変更前",
+            "PR HEAD");
+
+        Assert.Null(sut.CurrentVersion);
+        Assert.Null(sut.AffectedVersions);
+    }
+
+    [Fact]
+    public void VersionChangeRequested_Reruns_Coordinator_With_New_Version()
+    {
+        // 1 回目: fpt (Free) で render。CurrentVersion=fpt、AffectedVersions={fpt, ghec} を返す。
+        // 2 回目: navigator.RequestVersionChange(ghec) で PreviewActions が再 prepare。
+        //          coordinator は 2 回目に ghec を引数で受け取らなければならない。
+        var fpt = DocsVersionCatalog.All.First(v => v.Slug == "fpt");
+        var ghec = DocsVersionCatalog.All.First(v => v.Slug == "ghec");
+        var affected = new[] { fpt, ghec };
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var requestedVersion = call.ArgAt<DocsVersion?>(4) ?? fpt;
+                return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink() with
+                {
+                    CurrentVersion = requestedVersion,
+                    AffectedVersions = affected,
+                });
+            });
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.TestContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
+        };
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+
+        // ① 通常 preview を発火 (active path を確立)。
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+        cut.WaitForAssertion(() =>
+        {
+            coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Is<DocsVersion?>(v => v == null),
+                Arg.Any<CancellationToken>());
+        });
+
+        // ② Version ComboBox の操作を模擬 → broadcast。
+        navigator.RequestVersionChange(ghec);
+
+        cut.WaitForAssertion(() =>
+        {
+            coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Is<DocsVersion?>(v => v != null && v.Slug == "ghec"),
+                Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public void VersionChangeRequested_Same_Version_Does_Not_Rerun()
+    {
+        // 既に表示中の版と同じ要求は no-op (無駄な prepare 抑止)。
+        var fpt = DocsVersionCatalog.All.First(v => v.Slug == "fpt");
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink() with
+            {
+                CurrentVersion = fpt,
+                AffectedVersions = new[] { fpt },
+            }));
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.TestContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
+        };
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+        cut.WaitForAssertion(() =>
+        {
+            coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>());
+        });
+
+        navigator.RequestVersionChange(fpt);
+
+        // 200ms 程度待っても 2回目が呼ばれないこと。
+        System.Threading.Thread.Sleep(200);
+        coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+            Arg.Any<int>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<IProgress<string>?>(),
+            Arg.Any<DocsVersion?>(),
+            Arg.Any<CancellationToken>());
     }
 
     private static ServiceProvider BuildServices(

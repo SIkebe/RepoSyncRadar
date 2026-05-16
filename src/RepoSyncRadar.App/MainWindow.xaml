@@ -114,6 +114,26 @@
                     FontSize="13"
                     Margin="6,0,0,0"
                     Click="OnDocsThemeToggleClicked" />
+            <Button x:Name="OpenOfficialDocsButton"
+                    DockPanel.Dock="Right"
+                    Style="{StaticResource PreviewFocusIconButtonStyle}"
+                    Width="22"
+                    Height="22"
+                    FontSize="13"
+                    Margin="6,0,0,0"
+                    Content="↗"
+                    Visibility="Collapsed"
+                    Click="OnOpenOfficialDocsClicked" />
+            <!-- §Step 19.9: docs バージョン切替。Markdown プレビュー時のみ可視。 -->
+            <ComboBox x:Name="DocsVersionSelector"
+                      DockPanel.Dock="Right"
+                      MinWidth="160"
+                      Margin="6,0,0,0"
+                      VerticalAlignment="Center"
+                      Visibility="Collapsed"
+                      DisplayMemberPath="DisplayLabel"
+                      SelectionChanged="OnDocsVersionSelectionChanged"
+                      ToolTip="プレビューを表示する GitHub Docs のバージョンを切り替えます" />
             <TextBlock x:Name="OfficialDocsHeaderText"
                        Text="公式 docs.github.com"
                        Foreground="#C9D1D9"

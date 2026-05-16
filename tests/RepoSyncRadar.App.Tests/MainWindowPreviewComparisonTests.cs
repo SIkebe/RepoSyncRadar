@@ -39,6 +39,66 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void BuildOfficialDocsUri_Maps_Content_Markdown_Path_To_Public_Docs_Url()
+    {
+        var result = MainWindow.BuildOfficialDocsUri("content/copilot/about-copilot.md");
+
+        Assert.NotNull(result);
+        Assert.Equal("https://docs.github.com/en/copilot/about-copilot", result!.AbsoluteUri);
+    }
+
+    [Fact]
+    public void BuildOfficialDocsUri_Maps_Content_Index_Markdown_To_English_Home()
+    {
+        var result = MainWindow.BuildOfficialDocsUri("content/index.md");
+
+        Assert.NotNull(result);
+        Assert.Equal("https://docs.github.com/en", result!.AbsoluteUri);
+    }
+
+    [Fact]
+    public void BuildOfficialDocsUri_Maps_Section_Index_Markdown_To_Section_Home()
+    {
+        var result = MainWindow.BuildOfficialDocsUri("content/copilot/index.md");
+
+        Assert.NotNull(result);
+        Assert.Equal("https://docs.github.com/en/copilot", result!.AbsoluteUri);
+    }
+
+    [Fact]
+    public void BuildOfficialDocsUri_Returns_Null_For_Null_Or_Empty_Path()
+    {
+        Assert.Null(MainWindow.BuildOfficialDocsUri(null));
+        Assert.Null(MainWindow.BuildOfficialDocsUri(string.Empty));
+        Assert.Null(MainWindow.BuildOfficialDocsUri("   "));
+    }
+
+    [Fact]
+    public void BuildOfficialDocsUri_Returns_Null_For_Non_Content_Markdown_Path()
+    {
+        // CHANGELOG.md and other root-level Markdown files have no canonical public docs URL.
+        Assert.Null(MainWindow.BuildOfficialDocsUri("CHANGELOG.md"));
+        Assert.Null(MainWindow.BuildOfficialDocsUri("README.md"));
+    }
+
+    [Fact]
+    public void BuildOfficialDocsUri_Returns_Null_For_Non_Markdown_Content_Path()
+    {
+        // data/*.yml, src/*.ts etc. are not Markdown pages; nothing to publish-link to.
+        Assert.Null(MainWindow.BuildOfficialDocsUri("data/release-notes.yml"));
+        Assert.Null(MainWindow.BuildOfficialDocsUri("src/some-module.ts"));
+    }
+
+    [Fact]
+    public void BuildOfficialDocsUri_Trims_Surrounding_Whitespace_From_Path()
+    {
+        var result = MainWindow.BuildOfficialDocsUri("  content/copilot/about-copilot.md  ");
+
+        Assert.NotNull(result);
+        Assert.Equal("https://docs.github.com/en/copilot/about-copilot", result!.AbsoluteUri);
+    }
+
+    [Fact]
     public void BuildDiffHeaderLabel_Shows_Changed_Block_Count()
     {
         Assert.Equal("PR HEAD localhost・差分 3", MainWindow.BuildDiffHeaderLabel("PR HEAD localhost", 3));

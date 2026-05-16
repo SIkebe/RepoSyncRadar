@@ -1,3 +1,5 @@
+using RepoSyncRadar.Core.Services.Preview;
+
 namespace RepoSyncRadar.App.Components;
 
 /// <summary>
@@ -7,6 +9,12 @@ namespace RepoSyncRadar.App.Components;
 /// pattern: registered as a singleton so the Razor button and the WPF window can
 /// communicate without a direct reference.
 /// </summary>
+/// <remarks>
+/// §Step 19.9 — extended bi-directionally:
+/// the WPF host (e.g. a Version ComboBox in <c>MainWindow.xaml</c>) can ask the
+/// active <see cref="PreviewActions"/> instance to re-render the current preview
+/// for a different <see cref="DocsVersion"/> via <see cref="RequestVersionChange"/>.
+/// </remarks>
 public interface IPreviewNavigator
 {
     /// <summary>Raised whenever a new preview URL is ready for the host to display.</summary>
@@ -15,11 +23,23 @@ public interface IPreviewNavigator
     /// <summary>Raised whenever two local preview URLs are ready for visual before/after comparison.</summary>
     event EventHandler<PreviewComparisonRequest>? ComparisonRequested;
 
+    /// <summary>
+    /// Raised when the WPF host wants the currently-active preview component to
+    /// re-render against a different docs version (§Step 19.9).
+    /// </summary>
+    event EventHandler<DocsVersion>? VersionChangeRequested;
+
     /// <summary>Notifies subscribers that the WebView2 should navigate to <paramref name="url"/>.</summary>
     void Publish(Uri url);
 
     /// <summary>Notifies subscribers that the WebView2 panes should show a before/after comparison.</summary>
     void PublishComparison(PreviewComparisonRequest request);
+
+    /// <summary>
+    /// Asks the active preview component to re-render against <paramref name="version"/>.
+    /// Triggered by the host when the user picks a new entry in the Version ComboBox.
+    /// </summary>
+    void RequestVersionChange(DocsVersion version);
 }
 
 public sealed record PreviewComparisonRequest(
@@ -29,13 +49,16 @@ public sealed record PreviewComparisonRequest(
     string AfterLabel,
     string? FilePath = null,
     int? FileOrdinal = null,
-    int? FileCount = null);
+    int? FileCount = null,
+    DocsVersion? CurrentVersion = null,
+    IReadOnlyList<DocsVersion>? AffectedVersions = null);
 
 /// <inheritdoc cref="IPreviewNavigator" />
 public sealed class PreviewNavigator : IPreviewNavigator
 {
     public event EventHandler<Uri>? Requested;
     public event EventHandler<PreviewComparisonRequest>? ComparisonRequested;
+    public event EventHandler<DocsVersion>? VersionChangeRequested;
 
     public void Publish(Uri url)
     {
@@ -49,5 +72,11 @@ public sealed class PreviewNavigator : IPreviewNavigator
         ArgumentNullException.ThrowIfNull(request.BeforeUrl);
         ArgumentNullException.ThrowIfNull(request.AfterUrl);
         ComparisonRequested?.Invoke(this, request);
+    }
+
+    public void RequestVersionChange(DocsVersion version)
+    {
+        ArgumentNullException.ThrowIfNull(version);
+        VersionChangeRequested?.Invoke(this, version);
     }
 }
