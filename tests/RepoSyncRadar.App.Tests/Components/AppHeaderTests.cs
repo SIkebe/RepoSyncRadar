@@ -4,6 +4,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.App.Settings;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Services;
@@ -317,19 +318,74 @@ public sealed class AppHeaderTests
         });
     }
 
+    [Fact]
+    public void Settings_DefaultTheme_Selection_Is_Rendered_And_Saved()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+        var settingsStore = Substitute.For<IAppUserSettingsStore>();
+        settingsStore.Current.Returns(new AppUserSettings { DefaultDocsTheme = DocsThemeMode.Dark });
+        settingsStore.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new AppUserSettings { DefaultDocsTheme = DocsThemeMode.Dark }));
+        settingsStore.SaveDefaultDocsThemeAsync(DocsThemeMode.Light, Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sp = BuildServices(session, out _, out _, repo, settingsStore);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-default-theme-dark\"]").GetAttribute("aria-pressed"));
+            Assert.Equal("false", cut.Find("[data-testid=\"settings-default-theme-light\"]").GetAttribute("aria-pressed"));
+        });
+
+        cut.Find("[data-testid=\"settings-default-theme-light\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            settingsStore.Received(1).SaveDefaultDocsThemeAsync(DocsThemeMode.Light, Arg.Any<CancellationToken>());
+            Assert.Equal("false", cut.Find("[data-testid=\"settings-default-theme-dark\"]").GetAttribute("aria-pressed"));
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-default-theme-light\"]").GetAttribute("aria-pressed"));
+            Assert.Contains("保存", cut.Find("[data-testid=\"settings-default-theme-status\"]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
     private static ServiceProvider BuildServices(
         IGitHubAuthSession session,
         out ICopilotAgent agent,
         out IReviewBroadcaster broadcaster,
-        IRadarRepository? repo = null)
+        IRadarRepository? repo = null,
+        IAppUserSettingsStore? settingsStore = null)
     {
         agent = Substitute.For<ICopilotAgent>();
         broadcaster = Substitute.For<IReviewBroadcaster>();
+        var resolvedSettingsStore = settingsStore ?? Substitute.For<IAppUserSettingsStore>();
+        if (settingsStore is null)
+        {
+            resolvedSettingsStore.Current.Returns(AppUserSettings.Default);
+            resolvedSettingsStore.LoadAsync(Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult(AppUserSettings.Default));
+            resolvedSettingsStore.SaveDefaultDocsThemeAsync(Arg.Any<DocsThemeMode>(), Arg.Any<CancellationToken>())
+                .Returns(Task.CompletedTask);
+        }
         return new ServiceCollection()
             .AddSingleton(session)
             .AddSingleton(agent)
             .AddSingleton(broadcaster)
             .AddSingleton(repo ?? Substitute.For<IRadarRepository>())
+            .AddSingleton(resolvedSettingsStore)
             .BuildServiceProvider();
     }
 }

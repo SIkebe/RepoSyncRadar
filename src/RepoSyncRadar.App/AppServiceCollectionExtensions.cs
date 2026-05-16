@@ -5,6 +5,7 @@ using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Audit;
 using RepoSyncRadar.App.Copilot.Tools;
+using RepoSyncRadar.App.Settings;
 using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Services;
 
@@ -27,6 +28,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<RadarTools>();
         services.TryAddSingleton<RadarWriteTools>();
         services.TryAddSingleton<IClipboard, WpfClipboard>();
+        services.TryAddSingleton<IAppUserSettingsStore>(_ => FileAppUserSettingsStore.CreateDefault());
 
         // GitHub OAuth user-token auth (replaces env-var PAT chain). The HttpClient is
         // factoried so we get sensible socket lifetime + DI logging out of the box.

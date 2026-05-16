@@ -1,5 +1,6 @@
 @using Microsoft.Extensions.DependencyInjection
 @using RepoSyncRadar.App.Auth
+@using RepoSyncRadar.App.Settings
 @using RepoSyncRadar.Core.Services
 @implements IDisposable
 
@@ -95,7 +96,7 @@
             <header class="app-settings-header">
                 <div>
                     <h2>設定</h2>
-                    <p>現在有効な無視リストを確認できます。</p>
+                    <p>既定テーマと無視リストを確認できます。</p>
                 </div>
                 <button type="button"
                         class="toolbar-button compact secondary"
@@ -103,6 +104,32 @@
                         disabled="@_settingsLoading"
                         @onclick="LoadIgnoreRulesAsync">更新</button>
             </header>
+
+            <section class="settings-section" data-testid="settings-default-theme-section">
+                <h3>既定テーマ</h3>
+                <div class="settings-theme-options" data-testid="settings-default-theme" role="group" aria-label="既定テーマ">
+                    <button type="button"
+                            class="@BuildThemeOptionClass(DocsThemeMode.Dark)"
+                            data-testid="settings-default-theme-dark"
+                            aria-pressed="@BuildThemeOptionPressed(DocsThemeMode.Dark)"
+                            disabled="@_settingsThemeSaving"
+                            @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Dark)">ダーク</button>
+                    <button type="button"
+                            class="@BuildThemeOptionClass(DocsThemeMode.Light)"
+                            data-testid="settings-default-theme-light"
+                            aria-pressed="@BuildThemeOptionPressed(DocsThemeMode.Light)"
+                            disabled="@_settingsThemeSaving"
+                            @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Light)">ライト</button>
+                </div>
+                @if (!string.IsNullOrEmpty(_settingsThemeStatus))
+                {
+                    <p class="settings-muted" data-testid="settings-default-theme-status">@_settingsThemeStatus</p>
+                }
+                @if (!string.IsNullOrEmpty(_settingsThemeError))
+                {
+                    <p class="settings-error" data-testid="settings-default-theme-error">@_settingsThemeError</p>
+                }
+            </section>
 
             <section class="settings-section" data-testid="settings-ignore-rules">
                 <h3>無視リスト</h3>
@@ -158,6 +185,10 @@
     private bool _settingsOpen;
     private bool _settingsLoading;
     private string? _settingsError;
+    private DocsThemeMode _defaultDocsTheme = DocsThemeMode.Dark;
+    private bool _settingsThemeSaving;
+    private string? _settingsThemeError;
+    private string? _settingsThemeStatus;
     private IReadOnlyList<IgnoreRule> _ignoreRules = [];
 
     protected override async Task OnInitializedAsync()
@@ -266,7 +297,52 @@
         _settingsOpen = !_settingsOpen;
         if (_settingsOpen)
         {
+            await LoadUserSettingsAsync();
             await LoadIgnoreRulesAsync();
+        }
+    }
+
+    private async Task LoadUserSettingsAsync()
+    {
+        _settingsThemeError = null;
+        _settingsThemeStatus = null;
+        try
+        {
+            var store = Services.GetRequiredService<IAppUserSettingsStore>();
+            var settings = await store.LoadAsync(CancellationToken.None);
+            _defaultDocsTheme = settings.DefaultDocsTheme;
+        }
+        catch (Exception ex)
+        {
+            _settingsThemeError = $"テーマ設定の読み込みに失敗しました: {ex.Message}";
+        }
+    }
+
+    private async Task SaveDefaultDocsThemeAsync(DocsThemeMode theme)
+    {
+        if (_settingsThemeSaving)
+        {
+            return;
+        }
+
+        _settingsThemeSaving = true;
+        _settingsThemeError = null;
+        _settingsThemeStatus = null;
+        StateHasChanged();
+        try
+        {
+            var store = Services.GetRequiredService<IAppUserSettingsStore>();
+            await store.SaveDefaultDocsThemeAsync(theme, CancellationToken.None);
+            _defaultDocsTheme = theme;
+            _settingsThemeStatus = "保存しました";
+        }
+        catch (Exception ex)
+        {
+            _settingsThemeError = $"テーマ設定の保存に失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            _settingsThemeSaving = false;
         }
     }
 
@@ -339,6 +415,14 @@
 
     private static string FormatCreatedAt(DateTime createdAt)
         => createdAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm", System.Globalization.CultureInfo.CurrentCulture);
+
+    private string BuildThemeOptionClass(DocsThemeMode theme)
+        => _defaultDocsTheme == theme
+            ? "settings-theme-option active"
+            : "settings-theme-option";
+
+    private string BuildThemeOptionPressed(DocsThemeMode theme)
+        => _defaultDocsTheme == theme ? "true" : "false";
 
     public void Dispose()
     {

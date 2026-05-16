@@ -14,6 +14,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.App.Settings;
 using RepoSyncRadar.Core.Options;
 using RepoSyncRadar.Core.Services;
 using RepoSyncRadar.Core.Services.Preview;
@@ -85,6 +86,7 @@ public partial class MainWindow : Window
     private readonly UrlAllowList _allowList;
     private readonly PreviewSession _previewSession;
     private readonly IPreviewNavigator _previewNavigator;
+    private readonly IAppUserSettingsStore _userSettingsStore;
     private readonly ILogger<MainWindow> _logger;
     private PreviewComparisonRequest? _activePreviewDiffRequest;
     private int _previewDiffGeneration;
@@ -112,6 +114,11 @@ public partial class MainWindow : Window
             Interval = PreviewFocusLayoutShieldDuration,
         };
         _previewFocusLayoutShieldTimer.Tick += OnPreviewFocusLayoutShieldTimerTick;
+
+        _userSettingsStore = services.GetRequiredService<IAppUserSettingsStore>();
+        _docsTheme = _userSettingsStore.Current.DefaultDocsTheme;
+        _userSettingsStore.SettingsChanged += OnUserSettingsChanged;
+
         UpdatePreviewFocusToggleButton();
         UpdateDocsThemeToggleButton();
         BlazorView.Services = services;
@@ -134,6 +141,7 @@ public partial class MainWindow : Window
             PreviewView.NavigationStarting -= OnPreviewViewNavigationStarting;
             DocsView.NavigationCompleted -= OnDocsViewNavigationCompleted;
             PreviewView.NavigationCompleted -= OnPreviewViewNavigationCompleted;
+            _userSettingsStore.SettingsChanged -= OnUserSettingsChanged;
             if (DocsView.CoreWebView2 is not null)
             {
                 DocsView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
@@ -321,8 +329,36 @@ public partial class MainWindow : Window
 
     private void OnDocsThemeToggleClicked(object sender, RoutedEventArgs e)
     {
-        _docsTheme = ToggleDocsTheme(_docsTheme);
+        SetDocsTheme(ToggleDocsTheme(_docsTheme), applyToViews: true);
+    }
+
+    private void OnUserSettingsChanged(AppUserSettings settings)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            SetDocsTheme(settings.DefaultDocsTheme, applyToViews: true);
+            return;
+        }
+
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Normal,
+            () => SetDocsTheme(settings.DefaultDocsTheme, applyToViews: true));
+    }
+
+    private void SetDocsTheme(DocsThemeMode theme, bool applyToViews)
+    {
+        if (_docsTheme == theme)
+        {
+            return;
+        }
+
+        _docsTheme = theme;
         UpdateDocsThemeToggleButton();
+        if (!applyToViews)
+        {
+            return;
+        }
+
         _ = ApplyDocsThemeAsync(DocsView);
         _ = ApplyDocsThemeAsync(PreviewView);
     }

@@ -609,6 +609,41 @@ html, body {
     margin: 0;
 }
 
+.settings-theme-options {
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    display: inline-flex;
+    overflow: hidden;
+    width: fit-content;
+}
+
+.settings-theme-option {
+    background: #fff;
+    border: 0;
+    border-right: 1px solid #d0d7de;
+    color: #24292f;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    min-width: 5.5rem;
+    padding: 0.38rem 0.7rem;
+}
+
+.settings-theme-option:last-child {
+    border-right: 0;
+}
+
+.settings-theme-option.active {
+    background: #0969da;
+    color: #fff;
+}
+
+.settings-theme-option:disabled {
+    cursor: default;
+    opacity: 0.65;
+}
+
 .ignore-rule-list {
     border: 1px solid #d8dee4;
     border-radius: 6px;
