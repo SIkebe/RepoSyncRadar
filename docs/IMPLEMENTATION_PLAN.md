@@ -893,6 +893,58 @@ Step 19 で完成した Core サービスを **実際に画面から呼べる** 
 
 ---
 
+## Step 19.6. ローカルプレビューの起動時間を抜本短縮
+
+### 19.6.1 目的
+
+Step 19.5 完了後、ユーザから「プレビューが利用できるようになるまでの時間がかかりすぎ」というフィードバック。コールドスタートで「ローカルプレビュー」を押してから WebView2 が表示されるまでに、bare clone (1〜2 分) + `git fetch` (10〜30 秒) + `npm install` (30 秒〜1 分) + Next.js 初回コンパイル (10〜30 秒) が直列で積み上がっていた。各フェーズを並列化・先取り・共有することで、ユーザ視点の体感待ち時間を「Next.js コンパイル時間 + α」まで圧縮する。
+
+### 19.6.2 スコープ(5 イテレーション分)
+
+1. **比較プレビューサーバの並列起動** — `PreviewCoordinator.PrepareComparisonPreviewAsync` で before / after の `PreviewServerHost.StartAsync` を `Task.WhenAll` で同時実行 (どちらも単一プロセスを持つ別インスタンス)。冷スタート時間が概ね半分に。
+2. **`node_modules` ジャンクション共有** — `INodeModulesShareManager` + `NodeModulesShareManager` を新設。`<WorktreeRoot>/.shared-node-modules/<package-lock SHA-256 先頭 16hex>/node_modules` を Windows directory junction (`cmd /c mklink /J`) で各 worktree に張る。lockfile が同一なら 2 つ目以降の worktree は `npm install` を完全スキップ。`.complete` センチネルを書く前にプロセス内 `SemaphoreSlim` ゲートで並列インストールを直列化。失敗時は通常の `npm install` にフォールバック。
+3. **App 起動時の bare clone プリウォーム** — `IPreviewCoordinator.PrewarmAsync(CT)` を追加し、`App.OnStartup` で fire-and-forget。初回起動時の `git clone --bare` (github/docs で 1〜2 分) を背景で済ませる。失敗は `LogPreviewPrewarmFailed` でログのみ。
+4. **PR 選択時の予測プリウォーム** — `IPreviewCoordinator.PredictivePrewarmAsync(prNumber, sha, CT)` を追加。`PreviewActions.OnParametersSet` で `_activePreviewSha` が変わるたびに fire-and-forget で発火 (前回ぶんは `CancellationTokenSource.Cancel`)。`EnsureBareCloneAsync` + `FetchPrAsync` までを進める (`CheckoutAsync` は本筋経路と Dictionary を共有するので含めない)。ユーザがボタンを押した時点で `git fetch` が完了済み。
+5. **インストール / コンパイル フェーズ可視化** — `PreviewServerHost.StartAsync` に `IProgress<string>?` 引数を追加。`node_modules` 不在時は「node_modules を準備中… (このリポジトリでの初回は数分かかります)」を、その後常に「Next.js dev サーバを起動中…」を順に Report。`PreviewCoordinator` から `progress` をそのまま渡して、ユーザは「まだ install 中」と「Next.js が起動中」を区別できる。
+
+### 19.6.3 テスト
+
+`Integrations.Tests/Preview/PreviewCoordinatorTests.cs` (+ 6 件)
+
+| テスト | 内容 |
+|---|---|
+| `PrepareComparisonPreviewAsync_Starts_Before_And_After_Servers_In_Parallel` | `Barrier(2)` を使い、両 `StartAsync` が同時に probe へ到達することを検証 |
+| `PrewarmAsync_Runs_Bare_Clone_Eagerly` | `PrewarmAsync` 1 回呼ぶと `git clone --bare` が記録される |
+| `PrewarmAsync_When_Disabled_Is_NoOp` | `BareCloneDir`/`CloneUrl` が空のときランナーは一切呼ばれない |
+| `PredictivePrewarmAsync_Runs_Clone_And_Fetch_But_Not_Worktree` | `git clone --bare` と `git fetch origin +refs/pull/N/head:...` が記録され、`git worktree add` は呼ばれない |
+| `PredictivePrewarmAsync_When_Disabled_Is_NoOp` | パイプライン無効時はランナー無起動 |
+| `PredictivePrewarmAsync_Swallows_Fetch_Failure` | `git fetch` が exit 128 でも例外を投げない (ベストエフォート契約) |
+
+`Integrations.Tests/Preview/NodeModulesShareManagerTests.cs` (新規, 5 件)
+
+| テスト | 内容 |
+|---|---|
+| `EnsureAsync_Without_PackageLock_Falls_Back_To_Install` | `package-lock.json` 無し → コールバック (`npm install`) を直接呼ぶ |
+| `EnsureAsync_Without_WorktreeRoot_Falls_Back_To_Install` | オプションの `WorktreeRoot` が空 → 同上 |
+| `EnsureAsync_First_Time_Links_And_Runs_Install` | 初回は junction を作り `installFallback` を 1 回呼んで `.complete` を書く |
+| `EnsureAsync_Second_Worktree_Reuses_Junction_Skipping_Install` | 同一 lockfile の 2 個目 worktree は `installFallback` を呼ばない |
+| `EnsureAsync_Falls_Back_When_Junction_Creation_Fails` | `mklink /J` が exit≠0 → コールバックを呼んでも `.complete` は書かない |
+
+`Integrations.Tests/Preview/PreviewServerHostTests.cs` (+ 2 件)
+
+| テスト | 内容 |
+|---|---|
+| `StartAsync_Reports_Dev_Server_Progress_On_Warm_Path` | `node_modules` 既存 → "Next.js" メッセージのみ Report |
+| `StartAsync_Reports_Install_Phase_When_Node_Modules_Missing` | `node_modules` 不在 → "node_modules" と "Next.js" の両方が順に Report |
+
+### 19.6.4 完了基準
+
+- 新規 13 件 + 既存テスト = `Category!=Manual` で 439/439 緑
+- `dotnet build -warnaserror` 緑
+- 手動: コールド (キャッシュ全削除) でアプリ起動 → PR を選択 → 数十秒後に「ローカルプレビュー」クリック → "Next.js dev サーバを起動中…" 表示後、Next.js コンパイル分のみで preview が表示される。冷スタートのチェーン (`git clone --bare` + `git fetch` + `npm install`) が体感ゼロになっている
+
+---
+
 ## Step 20. 配布(Velopack)とシークレット保管(DPAPI)
 
 ### 20.1 目的
@@ -1003,6 +1055,9 @@ Step 19 で完成した Core サービスを **実際に画面から呼べる** 
 - [x] Step 19 — ローカルプレビュー (Core のみ)
   - 完了日 2026-05-13, テスト件数 7
 - [x] Step 19.5 — ローカルプレビュー UI 配線
+- [x] Step 19.6 — ローカルプレビュー起動時間の抜本短縮 (5 イテレーション)
+  - 並列起動 / `node_modules` ジャンクション共有 / bare clone プリウォーム / 予測プリウォーム / フェーズ可視化
+  - 新規テスト件数 13 (合計 439/439 緑)
 - [ ] Step 20 — 配布 + DPAPI
 
 ---
