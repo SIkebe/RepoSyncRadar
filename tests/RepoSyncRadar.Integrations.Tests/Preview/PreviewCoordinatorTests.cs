@@ -314,6 +314,42 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PrewarmAsync_Runs_Bare_Clone_Eagerly()
+    {
+        // Background prewarm during app startup: doing `git clone --bare`
+        // (1-2 minutes for github/docs) ahead of time means the user's first
+        // preview click skips the slowest non-npm step in the pipeline.
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-prewarm.git");
+        var runner = Substitute.For<IProcessRunner>();
+        var calls = new List<string>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git");
+
+        await sut.PrewarmAsync(ct);
+
+        Assert.Contains(calls, c => c.StartsWith("git clone --bare", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PrewarmAsync_When_Disabled_Is_NoOp()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var runner = Substitute.For<IProcessRunner>();
+        var sut = BuildSut(runner, bareCloneDir: string.Empty, cloneUrl: string.Empty);
+
+        await sut.PrewarmAsync(ct);
+
+        await runner.DidNotReceiveWithAnyArgs()
+            .RunAsync(default!, default!, default!, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task StopAsync_Deactivates_Session_And_Stops_Server()
     {
         var ct = TestContext.Current.CancellationToken;

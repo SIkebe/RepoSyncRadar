@@ -71,6 +71,15 @@ public interface IPreviewCoordinator
     Task StopAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Eagerly creates the bare clone so the user's first preview click no longer
+    /// pays the 1-2 minute <c>git clone --bare</c> cost. Best-effort: when the
+    /// pipeline is disabled or the bare clone already exists, this is a fast no-op.
+    /// Wired by the App layer as fire-and-forget right after the main window
+    /// shows; it runs in the background while the user does anything else.
+    /// </summary>
+    Task PrewarmAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stops the running preview and removes every worktree this manager tracks
     /// (including those rehydrated from disk on startup). Returns the number of
     /// worktrees actually removed. Returns 0 when the preview pipeline is disabled.
@@ -391,6 +400,15 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         _session.Deactivate();
         _activeBeforeSha = null;
         _activeSha = null;
+    }
+
+    public async Task PrewarmAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_worktree.IsEnabled)
+        {
+            return;
+        }
+        await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<int> CleanupCacheAsync(CancellationToken cancellationToken = default)

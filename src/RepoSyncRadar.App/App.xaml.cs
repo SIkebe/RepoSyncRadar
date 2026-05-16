@@ -12,6 +12,7 @@ using RepoSyncRadar.Core;
 using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Options;
+using RepoSyncRadar.Core.Services.Preview;
 
 namespace RepoSyncRadar.App;
 
@@ -82,6 +83,30 @@ public partial class App : Application
             Services.GetRequiredService<ILogger<App>>(),
             ShowStartupWarning,
             CancellationToken.None);
+
+        // Eager docs preview prewarm. Doing `git clone --bare` (1-2 minutes for
+        // github/docs) ahead of time means the user's first preview click
+        // skips the slowest non-npm step. Best-effort: if the network is down
+        // or the repo is misconfigured, the regular preview path will surface
+        // the error when the user clicks.
+        _ = PrewarmPreviewAsync(
+            Services.GetRequiredService<IPreviewCoordinator>(),
+            Services.GetRequiredService<ILogger<App>>());
+    }
+
+    internal static async Task PrewarmPreviewAsync(IPreviewCoordinator coordinator, ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(coordinator);
+        ArgumentNullException.ThrowIfNull(logger);
+        try
+        {
+            await coordinator.PrewarmAsync(CancellationToken.None).ConfigureAwait(false);
+            LogPreviewPrewarmCompleted(logger);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPreviewPrewarmFailed(logger, ex);
+        }
     }
 
     /// <summary>
@@ -154,6 +179,14 @@ public partial class App : Application
     [LoggerMessage(EventId = 3, Level = LogLevel.Error,
         Message = "Unhandled exception caught by global sink. Application kept alive; user should consider restarting.")]
     private static partial void LogUnhandled(ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 4, Level = LogLevel.Information,
+        Message = "Preview prewarm completed; first preview click should skip git clone --bare.")]
+    private static partial void LogPreviewPrewarmCompleted(ILogger logger);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Warning,
+        Message = "Preview prewarm failed; the first preview click will fall back to the cold path.")]
+    private static partial void LogPreviewPrewarmFailed(ILogger logger, Exception exception);
 
     /// <summary>
     /// Last-resort handler for any exception that escapes the BlazorWebView, a
