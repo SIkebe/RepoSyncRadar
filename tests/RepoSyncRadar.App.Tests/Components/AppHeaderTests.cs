@@ -13,7 +13,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 
 /// <summary>
 /// bUnit tests for <see cref="AppHeader"/>. Verifies the three auth states render the
-/// right affordances and that the Morning Triage button drives
+/// right affordances and that the Triage button drives
 /// <see cref="ICopilotAgent.RunMorningTriageAsync"/> + republishes through
 /// <see cref="IReviewBroadcaster"/> so Sidebar / CommitList refresh themselves.
 /// </summary>
@@ -44,6 +44,7 @@ public sealed class AppHeaderTests
             "@octocat",
             cut.Find("[data-testid=\"app-header-login\"]").TextContent);
         Assert.False(cut.Find("[data-testid=\"app-header-sync\"]").HasAttribute("disabled"));
+        Assert.Equal("Triage", cut.Find("[data-testid=\"app-header-sync\"]").TextContent.Trim());
     }
 
     [Fact]
@@ -231,7 +232,7 @@ public sealed class AppHeaderTests
         var cut = ctx.RenderComponent<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        // Still rendered as signed-in (Morning Triage enabled), but no @login chip — the
+        // Still rendered as signed-in (Triage enabled), but no @login chip — the
         // header must not crash just because /user 5xx'd or rate-limited.
         Assert.Equal(
             "SignedIn",

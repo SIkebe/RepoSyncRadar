@@ -6,7 +6,7 @@
 @*
     AppHeader — top bar shown at the top of Workbench. Surfaces the current GitHub
     auth state (Not configured / Not signed in / Signed in), exposes Sign in / Sign
-    out buttons, and the Morning Triage trigger that runs ICopilotAgent.
+    out buttons, and the Triage trigger that runs ICopilotAgent.
     Without this header the app launches into an entirely empty inbox with no
     visible action, which is what motivated this component.
 *@
@@ -80,7 +80,7 @@
                    OnClick="OnTriageAsync"
                    Disabled="@(_busy || _state != GitHubAuthState.SignedIn)"
                    data-testid="app-header-sync">
-            @(_busy ? "Triage 中…" : "Morning Triage")
+            @(_busy ? "Triage 中…" : "Triage")
         </MudButton>
         <MudButton Variant="Variant.Outlined"
                    Size="Size.Small"
@@ -244,7 +244,7 @@
             });
             _lastReport = await agent.RunMorningTriageAsync(progress, CancellationToken.None);
             // Reuse the review broadcaster so Sidebar/CommitList re-query their
-            // data the moment Morning Triage finishes. The broadcaster is a no-op
+            // data the moment Triage finishes. The broadcaster is a no-op
             // pub/sub so we can publish freely without coupling to a triage-specific bus.
             _broadcaster?.Publish();
             _triageStatus = "Triage 完了";

@@ -5,7 +5,7 @@
 @*
     CommitList — Phase 1 commit inbox view. Loads commits from IRadarRepository using the
     supplied filter and renders one row per commit. Empty state explicitly tells the user
-    to press the Morning Triage button rather than leaving them to guess. Triage-triggered refresh is
+    to press the Triage button rather than leaving them to guess. Triage-triggered refresh is
     driven by Workbench via the Filter parameter reference changing.
 *@
 
@@ -19,7 +19,7 @@
         <p class="empty" data-testid="commit-list-empty">
             表示するコミットがありません。<br />
             <small class="empty-hint">
-                上部の <strong>Morning Triage</strong> ボタンを押すと github/docs の最新 Repo sync コミットを取得し、スコアリングします。
+                上部の <strong>Triage</strong> ボタンを押すと github/docs の最新 Repo sync コミットを取得し、スコアリングします。
                 ボタンが無効の場合は、まず <strong>Sign in</strong> から GitHub にサインインしてください。
             </small>
         </p>

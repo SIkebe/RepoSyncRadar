@@ -137,11 +137,11 @@ dotnet run --project src/RepoSyncRadar.App
 
 ## 4. 毎日のワークフロー(5〜10 分)
 
-### 4.1 朝のトリアージ(Morning Triage)
+### 4.1 Triage
 
 [`MorningTriageSession`](../src/RepoSyncRadar.App/Copilot/MorningTriageSession.cs) が以下を順に実行します(Step 15)。
 
-画面上部でサインイン済みになっていることを確認し、**Morning Triage** ボタンを押します。
+画面上部でサインイン済みになっていることを確認し、**Triage** ボタンを押します。
 
 1. `github/docs` の Repo sync PR を最大 `MaxPullRequests` 件取得
 2. 各 PR のコミットを SQLite に **冪等取り込み**(既知 SHA はスキップ)
