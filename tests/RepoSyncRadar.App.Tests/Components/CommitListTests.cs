@@ -58,16 +58,16 @@ public class CommitListTests
             .AddSingleton(repo)
             .BuildServiceProvider();
 
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
         var filter = new CommitQueryFilter { Status = ReviewStatus.Unseen };
-        var cut = ctx.RenderComponent<CommitList>(parameters => parameters
+        var cut = ctx.Render<CommitList>(parameters => parameters
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Filter, filter)
             .Add(c => c.RefreshToken, 0));
 
         Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
 
-        cut.SetParametersAndRender(parameters => parameters
+        cut.Render(parameters => parameters
             .Add(c => c.Filter, filter)
             .Add(c => c.RefreshToken, 1));
 
@@ -85,8 +85,8 @@ public class CommitListTests
             .AddSingleton(repo)
             .BuildServiceProvider();
 
-        var ctx = new Bunit.TestContext();
-        return ctx.RenderComponent<CommitList>(
+        var ctx = new Bunit.BunitContext();
+        return ctx.Render<CommitList>(
             parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
     }
 

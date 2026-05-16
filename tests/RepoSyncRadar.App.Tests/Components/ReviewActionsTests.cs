@@ -21,9 +21,9 @@ public sealed class ReviewActionsTests
         var repo = Substitute.For<IRadarRepository>();
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc"));
         cut.Find("[data-testid=\"review-adopt\"]").Click();
@@ -38,9 +38,9 @@ public sealed class ReviewActionsTests
         var repo = Substitute.For<IRadarRepository>();
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc"));
 
@@ -59,9 +59,9 @@ public sealed class ReviewActionsTests
         var repo = Substitute.For<IRadarRepository>();
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc"));
 
@@ -84,9 +84,9 @@ public sealed class ReviewActionsTests
         var repo = Substitute.For<IRadarRepository>();
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc"));
 
@@ -104,9 +104,9 @@ public sealed class ReviewActionsTests
         var repo = Substitute.For<IRadarRepository>();
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc")
             .Add(c => c.FilePaths, [
@@ -139,9 +139,9 @@ public sealed class ReviewActionsTests
             ]));
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc")
             .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
@@ -178,9 +178,9 @@ public sealed class ReviewActionsTests
             ]));
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc")
             .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
@@ -212,9 +212,9 @@ public sealed class ReviewActionsTests
             ]));
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc")
             .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
@@ -247,9 +247,9 @@ public sealed class ReviewActionsTests
             .Returns(Task.FromResult(0));
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc")
             .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
@@ -274,10 +274,10 @@ public sealed class ReviewActionsTests
         var repo = Substitute.For<IRadarRepository>();
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         ReviewStatus? capturedFromCallback = null;
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc")
             .Add(c => c.Reviewed, (ReviewStatus status) => { capturedFromCallback = status; }));
@@ -298,10 +298,10 @@ public sealed class ReviewActionsTests
 
         var broadcaster = Substitute.For<IReviewBroadcaster>();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         ReviewStatus? capturedFromCallback = null;
-        var cut = ctx.RenderComponent<ReviewActions>(p => p
+        var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "abc")
             .Add(c => c.Reviewed, (ReviewStatus status) => { capturedFromCallback = status; }));
@@ -328,9 +328,9 @@ public sealed class ReviewActionsTests
 
         var broadcaster = new ReviewBroadcaster();
         var sp = BuildServices(repo, broadcaster);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<Sidebar>(p => p
+        var cut = ctx.Render<Sidebar>(p => p
             .AddCascadingValue<IServiceProvider>(sp));
         Assert.Equal("3", cut.Find("[data-testid=\"sidebar-count-Unseen\"]").TextContent);
 

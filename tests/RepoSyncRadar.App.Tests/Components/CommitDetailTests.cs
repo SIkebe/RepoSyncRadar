@@ -479,8 +479,8 @@ public class CommitDetailTests
             }));
         var sp = services.BuildServiceProvider();
 
-        var ctx = new Bunit.TestContext();
-        return ctx.RenderComponent<CommitDetail>(parameters => parameters
+        var ctx = new Bunit.BunitContext();
+        return ctx.Render<CommitDetail>(parameters => parameters
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(p => p.Commit, commit));
     }

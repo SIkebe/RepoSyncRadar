@@ -20,7 +20,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 public sealed class WorkbenchTests
 {
     [Fact]
-    public void Workbench_Renders_Resizable_Three_Column_Shell()
+    public async Task Workbench_Renders_Resizable_Three_Column_Shell()
     {
         var repo = Substitute.For<IRadarRepository>();
         repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
@@ -33,7 +33,7 @@ public sealed class WorkbenchTests
         auth.GetStateAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(GitHubAuthState.SignedIn));
         auth.GetCurrentLoginAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("octocat"));
 
-        using var ctx = new Bunit.TestContext();
+        await using var ctx = new Bunit.BunitContext();
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         ctx.Services.AddMudServices();
         ctx.Services
@@ -47,7 +47,7 @@ public sealed class WorkbenchTests
                 BaseAddress = new Uri("https://docs.github.com/"),
             }));
 
-        var cut = ctx.RenderComponent<Workbench>();
+        var cut = ctx.Render<Workbench>();
 
         var shell = cut.Find("[data-testid=\"radar-shell\"]");
         var splitter = cut.Find("[data-testid=\"radar-sidebar-resizer\"]");
@@ -59,7 +59,7 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
-    public void Rejecting_Selected_Commit_Returns_To_Unseen_Queue_And_Clears_Detail()
+    public async Task Rejecting_Selected_Commit_Returns_To_Unseen_Queue_And_Clears_Detail()
     {
         var target = new Commit
         {
@@ -97,7 +97,7 @@ public sealed class WorkbenchTests
         auth.GetCurrentLoginAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("octocat"));
         var resolver = Substitute.For<IPathToUrlResolver>();
 
-        using var ctx = new Bunit.TestContext();
+        await using var ctx = new Bunit.BunitContext();
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         ctx.Services.AddMudServices();
         ctx.Services
@@ -111,7 +111,7 @@ public sealed class WorkbenchTests
                 BaseAddress = new Uri("https://docs.github.com/"),
             }));
 
-        var cut = ctx.RenderComponent<Workbench>();
+        var cut = ctx.Render<Workbench>();
         cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]")));
 
         cut.Find("[data-testid=\"commit-row\"]").Click();
@@ -126,11 +126,11 @@ public sealed class WorkbenchTests
             Assert.NotNull(cut.Find("[data-testid=\"commit-detail-empty\"]"));
             Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Unseen\"]").ClassList);
         });
-        repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Rejected, "対象外", Arg.Any<CancellationToken>());
+        await repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Rejected, "対象外", Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public void Changing_Non_Unseen_Commit_To_Later_Selects_Later_Queue()
+    public async Task Changing_Non_Unseen_Commit_To_Later_Selects_Later_Queue()
     {
         var target = new Commit
         {
@@ -166,7 +166,7 @@ public sealed class WorkbenchTests
         auth.GetCurrentLoginAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("octocat"));
         var resolver = Substitute.For<IPathToUrlResolver>();
 
-        using var ctx = new Bunit.TestContext();
+        await using var ctx = new Bunit.BunitContext();
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         ctx.Services.AddMudServices();
         ctx.Services
@@ -180,7 +180,7 @@ public sealed class WorkbenchTests
                 BaseAddress = new Uri("https://docs.github.com/"),
             }));
 
-        var cut = ctx.RenderComponent<Workbench>();
+        var cut = ctx.Render<Workbench>();
         cut.Find("[data-testid=\"sidebar-item-Rejected\"]").Click();
         cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]")));
 
@@ -195,11 +195,11 @@ public sealed class WorkbenchTests
             Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
             Assert.Empty(cut.FindAll("[data-testid=\"review-actions\"]"));
         });
-        repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
+        await repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public void Selecting_Unseen_Commit_Does_Not_Render_Drafts_Panel()
+    public async Task Selecting_Unseen_Commit_Does_Not_Render_Drafts_Panel()
     {
         var target = new Commit
         {
@@ -223,8 +223,8 @@ public sealed class WorkbenchTests
                 return Task.FromResult(commits);
             });
 
-        using var ctx = CreateWorkbenchTestContext(repo, out _);
-        var cut = ctx.RenderComponent<Workbench>();
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
         cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]")));
 
         cut.Find("[data-testid=\"commit-row\"]").Click();
@@ -237,7 +237,7 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
-    public void Selecting_Adopted_Commit_Renders_Drafts_Panel()
+    public async Task Selecting_Adopted_Commit_Renders_Drafts_Panel()
     {
         var target = new Commit
         {
@@ -261,8 +261,8 @@ public sealed class WorkbenchTests
                 return Task.FromResult(commits);
             });
 
-        using var ctx = CreateWorkbenchTestContext(repo, out _);
-        var cut = ctx.RenderComponent<Workbench>();
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
         cut.Find("[data-testid=\"sidebar-item-Adopted\"]").Click();
         cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]")));
 
@@ -274,7 +274,7 @@ public sealed class WorkbenchTests
         });
     }
 
-    private static Bunit.TestContext CreateWorkbenchTestContext(IRadarRepository repo, out ReviewBroadcaster broadcaster)
+    private static Bunit.BunitContext CreateWorkbenchTestContext(IRadarRepository repo, out ReviewBroadcaster broadcaster)
     {
         broadcaster = new ReviewBroadcaster();
         var auth = Substitute.For<IGitHubAuthSession>();
@@ -282,7 +282,7 @@ public sealed class WorkbenchTests
         auth.GetCurrentLoginAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("octocat"));
         var resolver = Substitute.For<IPathToUrlResolver>();
 
-        var ctx = new Bunit.TestContext();
+        var ctx = new Bunit.BunitContext();
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         ctx.Services.AddMudServices();
         ctx.Services

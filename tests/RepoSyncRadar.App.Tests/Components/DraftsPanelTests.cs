@@ -33,7 +33,7 @@ public sealed class DraftsPanelTests
             await seed.SaveChangesAsync(ct);
         }
 
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
         var clipboard = Substitute.For<IClipboard>();
         var agent = Substitute.For<ICopilotAgent>();
         ctx.Services
@@ -42,7 +42,7 @@ public sealed class DraftsPanelTests
             .AddSingleton(agent);
 
         var sp = ctx.Services.BuildServiceProvider();
-        var cut = ctx.RenderComponent<DraftsPanel>(p => p
+        var cut = ctx.Render<DraftsPanel>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "sha1"));
 
@@ -69,7 +69,7 @@ public sealed class DraftsPanelTests
             await seed.SaveChangesAsync(ct);
         }
 
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
         var clipboard = Substitute.For<IClipboard>();
         clipboard.SetTextAsync(Arg.Any<string>()).Returns(Task.CompletedTask);
         var agent = Substitute.For<ICopilotAgent>();
@@ -79,7 +79,7 @@ public sealed class DraftsPanelTests
             .AddSingleton(agent);
 
         var sp = ctx.Services.BuildServiceProvider();
-        var cut = ctx.RenderComponent<DraftsPanel>(p => p
+        var cut = ctx.Render<DraftsPanel>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "sha1"));
 
@@ -100,7 +100,7 @@ public sealed class DraftsPanelTests
             await seed.SaveChangesAsync(ct);
         }
 
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
         var clipboard = Substitute.For<IClipboard>();
         var agent = Substitute.For<ICopilotAgent>();
         agent.GenerateDraftsAsync("sha1", Arg.Any<CancellationToken>())
@@ -112,7 +112,7 @@ public sealed class DraftsPanelTests
             .AddSingleton(agent);
 
         var sp = ctx.Services.BuildServiceProvider();
-        var cut = ctx.RenderComponent<DraftsPanel>(p => p
+        var cut = ctx.Render<DraftsPanel>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Sha, "sha1"));
 

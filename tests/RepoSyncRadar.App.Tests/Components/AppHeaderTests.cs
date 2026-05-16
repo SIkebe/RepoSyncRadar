@@ -31,9 +31,9 @@ public sealed class AppHeaderTests
             .Returns(Task.FromResult<string?>("octocat"));
 
         var sp = BuildServices(session, out _, out _);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<AppHeader>(
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         Assert.Equal(
@@ -56,9 +56,9 @@ public sealed class AppHeaderTests
             .Returns(Task.FromResult(GitHubAuthState.NotSignedIn));
 
         var sp = BuildServices(session, out _, out _);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<AppHeader>(
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         Assert.Equal(
@@ -77,9 +77,9 @@ public sealed class AppHeaderTests
             .Returns(Task.FromResult(GitHubAuthState.NotConfigured));
 
         var sp = BuildServices(session, out _, out _);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<AppHeader>(
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         Assert.Equal(
@@ -105,8 +105,8 @@ public sealed class AppHeaderTests
             .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new IngestionReport(Total: 3, Inserted: 2, Skipped: 1)));
 
-        using var ctx = new Bunit.TestContext();
-        var cut = ctx.RenderComponent<AppHeader>(
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Find("[data-testid=\"app-header-sync\"]").Click();
@@ -137,8 +137,8 @@ public sealed class AppHeaderTests
                 return gate.Task;
             });
 
-        using var ctx = new Bunit.TestContext();
-        var cut = ctx.RenderComponent<AppHeader>(
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Find("[data-testid=\"app-header-sync\"]").Click();
@@ -171,8 +171,8 @@ public sealed class AppHeaderTests
             .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("network down"));
 
-        using var ctx = new Bunit.TestContext();
-        var cut = ctx.RenderComponent<AppHeader>(
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Find("[data-testid=\"app-header-sync\"]").Click();
@@ -199,9 +199,9 @@ public sealed class AppHeaderTests
             .Returns(Task.FromResult<string?>("octocat"));
 
         var sp = BuildServices(session, out _, out _);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<AppHeader>(
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Find("[data-testid=\"app-header-signin\"]").Click();
@@ -227,9 +227,9 @@ public sealed class AppHeaderTests
             .Returns(Task.FromResult<string?>(null));
 
         var sp = BuildServices(session, out _, out _);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<AppHeader>(
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         // Still rendered as signed-in (Triage enabled), but no @login chip — the
@@ -269,8 +269,8 @@ public sealed class AppHeaderTests
             ]));
 
         var sp = BuildServices(session, out _, out _, repo);
-        using var ctx = new Bunit.TestContext();
-        var cut = ctx.RenderComponent<AppHeader>(
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Find("[data-testid=\"app-header-settings\"]").Click();
@@ -302,8 +302,8 @@ public sealed class AppHeaderTests
             .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
 
         var sp = BuildServices(session, out _, out _, repo);
-        using var ctx = new Bunit.TestContext();
-        var cut = ctx.RenderComponent<AppHeader>(
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Find("[data-testid=\"app-header-settings\"]").Click();

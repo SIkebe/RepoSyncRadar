@@ -74,7 +74,7 @@ public sealed class PreviewActionsTests
         PreviewComparisonRequest? captured = null;
         navigator.ComparisonRequested += (_, request) => captured = request;
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -84,7 +84,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -122,7 +122,7 @@ public sealed class PreviewActionsTests
             });
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -136,7 +136,7 @@ public sealed class PreviewActionsTests
                 new CommitFile { Sha = "deadbeef", Path = "content/copilot/about-copilot.md", Status = "modified" },
             },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
 
@@ -169,7 +169,7 @@ public sealed class PreviewActionsTests
         PreviewComparisonRequest? captured = null;
         navigator.ComparisonRequested += (_, request) => captured = request;
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -184,7 +184,7 @@ public sealed class PreviewActionsTests
                 new CommitFile { Sha = "deadbeef", Path = "content/copilot/second.md", Status = "modified" },
             },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
 
@@ -211,7 +211,7 @@ public sealed class PreviewActionsTests
         var coordinator = Substitute.For<IPreviewCoordinator>();
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -225,7 +225,7 @@ public sealed class PreviewActionsTests
                 new CommitFile { Sha = "deadbeef", Path = "src/graphql/data/fpt/schema.json", Status = "modified" },
             },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
 
@@ -274,7 +274,7 @@ public sealed class PreviewActionsTests
         PreviewComparisonRequest? captured = null;
         navigator.ComparisonRequested += (_, request) => captured = request;
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -284,7 +284,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "CHANGELOG.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -322,7 +322,7 @@ public sealed class PreviewActionsTests
                 afterWorktreePath: @"C:\github\.cache\docs-worktrees\deadbeef")));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -332,7 +332,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -360,7 +360,7 @@ public sealed class PreviewActionsTests
             .Returns(Task.FromResult<PreviewComparisonLink?>(null));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -370,7 +370,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -393,7 +393,7 @@ public sealed class PreviewActionsTests
             .Returns<Task<PreviewComparisonLink?>>(_ => throw new InvalidOperationException("git fetch failed"));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -403,7 +403,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -431,7 +431,7 @@ public sealed class PreviewActionsTests
                 throw new System.ComponentModel.Win32Exception(2, "指定されたファイルが見つかりません"));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -441,7 +441,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -470,7 +470,7 @@ public sealed class PreviewActionsTests
             });
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -480,7 +480,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -498,9 +498,9 @@ public sealed class PreviewActionsTests
             .Returns(Task.FromResult(3));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp));
         cut.Find("[data-testid=\"preview-cleanup-button\"]").Click();
 
@@ -529,7 +529,7 @@ public sealed class PreviewActionsTests
             .Returns(_ => tcs.Task);
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -539,7 +539,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -582,7 +582,7 @@ public sealed class PreviewActionsTests
             });
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -592,7 +592,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -630,7 +630,7 @@ public sealed class PreviewActionsTests
             });
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator, previewReadyTimeoutSeconds: 1);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -640,7 +640,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
         cut.Find("[data-testid=\"preview-button\"]").Click();
@@ -661,9 +661,9 @@ public sealed class PreviewActionsTests
             .Returns<Task<int>>(_ => throw new InvalidOperationException("disk locked"));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp));
         cut.Find("[data-testid=\"preview-cleanup-button\"]").Click();
 
@@ -682,9 +682,9 @@ public sealed class PreviewActionsTests
             .Returns(_ => tcs.Task);
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp));
         cut.Find("[data-testid=\"preview-cleanup-button\"]").Click();
 
@@ -728,9 +728,9 @@ public sealed class PreviewActionsTests
             });
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator, previewReadyTimeoutSeconds: 1);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp));
         cut.Find("[data-testid=\"preview-cleanup-button\"]").Click();
 
@@ -807,7 +807,7 @@ public sealed class PreviewActionsTests
             });
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -817,7 +817,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
 
@@ -869,7 +869,7 @@ public sealed class PreviewActionsTests
             }));
         var navigator = new PreviewNavigator();
         var sp = BuildServices(coordinator, navigator);
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         var commit = new Commit
         {
@@ -879,7 +879,7 @@ public sealed class PreviewActionsTests
             Author = "alice",
             Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
         };
-        var cut = ctx.RenderComponent<PreviewActions>(p => p
+        var cut = ctx.Render<PreviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(c => c.Commit, commit));
 

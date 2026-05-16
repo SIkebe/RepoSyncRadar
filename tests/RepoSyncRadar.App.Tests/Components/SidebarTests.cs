@@ -35,10 +35,10 @@ public class SidebarTests
             .AddSingleton(repo)
             .BuildServiceProvider();
 
-        using var ctx = new Bunit.TestContext();
+        using var ctx = new Bunit.BunitContext();
 
         // Act
-        var cut = ctx.RenderComponent<Sidebar>(
+        var cut = ctx.Render<Sidebar>(
             parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
 
         // Assert — UI reflects the four user-facing buckets, with Seen folded out of the sidebar.
@@ -68,8 +68,8 @@ public class SidebarTests
             .AddSingleton(repo)
             .BuildServiceProvider();
 
-        using var ctx = new Bunit.TestContext();
-        var cut = ctx.RenderComponent<Sidebar>(
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<Sidebar>(
             parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
 
         Assert.Contains("まだ確認していない", cut.Find("[data-testid=\"sidebar-description-Unseen\"]").TextContent);

@@ -66,8 +66,8 @@ public class ArticleBodyPaneTests
             .AddSingleton(apiClient)
             .BuildServiceProvider();
 
-        var ctx = new Bunit.TestContext();
-        return ctx.RenderComponent<ArticleBodyPane>(parameters => parameters
+        var ctx = new Bunit.BunitContext();
+        return ctx.Render<ArticleBodyPane>(parameters => parameters
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(p => p.Pathname, pathname));
     }
