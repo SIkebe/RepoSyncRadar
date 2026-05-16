@@ -187,4 +187,55 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains($"<h1>{expected}</h1>", html, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Reacts_To_Data_Color_Mode_Attribute_For_Theme_Toggle()
+    {
+        // The WPF host toggles theme by setting `<html data-color-mode="dark|light">`
+        // (MainWindow.xaml.cs `BuildDocsThemeScript`). The renderer must emit
+        // rules selecting on that attribute so the user's explicit choice
+        // takes effect on the Markdown-first preview path.
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            "# Hello",
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains(":root[data-color-mode=\"dark\"]", html, StringComparison.Ordinal);
+        Assert.Contains(":root[data-color-mode=\"light\"]", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Uses_Css_Variables_So_Theme_Switch_Is_Live()
+    {
+        // Body / article colours must come from CSS variables (not hard-coded
+        // hex literals on the element rules) so attribute-driven theme swaps
+        // re-paint without a reload.
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            "# Hello",
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("--rsr-bg", html, StringComparison.Ordinal);
+        Assert.Contains("--rsr-fg", html, StringComparison.Ordinal);
+        Assert.Contains("background:var(--rsr-bg)", html, StringComparison.Ordinal);
+        Assert.Contains("color:var(--rsr-fg)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Explicit_Light_Choice_Overrides_Os_Dark_Preference()
+    {
+        // When the user pins light via the toggle, the OS-level dark
+        // preference must NOT win. Encoded as `:not([data-color-mode="light"])`
+        // on the `@media (prefers-color-scheme: dark)` block.
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            "# Hello",
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("@media (prefers-color-scheme: dark)", html, StringComparison.Ordinal);
+        Assert.Contains(":not([data-color-mode=\"light\"])", html, StringComparison.Ordinal);
+    }
 }

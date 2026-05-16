@@ -78,22 +78,34 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
         html.Append("<title>").Append(title).AppendLine("</title>");
         html.AppendLine("<style>");
-        html.AppendLine("body{margin:0;background:#f6f8fa;color:#24292f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.55;}");
+        // Light palette (default). Both the WPF theme toggle
+        // (MainWindow.xaml.cs `BuildDocsThemeScript`) and the OS
+        // `prefers-color-scheme` are mapped onto these CSS variables so a
+        // single rule set drives the live colours.
+        html.AppendLine(":root{--rsr-bg:#f6f8fa;--rsr-fg:#24292f;--rsr-article-bg:#fff;--rsr-border:#d8dee4;--rsr-muted:#57606a;--rsr-link:#0969da;--rsr-code-bg:#afb8c133;--rsr-pre-bg:#f6f8fa;--rsr-blockquote-border:#d0d7de;--rsr-th-bg:#f6f8fa;--rsr-liquid-bg:#fff8c5;--rsr-liquid-fg:#7d4e00;--rsr-liquid-border:#d4a72c;color-scheme:light;}");
+        // OS-level dark preference, but ONLY when the user has not pinned
+        // light via the toggle (`data-color-mode="light"`). This keeps the
+        // explicit user choice authoritative over the OS hint.
+        html.AppendLine("@media (prefers-color-scheme: dark){:root:not([data-color-mode=\"light\"]){--rsr-bg:#0d1117;--rsr-fg:#c9d1d9;--rsr-article-bg:#0d1117;--rsr-border:#30363d;--rsr-muted:#8b949e;--rsr-link:#58a6ff;--rsr-code-bg:#6e768166;--rsr-pre-bg:#161b22;--rsr-blockquote-border:#30363d;--rsr-th-bg:#161b22;--rsr-liquid-bg:#3c2e00;--rsr-liquid-fg:#e3b341;--rsr-liquid-border:#9e6a03;color-scheme:dark;}}");
+        // Explicit user selection from the toggle always wins, regardless of
+        // OS preference.
+        html.AppendLine(":root[data-color-mode=\"dark\"]{--rsr-bg:#0d1117;--rsr-fg:#c9d1d9;--rsr-article-bg:#0d1117;--rsr-border:#30363d;--rsr-muted:#8b949e;--rsr-link:#58a6ff;--rsr-code-bg:#6e768166;--rsr-pre-bg:#161b22;--rsr-blockquote-border:#30363d;--rsr-th-bg:#161b22;--rsr-liquid-bg:#3c2e00;--rsr-liquid-fg:#e3b341;--rsr-liquid-border:#9e6a03;color-scheme:dark;}");
+        html.AppendLine(":root[data-color-mode=\"light\"]{--rsr-bg:#f6f8fa;--rsr-fg:#24292f;--rsr-article-bg:#fff;--rsr-border:#d8dee4;--rsr-muted:#57606a;--rsr-link:#0969da;--rsr-code-bg:#afb8c133;--rsr-pre-bg:#f6f8fa;--rsr-blockquote-border:#d0d7de;--rsr-th-bg:#f6f8fa;--rsr-liquid-bg:#fff8c5;--rsr-liquid-fg:#7d4e00;--rsr-liquid-border:#d4a72c;color-scheme:light;}");
+        html.AppendLine("body{margin:0;background:var(--rsr-bg);color:var(--rsr-fg);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.55;}");
         html.AppendLine("main{max-width:920px;margin:0 auto;padding:32px 24px 64px;}");
-        html.AppendLine("article{background:#fff;border:1px solid #d8dee4;border-radius:6px;padding:28px;}");
-        html.AppendLine("header{border-bottom:1px solid #d8dee4;margin-bottom:24px;padding-bottom:16px;}");
+        html.AppendLine("article{background:var(--rsr-article-bg);border:1px solid var(--rsr-border);border-radius:6px;padding:28px;}");
+        html.AppendLine("header{border-bottom:1px solid var(--rsr-border);margin-bottom:24px;padding-bottom:16px;}");
         html.AppendLine("h1,h2,h3,h4,h5,h6{line-height:1.25;margin:1.25em 0 .55em;font-weight:650;}");
         html.AppendLine("header h1{font-size:1.55rem;margin:0 0 6px;}");
-        html.AppendLine(".rsr-meta{color:#57606a;font-size:.85rem;margin:0;}");
-        html.AppendLine(".rsr-path{color:#57606a;font-size:.78rem;margin:4px 0 0;font-family:'Cascadia Mono',Consolas,monospace;}");
-        html.AppendLine(".rsr-intro{color:#24292f;font-size:1.05rem;margin:0 0 1.25rem;font-weight:500;}");
+        html.AppendLine(".rsr-meta{color:var(--rsr-muted);font-size:.85rem;margin:0;}");
+        html.AppendLine(".rsr-path{color:var(--rsr-muted);font-size:.78rem;margin:4px 0 0;font-family:'Cascadia Mono',Consolas,monospace;}");
+        html.AppendLine(".rsr-intro{color:var(--rsr-fg);font-size:1.05rem;margin:0 0 1.25rem;font-weight:500;}");
         html.AppendLine("p,ul,ol,pre,blockquote,table{margin:0 0 1rem;}");
-        html.AppendLine("a{color:#0969da;}code{background:#afb8c133;border-radius:4px;padding:.12em .28em;font-family:'Cascadia Mono',Consolas,monospace;font-size:.92em;}");
-        html.AppendLine("pre{background:#f6f8fa;border-radius:6px;overflow:auto;padding:16px;}pre code{background:transparent;padding:0;}");
-        html.AppendLine("blockquote{border-left:4px solid #d0d7de;color:#57606a;padding-left:1rem;}table{border-collapse:collapse;display:block;overflow:auto;}td,th{border:1px solid #d0d7de;padding:6px 13px;}th{background:#f6f8fa;}");
-        html.AppendLine(".rsr-liquid{display:inline-block;background:#fff8c5;color:#7d4e00;border:1px solid #d4a72c;border-radius:3px;padding:0 .35em;margin:0 .15em;font-size:.82em;font-family:'Cascadia Mono',Consolas,monospace;}");
-        html.AppendLine(".rsr-empty{color:#57606a;font-style:italic;}");
-        html.AppendLine("@media (prefers-color-scheme: dark){body{background:#0d1117;color:#c9d1d9;}article{background:#0d1117;border-color:#30363d;}header{border-color:#30363d}.rsr-meta,.rsr-path,.rsr-empty{color:#8b949e;}.rsr-intro{color:#c9d1d9;}a{color:#58a6ff;}code{background:#6e768166;}pre{background:#161b22;}blockquote{border-color:#30363d;color:#8b949e;}td,th{border-color:#30363d;}th{background:#161b22;}.rsr-liquid{background:#3c2e00;color:#e3b341;border-color:#9e6a03;}}");
+        html.AppendLine("a{color:var(--rsr-link);}code{background:var(--rsr-code-bg);border-radius:4px;padding:.12em .28em;font-family:'Cascadia Mono',Consolas,monospace;font-size:.92em;}");
+        html.AppendLine("pre{background:var(--rsr-pre-bg);border-radius:6px;overflow:auto;padding:16px;}pre code{background:transparent;padding:0;}");
+        html.AppendLine("blockquote{border-left:4px solid var(--rsr-blockquote-border);color:var(--rsr-muted);padding-left:1rem;}table{border-collapse:collapse;display:block;overflow:auto;}td,th{border:1px solid var(--rsr-border);padding:6px 13px;}th{background:var(--rsr-th-bg);}");
+        html.AppendLine(".rsr-liquid{display:inline-block;background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border:1px solid var(--rsr-liquid-border);border-radius:3px;padding:0 .35em;margin:0 .15em;font-size:.82em;font-family:'Cascadia Mono',Consolas,monospace;}");
+        html.AppendLine(".rsr-empty{color:var(--rsr-muted);font-style:italic;}");
         html.AppendLine("</style>");
         html.AppendLine("</head>");
         html.AppendLine("<body>");
