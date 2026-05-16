@@ -334,6 +334,89 @@ public sealed class DocsWorktreeManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckoutAsync_Clears_Delete_Blocking_Attributes_When_Deleting_Stale_Directory()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "3434343434340009";
+        var stalePath = Path.Combine(worktreeRoot, "343434343434");
+        Directory.CreateDirectory(stalePath);
+        var staleFile = Path.Combine(stalePath, "readonly.txt");
+        File.WriteAllText(staleFile, "left from interrupted npm install");
+        File.SetAttributes(staleFile, FileAttributes.ReadOnly | FileAttributes.Hidden);
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse HEAD", stalePath, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(128, string.Empty, "not a git repository")));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+                bare,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Assert.False(File.Exists(staleFile));
+                Directory.CreateDirectory(stalePath);
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var path = await sut.CheckoutAsync(sha, ct);
+
+        Assert.Equal(stalePath, path);
+    }
+
+    [Fact]
+    public async Task CheckoutAsync_Stops_Stale_Server_Before_Deleting_Stale_Existing_Directory()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "1212121212120008";
+        var stalePath = Path.Combine(worktreeRoot, "121212121212");
+        Directory.CreateDirectory(stalePath);
+        var staleFile = Path.Combine(stalePath, "partial.txt");
+        File.WriteAllText(staleFile, "left from interrupted checkout");
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse HEAD", stalePath, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(128, string.Empty, "not a git repository")));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+                bare,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Assert.False(File.Exists(staleFile));
+                Directory.CreateDirectory(stalePath);
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var cleaner = Substitute.For<IPreviewServerProcessCleaner>();
+        cleaner.StopStaleServersAsync(stalePath, null, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Assert.True(Directory.Exists(stalePath));
+                return Task.FromResult(1);
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot, processCleaner: cleaner);
+
+        var path = await sut.CheckoutAsync(sha, ct);
+
+        Assert.Equal(stalePath, path);
+        await cleaner.Received(1).StopStaleServersAsync(stalePath, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task PruneAllAsync_Removes_All_Tracked_Worktrees()
     {
         // Surface from the UI / docs so users can deliberately wipe the cache.
@@ -372,12 +455,58 @@ public sealed class DocsWorktreeManagerTests : IDisposable
         await runner.Received().RunAsync("git", "worktree prune", bare, Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task PruneAllAsync_Stops_Stale_Servers_Before_Removing_Worktrees()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var path = Path.Combine(worktreeRoot, "aaaaaaaaaaaa");
+        Directory.CreateDirectory(path);
+        var cleanerCalled = false;
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(
+                0,
+                $"worktree {path}\nHEAD aaaaaaaaaaaaaa01\ndetached\n\n",
+                string.Empty)));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("worktree remove --force", StringComparison.Ordinal)),
+                bare,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Assert.True(cleanerCalled);
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var cleaner = Substitute.For<IPreviewServerProcessCleaner>();
+        cleaner.StopStaleServersAsync(path, null, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                cleanerCalled = true;
+                return Task.FromResult(1);
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot, processCleaner: cleaner);
+
+        var removed = await sut.PruneAllAsync(ct);
+
+        Assert.Equal(1, removed);
+        await cleaner.Received(1).StopStaleServersAsync(path, null, Arg.Any<CancellationToken>());
+    }
+
     private static DocsWorktreeManager BuildSut(
         IProcessRunner runner,
         string bareCloneDir,
         string cloneUrl,
         string? worktreeRoot = null,
-        int maxWorktrees = 5)
+        int maxWorktrees = 5,
+        IPreviewServerProcessCleaner? processCleaner = null)
     {
         var options = Options.Create(new DocsRepositoryOptions
         {
@@ -386,7 +515,11 @@ public sealed class DocsWorktreeManagerTests : IDisposable
             WorktreeRoot = worktreeRoot ?? string.Empty,
             MaxWorktrees = maxWorktrees,
         });
-        return new DocsWorktreeManager(runner, options, NullLogger<DocsWorktreeManager>.Instance);
+        return new DocsWorktreeManager(
+            runner,
+            options,
+            NullLogger<DocsWorktreeManager>.Instance,
+            processCleaner ?? NoopPreviewServerProcessCleaner.Instance);
     }
 
     public void Dispose()

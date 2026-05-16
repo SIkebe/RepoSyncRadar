@@ -194,6 +194,10 @@ public sealed class PreviewServerHostTests : IDisposable
         var handle = await host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken);
 
         Assert.NotNull(handle);
+        Assert.Contains(
+            "1234",
+            File.ReadAllText(Path.Combine(worktree, ".reposyncradar-preview-pids")),
+            StringComparison.Ordinal);
         var call = Assert.Single(runner.StartCalls);
         Assert.Equal("npm", call.FileName);
         Assert.Equal("run dev -- --port 4500", call.Arguments);

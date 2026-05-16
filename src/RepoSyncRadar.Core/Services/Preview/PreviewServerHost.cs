@@ -187,6 +187,7 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var handle = _runner.Start(_options.PreviewCommand, args, worktreePath, env);
+            NextDevServerProcessCleaner.RememberPreviewProcess(worktreePath, handle.ProcessId);
             _current = handle;
             _currentPort = port;
             LogStarted(_logger, _options.PreviewCommand, args, port);
@@ -348,6 +349,7 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
             installArgs,
             worktreePath,
             environment: null);
+        NextDevServerProcessCleaner.RememberPreviewProcess(worktreePath, handle.ProcessId);
         _current = handle;
         var exitCode = 0;
         try

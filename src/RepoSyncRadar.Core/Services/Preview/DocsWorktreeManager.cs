@@ -16,6 +16,7 @@ public sealed partial class DocsWorktreeManager
     private readonly IProcessRunner _runner;
     private readonly DocsRepositoryOptions _options;
     private readonly ILogger<DocsWorktreeManager> _logger;
+    private readonly IPreviewServerProcessCleaner _processCleaner;
     private readonly Dictionary<string, WorktreeEntry> _worktrees = new(StringComparer.OrdinalIgnoreCase);
     private long _tick;
     private bool _restored;
@@ -24,13 +25,24 @@ public sealed partial class DocsWorktreeManager
         IProcessRunner runner,
         IOptions<DocsRepositoryOptions> options,
         ILogger<DocsWorktreeManager> logger)
+        : this(runner, options, logger, NoopPreviewServerProcessCleaner.Instance)
+    {
+    }
+
+    public DocsWorktreeManager(
+        IProcessRunner runner,
+        IOptions<DocsRepositoryOptions> options,
+        ILogger<DocsWorktreeManager> logger,
+        IPreviewServerProcessCleaner processCleaner)
     {
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(processCleaner);
         _runner = runner;
         _options = options.Value;
         _logger = logger;
+        _processCleaner = processCleaner;
     }
 
     public bool IsEnabled => !string.IsNullOrWhiteSpace(_options.BareCloneDir)
@@ -159,6 +171,7 @@ public sealed partial class DocsWorktreeManager
                 }
             }
             var removeArgs = string.Create(CultureInfo.InvariantCulture, $"worktree remove --force {oldest.Value.Path}");
+            await StopStaleServersBeforeRemovalAsync(oldest.Value.Path, cancellationToken).ConfigureAwait(false);
             var removeResult = await _runner.RunAsync("git", removeArgs, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
             if (removeResult.ExitCode != 0)
             {
@@ -187,7 +200,8 @@ public sealed partial class DocsWorktreeManager
 
         try
         {
-            Directory.Delete(path, recursive: true);
+            await StopStaleServersBeforeRemovalAsync(path, cancellationToken).ConfigureAwait(false);
+            await DeleteDirectoryRobustAsync(path, cancellationToken).ConfigureAwait(false);
             LogStaleWorktreeDeleted(_logger, path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -369,6 +383,7 @@ public sealed partial class DocsWorktreeManager
         foreach (var p in paths)
         {
             var args = string.Create(CultureInfo.InvariantCulture, $"worktree remove --force {p}");
+            await StopStaleServersBeforeRemovalAsync(p, cancellationToken).ConfigureAwait(false);
             var res = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
             if (res.ExitCode == 0)
             {
@@ -382,6 +397,94 @@ public sealed partial class DocsWorktreeManager
         _worktrees.Clear();
         await _runner.RunAsync("git", "worktree prune", _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
         return removed;
+    }
+
+    private async Task StopStaleServersBeforeRemovalAsync(string path, CancellationToken cancellationToken)
+    {
+        var stopped = await _processCleaner.StopStaleServersAsync(
+                path,
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+        if (stopped > 0)
+        {
+            LogStalePreviewServersStopped(_logger, path, stopped);
+        }
+    }
+
+    private static async Task DeleteDirectoryRobustAsync(string path, CancellationToken cancellationToken)
+    {
+        const int attempts = 3;
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                Directory.Delete(path, recursive: true);
+                return;
+            }
+            catch (Exception ex) when (attempt < attempts && (ex is IOException or UnauthorizedAccessException))
+            {
+                ClearDeleteBlockingAttributes(path);
+                await Task.Delay(TimeSpan.FromMilliseconds(150 * attempt), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        ClearDeleteBlockingAttributes(path);
+        Directory.Delete(path, recursive: true);
+    }
+
+    private static void ClearDeleteBlockingAttributes(string path)
+    {
+        try
+        {
+            if (!File.Exists(path) && !Directory.Exists(path))
+            {
+                return;
+            }
+
+            var pending = new Stack<string>();
+            pending.Push(path);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                FileAttributes currentAttributes;
+                try
+                {
+                    currentAttributes = File.GetAttributes(current);
+                    File.SetAttributes(current, NormalizeDeleteAttributes(currentAttributes));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    continue;
+                }
+
+                if ((currentAttributes & FileAttributes.Directory) == 0
+                    || (currentAttributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    foreach (var entry in Directory.EnumerateFileSystemEntries(current))
+                    {
+                        pending.Push(entry);
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private static FileAttributes NormalizeDeleteAttributes(FileAttributes attributes)
+    {
+        var normalized = attributes & ~(FileAttributes.ReadOnly | FileAttributes.Hidden | FileAttributes.System);
+        return normalized == 0 ? FileAttributes.Normal : normalized;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning,
@@ -411,4 +514,8 @@ public sealed partial class DocsWorktreeManager
     [LoggerMessage(EventId = 7, Level = LogLevel.Warning,
         Message = "Deleted stale preview worktree directory {Path} before recreating it.")]
     private static partial void LogStaleWorktreeDeleted(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Information,
+        Message = "Stopped {Count} stale preview server process(es) before removing worktree {Path}.")]
+    private static partial void LogStalePreviewServersStopped(ILogger logger, string path, int count);
 }

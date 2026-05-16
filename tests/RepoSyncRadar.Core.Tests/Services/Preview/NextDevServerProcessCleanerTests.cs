@@ -6,6 +6,7 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 public sealed class NextDevServerProcessCleanerTests : IDisposable
 {
     private readonly string _tempRoot;
+    private static readonly PreviewProcessSnapshot[] NoProcesses = [];
 
     public NextDevServerProcessCleanerTests()
     {
@@ -22,7 +23,7 @@ public sealed class NextDevServerProcessCleanerTests : IDisposable
             Path.Combine(logDir, "next-development.log"),
             "{\"message\":\"Server started  port=4501 pid=32776 nodeEnv=development\"}" + Environment.NewLine);
 
-        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null);
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, NoProcesses);
 
         Assert.Equal(32776, Assert.Single(pids));
     }
@@ -34,7 +35,7 @@ public sealed class NextDevServerProcessCleanerTests : IDisposable
             + _tempRoot
             + " - Log: .next\\dev\\logs\\next-development.log Run taskkill /PID 32776 /F to stop it.";
 
-        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, message);
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, message, NoProcesses);
 
         Assert.Equal(32776, Assert.Single(pids));
     }
@@ -47,7 +48,62 @@ public sealed class NextDevServerProcessCleanerTests : IDisposable
             + otherDir
             + " - Log: .next\\dev\\logs\\next-development.log Run taskkill /PID 32776 /F to stop it.";
 
-        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, message);
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, message, NoProcesses);
+
+        Assert.Empty(pids);
+    }
+
+    [Fact]
+    public void FindCandidatePids_Reads_Node_CommandLine_When_Worktree_Path_Matches()
+    {
+        var snapshots = new[]
+        {
+            new PreviewProcessSnapshot(
+                18452,
+                "node.exe",
+                $"node \"{_tempRoot}\\node_modules\\.bin\\tsx\" src/frame/server.ts"),
+        };
+
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, snapshots);
+
+        Assert.Equal(18452, Assert.Single(pids));
+    }
+
+    [Fact]
+    public void FindCandidatePids_Reads_RepoSyncRadar_Pid_File()
+    {
+        File.WriteAllText(
+            Path.Combine(_tempRoot, ".reposyncradar-preview-pids"),
+            "18452" + Environment.NewLine + "not-a-pid" + Environment.NewLine);
+
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, NoProcesses);
+
+        Assert.Equal(18452, Assert.Single(pids));
+    }
+
+    [Fact]
+    public void RememberPreviewProcess_Appends_RepoSyncRadar_Pid_File()
+    {
+        NextDevServerProcessCleaner.RememberPreviewProcess(_tempRoot, 36556);
+
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, NoProcesses);
+
+        Assert.Equal(36556, Assert.Single(pids));
+    }
+
+    [Fact]
+    public void FindCandidatePids_Ignores_Node_CommandLine_When_Worktree_Path_Differs()
+    {
+        var otherDir = Path.Combine(Path.GetTempPath(), "other-worktree");
+        var snapshots = new[]
+        {
+            new PreviewProcessSnapshot(
+                18452,
+                "node.exe",
+                $"node \"{otherDir}\\node_modules\\.bin\\tsx\" src/frame/server.ts"),
+        };
+
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, snapshots);
 
         Assert.Empty(pids);
     }
