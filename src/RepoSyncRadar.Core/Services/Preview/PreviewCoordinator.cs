@@ -445,14 +445,15 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         await _contentServer.StartAsync(port, pages, cancellationToken).ConfigureAwait(false);
         _session.Activate(port);
 
-        // §Step 19.9: バージョンを切り替えるたびに同じポートで /markdown/before の内容を
-        // 差し替える運用なので、URL に version slug を埋め込まないと WebView2 は
-        // 「Source が変わっていない」と判断して navigation をスキップし、
-        // 「変更前ページを準備中…」のオーバーレイから先に進めなくなる。
+        // §Step 19.9/19.10: バージョン切替でもファイル切替でも同じポートで
+        // /markdown/before の内容を差し替える運用なので、URL に version slug と
+        // file path を埋め込まないと WebView2 は「Source が変わっていない」と
+        // 判断して navigation をスキップし、「変更前ページを準備中…」の
+        // オーバーレイから先に進めなくなる。
         // LocalPreviewContentServer.NormalizeRoute は query を捨てるためルーティングには影響しない。
-        var versionSlug = Uri.EscapeDataString(effectiveVersion.Slug);
-        var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before?v={versionSlug}"));
-        var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after?v={versionSlug}"));
+        var query = BuildMarkdownPreviewQuery(effectiveVersion, filePath);
+        var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before?{query}"));
+        var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after?{query}"));
         LogMarkdownComparisonReady(_logger, session.BeforeSha, sha, filePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
         return new PreviewComparisonLink(
             beforeUrl,
@@ -468,6 +469,11 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             AffectedVersions = affectedVersions,
         };
     }
+
+    private static string BuildMarkdownPreviewQuery(DocsVersion version, string filePath)
+        => string.Create(
+            CultureInfo.InvariantCulture,
+            $"v={Uri.EscapeDataString(version.Slug)}&file={Uri.EscapeDataString(filePath.Trim())}");
 
     /// <summary>
     /// §Step 19.10 (perf): 同一 (prNumber, sha) で繰り返し呼ばれても重い前準備

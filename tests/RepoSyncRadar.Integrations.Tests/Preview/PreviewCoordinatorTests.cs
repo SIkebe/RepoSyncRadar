@@ -234,11 +234,11 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", "CHANGELOG.md", cancellationToken: ct);
 
         Assert.NotNull(link);
-        // §Step 19.9: version slug を URL に必ず埋め込む。WebView2 の Source 等価判定で
-        // 「同じ URL」とみなされて navigation がスキップされ、オーバーレイが「変更前ページを
-        // 準備中…」のまま固まる回帰を防ぐ。default version は fpt。
-        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/before?v=fpt"), link!.BeforeUrl);
-        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after?v=fpt"), link.AfterUrl);
+        // §Step 19.9/19.10: version slug と file path を URL に必ず埋め込む。
+        // WebView2 の Source 等価判定で「同じ URL」とみなされて navigation が
+        // スキップされ、オーバーレイが「変更前ページを準備中…」のまま固まる回帰を防ぐ。
+        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/before?v=fpt&file=CHANGELOG.md"), link!.BeforeUrl);
+        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after?v=fpt&file=CHANGELOG.md"), link.AfterUrl);
         Assert.True(session.IsAllowed(link.BeforeUrl));
         Assert.True(session.IsAllowed(link.AfterUrl));
         Assert.Contains("Old entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
@@ -304,8 +304,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
             cancellationToken: ct);
 
         Assert.NotNull(link);
-        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/before?v={expectedSlug}"), link!.BeforeUrl);
-        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/after?v={expectedSlug}"), link.AfterUrl);
+        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/before?v={expectedSlug}&file=CHANGELOG.md"), link!.BeforeUrl);
+        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/after?v={expectedSlug}&file=CHANGELOG.md"), link.AfterUrl);
     }
 
     // §Step 19.9 regression: 同一ファイル・同一 sha でも version を切り替えれば
@@ -603,6 +603,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
             123, "headsha", "FILE2.md", cancellationToken: ct);
 
         Assert.NotNull(secondLink);
+        Assert.NotEqual(firstLink!.BeforeUrl, secondLink!.BeforeUrl);
+        Assert.NotEqual(firstLink.AfterUrl, secondLink.AfterUrl);
+        Assert.Contains("file=FILE1.md", firstLink.BeforeUrl.Query, StringComparison.Ordinal);
+        Assert.Contains("file=FILE2.md", secondLink.BeforeUrl.Query, StringComparison.Ordinal);
         // 1/7 → 2/7 切替で git fetch / git worktree add が再走していないこと。
         Assert.Equal(fetchAfterFirst, calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal)));
         Assert.Equal(worktreeAddAfterFirst, calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal)));

@@ -61,13 +61,23 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
             throw new ArgumentException("At least one page is required.", nameof(pages));
         }
 
-        await StopAsync(cancellationToken).ConfigureAwait(false);
-
         var encodedPages = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var page in pages)
         {
             encodedPages[NormalizeRoute(page.Key)] = Encoding.UTF8.GetBytes(page.Value);
         }
+
+        lock (_gate)
+        {
+            if (_listener is not null && CurrentPort == port)
+            {
+                _pages = encodedPages;
+                LogUpdated(_logger, port, pages.Count);
+                return;
+            }
+        }
+
+        await StopAsync(cancellationToken).ConfigureAwait(false);
 
         var listener = new TcpListener(IPAddress.Loopback, port);
         listener.Start();
@@ -228,4 +238,7 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Local preview content server request failed: {Message}")]
     private static partial void LogRequestFailed(ILogger logger, string message);
+
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Local preview content server updated on port {Port} with {PageCount} pages.")]
+    private static partial void LogUpdated(ILogger logger, int port, int pageCount);
 }
