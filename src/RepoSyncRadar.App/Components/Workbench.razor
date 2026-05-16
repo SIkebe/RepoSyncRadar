@@ -53,7 +53,10 @@
                                    FilePaths="@_selectedCommit.Files.Select(static file => file.Path).ToArray()"
                                    Reviewed="HandleReviewCompleted" />
                     <PreviewActions Commit="_selectedCommit" />
-                    <DraftsPanel Sha="@_selectedCommit.Sha" />
+                    @if (CanShowDrafts(_selectedCommit))
+                    {
+                        <DraftsPanel Sha="@_selectedCommit.Sha" />
+                    }
                 }
             </MudPaper>
         </main>
@@ -134,6 +137,9 @@
         _selectedCommit = commit;
         return Task.CompletedTask;
     }
+
+    private static bool CanShowDrafts(Commit commit)
+        => commit.Review?.Status == ReviewStatus.Adopted;
 
     private Task HandleReviewCompleted(ReviewStatus status)
     {

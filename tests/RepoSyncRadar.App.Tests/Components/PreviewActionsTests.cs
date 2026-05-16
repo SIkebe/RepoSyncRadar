@@ -660,6 +660,75 @@ public sealed class PreviewActionsTests
         });
     }
 
+    [Fact]
+    public void Click_Cleanup_Shows_Progress_And_Advances_Elapsed_While_Running()
+    {
+        var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.CleanupCacheAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => tcs.Task);
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.TestContext();
+
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp));
+        cut.Find("[data-testid=\"preview-cleanup-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find("[data-testid=\"preview-progress\"]");
+            cut.Find("[data-testid=\"preview-cancel-button\"]");
+            Assert.Contains(
+                "キャッシュをクリーンアップ中",
+                cut.Find("[data-testid=\"preview-progress-text\"]").TextContent,
+                StringComparison.Ordinal);
+        });
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(
+                "1 秒経過",
+                cut.Find("[data-testid=\"preview-progress-elapsed\"]").TextContent,
+                StringComparison.Ordinal);
+        }, timeout: TimeSpan.FromSeconds(3));
+
+        tcs.SetResult(2);
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("2 件", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Click_Cleanup_Times_Out_When_Coordinator_Exceeds_Limit()
+    {
+        var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken receivedToken = default;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.CleanupCacheAsync(Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                receivedToken = call.ArgAt<CancellationToken>(0);
+                receivedToken.Register(() =>
+                    tcs.TrySetException(new OperationCanceledException(receivedToken)));
+                return tcs.Task;
+            });
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator, previewReadyTimeoutSeconds: 1);
+        using var ctx = new Bunit.TestContext();
+
+        var cut = ctx.RenderComponent<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp));
+        cut.Find("[data-testid=\"preview-cleanup-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(receivedToken.IsCancellationRequested);
+            var status = cut.Find("[data-testid=\"preview-status\"]").TextContent;
+            Assert.Contains("キャッシュ削除が上限 1 秒", status, StringComparison.Ordinal);
+        }, timeout: TimeSpan.FromSeconds(3));
+    }
+
     private static ServiceProvider BuildServices(
         IPreviewCoordinator coordinator,
         IPreviewNavigator navigator,

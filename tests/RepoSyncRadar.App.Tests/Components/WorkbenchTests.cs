@@ -198,6 +198,106 @@ public sealed class WorkbenchTests
         repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public void Selecting_Unseen_Commit_Does_Not_Render_Drafts_Panel()
+    {
+        var target = new Commit
+        {
+            Sha = "aaa1111aaa1111aaa1111aaa1111aaa1111aaa1",
+            PrNumber = 61073,
+            Message = "Update unread docs",
+            Author = "docs-bot",
+            AuthoredAt = new DateTime(2026, 5, 15, 2, 0, 0, DateTimeKind.Utc),
+            FetchedAt = new DateTime(2026, 5, 15, 2, 0, 0, DateTimeKind.Utc),
+            Review = new Review { Sha = "aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", Status = ReviewStatus.Unseen },
+        };
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(CountsFor(ReviewStatus.Unseen)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> commits = filter.Status == ReviewStatus.Unseen ? [target] : [];
+                return Task.FromResult(commits);
+            });
+
+        using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.RenderComponent<Workbench>();
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]")));
+
+        cut.Find("[data-testid=\"commit-row\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotEmpty(cut.FindAll("[data-testid=\"review-actions\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"drafts-panel\"]"));
+        });
+    }
+
+    [Fact]
+    public void Selecting_Adopted_Commit_Renders_Drafts_Panel()
+    {
+        var target = new Commit
+        {
+            Sha = "bbb2222bbb2222bbb2222bbb2222bbb2222bbb2",
+            PrNumber = 61074,
+            Message = "Update adopted docs",
+            Author = "docs-bot",
+            AuthoredAt = new DateTime(2026, 5, 15, 3, 0, 0, DateTimeKind.Utc),
+            FetchedAt = new DateTime(2026, 5, 15, 3, 0, 0, DateTimeKind.Utc),
+            Review = new Review { Sha = "bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", Status = ReviewStatus.Adopted },
+        };
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(CountsFor(ReviewStatus.Adopted)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> commits = filter.Status == ReviewStatus.Adopted ? [target] : [];
+                return Task.FromResult(commits);
+            });
+
+        using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.RenderComponent<Workbench>();
+        cut.Find("[data-testid=\"sidebar-item-Adopted\"]").Click();
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]")));
+
+        cut.Find("[data-testid=\"commit-row\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotEmpty(cut.FindAll("[data-testid=\"drafts-panel\"]"));
+        });
+    }
+
+    private static Bunit.TestContext CreateWorkbenchTestContext(IRadarRepository repo, out ReviewBroadcaster broadcaster)
+    {
+        broadcaster = new ReviewBroadcaster();
+        var auth = Substitute.For<IGitHubAuthSession>();
+        auth.GetStateAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        auth.GetCurrentLoginAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("octocat"));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+
+        var ctx = new Bunit.TestContext();
+        ctx.JSInterop.Mode = JSRuntimeMode.Loose;
+        ctx.Services.AddMudServices();
+        ctx.Services
+            .AddSingleton(repo)
+            .AddSingleton<IReviewBroadcaster>(broadcaster)
+            .AddSingleton(auth)
+            .AddSingleton(Substitute.For<ICopilotAgent>())
+            .AddSingleton(resolver)
+            .AddSingleton<IOptions<DocsApiOptions>>(Options.Create(new DocsApiOptions
+            {
+                BaseAddress = new Uri("https://docs.github.com/"),
+            }));
+        return ctx;
+    }
+
     private static Dictionary<ReviewStatus, int> CountsFor(ReviewStatus currentStatus)
     {
         return new Dictionary<ReviewStatus, int>

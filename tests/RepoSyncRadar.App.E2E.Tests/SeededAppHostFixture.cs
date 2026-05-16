@@ -131,6 +131,13 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
             ScoredAt = fetchedAt,
         });
 
+        db.Reviews.Add(new Review
+        {
+            Sha = SeededSha,
+            Status = ReviewStatus.Adopted,
+            ReviewedAt = fetchedAt,
+        });
+
         db.Drafts.AddRange(
             new Draft
             {

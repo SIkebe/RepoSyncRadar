@@ -245,6 +245,18 @@ public sealed class RadarRepository : IRadarRepository
         return true;
     }
 
+    public async Task<IReadOnlyList<IgnoreRule>> GetIgnoreRulesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var db = _contextFactory.CreateDbContext();
+        return await db.IgnoreRules
+            .AsNoTracking()
+            .OrderByDescending(rule => rule.CreatedAt)
+            .ThenBy(rule => rule.Pattern)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
     public async Task<int> BulkRejectByPathPrefixAsync(
         string pathPrefix,
         string reason,

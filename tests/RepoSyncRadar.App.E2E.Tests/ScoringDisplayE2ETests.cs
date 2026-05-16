@@ -26,12 +26,7 @@ public sealed class ScoringDisplayE2ETests
     public async Task Scoring_Fields_Render_For_Seeded_Commit()
     {
         var page = await GetBlazorPageAsync();
-
-        // The seeded commit must appear in the inbox; click it to drive
-        // CommitDetail.
-        var row = page.Locator($"[data-testid='commit-row'][data-sha='{SeededAppHostFixture.SeededSha}']");
-        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
-        await row.ClickAsync();
+        await SelectSeededCommitAsync(page);
 
         // Score formatted to two decimals.
         var score = page.Locator("[data-testid='commit-detail-score']");
@@ -61,6 +56,17 @@ public sealed class ScoringDisplayE2ETests
 
         // The "未スコアリング" hint must not appear once Scoring is bound.
         Assert.Empty(await page.Locator("[data-testid='commit-detail-unscored']").AllAsync());
+    }
+
+    private static async Task SelectSeededCommitAsync(IPage page)
+    {
+        var adoptedItem = page.Locator("[data-testid='sidebar-item-Adopted']");
+        await adoptedItem.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
+        await adoptedItem.ClickAsync();
+
+        var row = page.Locator($"[data-testid='commit-row'][data-sha='{SeededAppHostFixture.SeededSha}']");
+        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
+        await row.ClickAsync();
     }
 
     private async Task<IPage> GetBlazorPageAsync()

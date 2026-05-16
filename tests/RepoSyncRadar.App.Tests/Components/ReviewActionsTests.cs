@@ -125,6 +125,119 @@ public sealed class ReviewActionsTests
     }
 
     [Fact]
+    public void Ignore_Suggestions_Mark_Patterns_Already_In_Ignore_List()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([
+                new IgnoreRule
+                {
+                    Pattern = "content/copilot/concepts/**",
+                    Reason = "ignore-directory",
+                    CreatedAt = new DateTime(2026, 5, 16, 0, 0, 0, DateTimeKind.Utc),
+                },
+            ]));
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.TestContext();
+
+        var cut = ctx.RenderComponent<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
+
+        cut.WaitForAssertion(() =>
+        {
+            var registered = cut.FindAll("[data-testid=\"review-ignore-suggestion\"]")
+                .Single(button => button.GetAttribute("data-pattern") == "content/copilot/concepts/**");
+            var newCandidate = cut.FindAll("[data-testid=\"review-ignore-suggestion\"]")
+                .Single(button => button.GetAttribute("data-pattern") == "content/copilot/**");
+
+            Assert.Equal("true", registered.GetAttribute("data-ignored"));
+            Assert.Contains("already-ignored", registered.ClassList);
+            Assert.True(registered.HasAttribute("disabled"));
+            Assert.Contains("登録済み", registered.TextContent, StringComparison.Ordinal);
+            Assert.Equal("false", newCandidate.GetAttribute("data-ignored"));
+            Assert.False(newCandidate.HasAttribute("disabled"));
+            Assert.DoesNotContain("登録済み", newCandidate.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Already_Ignored_Suggestion_Cannot_Be_Selected()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([
+                new IgnoreRule
+                {
+                    Pattern = "content/copilot/**",
+                    Reason = "ignore-directory",
+                    CreatedAt = new DateTime(2026, 5, 16, 0, 0, 0, DateTimeKind.Utc),
+                },
+            ]));
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.TestContext();
+
+        var cut = ctx.RenderComponent<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
+
+        cut.WaitForAssertion(() =>
+        {
+            var registered = cut.FindAll("[data-testid=\"review-ignore-suggestion\"]")
+                .Single(button => button.GetAttribute("data-pattern") == "content/copilot/**");
+            Assert.True(registered.HasAttribute("disabled"));
+        });
+
+        cut.Find("[data-pattern=\"content/copilot/**\"]").Click();
+
+        Assert.Equal(string.Empty, cut.Find("[data-testid=\"review-ignore-pattern\"]").GetAttribute("value"));
+    }
+
+    [Fact]
+    public void Suggestion_Covered_By_Existing_Broader_Ignore_Rule_Is_Disabled()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([
+                new IgnoreRule
+                {
+                    Pattern = "content/copilot/**",
+                    Reason = "ignore-directory",
+                    CreatedAt = new DateTime(2026, 5, 16, 0, 0, 0, DateTimeKind.Utc),
+                },
+            ]));
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.TestContext();
+
+        var cut = ctx.RenderComponent<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
+
+        cut.WaitForAssertion(() =>
+        {
+            var covered = cut.FindAll("[data-testid=\"review-ignore-suggestion\"]")
+                .Single(button => button.GetAttribute("data-pattern") == "content/copilot/concepts/**");
+            var registered = cut.FindAll("[data-testid=\"review-ignore-suggestion\"]")
+                .Single(button => button.GetAttribute("data-pattern") == "content/copilot/**");
+
+            Assert.Equal("true", covered.GetAttribute("data-ignored"));
+            Assert.True(covered.HasAttribute("disabled"));
+            Assert.Contains("カバー済み", covered.TextContent, StringComparison.Ordinal);
+            Assert.Contains("登録済み", registered.TextContent, StringComparison.Ordinal);
+        });
+
+        cut.Find("[data-pattern=\"content/copilot/concepts/**\"]").Click();
+
+        Assert.Equal(string.Empty, cut.Find("[data-testid=\"review-ignore-pattern\"]").GetAttribute("value"));
+    }
+
+    [Fact]
     public void Ignore_Suggestion_Fills_Input_And_Can_Be_Submitted()
     {
         var repo = Substitute.For<IRadarRepository>();

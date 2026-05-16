@@ -223,6 +223,9 @@ public sealed class RadarToolsTests
         public Task<bool> AddIgnoreRuleAsync(string pattern, string? reason, CancellationToken cancellationToken = default)
             => Task.FromResult(true);
 
+        public Task<IReadOnlyList<IgnoreRule>> GetIgnoreRulesAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<IgnoreRule>>(Array.Empty<IgnoreRule>());
+
         public Task<int> BulkRejectByPathPrefixAsync(string pathPrefix, string reason, CancellationToken cancellationToken = default)
             => Task.FromResult(0);
     }

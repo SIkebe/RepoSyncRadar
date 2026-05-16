@@ -77,13 +77,18 @@
                         @foreach (var pattern in _suggestedIgnorePatterns)
                         {
                             <button type="button"
-                                    class="review-suggestion-chip"
+                                    class="@BuildSuggestionChipClass(pattern)"
                                     data-testid="review-ignore-suggestion"
                                     data-pattern="@pattern.Pattern"
-                                    disabled="@_busy"
-                                    @onclick="() => SelectIgnorePattern(pattern.Pattern)">
+                                    data-ignored="@pattern.IsAlreadyIgnored.ToString().ToLowerInvariant()"
+                                    disabled="@(_busy || pattern.IsAlreadyIgnored)"
+                                    @onclick="() => SelectIgnorePattern(pattern)">
                                 <span class="review-suggestion-pattern">@pattern.Pattern</span>
                                 <span class="review-suggestion-meta">@pattern.MatchCount 件</span>
+                                @if (pattern.IgnoreState is not IgnorePatternState.Available)
+                                {
+                                    <span class="review-suggestion-state" data-testid="review-ignore-suggestion-state">@BuildSuggestionStateLabel(pattern.IgnoreState)</span>
+                                }
                             </button>
                         }
                     </div>
@@ -130,11 +135,39 @@
     private string _rejectReason = string.Empty;
     private string _ignorePattern = string.Empty;
     private List<IgnorePatternSuggestion> _suggestedIgnorePatterns = [];
+    private IReadOnlyList<string> _existingIgnorePatterns = [];
     private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadExistingIgnorePatternsAsync();
+    }
 
     protected override void OnParametersSet()
     {
-        _suggestedIgnorePatterns = BuildIgnorePatternSuggestions(FilePaths);
+        _suggestedIgnorePatterns = BuildIgnorePatternSuggestions(FilePaths, _existingIgnorePatterns);
+    }
+
+    private async Task LoadExistingIgnorePatternsAsync()
+    {
+        try
+        {
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            var rulesTask = repo.GetIgnoreRulesAsync(CancellationToken.None);
+            IReadOnlyList<IgnoreRule> rules = rulesTask is null
+                ? Array.Empty<IgnoreRule>()
+                : await rulesTask;
+            _existingIgnorePatterns = rules
+                .Select(static rule => NormalizePattern(rule.Pattern))
+                .Where(static pattern => !string.IsNullOrEmpty(pattern))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            _suggestedIgnorePatterns = BuildIgnorePatternSuggestions(FilePaths, _existingIgnorePatterns);
+        }
+        catch
+        {
+            _existingIgnorePatterns = [];
+        }
     }
 
     private void OnRejectReasonChanged(ChangeEventArgs e)
@@ -146,13 +179,33 @@
     private void SelectRejectReason(string reason)
         => _rejectReason = reason;
 
-    private void SelectIgnorePattern(string pattern)
-        => _ignorePattern = pattern;
+    private void SelectIgnorePattern(IgnorePatternSuggestion suggestion)
+    {
+        if (suggestion.IgnoreState is not IgnorePatternState.Available)
+        {
+            return;
+        }
+
+        _ignorePattern = suggestion.Pattern;
+    }
 
     private string BuildRejectReasonPresetClass(string reason)
         => string.Equals(_rejectReason, reason, StringComparison.Ordinal)
             ? "review-reason-chip active"
             : "review-reason-chip";
+
+    private static string BuildSuggestionChipClass(IgnorePatternSuggestion suggestion)
+        => suggestion.IsAlreadyIgnored
+            ? "review-suggestion-chip already-ignored"
+            : "review-suggestion-chip";
+
+    private static string BuildSuggestionStateLabel(IgnorePatternState state)
+        => state switch
+        {
+            IgnorePatternState.Registered => "登録済み",
+            IgnorePatternState.Covered => "カバー済み",
+            _ => string.Empty,
+        };
 
     private async Task AdoptAsync()
         => await SetReviewAsync(ReviewStatus.Adopted, reason: null);
@@ -208,7 +261,9 @@
         }
     }
 
-    private static List<IgnorePatternSuggestion> BuildIgnorePatternSuggestions(IReadOnlyList<string> filePaths)
+    private static List<IgnorePatternSuggestion> BuildIgnorePatternSuggestions(
+        IReadOnlyList<string> filePaths,
+        IReadOnlyList<string> existingIgnorePatterns)
     {
         var normalizedPaths = filePaths
             .Select(NormalizePath)
@@ -223,9 +278,13 @@
         }
 
         return suggestions
-            .Select(pattern => new IgnorePatternSuggestion(pattern, CountMatchingPaths(pattern, normalizedPaths)))
+            .Select(pattern => new IgnorePatternSuggestion(
+                pattern,
+                CountMatchingPaths(pattern, normalizedPaths),
+                GetIgnorePatternState(pattern, existingIgnorePatterns)))
             .Where(static suggestion => suggestion.MatchCount > 0)
-            .OrderByDescending(static suggestion => suggestion.MatchCount)
+            .OrderBy(static suggestion => suggestion.IsAlreadyIgnored)
+            .ThenByDescending(static suggestion => suggestion.MatchCount)
             .ThenByDescending(static suggestion => CountPathSegments(suggestion.Pattern))
             .ThenBy(static suggestion => suggestion.Pattern, StringComparer.Ordinal)
             .Take(MaxSuggestedIgnorePatterns)
@@ -267,6 +326,45 @@
     private static string NormalizePath(string path)
         => path.Replace('\\', '/').Trim().Trim('/');
 
+    private static string NormalizePattern(string pattern)
+        => pattern.Replace('\\', '/').Trim().Trim('/');
+
+    private static IgnorePatternState GetIgnorePatternState(
+        string candidatePattern,
+        IReadOnlyList<string> existingIgnorePatterns)
+    {
+        var normalizedCandidate = NormalizePattern(candidatePattern);
+        if (existingIgnorePatterns.Contains(normalizedCandidate, StringComparer.Ordinal))
+        {
+            return IgnorePatternState.Registered;
+        }
+
+        var candidatePrefix = GetRulePrefix(normalizedCandidate);
+        if (string.IsNullOrEmpty(candidatePrefix))
+        {
+            return IgnorePatternState.Available;
+        }
+
+        foreach (var existingPattern in existingIgnorePatterns)
+        {
+            var existingPrefix = GetRulePrefix(existingPattern);
+            if (string.IsNullOrEmpty(existingPrefix))
+            {
+                continue;
+            }
+
+            if (candidatePrefix.StartsWith(existingPrefix + "/", StringComparison.Ordinal))
+            {
+                return IgnorePatternState.Covered;
+            }
+        }
+
+        return IgnorePatternState.Available;
+    }
+
+    private static string GetRulePrefix(string pattern)
+        => NormalizePattern(pattern).TrimEnd('*', '/');
+
     private static void AddSuggestion(HashSet<string> suggestions, string pattern)
     {
         if (!string.IsNullOrWhiteSpace(pattern))
@@ -275,5 +373,15 @@
         }
     }
 
-    private sealed record IgnorePatternSuggestion(string Pattern, int MatchCount);
+    private enum IgnorePatternState
+    {
+        Available,
+        Registered,
+        Covered,
+    }
+
+    private sealed record IgnorePatternSuggestion(string Pattern, int MatchCount, IgnorePatternState IgnoreState)
+    {
+        public bool IsAlreadyIgnored => IgnoreState is not IgnorePatternState.Available;
+    }
 }

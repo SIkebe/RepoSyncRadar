@@ -4,6 +4,8 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.Core.Data;
+using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Services;
 using Xunit;
 
@@ -238,10 +240,87 @@ public sealed class AppHeaderTests
         Assert.False(cut.Find("[data-testid=\"app-header-sync\"]").HasAttribute("disabled"));
     }
 
+    [Fact]
+    public void Settings_Button_Loads_And_Renders_Ignore_Rules()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([
+                new IgnoreRule
+                {
+                    Pattern = "content/copilot/**",
+                    Reason = "ignore-directory",
+                    CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+                },
+                new IgnoreRule
+                {
+                    Pattern = "data/release-notes/**",
+                    Reason = "noisy",
+                    CreatedAt = new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Utc),
+                },
+            ]));
+
+        var sp = BuildServices(session, out _, out _, repo);
+        using var ctx = new Bunit.TestContext();
+        var cut = ctx.RenderComponent<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
+            var patterns = cut.FindAll("[data-testid=\"settings-ignore-rule-pattern\"]")
+                .Select(static node => node.TextContent)
+                .ToArray();
+            Assert.Equal(["content/copilot/**", "data/release-notes/**"], patterns);
+            Assert.Contains("ignore-directory", cut.Find("[data-testid=\"settings-ignore-rule-reason\"]").TextContent);
+        });
+        repo.Received(1).GetIgnoreRulesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Settings_Shows_Empty_State_When_No_Ignore_Rules_Exist()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+
+        var sp = BuildServices(session, out _, out _, repo);
+        using var ctx = new Bunit.TestContext();
+        var cut = ctx.RenderComponent<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(
+                "まだ設定されていません",
+                cut.Find("[data-testid=\"settings-ignore-rules-empty\"]").TextContent,
+                StringComparison.Ordinal);
+        });
+    }
+
     private static ServiceProvider BuildServices(
         IGitHubAuthSession session,
         out ICopilotAgent agent,
-        out IReviewBroadcaster broadcaster)
+        out IReviewBroadcaster broadcaster,
+        IRadarRepository? repo = null)
     {
         agent = Substitute.For<ICopilotAgent>();
         broadcaster = Substitute.For<IReviewBroadcaster>();
@@ -249,6 +328,7 @@ public sealed class AppHeaderTests
             .AddSingleton(session)
             .AddSingleton(agent)
             .AddSingleton(broadcaster)
+            .AddSingleton(repo ?? Substitute.For<IRadarRepository>())
             .BuildServiceProvider();
     }
 }

@@ -30,10 +30,7 @@ public sealed class TeamsDraftE2ETests
     public async Task DraftsPanel_Renders_Teams_Section_With_Seeded_Body()
     {
         var page = await GetBlazorPageAsync();
-
-        var row = page.Locator($"[data-testid='commit-row'][data-sha='{SeededAppHostFixture.SeededSha}']");
-        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
-        await row.ClickAsync();
+        await SelectSeededCommitAsync(page);
 
         var section = page.Locator("[data-testid='drafts-section-teams']");
         await section.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
@@ -61,10 +58,7 @@ public sealed class TeamsDraftE2ETests
     public async Task Blazor_View_Does_Not_Contain_Stale_Slack_Label()
     {
         var page = await GetBlazorPageAsync();
-
-        var row = page.Locator($"[data-testid='commit-row'][data-sha='{SeededAppHostFixture.SeededSha}']");
-        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
-        await row.ClickAsync();
+        await SelectSeededCommitAsync(page);
 
         // Wait for the DraftsPanel to mount so the entire workbench tree is in
         // the DOM before we inspect it.
@@ -73,6 +67,17 @@ public sealed class TeamsDraftE2ETests
 
         var visibleText = await page.Locator("body").InnerTextAsync();
         Assert.DoesNotContain("Slack", visibleText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task SelectSeededCommitAsync(IPage page)
+    {
+        var adoptedItem = page.Locator("[data-testid='sidebar-item-Adopted']");
+        await adoptedItem.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
+        await adoptedItem.ClickAsync();
+
+        var row = page.Locator($"[data-testid='commit-row'][data-sha='{SeededAppHostFixture.SeededSha}']");
+        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
+        await row.ClickAsync();
     }
 
     private async Task<IPage> GetBlazorPageAsync()

@@ -287,6 +287,37 @@ public sealed class RadarRepositoryTests
         Assert.Equal(1, counts[ReviewStatus.Later]);
     }
 
+    [Fact]
+    public async Task GetIgnoreRulesAsync_Returns_Rules_Newest_First()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        using (var seed = fixture.CreateContext())
+        {
+            seed.IgnoreRules.AddRange(
+                new IgnoreRule
+                {
+                    Pattern = "data/release-notes/**",
+                    Reason = "noisy",
+                    CreatedAt = new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Utc),
+                },
+                new IgnoreRule
+                {
+                    Pattern = "content/copilot/**",
+                    Reason = "ignore-directory",
+                    CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+                });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var rules = await repository.GetIgnoreRulesAsync(ct);
+
+        Assert.Equal(["content/copilot/**", "data/release-notes/**"], rules.Select(rule => rule.Pattern).ToArray());
+        Assert.Equal("ignore-directory", rules[0].Reason);
+    }
+
     private static Commit MakeCommit(
         string sha,
         int prNumber,

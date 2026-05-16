@@ -81,6 +81,13 @@ public interface IRadarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns the currently configured ignore rules, newest first, so settings UI can
+    /// show what will be auto-archived before the user adds more rules.
+    /// </summary>
+    Task<IReadOnlyList<IgnoreRule>> GetIgnoreRulesAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Bulk-rejects every commit whose at least one <see cref="CommitFile.Path"/> begins with
     /// <paramref name="pathPrefix"/> and that is currently <see cref="ReviewStatus.Unseen"/>.
     /// Used by the Review UI's "Ignore Directory" flow to retroactively clean the inbox.

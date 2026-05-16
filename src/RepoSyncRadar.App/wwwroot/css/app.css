@@ -559,6 +559,100 @@ html, body {
     opacity: 0.55;
 }
 
+.app-settings-panel {
+    border-top: 1px solid #eaeef2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+}
+
+.app-settings-header {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.app-settings-header h2,
+.settings-section h3 {
+    color: #24292f;
+    font-weight: 700;
+    margin: 0;
+}
+
+.app-settings-header h2 {
+    font-size: 1rem;
+}
+
+.app-settings-header p,
+.settings-muted {
+    color: #57606a;
+    font-size: 0.82rem;
+    margin: 0.15rem 0 0;
+}
+
+.settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.settings-section h3 {
+    font-size: 0.92rem;
+}
+
+.settings-error {
+    color: #a40e26;
+    font-size: 0.82rem;
+    margin: 0;
+}
+
+.ignore-rule-list {
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.ignore-rule-row {
+    align-items: center;
+    background: #fff;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 0.55rem 0.65rem;
+}
+
+.ignore-rule-row + .ignore-rule-row {
+    border-top: 1px solid #eaeef2;
+}
+
+.ignore-rule-row code {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 4px;
+    color: #24292f;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+    padding: 0.16rem 0.35rem;
+}
+
+.ignore-rule-meta {
+    align-items: center;
+    color: #57606a;
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    gap: 0.45rem;
+    justify-content: flex-end;
+}
+
 .review-primary-actions {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
@@ -724,6 +818,22 @@ html, body {
     font: inherit;
     font-size: 0.76rem;
     padding: 0.25rem 0.55rem;
+}
+
+.review-suggestion-chip.already-ignored {
+    background: #f6f8fa;
+    border-color: #8c959f;
+    color: #57606a;
+}
+
+.review-suggestion-state {
+    border: 1px solid #8c959f;
+    border-radius: 999px;
+    color: #57606a;
+    font-size: 0.68rem;
+    font-weight: 700;
+    line-height: 1.2;
+    padding: 0.08rem 0.35rem;
 }
 
 .review-suggestion-pattern {

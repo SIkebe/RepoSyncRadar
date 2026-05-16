@@ -1,5 +1,6 @@
 using System.IO;
 using System.Globalization;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -102,6 +103,14 @@ public partial class MainWindow : Window
             PreviewView.NavigationStarting -= OnPreviewViewNavigationStarting;
             DocsView.NavigationCompleted -= OnDocsViewNavigationCompleted;
             PreviewView.NavigationCompleted -= OnPreviewViewNavigationCompleted;
+            if (DocsView.CoreWebView2 is not null)
+            {
+                DocsView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
+            }
+            if (PreviewView.CoreWebView2 is not null)
+            {
+                PreviewView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
+            }
         };
         _logger = services.GetRequiredService<ILoggerFactory>().CreateLogger<MainWindow>();
 
@@ -271,6 +280,8 @@ public partial class MainWindow : Window
             "*",
             CoreWebView2WebResourceContext.All);
         view.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
+        view.CoreWebView2.Settings.IsWebMessageEnabled = true;
+        view.CoreWebView2.WebMessageReceived += OnPreviewScrollMessageReceived;
     }
 
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
@@ -473,12 +484,94 @@ public partial class MainWindow : Window
                 ? "両方のページが揃いました。差分を解析します。"
                 : "もう片方のページ読み込みを待っています。");
 
+        _ = InstallPreviewScrollSynchronizationAsync(
+            view,
+            isBeforePane ? PreviewDiffPane.Before : PreviewDiffPane.After,
+            _previewDiffGeneration);
+
         if (_beforePreviewDiffReady && _afterPreviewDiffReady)
         {
             var generation = _previewDiffGeneration;
             ShowPreviewPaneStatus(isBeforePane: true, "差分を解析中…", "本文ブロックを抽出してハイライトを適用しています。");
             ShowPreviewPaneStatus(isBeforePane: false, "差分を解析中…", "本文ブロックを抽出してハイライトを適用しています。");
             _ = ApplyPreviewDiffHighlightsAsync(generation);
+        }
+    }
+
+    private async Task InstallPreviewScrollSynchronizationAsync(
+        WebView2 view,
+        PreviewDiffPane pane,
+        int generation)
+    {
+        try
+        {
+            if (_activePreviewDiffRequest is null
+                || generation != _previewDiffGeneration
+                || view.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            await view.ExecuteScriptAsync(BuildInstallSynchronizedScrollScript(pane));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPreviewScrollSyncFailed(_logger, ex);
+        }
+    }
+
+    private void OnPreviewScrollMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        if (_activePreviewDiffRequest is null || !_beforePreviewDiffReady || !_afterPreviewDiffReady)
+        {
+            return;
+        }
+
+        string? message;
+        try
+        {
+            message = e.TryGetWebMessageAsString();
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+
+        if (!TryParsePreviewScrollMessage(message, out var sourcePane, out var ratio))
+        {
+            return;
+        }
+
+        var senderCore = sender as CoreWebView2;
+        if (sourcePane == PreviewDiffPane.Before && !ReferenceEquals(senderCore, DocsView.CoreWebView2))
+        {
+            return;
+        }
+        if (sourcePane == PreviewDiffPane.After && !ReferenceEquals(senderCore, PreviewView.CoreWebView2))
+        {
+            return;
+        }
+
+        var targetView = sourcePane == PreviewDiffPane.Before ? PreviewView : DocsView;
+        _ = ApplySynchronizedScrollAsync(targetView, ratio, _previewDiffGeneration);
+    }
+
+    private async Task ApplySynchronizedScrollAsync(WebView2 targetView, double ratio, int generation)
+    {
+        try
+        {
+            if (_activePreviewDiffRequest is null
+                || generation != _previewDiffGeneration
+                || targetView.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            await targetView.ExecuteScriptAsync(BuildApplySynchronizedScrollScript(ratio));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPreviewScrollSyncFailed(_logger, ex);
         }
     }
 
@@ -610,6 +703,121 @@ public partial class MainWindow : Window
             ? string.Create(CultureInfo.InvariantCulture, $"{fileOrdinal}/{fileCount}")
             : string.Empty;
 
+        internal static string BuildInstallSynchronizedScrollScript(PreviewDiffPane pane)
+        {
+                var paneName = pane == PreviewDiffPane.Before ? "before" : "after";
+                var paneJson = JsonSerializer.Serialize(paneName);
+                return $$"""
+(() => {
+    const pane = {{paneJson}};
+    const stateKey = '__repoSyncRadarPreviewScrollSync';
+    const existing = window[stateKey];
+    if (existing && existing.handler) {
+        window.removeEventListener('scroll', existing.handler);
+    }
+
+    const getMaxScrollTop = () => {
+        const root = document.scrollingElement || document.documentElement || document.body;
+        if (!root) {
+            return 0;
+        }
+        return Math.max(0, root.scrollHeight - window.innerHeight);
+    };
+
+    const getScrollRatio = () => {
+        const root = document.scrollingElement || document.documentElement || document.body;
+        const maxScrollTop = getMaxScrollTop();
+        const currentTop = window.scrollY || root?.scrollTop || 0;
+        if (maxScrollTop <= 0) {
+            return 0;
+        }
+        return Math.max(0, Math.min(1, currentTop / maxScrollTop));
+    };
+
+    let frame = 0;
+    const handler = () => {
+        if (Date.now() < (window[stateKey]?.suppressUntil || 0) || frame !== 0) {
+            return;
+        }
+        frame = window.requestAnimationFrame(() => {
+            frame = 0;
+            if (Date.now() < (window[stateKey]?.suppressUntil || 0)) {
+                return;
+            }
+            window.chrome?.webview?.postMessage(`rsr-preview-scroll:${pane}:${getScrollRatio().toFixed(6)}`);
+        });
+    };
+
+    window[stateKey] = {
+        pane,
+        handler,
+        suppressUntil: existing?.suppressUntil || 0,
+    };
+    window.addEventListener('scroll', handler, { passive: true });
+    return true;
+})();
+""";
+        }
+
+        internal static string BuildApplySynchronizedScrollScript(double ratio)
+        {
+                var clampedRatio = Math.Clamp(ratio, 0, 1).ToString("R", CultureInfo.InvariantCulture);
+                return $$"""
+(() => {
+    const stateKey = '__repoSyncRadarPreviewScrollSync';
+    const root = document.scrollingElement || document.documentElement || document.body;
+    if (!root) {
+        return false;
+    }
+    const ratio = {{clampedRatio}};
+    const maxScrollTop = Math.max(0, root.scrollHeight - window.innerHeight);
+    window[stateKey] = window[stateKey] || {};
+    window[stateKey].suppressUntil = Date.now() + 250;
+    window.scrollTo({ left: window.scrollX || root.scrollLeft || 0, top: maxScrollTop * ratio, behavior: 'auto' });
+    return true;
+})();
+""";
+        }
+
+        internal static bool TryParsePreviewScrollMessage(
+                string? message,
+                out PreviewDiffPane pane,
+                out double ratio)
+        {
+                pane = default;
+                ratio = 0;
+                if (string.IsNullOrWhiteSpace(message))
+                {
+                        return false;
+                }
+
+                var parts = message.Split(':');
+                if (parts.Length != 3 || !string.Equals(parts[0], "rsr-preview-scroll", StringComparison.Ordinal))
+                {
+                        return false;
+                }
+
+                pane = parts[1] switch
+                {
+                        "before" => PreviewDiffPane.Before,
+                        "after" => PreviewDiffPane.After,
+                        _ => default,
+                };
+                if (parts[1] is not ("before" or "after"))
+                {
+                        return false;
+                }
+
+                if (!double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedRatio)
+                        || !double.IsFinite(parsedRatio))
+                {
+                        return false;
+                }
+
+                ratio = Math.Clamp(parsedRatio, 0, 1);
+                return true;
+        }
+
     internal static GridLength ResolveWorkbenchColumnRestoreWidth(GridLength? savedWidth)
     {
         if (savedWidth.HasValue && savedWidth.Value.Value > 0)
@@ -677,4 +885,10 @@ public partial class MainWindow : Window
         Level = LogLevel.Debug,
         Message = "Preview diff highlight failed.")]
     private static partial void LogPreviewDiffFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 4,
+        Level = LogLevel.Debug,
+        Message = "Preview scroll synchronization failed.")]
+    private static partial void LogPreviewScrollSyncFailed(ILogger logger, Exception exception);
 }

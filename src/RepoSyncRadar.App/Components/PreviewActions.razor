@@ -138,6 +138,7 @@ npm install</code></pre>
     private string? _worktreePath;
     private string? _activePreviewSha;
     private string? _activePreviewPath;
+    private string _busyCancellationSubject = "プレビュー起動";
     private CancellationTokenSource? _cts;
     private DateTimeOffset _startedAt;
     private int _elapsedSec;
@@ -168,21 +169,10 @@ npm install</code></pre>
         {
             return;
         }
-        _busy = true;
-        _canceling = false;
-        _status = "リポジトリを準備中…";
-        _lastUrl = null;
-        _stdoutTail = new List<string>();
-        _stderrTail = new List<string>();
-        _pid = null;
-        _startedAt = DateTimeOffset.UtcNow;
-        _elapsedSec = 0;
-        _timeoutSec = Services.GetRequiredService<IOptions<DocsRepositoryOptions>>().Value.PreviewReadyTimeoutSeconds;
-        _cts = new CancellationTokenSource();
-        ArmPreviewTimeout(_cts);
-        var token = _cts.Token;
+        StartBusyOperation("リポジトリを準備中…", "プレビュー起動", clearWorktreePath: false);
+        var token = _cts?.Token ?? throw new InvalidOperationException("Busy operation token was not initialized.");
         var host = Services.GetRequiredService<PreviewServerHost>();
-        _pollTask = Task.Run(() => PollProgressAsync(host, token), CancellationToken.None);
+        _pollTask = Task.Run(() => PollProgressAsync(host, includePreviewServerState: true, token), CancellationToken.None);
         try
         {
             var coordinator = Services.GetRequiredService<IPreviewCoordinator>();
@@ -220,17 +210,7 @@ npm install</code></pre>
         {
             // Stop the polling loop before clearing _busy so the UI does not
             // briefly show "起動中…" with a stale elapsed counter after success.
-            try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
-            if (_pollTask is not null)
-            {
-                try { await _pollTask.ConfigureAwait(false); }
-                catch (OperationCanceledException) { /* expected */ }
-                _pollTask = null;
-            }
-            _cts?.Dispose();
-            _cts = null;
-            _busy = false;
-            _canceling = false;
+            await FinishBusyOperationAsync();
         }
     }
 
@@ -255,25 +235,65 @@ npm install</code></pre>
 
     private string BuildCancellationStatus()
         => _canceling
-            ? "プレビュー起動を中止しました"
-            : $"プレビュー起動が上限 {_timeoutSec} 秒を超えたため中止しました";
+            ? $"{_busyCancellationSubject}を中止しました"
+            : $"{_busyCancellationSubject}が上限 {_timeoutSec} 秒を超えたため中止しました";
+
+    private void StartBusyOperation(string status, string cancellationSubject, bool clearWorktreePath)
+    {
+        _busy = true;
+        _canceling = false;
+        _busyCancellationSubject = cancellationSubject;
+        _status = status;
+        _lastUrl = null;
+        if (clearWorktreePath)
+        {
+            _worktreePath = null;
+        }
+        _stdoutTail = new List<string>();
+        _stderrTail = new List<string>();
+        _pid = null;
+        _startedAt = DateTimeOffset.UtcNow;
+        _elapsedSec = 0;
+        _timeoutSec = Services.GetRequiredService<IOptions<DocsRepositoryOptions>>().Value.PreviewReadyTimeoutSeconds;
+        _cts = new CancellationTokenSource();
+        ArmPreviewTimeout(_cts);
+    }
+
+    private async Task FinishBusyOperationAsync()
+    {
+        try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+        if (_pollTask is not null)
+        {
+            try { await _pollTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { /* expected */ }
+            _pollTask = null;
+        }
+        _cts?.Dispose();
+        _cts = null;
+        _busy = false;
+        _canceling = false;
+    }
 
     /// <summary>
-    /// 500 ms ごとに PreviewServerHost のログ tail と経過秒を読んで UI を再描画する。
-    /// PreparePreviewAsync が完了 or キャンセルされた時点で OperationCanceledException で抜ける。
-    /// P2: stdout と stderr を独立に表示するため、結合せず別々に末尾 N 行を取る
-    /// (stderr 側の warning ループで stdout が押し出される問題を回避)。
+    /// 500 ms ごとに経過秒を読んで UI を再描画する。プレビュー起動時は
+    /// PreviewServerHost のログ tail / PID も更新する。
     /// </summary>
-    private async Task PollProgressAsync(PreviewServerHost host, CancellationToken token)
+    private async Task PollProgressAsync(PreviewServerHost? host, bool includePreviewServerState, CancellationToken token)
     {
         try
         {
             using var timer = new PeriodicTimer(PollInterval);
             while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
-                var stdoutTail = TakeTail(host.RecentStdoutLines, MaxLogTailLines);
-                var stderrTail = TakeTail(host.RecentStderrLines, MaxLogTailLines);
-                var pid = host.CurrentProcessId;
+                var stdoutTail = includePreviewServerState && host is not null
+                    ? TakeTail(host.RecentStdoutLines, MaxLogTailLines)
+                    : _stdoutTail;
+                var stderrTail = includePreviewServerState && host is not null
+                    ? TakeTail(host.RecentStderrLines, MaxLogTailLines)
+                    : _stderrTail;
+                var pid = includePreviewServerState && host is not null
+                    ? host.CurrentProcessId
+                    : _pid;
                 var elapsed = (int)(DateTimeOffset.UtcNow - _startedAt).TotalSeconds;
                 await InvokeAsync(() =>
                 {
@@ -478,20 +498,19 @@ npm install</code></pre>
         {
             return;
         }
-        _busy = true;
-        _status = "キャッシュをクリーンアップ中…";
-        _lastUrl = null;
-        _worktreePath = null;
+        StartBusyOperation("キャッシュをクリーンアップ中…", "キャッシュ削除", clearWorktreePath: true);
+        var token = _cts?.Token ?? throw new InvalidOperationException("Busy operation token was not initialized.");
+        _pollTask = Task.Run(() => PollProgressAsync(host: null, includePreviewServerState: false, token), CancellationToken.None);
         StateHasChanged();
         try
         {
             var coordinator = Services.GetRequiredService<IPreviewCoordinator>();
-            var removed = await coordinator.CleanupCacheAsync();
+            var removed = await coordinator.CleanupCacheAsync(token);
             _status = $"{removed} 件の worktree を削除しました";
         }
         catch (OperationCanceledException)
         {
-            throw;
+            _status = BuildCancellationStatus();
         }
         catch (Exception ex)
         {
@@ -501,7 +520,7 @@ npm install</code></pre>
         }
         finally
         {
-            _busy = false;
+            await FinishBusyOperationAsync();
         }
     }
 

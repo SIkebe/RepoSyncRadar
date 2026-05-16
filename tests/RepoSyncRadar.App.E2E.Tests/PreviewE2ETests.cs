@@ -160,6 +160,10 @@ public sealed class PreviewE2ETests
 
     private static async Task SelectSeededCommitAsync(IPage page)
     {
+        var adoptedItem = page.Locator("[data-testid='sidebar-item-Adopted']");
+        await adoptedItem.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
+        await adoptedItem.ClickAsync();
+
         var row = page.Locator($"[data-testid='commit-row'][data-sha='{SeededAppHostFixture.SeededSha}']");
         await row.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
         await row.ClickAsync();

@@ -65,6 +65,56 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(string.Empty, MainWindow.BuildComparisonFileIndexLabel(0, 6));
     }
 
+    [Theory]
+    [InlineData("rsr-preview-scroll:before:0.25", true, 0.25)]
+    [InlineData("rsr-preview-scroll:after:1.5", false, 1)]
+    [InlineData("rsr-preview-scroll:before:-0.2", true, 0)]
+    public void TryParsePreviewScrollMessage_Parses_Pane_And_Clamps_Ratio(
+        string message,
+        bool expectedBeforePane,
+        double expectedRatio)
+    {
+        var parsed = MainWindow.TryParsePreviewScrollMessage(message, out var pane, out var ratio);
+
+        Assert.True(parsed);
+        Assert.Equal(expectedBeforePane, pane == PreviewDiffPane.Before);
+        Assert.Equal(expectedRatio, ratio, precision: 6);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("rsr-preview-scroll:left:0.5")]
+    [InlineData("rsr-preview-scroll:before:not-a-number")]
+    [InlineData("unrelated:before:0.5")]
+    public void TryParsePreviewScrollMessage_Rejects_Invalid_Messages(string? message)
+    {
+        var parsed = MainWindow.TryParsePreviewScrollMessage(message, out _, out _);
+
+        Assert.False(parsed);
+    }
+
+    [Fact]
+    public void BuildInstallSynchronizedScrollScript_Posts_Before_Pane_Ratio_Message()
+    {
+        var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.Before);
+
+        Assert.Contains("rsr-preview-scroll", script, StringComparison.Ordinal);
+        Assert.Contains("const pane = \"before\"", script, StringComparison.Ordinal);
+        Assert.Contains("window.addEventListener('scroll'", script, StringComparison.Ordinal);
+        Assert.Contains("requestAnimationFrame", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildApplySynchronizedScrollScript_Clamps_Ratio_And_Suppresses_Feedback()
+    {
+        var script = MainWindow.BuildApplySynchronizedScrollScript(2.4);
+
+        Assert.Contains("const ratio = 1", script, StringComparison.Ordinal);
+        Assert.Contains("suppressUntil", script, StringComparison.Ordinal);
+        Assert.Contains("window.scrollTo", script, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ResolveWorkbenchColumnRestoreWidth_Preserves_User_Adjusted_Width()
     {
