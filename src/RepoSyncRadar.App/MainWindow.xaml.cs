@@ -20,6 +20,16 @@ using RepoSyncRadar.Core.Services.Preview;
 namespace RepoSyncRadar.App;
 
 /// <summary>
+/// Color mode for the docs / preview WebView2 surfaces. Defaults to <see cref="Dark"/>
+/// because the GitHub Docs dark palette matches the surrounding chrome.
+/// </summary>
+public enum DocsThemeMode
+{
+    Dark,
+    Light,
+}
+
+/// <summary>
 /// Top-level shell. Hosts a BlazorWebView (UI shell) and WebView2 docs surfaces.
 /// Rendering mode C from DESIGN.md §9.3.
 /// </summary>
@@ -84,6 +94,7 @@ public partial class MainWindow : Window
     private bool _previewFocusToggleMouseActivated;
     private bool? _pendingPreviewFocusMode;
     private bool _previewFocusModeChangeScheduled;
+    private DocsThemeMode _docsTheme = DocsThemeMode.Dark;
     private readonly DispatcherTimer _previewFocusLayoutShieldTimer;
 
     public MainWindow(IServiceProvider services)
@@ -96,6 +107,7 @@ public partial class MainWindow : Window
         };
         _previewFocusLayoutShieldTimer.Tick += OnPreviewFocusLayoutShieldTimerTick;
         UpdatePreviewFocusToggleButton();
+        UpdateDocsThemeToggleButton();
         BlazorView.Services = services;
 
         var copilotOptions = services.GetRequiredService<IOptions<CopilotOptions>>().Value;
@@ -292,6 +304,38 @@ public partial class MainWindow : Window
         AutomationProperties.SetName(
             PreviewFocusToggleButton,
             BuildPreviewFocusToggleAutomationName(_isPreviewFocusMode));
+    }
+
+    private void UpdateDocsThemeToggleButton()
+    {
+        DocsThemeToggleButton.Content = BuildDocsThemeToggleGlyph(_docsTheme);
+        DocsThemeToggleButton.ToolTip = BuildDocsThemeToggleToolTip(_docsTheme);
+        AutomationProperties.SetName(DocsThemeToggleButton, BuildDocsThemeToggleToolTip(_docsTheme));
+    }
+
+    private void OnDocsThemeToggleClicked(object sender, RoutedEventArgs e)
+    {
+        _docsTheme = ToggleDocsTheme(_docsTheme);
+        UpdateDocsThemeToggleButton();
+        _ = ApplyDocsThemeAsync(DocsView);
+        _ = ApplyDocsThemeAsync(PreviewView);
+    }
+
+    private async Task ApplyDocsThemeAsync(WebView2CompositionControl view)
+    {
+        try
+        {
+            if (view.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            await view.ExecuteScriptAsync(BuildDocsThemeScript(_docsTheme));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogDocsThemeApplyFailed(_logger, ex);
+        }
     }
 
     /// <summary>
@@ -517,10 +561,16 @@ public partial class MainWindow : Window
     }
 
     private void OnDocsViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
-        => OnPreviewDiffPaneNavigationCompleted(DocsView, isBeforePane: true, e);
+    {
+        _ = ApplyDocsThemeAsync(DocsView);
+        OnPreviewDiffPaneNavigationCompleted(DocsView, isBeforePane: true, e);
+    }
 
     private void OnPreviewViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
-        => OnPreviewDiffPaneNavigationCompleted(PreviewView, isBeforePane: false, e);
+    {
+        _ = ApplyDocsThemeAsync(PreviewView);
+        OnPreviewDiffPaneNavigationCompleted(PreviewView, isBeforePane: false, e);
+    }
 
     private void OnPreviewDiffPaneNavigationCompleted(
         WebView2CompositionControl view,
@@ -800,6 +850,42 @@ public partial class MainWindow : Window
         => fileOrdinal is > 0 && fileCount is > 0
             ? string.Create(CultureInfo.InvariantCulture, $"{fileOrdinal}/{fileCount}")
             : string.Empty;
+
+        internal static DocsThemeMode ToggleDocsTheme(DocsThemeMode current)
+            => current == DocsThemeMode.Dark ? DocsThemeMode.Light : DocsThemeMode.Dark;
+
+        internal static string BuildDocsThemeToggleGlyph(DocsThemeMode current)
+            // Icon represents the mode that clicking will switch TO.
+            => current == DocsThemeMode.Dark ? "☀" : "🌙";
+
+        internal static string BuildDocsThemeToggleToolTip(DocsThemeMode current)
+            => current == DocsThemeMode.Dark
+                ? "ライトテーマに切り替え"
+                : "ダークテーマに切り替え";
+
+        internal static string BuildDocsThemeScript(DocsThemeMode theme)
+        {
+                var modeName = theme == DocsThemeMode.Dark ? "dark" : "light";
+                var modeJson = JsonSerializer.Serialize(modeName);
+                return $$"""
+(() => {
+    const mode = {{modeJson}};
+    try { window.localStorage?.setItem('color_mode', mode); } catch (_) {}
+    try { window.localStorage?.setItem('theme', mode); } catch (_) {}
+    try {
+        document.cookie = 'color_mode=' + mode + '; path=/; max-age=31536000; samesite=lax';
+    } catch (_) {}
+    const root = document.documentElement;
+    if (root) {
+        root.setAttribute('data-color-mode', mode);
+        root.setAttribute('data-light-theme', 'light');
+        root.setAttribute('data-dark-theme', 'dark');
+        root.style.colorScheme = mode;
+    }
+    return true;
+})();
+""";
+        }
 
         internal static string BuildInstallSynchronizedScrollScript(PreviewDiffPane pane)
         {
@@ -1146,4 +1232,10 @@ public partial class MainWindow : Window
         Level = LogLevel.Debug,
         Message = "Preview scroll synchronization failed.")]
     private static partial void LogPreviewScrollSyncFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 5,
+        Level = LogLevel.Debug,
+        Message = "Docs theme apply failed.")]
+    private static partial void LogDocsThemeApplyFailed(ILogger logger, Exception exception);
 }

@@ -105,11 +105,22 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
-          <TextBlock x:Name="OfficialDocsHeaderText"
-                     Text="公式 docs.github.com"
-                     Foreground="#C9D1D9"
-                     FontSize="12"
-                     TextTrimming="CharacterEllipsis" />
+          <DockPanel LastChildFill="True">
+            <Button x:Name="DocsThemeToggleButton"
+                    DockPanel.Dock="Right"
+                    Style="{StaticResource PreviewFocusIconButtonStyle}"
+                    Width="22"
+                    Height="22"
+                    FontSize="13"
+                    Margin="6,0,0,0"
+                    Click="OnDocsThemeToggleClicked" />
+            <TextBlock x:Name="OfficialDocsHeaderText"
+                       Text="公式 docs.github.com"
+                       Foreground="#C9D1D9"
+                       FontSize="12"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
+          </DockPanel>
           <DockPanel Grid.Row="1"
                      LastChildFill="True">
             <Border x:Name="OfficialDocsFileBadge"

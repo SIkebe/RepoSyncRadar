@@ -274,4 +274,60 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(IndexOne, plan.BeforeChangedIndexes);
         Assert.Equal(IndexOne, plan.AfterChangedIndexes);
     }
+
+    [Fact]
+    public void BuildDocsThemeScript_Dark_Sets_Data_Color_Mode_Dark()
+    {
+        var script = MainWindow.BuildDocsThemeScript(DocsThemeMode.Dark);
+
+        Assert.Contains("data-color-mode", script, StringComparison.Ordinal);
+        Assert.Contains("\"dark\"", script, StringComparison.Ordinal);
+        // Persist via localStorage + cookie so the React shell does not flip it back on rerender.
+        Assert.Contains("localStorage", script, StringComparison.Ordinal);
+        Assert.Contains("color_mode", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildDocsThemeScript_Light_Sets_Data_Color_Mode_Light()
+    {
+        var script = MainWindow.BuildDocsThemeScript(DocsThemeMode.Light);
+
+        Assert.Contains("data-color-mode", script, StringComparison.Ordinal);
+        Assert.Contains("\"light\"", script, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(DocsThemeMode.Dark, DocsThemeMode.Light)]
+    [InlineData(DocsThemeMode.Light, DocsThemeMode.Dark)]
+    public void ToggleDocsTheme_Inverts_The_Current_Mode(DocsThemeMode current, DocsThemeMode expected)
+    {
+        Assert.Equal(expected, MainWindow.ToggleDocsTheme(current));
+    }
+
+    [Theory]
+    [InlineData(DocsThemeMode.Dark, "☀")]
+    [InlineData(DocsThemeMode.Light, "🌙")]
+    public void BuildDocsThemeToggleGlyph_Shows_Next_Mode_Icon(DocsThemeMode current, string expectedGlyph)
+    {
+        // Glyph represents the mode you will switch TO when clicked.
+        Assert.Equal(expectedGlyph, MainWindow.BuildDocsThemeToggleGlyph(current));
+    }
+
+    [Theory]
+    [InlineData(DocsThemeMode.Dark)]
+    [InlineData(DocsThemeMode.Light)]
+    public void BuildDocsThemeToggleToolTip_Mentions_The_Target_Mode(DocsThemeMode current)
+    {
+        var toolTip = MainWindow.BuildDocsThemeToggleToolTip(current);
+
+        Assert.False(string.IsNullOrWhiteSpace(toolTip));
+        if (current == DocsThemeMode.Dark)
+        {
+            Assert.Contains("ライト", toolTip, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Contains("ダーク", toolTip, StringComparison.Ordinal);
+        }
+    }
 }
