@@ -147,6 +147,7 @@ npm install</code></pre>
     private List<string> _stderrTail = new();
     private int? _pid;
     private Task? _pollTask;
+    private CancellationTokenSource? _predictivePrewarmCts;
 
     protected override void OnParametersSet()
     {
@@ -158,6 +159,29 @@ npm install</code></pre>
 
         _activePreviewSha = sha;
         _activePreviewPath = null;
+
+        // Predictive prewarm: the moment the user selects a different PR/commit we
+        // start the bare-clone+fetch in the background so the eventual
+        // "ローカルプレビュー" click only pays the worktree-add + npm install +
+        // dev server compile cost. Cancel any in-flight prewarm from the
+        // previous selection — the new one supersedes it. Fire-and-forget; the
+        // coordinator already swallows its own failures.
+        try { _predictivePrewarmCts?.Cancel(); } catch (ObjectDisposedException) { }
+        _predictivePrewarmCts?.Dispose();
+        _predictivePrewarmCts = null;
+
+        if (Commit is { PrNumber: > 0 } commit
+            && !string.IsNullOrEmpty(sha)
+            && Services.GetService<IPreviewCoordinator>() is { } coordinator)
+        {
+            var cts = new CancellationTokenSource();
+            _predictivePrewarmCts = cts;
+            var prNumber = commit.PrNumber;
+            var capturedSha = sha;
+            _ = Task.Run(
+                () => coordinator.PredictivePrewarmAsync(prNumber, capturedSha, cts.Token),
+                CancellationToken.None);
+        }
     }
 
     private async Task PreviewAsync()
@@ -529,5 +553,8 @@ npm install</code></pre>
         try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
         _cts?.Dispose();
         _cts = null;
+        try { _predictivePrewarmCts?.Cancel(); } catch (ObjectDisposedException) { }
+        _predictivePrewarmCts?.Dispose();
+        _predictivePrewarmCts = null;
     }
 }

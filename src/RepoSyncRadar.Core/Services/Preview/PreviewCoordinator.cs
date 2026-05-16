@@ -80,6 +80,18 @@ public interface IPreviewCoordinator
     Task PrewarmAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Predictively warms the bare clone and PR ref for a freshly selected commit
+    /// so the user's "ローカルプレビュー" click no longer pays the <c>git fetch</c>
+    /// cost (10-30 s for github/docs depending on cache age). Performs
+    /// <see cref="DocsWorktreeManager.EnsureBareCloneAsync"/> followed by
+    /// <see cref="DocsWorktreeManager.FetchPrAsync"/> only — does NOT touch
+    /// <c>git worktree add</c> nor <c>npm install</c> so it can never race the
+    /// real preview path. Best-effort: any failure (network, bad SHA, etc.) is
+    /// swallowed; the regular preview path will surface the error when clicked.
+    /// </summary>
+    Task PredictivePrewarmAsync(int prNumber, string sha, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stops the running preview and removes every worktree this manager tracks
     /// (including those rehydrated from disk on startup). Returns the number of
     /// worktrees actually removed. Returns 0 when the preview pipeline is disabled.
@@ -411,6 +423,30 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task PredictivePrewarmAsync(int prNumber, string sha, CancellationToken cancellationToken = default)
+    {
+        if (!_worktree.IsEnabled || prNumber <= 0 || string.IsNullOrEmpty(sha))
+        {
+            return;
+        }
+        try
+        {
+            await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
+            await _worktree.FetchPrAsync(prNumber, cancellationToken).ConfigureAwait(false);
+            LogPredictivePrewarmCompleted(_logger, prNumber, sha);
+        }
+        catch (OperationCanceledException)
+        {
+            // Caller cancelled — typically because the user picked a different PR
+            // before this one finished. Don't log; the new selection's prewarm
+            // will take over.
+        }
+        catch (Exception ex)
+        {
+            LogPredictivePrewarmFailed(_logger, prNumber, sha, ex);
+        }
+    }
+
     public async Task<int> CleanupCacheAsync(CancellationToken cancellationToken = default)
     {
         if (!_worktree.IsEnabled)
@@ -498,4 +534,12 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         string filePath,
         string beforeUrl,
         string afterUrl);
+
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug,
+        Message = "Predictive preview prewarm completed for PR #{PrNumber} (sha {Sha}); subsequent click should skip git fetch.")]
+    private static partial void LogPredictivePrewarmCompleted(ILogger logger, int prNumber, string sha);
+
+    [LoggerMessage(EventId = 6, Level = LogLevel.Debug,
+        Message = "Predictive preview prewarm failed for PR #{PrNumber} (sha {Sha}); the regular click path will retry.")]
+    private static partial void LogPredictivePrewarmFailed(ILogger logger, int prNumber, string sha, Exception exception);
 }

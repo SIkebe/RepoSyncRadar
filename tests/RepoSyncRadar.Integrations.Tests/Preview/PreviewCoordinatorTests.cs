@@ -350,6 +350,74 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PredictivePrewarmAsync_Runs_Clone_And_Fetch_But_Not_Worktree()
+    {
+        // Predictive prewarm fires fire-and-forget when the user picks a PR in the
+        // UI. It should advance the pipeline as far as possible without touching
+        // `git worktree add` (which would race the real click path that uses the
+        // same internal Dictionary in DocsWorktreeManager).
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-predictive.git");
+        var runner = Substitute.For<IProcessRunner>();
+        var calls = new List<string>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git");
+
+        await sut.PredictivePrewarmAsync(prNumber: 4242, sha: "deadbeefcafe", cancellationToken: ct);
+
+        Assert.Contains(calls, c => c.StartsWith("git clone --bare", StringComparison.Ordinal));
+        Assert.Contains(calls, c => c.StartsWith("git fetch origin +refs/pull/4242/head:refs/pull/4242/head", StringComparison.Ordinal));
+        Assert.DoesNotContain(calls, c => c.StartsWith("git worktree add", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PredictivePrewarmAsync_When_Disabled_Is_NoOp()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var runner = Substitute.For<IProcessRunner>();
+        var sut = BuildSut(runner, bareCloneDir: string.Empty, cloneUrl: string.Empty);
+
+        await sut.PredictivePrewarmAsync(prNumber: 4242, sha: "deadbeefcafe", cancellationToken: ct);
+
+        await runner.DidNotReceiveWithAnyArgs()
+            .RunAsync(default!, default!, default!, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PredictivePrewarmAsync_Swallows_Fetch_Failure()
+    {
+        // Best-effort contract: if `git fetch` fails (network down, deleted branch,
+        // etc.) the user's later click should still surface the error through the
+        // regular path. The predictive call itself must not throw.
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-predictive-fail.git");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var args = call.ArgAt<string>(1);
+                if (args.StartsWith("clone --bare", StringComparison.Ordinal))
+                {
+                    return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+                }
+                if (args.StartsWith("fetch origin", StringComparison.Ordinal))
+                {
+                    return Task.FromResult(new ProcessRunResult(128, string.Empty, "fatal: couldn't find remote ref"));
+                }
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git");
+
+        // Should not throw.
+        await sut.PredictivePrewarmAsync(prNumber: 9999, sha: "deadbeefcafe", cancellationToken: ct);
+    }
+
+    [Fact]
     public async Task StopAsync_Deactivates_Session_And_Stops_Server()
     {
         var ct = TestContext.Current.CancellationToken;
