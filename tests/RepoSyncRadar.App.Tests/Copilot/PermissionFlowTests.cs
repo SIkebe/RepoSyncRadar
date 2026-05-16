@@ -58,6 +58,6 @@ public sealed class PermissionFlowTests
 
         var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.DeniedInteractivelyByUser, result.Kind);
+        Assert.Equal(PermissionRequestResultKind.Rejected, result.Kind);
     }
 }

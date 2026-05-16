@@ -115,10 +115,10 @@ public sealed partial class RadarPermissionPolicy
         new() { Kind = PermissionRequestResultKind.Approved };
 
     private static PermissionRequestResult DeniedByUser() =>
-        new() { Kind = PermissionRequestResultKind.DeniedInteractivelyByUser };
+        new() { Kind = PermissionRequestResultKind.Rejected };
 
     private static PermissionRequestResult DeniedByRules() =>
-        new() { Kind = PermissionRequestResultKind.DeniedByRules };
+        new() { Kind = PermissionRequestResultKind.UserNotAvailable };
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
         Message = "Approving custom tool {ToolName} (session={SessionId})")]
