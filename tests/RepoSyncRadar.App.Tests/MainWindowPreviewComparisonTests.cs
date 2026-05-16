@@ -87,11 +87,47 @@ public sealed class MainWindowPreviewComparisonTests
     [InlineData("rsr-preview-scroll:left:0.5")]
     [InlineData("rsr-preview-scroll:before:not-a-number")]
     [InlineData("unrelated:before:0.5")]
+    [InlineData("rsr-preview-scroll:before:0.5:120")] // 4-part is malformed: must be 3 or 5
     public void TryParsePreviewScrollMessage_Rejects_Invalid_Messages(string? message)
     {
         var parsed = MainWindow.TryParsePreviewScrollMessage(message, out _, out _);
 
         Assert.False(parsed);
+    }
+
+    [Fact]
+    public void TryParsePreviewScrollMessage_Parses_Anchor_Fingerprint_And_Offset()
+    {
+        const string fingerprint = "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA=="; // base64("Setting up GitHub Copilot")
+        var message = $"rsr-preview-scroll:after:0.42:120.5:{fingerprint}";
+
+        var parsed = MainWindow.TryParsePreviewScrollMessage(
+            message,
+            out var pane,
+            out var ratio,
+            out var anchorOffsetPx,
+            out var anchorFingerprint);
+
+        Assert.True(parsed);
+        Assert.Equal(PreviewDiffPane.After, pane);
+        Assert.Equal(0.42, ratio, precision: 6);
+        Assert.Equal(120.5, anchorOffsetPx, precision: 6);
+        Assert.Equal(fingerprint, anchorFingerprint);
+    }
+
+    [Fact]
+    public void TryParsePreviewScrollMessage_Anchor_Outputs_Default_To_Empty_For_Legacy_Messages()
+    {
+        var parsed = MainWindow.TryParsePreviewScrollMessage(
+            "rsr-preview-scroll:before:0.25",
+            out _,
+            out _,
+            out var anchorOffsetPx,
+            out var anchorFingerprint);
+
+        Assert.True(parsed);
+        Assert.True(double.IsNaN(anchorOffsetPx));
+        Assert.Null(anchorFingerprint);
     }
 
     [Fact]
@@ -106,6 +142,20 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void BuildInstallSynchronizedScrollScript_Sends_Anchor_Fingerprint_For_Topmost_Visible_Block()
+    {
+        var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.After);
+
+        // The install script must look for a visible content block and include its
+        // fingerprint + viewport offset in the outgoing message so the peer can do
+        // content-anchored sync rather than relying on a height-ratio that diverges
+        // when the two pages have different chrome.
+        Assert.Contains("getBoundingClientRect", script, StringComparison.Ordinal);
+        Assert.Contains("btoa", script, StringComparison.Ordinal);
+        Assert.Contains("data-rsr-diff-index", script, StringComparison.Ordinal); // anchor candidates include diff blocks
+    }
+
+    [Fact]
     public void BuildApplySynchronizedScrollScript_Clamps_Ratio_And_Suppresses_Feedback()
     {
         var script = MainWindow.BuildApplySynchronizedScrollScript(2.4);
@@ -113,6 +163,21 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const ratio = 1", script, StringComparison.Ordinal);
         Assert.Contains("suppressUntil", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollTo", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildApplySynchronizedScrollScript_Uses_Anchor_When_Provided()
+    {
+        var script = MainWindow.BuildApplySynchronizedScrollScript(
+            ratio: 0.5,
+            anchorOffsetPx: 120.5,
+            anchorFingerprintBase64: "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==");
+
+        Assert.Contains("U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==", script, StringComparison.Ordinal);
+        Assert.Contains("120.5", script, StringComparison.Ordinal);
+        Assert.Contains("window.scrollBy", script, StringComparison.Ordinal); // anchor branch uses scrollBy(delta)
+        // Ratio fallback must still be present so anchor-miss does not freeze sync.
+        Assert.Contains("const ratio = 0.5", script, StringComparison.Ordinal);
     }
 
     [Fact]

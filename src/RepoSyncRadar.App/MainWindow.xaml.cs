@@ -616,7 +616,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!TryParsePreviewScrollMessage(message, out var sourcePane, out var ratio))
+        if (!TryParsePreviewScrollMessage(
+                message,
+                out var sourcePane,
+                out var ratio,
+                out var anchorOffsetPx,
+                out var anchorFingerprint))
         {
             return;
         }
@@ -632,10 +637,20 @@ public partial class MainWindow : Window
         }
 
         var targetView = sourcePane == PreviewDiffPane.Before ? PreviewView : DocsView;
-        _ = ApplySynchronizedScrollAsync(targetView, ratio, _previewDiffGeneration);
+        _ = ApplySynchronizedScrollAsync(
+            targetView,
+            ratio,
+            anchorOffsetPx,
+            anchorFingerprint,
+            _previewDiffGeneration);
     }
 
-    private async Task ApplySynchronizedScrollAsync(WebView2CompositionControl targetView, double ratio, int generation)
+    private async Task ApplySynchronizedScrollAsync(
+        WebView2CompositionControl targetView,
+        double ratio,
+        double anchorOffsetPx,
+        string? anchorFingerprint,
+        int generation)
     {
         try
         {
@@ -646,7 +661,11 @@ public partial class MainWindow : Window
                 return;
             }
 
-            await targetView.ExecuteScriptAsync(BuildApplySynchronizedScrollScript(ratio));
+            var script = BuildApplySynchronizedScrollScript(
+                ratio,
+                double.IsNaN(anchorOffsetPx) ? null : anchorOffsetPx,
+                anchorFingerprint);
+            await targetView.ExecuteScriptAsync(script);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -795,6 +814,59 @@ public partial class MainWindow : Window
         window.removeEventListener('scroll', existing.handler);
     }
 
+    const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
+    const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
+
+    const findCandidateBlocks = () => {
+        // Prefer blocks already stamped by PreviewDiffHighlighter when available,
+        // since they are guaranteed to be the same set we run diff matching on.
+        // Fall back to scanning leaf elements before the highlighter has finished.
+        const stamped = document.querySelectorAll('[data-rsr-diff-index]');
+        if (stamped.length > 0) {
+            return Array.from(stamped);
+        }
+        const articleRoot =
+            document.querySelector('main article') ||
+            document.querySelector('article') ||
+            document.querySelector('[data-testid="article-body"]') ||
+            document.querySelector('main') ||
+            document.body;
+        if (!articleRoot) {
+            return [];
+        }
+        return Array.from(articleRoot.querySelectorAll(leafSelector))
+            .filter((el) => !el.closest(blockedAncestorSelector))
+            .filter((el) => {
+                const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+                return text.length >= 4 && !el.querySelector(leafSelector);
+            });
+    };
+
+    const computeFingerprint = (el) => {
+        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text.length < 4) {
+            return '';
+        }
+        const slice = text.slice(0, 96);
+        try {
+            return btoa(unescape(encodeURIComponent(slice)));
+        } catch (_) {
+            return '';
+        }
+    };
+
+    const pickAnchor = () => {
+        const blocks = findCandidateBlocks();
+        for (const el of blocks) {
+            const rect = el.getBoundingClientRect();
+            // First block whose bottom edge is still on/below the viewport top.
+            if (rect.bottom > 0) {
+                return { el, rect };
+            }
+        }
+        return null;
+    };
+
     const getMaxScrollTop = () => {
         const root = document.scrollingElement || document.documentElement || document.body;
         if (!root) {
@@ -823,7 +895,18 @@ public partial class MainWindow : Window
             if (Date.now() < (window[stateKey]?.suppressUntil || 0)) {
                 return;
             }
-            window.chrome?.webview?.postMessage(`rsr-preview-scroll:${pane}:${getScrollRatio().toFixed(6)}`);
+            const ratio = getScrollRatio().toFixed(6);
+            const anchor = pickAnchor();
+            const fingerprint = anchor ? computeFingerprint(anchor.el) : '';
+            if (anchor && fingerprint) {
+                const offset = anchor.rect.top.toFixed(2);
+                window.chrome?.webview?.postMessage(
+                    `rsr-preview-scroll:${pane}:${ratio}:${offset}:${fingerprint}`);
+            } else {
+                // No anchor available yet (page still loading). Fall back to the
+                // legacy ratio-only message so the peer can still approximate.
+                window.chrome?.webview?.postMessage(`rsr-preview-scroll:${pane}:${ratio}`);
+            }
         });
     };
 
@@ -839,8 +922,20 @@ public partial class MainWindow : Window
         }
 
         internal static string BuildApplySynchronizedScrollScript(double ratio)
+            => BuildApplySynchronizedScrollScript(ratio, anchorOffsetPx: null, anchorFingerprintBase64: null);
+
+        internal static string BuildApplySynchronizedScrollScript(
+            double ratio,
+            double? anchorOffsetPx,
+            string? anchorFingerprintBase64)
         {
                 var clampedRatio = Math.Clamp(ratio, 0, 1).ToString("R", CultureInfo.InvariantCulture);
+                var hasAnchor = !string.IsNullOrEmpty(anchorFingerprintBase64)
+                    && anchorOffsetPx is { } px && double.IsFinite(px);
+                var anchorJson = JsonSerializer.Serialize(hasAnchor ? anchorFingerprintBase64 : string.Empty);
+                var anchorOffsetLiteral = hasAnchor
+                    ? anchorOffsetPx!.Value.ToString("R", CultureInfo.InvariantCulture)
+                    : "0";
                 return $$"""
 (() => {
     const stateKey = '__repoSyncRadarPreviewScrollSync';
@@ -849,10 +944,67 @@ public partial class MainWindow : Window
         return false;
     }
     const ratio = {{clampedRatio}};
-    const maxScrollTop = Math.max(0, root.scrollHeight - window.innerHeight);
+    const anchorFingerprint = {{anchorJson}};
+    const anchorOffsetPx = {{anchorOffsetLiteral}};
+    const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
+    const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
+
     window[stateKey] = window[stateKey] || {};
     window[stateKey].suppressUntil = Date.now() + 250;
-    window.scrollTo({ left: window.scrollX || root.scrollLeft || 0, top: maxScrollTop * ratio, behavior: 'auto' });
+
+    const findCandidateBlocks = () => {
+        const stamped = document.querySelectorAll('[data-rsr-diff-index]');
+        if (stamped.length > 0) {
+            return Array.from(stamped);
+        }
+        const articleRoot =
+            document.querySelector('main article') ||
+            document.querySelector('article') ||
+            document.querySelector('[data-testid="article-body"]') ||
+            document.querySelector('main') ||
+            document.body;
+        if (!articleRoot) {
+            return [];
+        }
+        return Array.from(articleRoot.querySelectorAll(leafSelector))
+            .filter((el) => !el.closest(blockedAncestorSelector))
+            .filter((el) => {
+                const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+                return text.length >= 4 && !el.querySelector(leafSelector);
+            });
+    };
+
+    const computeFingerprint = (el) => {
+        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text.length < 4) {
+            return '';
+        }
+        const slice = text.slice(0, 96);
+        try {
+            return btoa(unescape(encodeURIComponent(slice)));
+        } catch (_) {
+            return '';
+        }
+    };
+
+    let scrolled = false;
+    if (anchorFingerprint) {
+        for (const el of findCandidateBlocks()) {
+            if (computeFingerprint(el) === anchorFingerprint) {
+                const targetTop = el.getBoundingClientRect().top;
+                const delta = targetTop - anchorOffsetPx;
+                if (Math.abs(delta) > 0.5) {
+                    window.scrollBy({ left: 0, top: delta, behavior: 'auto' });
+                }
+                scrolled = true;
+                break;
+            }
+        }
+    }
+    if (!scrolled) {
+        const maxScrollTop = Math.max(0, root.scrollHeight - window.innerHeight);
+        window.scrollTo({ left: window.scrollX || root.scrollLeft || 0, top: maxScrollTop * ratio, behavior: 'auto' });
+    }
     return true;
 })();
 """;
@@ -862,16 +1014,28 @@ public partial class MainWindow : Window
                 string? message,
                 out PreviewDiffPane pane,
                 out double ratio)
+            => TryParsePreviewScrollMessage(message, out pane, out ratio, out _, out _);
+
+        internal static bool TryParsePreviewScrollMessage(
+                string? message,
+                out PreviewDiffPane pane,
+                out double ratio,
+                out double anchorOffsetPx,
+                out string? anchorFingerprint)
         {
                 pane = default;
                 ratio = 0;
+                anchorOffsetPx = double.NaN;
+                anchorFingerprint = null;
                 if (string.IsNullOrWhiteSpace(message))
                 {
                         return false;
                 }
 
                 var parts = message.Split(':');
-                if (parts.Length != 3 || !string.Equals(parts[0], "rsr-preview-scroll", StringComparison.Ordinal))
+                // 3-part: legacy ratio-only. 5-part: ratio + anchor (offset, base64 fingerprint).
+                if ((parts.Length != 3 && parts.Length != 5)
+                        || !string.Equals(parts[0], "rsr-preview-scroll", StringComparison.Ordinal))
                 {
                         return false;
                 }
@@ -894,6 +1058,18 @@ public partial class MainWindow : Window
                 }
 
                 ratio = Math.Clamp(parsedRatio, 0, 1);
+
+                if (parts.Length == 5)
+                {
+                        if (double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedOffset)
+                                && double.IsFinite(parsedOffset)
+                                && !string.IsNullOrEmpty(parts[4]))
+                        {
+                                anchorOffsetPx = parsedOffset;
+                                anchorFingerprint = parts[4];
+                        }
+                }
+
                 return true;
         }
 
