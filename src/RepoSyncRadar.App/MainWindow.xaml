@@ -102,8 +102,8 @@
               Padding="46,4,10,4">
         <Grid>
           <Grid.RowDefinitions>
-              <RowDefinition Height="Auto" />
-              <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
           <TextBlock x:Name="OfficialDocsHeaderText"
                      Text="公式 docs.github.com"
@@ -153,8 +153,8 @@
               Visibility="Collapsed">
         <Grid>
           <Grid.RowDefinitions>
-              <RowDefinition Height="Auto" />
-              <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
           </Grid.RowDefinitions>
           <TextBlock x:Name="PreviewDocsHeaderText"
                      Text="PR HEAD localhost"
@@ -185,7 +185,7 @@
 
       <Grid Grid.Row="1"
             Grid.Column="0">
-        <wv2:WebView2 x:Name="DocsView" />
+        <wv2:WebView2CompositionControl x:Name="DocsView" />
         <Border x:Name="DocsPreviewStatusOverlay"
                 Panel.ZIndex="1"
                 HorizontalAlignment="Stretch"
@@ -219,7 +219,7 @@
             Grid.Column="2"
             x:Name="PreviewViewHost"
             Visibility="Collapsed">
-        <wv2:WebView2 x:Name="PreviewView" />
+        <wv2:WebView2CompositionControl x:Name="PreviewView" />
         <Border x:Name="PreviewStatusOverlay"
                 Panel.ZIndex="1"
                 HorizontalAlignment="Stretch"
@@ -282,7 +282,17 @@
               AutomationProperties.AutomationId="PreviewFocusToggleButton"
               AutomationProperties.Name="プレビューだけ表示"
               ToolTip="左の作業ペインを折りたたんでプレビューだけ表示します"
+              PreviewKeyDown="OnPreviewFocusTogglePreviewKeyDown"
+              PreviewMouseLeftButtonDown="OnPreviewFocusTogglePreviewMouseLeftButtonDown"
               Click="OnPreviewFocusToggleClicked" />
     </Grid>
+
+    <Border x:Name="PreviewFocusLayoutShield"
+            Grid.Column="0"
+            Grid.ColumnSpan="3"
+            Panel.ZIndex="50"
+            Background="#0D1117"
+            Visibility="Collapsed"
+            IsHitTestVisible="True" />
   </Grid>
 </Window>

@@ -70,7 +70,7 @@ internal static class PreviewDiffHighlighter
 })();
 """;
 
-    internal static async Task<IReadOnlyList<PreviewDiffBlock>> ExtractBlocksAsync(WebView2 view)
+    internal static async Task<IReadOnlyList<PreviewDiffBlock>> ExtractBlocksAsync(WebView2CompositionControl view)
     {
         ArgumentNullException.ThrowIfNull(view);
         if (view.CoreWebView2 is null)
@@ -158,7 +158,7 @@ internal static class PreviewDiffHighlighter
     }
 
     internal static async Task ApplyPlanAsync(
-        WebView2 view,
+        WebView2CompositionControl view,
         IReadOnlyList<int> changedIndexes,
         PreviewDiffPane pane)
     {

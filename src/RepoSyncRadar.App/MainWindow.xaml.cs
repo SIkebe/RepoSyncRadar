@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.AspNetCore.Components.WebView;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,7 +20,7 @@ using RepoSyncRadar.Core.Services.Preview;
 namespace RepoSyncRadar.App;
 
 /// <summary>
-/// Top-level shell. Hosts a BlazorWebView (UI shell) and a WebView2 (live docs.github.com).
+/// Top-level shell. Hosts a BlazorWebView (UI shell) and WebView2 docs surfaces.
 /// Rendering mode C from DESIGN.md §9.3.
 /// </summary>
 /// <remarks>
@@ -65,7 +66,10 @@ public partial class MainWindow : Window
 
     private static readonly GridLength DefaultWorkbenchColumnWidth = new(2, GridUnitType.Star);
     private static readonly GridLength ExpandedWorkbenchSplitterColumnWidth = new(5);
-    private static readonly GridLength CollapsedColumnWidth = new(0);
+    // BlazorWebView hosts a native child window, which can throw when arranged at exactly 0 width.
+    private static readonly GridLength CollapsedWorkbenchColumnWidth = new(1);
+    private static readonly GridLength CollapsedSplitterColumnWidth = new(0);
+    private static readonly TimeSpan PreviewFocusLayoutShieldDuration = TimeSpan.FromMilliseconds(120);
 
     private readonly UrlAllowList _allowList;
     private readonly PreviewSession _previewSession;
@@ -77,11 +81,20 @@ public partial class MainWindow : Window
     private bool _afterPreviewDiffReady;
     private GridLength? _expandedWorkbenchColumnWidth = DefaultWorkbenchColumnWidth;
     private bool _isPreviewFocusMode;
+    private bool _previewFocusToggleMouseActivated;
+    private bool? _pendingPreviewFocusMode;
+    private bool _previewFocusModeChangeScheduled;
+    private readonly DispatcherTimer _previewFocusLayoutShieldTimer;
 
     public MainWindow(IServiceProvider services)
     {
         ArgumentNullException.ThrowIfNull(services);
         InitializeComponent();
+        _previewFocusLayoutShieldTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = PreviewFocusLayoutShieldDuration,
+        };
+        _previewFocusLayoutShieldTimer.Tick += OnPreviewFocusLayoutShieldTimerTick;
         UpdatePreviewFocusToggleButton();
         BlazorView.Services = services;
 
@@ -111,6 +124,8 @@ public partial class MainWindow : Window
             {
                 PreviewView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
             }
+            _previewFocusLayoutShieldTimer.Stop();
+            _previewFocusLayoutShieldTimer.Tick -= OnPreviewFocusLayoutShieldTimerTick;
         };
         _logger = services.GetRequiredService<ILoggerFactory>().CreateLogger<MainWindow>();
 
@@ -172,10 +187,65 @@ public partial class MainWindow : Window
             string.IsNullOrEmpty(existing) ? args : $"{existing} {args}";
     }
 
-    private void OnPreviewFocusToggleClicked(object sender, RoutedEventArgs e)
-        => SetPreviewFocusMode(!_isPreviewFocusMode);
+    private void OnPreviewFocusTogglePreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        => _previewFocusToggleMouseActivated = true;
 
-    private void SetPreviewFocusMode(bool isPreviewFocusMode)
+    private void OnPreviewFocusTogglePreviewKeyDown(object sender, KeyEventArgs e)
+        => _previewFocusToggleMouseActivated = false;
+
+    private void OnPreviewFocusToggleClicked(object sender, RoutedEventArgs e)
+    {
+        var clearFocusAfterClick = _previewFocusToggleMouseActivated;
+        _previewFocusToggleMouseActivated = false;
+
+        BeginPreviewFocusModeChange(!(_pendingPreviewFocusMode ?? _isPreviewFocusMode));
+        if (clearFocusAfterClick)
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, () => ClearPreviewFocusToggleKeyboardFocus());
+        }
+    }
+
+    private void ClearPreviewFocusToggleKeyboardFocus()
+    {
+        if (ReferenceEquals(Keyboard.FocusedElement, PreviewFocusToggleButton))
+        {
+            Keyboard.ClearFocus();
+        }
+    }
+
+    private void BeginPreviewFocusModeChange(bool isPreviewFocusMode)
+    {
+        if (_pendingPreviewFocusMode == isPreviewFocusMode
+            || (_pendingPreviewFocusMode is null && _isPreviewFocusMode == isPreviewFocusMode))
+        {
+            return;
+        }
+
+        _pendingPreviewFocusMode = isPreviewFocusMode;
+        PreviewFocusLayoutShield.Visibility = Visibility.Visible;
+        _previewFocusLayoutShieldTimer.Stop();
+
+        if (_previewFocusModeChangeScheduled)
+        {
+            return;
+        }
+
+        _previewFocusModeChangeScheduled = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+        {
+            _previewFocusModeChangeScheduled = false;
+            if (_pendingPreviewFocusMode is not { } pendingPreviewFocusMode)
+            {
+                return;
+            }
+
+            _pendingPreviewFocusMode = null;
+            ApplyPreviewFocusMode(pendingPreviewFocusMode);
+            _previewFocusLayoutShieldTimer.Start();
+        });
+    }
+
+    private void ApplyPreviewFocusMode(bool isPreviewFocusMode)
     {
         if (_isPreviewFocusMode == isPreviewFocusMode)
         {
@@ -190,20 +260,29 @@ public partial class MainWindow : Window
                 _expandedWorkbenchColumnWidth = WorkbenchColumn.Width;
             }
 
-            BlazorView.Visibility = Visibility.Collapsed;
             WorkbenchPreviewSplitter.Visibility = Visibility.Collapsed;
-            WorkbenchColumn.Width = CollapsedColumnWidth;
-            WorkbenchPreviewSplitterColumn.Width = CollapsedColumnWidth;
+            WorkbenchColumn.Width = CollapsedWorkbenchColumnWidth;
+            WorkbenchPreviewSplitterColumn.Width = CollapsedSplitterColumnWidth;
         }
         else
         {
             WorkbenchColumn.Width = ResolveWorkbenchColumnRestoreWidth(_expandedWorkbenchColumnWidth);
             WorkbenchPreviewSplitterColumn.Width = ExpandedWorkbenchSplitterColumnWidth;
             WorkbenchPreviewSplitter.Visibility = Visibility.Visible;
-            BlazorView.Visibility = Visibility.Visible;
         }
 
         UpdatePreviewFocusToggleButton();
+    }
+
+    private void OnPreviewFocusLayoutShieldTimerTick(object? sender, EventArgs e)
+    {
+        _previewFocusLayoutShieldTimer.Stop();
+        if (_previewFocusModeChangeScheduled || _pendingPreviewFocusMode is not null)
+        {
+            return;
+        }
+
+        PreviewFocusLayoutShield.Visibility = Visibility.Collapsed;
     }
 
     private void UpdatePreviewFocusToggleButton()
@@ -262,7 +341,7 @@ public partial class MainWindow : Window
         => OnDocsSurfaceInitializationCompleted(PreviewView, e);
 
     private void OnDocsSurfaceInitializationCompleted(
-        WebView2 view,
+        WebView2CompositionControl view,
         CoreWebView2InitializationCompletedEventArgs e)
     {
         if (!e.IsSuccess)
@@ -444,7 +523,7 @@ public partial class MainWindow : Window
         => OnPreviewDiffPaneNavigationCompleted(PreviewView, isBeforePane: false, e);
 
     private void OnPreviewDiffPaneNavigationCompleted(
-        WebView2 view,
+        WebView2CompositionControl view,
         bool isBeforePane,
         CoreWebView2NavigationCompletedEventArgs e)
     {
@@ -499,7 +578,7 @@ public partial class MainWindow : Window
     }
 
     private async Task InstallPreviewScrollSynchronizationAsync(
-        WebView2 view,
+        WebView2CompositionControl view,
         PreviewDiffPane pane,
         int generation)
     {
@@ -556,7 +635,7 @@ public partial class MainWindow : Window
         _ = ApplySynchronizedScrollAsync(targetView, ratio, _previewDiffGeneration);
     }
 
-    private async Task ApplySynchronizedScrollAsync(WebView2 targetView, double ratio, int generation)
+    private async Task ApplySynchronizedScrollAsync(WebView2CompositionControl targetView, double ratio, int generation)
     {
         try
         {
