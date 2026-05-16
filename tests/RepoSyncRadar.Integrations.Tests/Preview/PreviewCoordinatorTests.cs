@@ -234,8 +234,11 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", "CHANGELOG.md", cancellationToken: ct);
 
         Assert.NotNull(link);
-        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/before"), link!.BeforeUrl);
-        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after"), link.AfterUrl);
+        // §Step 19.9: version slug を URL に必ず埋め込む。WebView2 の Source 等価判定で
+        // 「同じ URL」とみなされて navigation がスキップされ、オーバーレイが「変更前ページを
+        // 準備中…」のまま固まる回帰を防ぐ。default version は fpt。
+        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/before?v=fpt"), link!.BeforeUrl);
+        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after?v=fpt"), link.AfterUrl);
         Assert.True(session.IsAllowed(link.BeforeUrl));
         Assert.True(session.IsAllowed(link.AfterUrl));
         Assert.Contains("Old entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
@@ -245,6 +248,107 @@ public sealed class PreviewCoordinatorTests : IDisposable
             4500,
             Arg.Any<IReadOnlyDictionary<string, string>>(),
             Arg.Any<CancellationToken>());
+    }
+
+    // §Step 19.9 regression: docs version ドロップダウンで Free / Enterprise Cloud /
+    // Enterprise Server を切り替えると、PreviewCoordinator は同じポートで /markdown/before
+    // の内容を差し替える。URL に version 識別子が入っていないと WebView2 は
+    // 「Source が変わっていない」と判定して navigation を発火しないため、ホスト側の
+    // 「変更前ページを準備中…」オーバーレイが解除されず固まる。BeforeUrl/AfterUrl が
+    // version ごとに別 URL になることを保証する。
+    [Theory]
+    [InlineData(null, "fpt")]
+    [InlineData("fpt", "fpt")]
+    [InlineData("ghec", "ghec")]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Embeds_Version_Slug_In_Url(string? slug, string expectedSlug)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-" + (slug ?? "default") + ".git");
+        var wtRoot = Path.Combine(_tempRoot, "wt-" + (slug ?? "default"));
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, _) =>
+            {
+                File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), "# Changelog\n\nEntry");
+            });
+
+        var version = slug switch
+        {
+            null => null,
+            "fpt" => DocsVersion.Fpt,
+            "ghec" => DocsVersion.Ghec,
+            _ => throw new InvalidOperationException("unexpected slug"),
+        };
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123,
+            "headsha",
+            "CHANGELOG.md",
+            version: version,
+            cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/before?v={expectedSlug}"), link!.BeforeUrl);
+        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/after?v={expectedSlug}"), link.AfterUrl);
+    }
+
+    // §Step 19.9 regression: 同一ファイル・同一 sha でも version を切り替えれば
+    // BeforeUrl / AfterUrl は別 URL を返さなければならない。これが満たされないと
+    // WebView2 は Source 等価で navigation をスキップする。
+    [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Switching_Version_Produces_Distinct_Urls()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-switch.git");
+        var wtRoot = Path.Combine(_tempRoot, "wt-switch");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, _) =>
+            {
+                File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), "# Changelog\n\nEntry");
+            });
+
+        var fptLink = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123, "headsha", "CHANGELOG.md", version: DocsVersion.Fpt, cancellationToken: ct);
+        var ghecLink = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123, "headsha", "CHANGELOG.md", version: DocsVersion.Ghec, cancellationToken: ct);
+
+        Assert.NotNull(fptLink);
+        Assert.NotNull(ghecLink);
+        Assert.NotEqual(fptLink!.BeforeUrl, ghecLink!.BeforeUrl);
+        Assert.NotEqual(fptLink.AfterUrl, ghecLink.AfterUrl);
     }
 
     [Fact]
@@ -350,14 +454,18 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task PredictivePrewarmAsync_Runs_Clone_And_Fetch_But_Not_Worktree()
+    public async Task PredictivePrewarmAsync_Warms_BareClone_Fetch_Worktrees_And_LiquidContext()
     {
-        // Predictive prewarm fires fire-and-forget when the user picks a PR in the
-        // UI. It should advance the pipeline as far as possible without touching
-        // `git worktree add` (which would race the real click path that uses the
-        // same internal Dictionary in DocsWorktreeManager).
+        // §Step 19.10 (perf): 先読み (PR を選択した瞬間に fire-and-forget で走る)
+        // が bare clone + git fetch までしか warm up しないと、ユーザが最初に
+        // Markdown ファイルをクリックした瞬間に git rev-parse / git worktree add ×2 /
+        // data/variables・data/reusables の全件読み込みが直列で走り、見た目の
+        // 「準備中…」がかなり長くなる。EnsurePreparedSessionAsync を呼ぶ実装に
+        // 変わったので、worktree add まで進んでいることを保証する。
+        // 内部の SemaphoreSlim<(prNumber, sha)> がユーザクリック側とのレースを防ぐ。
         var ct = TestContext.Current.CancellationToken;
         var bare = Path.Combine(_tempRoot, "bare-predictive.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-predictive");
         var runner = Substitute.For<IProcessRunner>();
         var calls = new List<string>();
         runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -366,13 +474,138 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
                 return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
             });
-        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git");
+        runner.RunAsync("git", "rev-parse deadbeefcafe^", bare, Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot: wtRoot);
 
         await sut.PredictivePrewarmAsync(prNumber: 4242, sha: "deadbeefcafe", cancellationToken: ct);
 
         Assert.Contains(calls, c => c.StartsWith("git clone --bare", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("git fetch origin +refs/pull/4242/head:refs/pull/4242/head", StringComparison.Ordinal));
-        Assert.DoesNotContain(calls, c => c.StartsWith("git worktree add", StringComparison.Ordinal));
+        Assert.Contains(calls, c => c.StartsWith("git rev-parse deadbeefcafe^", StringComparison.Ordinal));
+        // §Step 19.10: 先読みも worktree add まで warm up する (per-key SemaphoreSlim でレース回避)。
+        var worktreeAddCount = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));
+        Assert.Equal(2, worktreeAddCount);
+    }
+
+    [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Reuses_Prewarmed_Session_Without_Refetching()
+    {
+        // §Step 19.10 (perf): ユーザ視点の中心シナリオ。PR 選択直後に PredictivePrewarmAsync が
+        // worktree まで warm up しておけば、最初のファイルクリックでは git fetch も
+        // git worktree add も走らず、ファイル単位の Markdown レンダリングだけで済む。
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-reuse.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-reuse");
+        var runner = Substitute.For<IProcessRunner>();
+        var calls = new List<string>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty));
+            });
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var sut = BuildSut(
+            runner,
+            bare,
+            "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, _) =>
+            {
+                File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), "# Changelog\n\nentry");
+            });
+
+        await sut.PredictivePrewarmAsync(prNumber: 123, sha: "headsha", cancellationToken: ct);
+        var prewarmFetchCount = calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal));
+        var prewarmWorktreeAddCount = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));
+        Assert.Equal(1, prewarmFetchCount);
+        Assert.Equal(2, prewarmWorktreeAddCount);
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123, "headsha", "CHANGELOG.md", cancellationToken: ct);
+
+        Assert.NotNull(link);
+        // ユーザクリック後は fetch も worktree add も増えていないこと。
+        Assert.Equal(prewarmFetchCount, calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal)));
+        Assert.Equal(prewarmWorktreeAddCount, calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Switching_Files_Reuses_Cached_Session()
+    {
+        // §Step 19.10 (perf): 1/7 → 2/7 のファイル切替で「全体をコンパイルしている?」と
+        // ユーザが感じるほど遅かった元凶。同一 (prNumber, sha) の 2 回目以降の
+        // PrepareMarkdownComparisonPreviewAsync では git fetch / worktree add / liquid 読込が
+        // 一切走らないことを保証する。
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-fileswitch.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-fileswitch");
+        var runner = Substitute.For<IProcessRunner>();
+        var calls = new List<string>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty));
+            });
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var sut = BuildSut(
+            runner,
+            bare,
+            "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, _) =>
+            {
+                // 同じ worktree に複数の Markdown を置いて、ファイル切替時に
+                // worktree を作り直していないことを示せるようにする。
+                File.WriteAllText(Path.Combine(path, "FILE1.md"), "# File 1\n\nentry");
+                File.WriteAllText(Path.Combine(path, "FILE2.md"), "# File 2\n\nentry");
+            });
+
+        var firstLink = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123, "headsha", "FILE1.md", cancellationToken: ct);
+        Assert.NotNull(firstLink);
+        var fetchAfterFirst = calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal));
+        var worktreeAddAfterFirst = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));
+        Assert.Equal(1, fetchAfterFirst);
+        Assert.Equal(2, worktreeAddAfterFirst);
+
+        var secondLink = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123, "headsha", "FILE2.md", cancellationToken: ct);
+
+        Assert.NotNull(secondLink);
+        // 1/7 → 2/7 切替で git fetch / git worktree add が再走していないこと。
+        Assert.Equal(fetchAfterFirst, calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal)));
+        Assert.Equal(worktreeAddAfterFirst, calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal)));
     }
 
     [Fact]

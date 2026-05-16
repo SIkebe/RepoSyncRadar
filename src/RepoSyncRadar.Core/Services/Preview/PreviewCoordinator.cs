@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -85,14 +86,21 @@ public interface IPreviewCoordinator
     Task PrewarmAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Predictively warms the bare clone and PR ref for a freshly selected commit
-    /// so the user's "ローカルプレビュー" click no longer pays the <c>git fetch</c>
-    /// cost (10-30 s for github/docs depending on cache age). Performs
-    /// <see cref="DocsWorktreeManager.EnsureBareCloneAsync"/> followed by
-    /// <see cref="DocsWorktreeManager.FetchPrAsync"/> only — does NOT touch
-    /// <c>git worktree add</c> nor <c>npm install</c> so it can never race the
-    /// real preview path. Best-effort: any failure (network, bad SHA, etc.) is
-    /// swallowed; the regular preview path will surface the error when clicked.
+    /// Predictively warms everything needed to render Markdown comparison previews
+    /// for a freshly selected commit so the user's first "ローカルプレビュー" click
+    /// only pays the per-file Markdown render cost (typically 10-50 ms). Performs
+    /// <see cref="DocsWorktreeManager.EnsureBareCloneAsync"/>,
+    /// <see cref="DocsWorktreeManager.FetchPrAsync"/>,
+    /// <see cref="DocsWorktreeManager.ResolveFirstParentAsync"/>,
+    /// <see cref="DocsWorktreeManager.CheckoutAsync"/> for both the before/after
+    /// commits, and loads the <c>DocsLiquidContext</c> (data/variables and
+    /// data/reusables, thousands of files for the public docs repo). All work
+    /// is serialized through a per-(prNumber, sha) <see cref="SemaphoreSlim"/>,
+    /// so concurrent invocations from the predictive path and the user-click
+    /// path coalesce instead of racing the internal Dictionary in
+    /// <see cref="DocsWorktreeManager"/>. Best-effort: any failure (network,
+    /// bad SHA, etc.) is swallowed; the regular preview path will surface the
+    /// error when clicked.
     /// </summary>
     Task PredictivePrewarmAsync(int prNumber, string sha, CancellationToken cancellationToken = default);
 
@@ -149,6 +157,34 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     private readonly ILogger<PreviewCoordinator> _logger;
     private string? _activeSha;
     private string? _activeBeforeSha;
+
+    // §Step 19.10 (perf): 同一 PR HEAD で 1/7 → 2/7 → 3/7 のように別ファイルへ
+    // 切り替えるたびに毎回 git fetch + git rev-parse + git worktree add ×2 +
+    // data/variables/**/*.yml と data/reusables/**/*.md の全件読み込みを走らせると、
+    // 公式 docs (数千ファイル) では 1 ファイル切り替えに数秒〜10 秒掛かる。
+    // (prNumber, sha) ごとに「準備済みセッション」をキャッシュして、ファイル切替の
+    // たびに走らせるのは ReadWorktreeFile + Markdig レンダリングだけにする。
+    private readonly ConcurrentDictionary<PreparedSessionKey, PreparedMarkdownSession> _preparedSessions = new();
+
+    // (prNumber, sha) ごとの準備処理は 1 本にシリアライズする。先読み (PredictivePrewarmAsync)
+    // とユーザクリック (PrepareMarkdownComparisonPreviewAsync) が同時に走っても、後発は
+    // 先発の完了を待ってキャッシュヒットだけで終わる。DocsWorktreeManager の内部
+    // Dictionary は thread-safe ではないので、これを介して保護する。
+    private readonly ConcurrentDictionary<PreparedSessionKey, SemaphoreSlim> _preparedSessionLocks = new();
+
+    // 同じ worktreePath なら data/variables / data/reusables の中身は不変なので、
+    // 1 回読んだ DocsLiquidContext は何度でも使い回す。
+    private readonly ConcurrentDictionary<string, DocsLiquidContext> _liquidContextCache
+        = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly record struct PreparedSessionKey(int PrNumber, string Sha);
+
+    private sealed record PreparedMarkdownSession(
+        string BeforeSha,
+        string BeforeWorktreePath,
+        string AfterWorktreePath,
+        DocsLiquidContext BeforeLiquid,
+        DocsLiquidContext AfterLiquid);
 
     public PreviewCoordinator(
         DocsWorktreeManager worktree,
@@ -371,52 +407,27 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
-        progress?.Report("リポジトリを準備中… (初回は git clone --bare で 1〜2 分)");
-        await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
-
-        progress?.Report($"PR #{prNumber.ToString(CultureInfo.InvariantCulture)} を取得中… (git fetch)");
-        await _worktree.FetchPrAsync(prNumber, cancellationToken).ConfigureAwait(false);
-
-        progress?.Report("比較元の親コミットを解決中… (git rev-parse <sha>^)");
-        var beforeSha = await _worktree.ResolveFirstParentAsync(sha, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(beforeSha))
-        {
-            throw new InvalidOperationException("比較元になる親コミットを解決できませんでした。");
-        }
-
-        progress?.Report("変更前 worktree を作成中… (git worktree add)");
-        var beforeWorktreePath = await _worktree.CheckoutAsync(beforeSha, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(beforeWorktreePath))
-        {
-            return null;
-        }
-
-        progress?.Report("PR HEAD worktree を作成中… (git worktree add)");
-        var afterWorktreePath = await _worktree.CheckoutAsync(sha, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(afterWorktreePath))
+        var session = await EnsurePreparedSessionAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
+        if (session is null)
         {
             return null;
         }
 
         progress?.Report($"{filePath} を Markdown としてレンダリング中…");
-        var beforeMarkdown = await ReadWorktreeFileOrNullAsync(beforeWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
-        var afterMarkdown = await ReadWorktreeFileOrNullAsync(afterWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
-
-        progress?.Report("Liquid 変数・再利用ブロックを読み込み中…");
-        var beforeLiquid = await DocsLiquidContextLoader.LoadAsync(beforeWorktreePath, cancellationToken).ConfigureAwait(false);
-        var afterLiquid = await DocsLiquidContextLoader.LoadAsync(afterWorktreePath, cancellationToken).ConfigureAwait(false);
+        var beforeMarkdown = await ReadWorktreeFileOrNullAsync(session.BeforeWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
+        var afterMarkdown = await ReadWorktreeFileOrNullAsync(session.AfterWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
 
         progress?.Report("公式版 (fpt/ghec/ghes) で差分の出る版を解析中…");
-        var affectedVersions = DocsVersionImpactAnalyzer.Analyze(beforeMarkdown, beforeLiquid, afterMarkdown, afterLiquid);
+        var affectedVersions = DocsVersionImpactAnalyzer.Analyze(beforeMarkdown, session.BeforeLiquid, afterMarkdown, session.AfterLiquid);
 
         var pages = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["/markdown/before"] = MarkdownPreviewRenderer.RenderDocument(
                 filePath,
                 beforeMarkdown,
-                beforeSha,
+                session.BeforeSha,
                 "変更前",
-                beforeLiquid,
+                session.BeforeLiquid,
                 effectiveVersion,
                 affectedVersions),
             ["/markdown/after"] = MarkdownPreviewRenderer.RenderDocument(
@@ -424,7 +435,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 afterMarkdown,
                 sha,
                 "PR HEAD",
-                afterLiquid,
+                session.AfterLiquid,
                 effectiveVersion,
                 affectedVersions),
         };
@@ -434,22 +445,137 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         await _contentServer.StartAsync(port, pages, cancellationToken).ConfigureAwait(false);
         _session.Activate(port);
 
-        var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before"));
-        var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after"));
-        LogMarkdownComparisonReady(_logger, beforeSha, sha, filePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
+        // §Step 19.9: バージョンを切り替えるたびに同じポートで /markdown/before の内容を
+        // 差し替える運用なので、URL に version slug を埋め込まないと WebView2 は
+        // 「Source が変わっていない」と判断して navigation をスキップし、
+        // 「変更前ページを準備中…」のオーバーレイから先に進めなくなる。
+        // LocalPreviewContentServer.NormalizeRoute は query を捨てるためルーティングには影響しない。
+        var versionSlug = Uri.EscapeDataString(effectiveVersion.Slug);
+        var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before?v={versionSlug}"));
+        var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after?v={versionSlug}"));
+        LogMarkdownComparisonReady(_logger, session.BeforeSha, sha, filePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
         return new PreviewComparisonLink(
             beforeUrl,
             afterUrl,
             port,
             port,
-            beforeWorktreePath,
-            afterWorktreePath,
-            beforeSha,
+            session.BeforeWorktreePath,
+            session.AfterWorktreePath,
+            session.BeforeSha,
             sha)
         {
             CurrentVersion = effectiveVersion,
             AffectedVersions = affectedVersions,
         };
+    }
+
+    /// <summary>
+    /// §Step 19.10 (perf): 同一 (prNumber, sha) で繰り返し呼ばれても重い前準備
+    /// (git fetch / rev-parse / worktree add / data 配下の全件読み込み) を 1 回だけ走らせる。
+    /// 2 回目以降はキャッシュヒットでほぼ即返る。<paramref name="cancellationToken"/> は
+    /// 内部の git/I/O 操作にだけ流すので、キャンセル時にキャッシュは汚染されない。
+    /// </summary>
+    private async Task<PreparedMarkdownSession?> EnsurePreparedSessionAsync(
+        int prNumber,
+        string sha,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        var key = new PreparedSessionKey(prNumber, sha);
+        if (TryGetValidPreparedSession(key, out var fast))
+        {
+            return fast;
+        }
+
+        var gate = _preparedSessionLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // Re-check after acquiring the lock — a concurrent prewarm may have
+            // just finished and populated the cache.
+            if (TryGetValidPreparedSession(key, out var slow))
+            {
+                return slow;
+            }
+
+            progress?.Report("リポジトリを準備中… (初回は git clone --bare で 1〜2 分)");
+            await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
+
+            progress?.Report($"PR #{prNumber.ToString(CultureInfo.InvariantCulture)} を取得中… (git fetch)");
+            await _worktree.FetchPrAsync(prNumber, cancellationToken).ConfigureAwait(false);
+
+            progress?.Report("比較元の親コミットを解決中… (git rev-parse <sha>^)");
+            var beforeSha = await _worktree.ResolveFirstParentAsync(sha, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(beforeSha))
+            {
+                throw new InvalidOperationException("比較元になる親コミットを解決できませんでした。");
+            }
+
+            progress?.Report("変更前 worktree を作成中… (git worktree add)");
+            var beforeWorktreePath = await _worktree.CheckoutAsync(beforeSha, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(beforeWorktreePath))
+            {
+                return null;
+            }
+
+            progress?.Report("PR HEAD worktree を作成中… (git worktree add)");
+            var afterWorktreePath = await _worktree.CheckoutAsync(sha, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(afterWorktreePath))
+            {
+                return null;
+            }
+
+            progress?.Report("Liquid 変数・再利用ブロックを読み込み中…");
+            var beforeLiquid = await LoadLiquidContextCachedAsync(beforeWorktreePath, cancellationToken).ConfigureAwait(false);
+            var afterLiquid = await LoadLiquidContextCachedAsync(afterWorktreePath, cancellationToken).ConfigureAwait(false);
+
+            var session = new PreparedMarkdownSession(
+                beforeSha,
+                beforeWorktreePath,
+                afterWorktreePath,
+                beforeLiquid,
+                afterLiquid);
+            _preparedSessions[key] = session;
+            return session;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private bool TryGetValidPreparedSession(PreparedSessionKey key, out PreparedMarkdownSession session)
+    {
+        if (_preparedSessions.TryGetValue(key, out var cached)
+            && Directory.Exists(cached.BeforeWorktreePath)
+            && Directory.Exists(cached.AfterWorktreePath))
+        {
+            session = cached;
+            return true;
+        }
+        // Worktree directory was pruned out from under us (e.g. CleanupCacheAsync
+        // on another caller). Drop the stale entry so the next call rebuilds.
+        if (cached is not null)
+        {
+            _preparedSessions.TryRemove(key, out _);
+        }
+        session = null!;
+        return false;
+    }
+
+    private async Task<DocsLiquidContext> LoadLiquidContextCachedAsync(
+        string worktreePath,
+        CancellationToken cancellationToken)
+    {
+        if (_liquidContextCache.TryGetValue(worktreePath, out var cached))
+        {
+            return cached;
+        }
+        var loaded = await DocsLiquidContextLoader.LoadAsync(worktreePath, cancellationToken).ConfigureAwait(false);
+        // DocsLiquidContext.Empty を含めキャッシュに入れる: data/ 配下が無いのも
+        // 一定の事実なので 2 回目以降のディスク I/O を避ける。
+        _liquidContextCache[worktreePath] = loaded;
+        return loaded;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
@@ -479,8 +605,17 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
         try
         {
-            await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
-            await _worktree.FetchPrAsync(prNumber, cancellationToken).ConfigureAwait(false);
+            // §Step 19.10 (perf): 単に bare clone と git fetch を warm up するだけだと、
+            // 実際に最初の Markdown ファイルをクリックしたタイミングで
+            //   - git rev-parse <sha>^
+            //   - git worktree add ×2
+            //   - data/variables / data/reusables の全件読み込み
+            // が直列で走り、1/7 → 2/7 へのファイル切替時にも data 配下の I/O が
+            // 再走するため重く感じられる。EnsurePreparedSessionAsync を呼んでおけば
+            // ユーザクリック時はファイル単位の Markdown レンダリングだけで済む。
+            // 同じキーに対する並列呼び出しは内部 SemaphoreSlim でシリアライズされる
+            // ため DocsWorktreeManager の Dictionary レースは起こらない。
+            await EnsurePreparedSessionAsync(prNumber, sha, progress: null, cancellationToken).ConfigureAwait(false);
             LogPredictivePrewarmCompleted(_logger, prNumber, sha);
         }
         catch (OperationCanceledException)
@@ -506,7 +641,13 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         // Stop the running server first so we don't try to remove a worktree that
         // still has a child process holding file handles inside it.
         await StopAsync(cancellationToken).ConfigureAwait(false);
-        return await _worktree.PruneAllAsync(cancellationToken).ConfigureAwait(false);
+        var removed = await _worktree.PruneAllAsync(cancellationToken).ConfigureAwait(false);
+        // PruneAllAsync の後は worktree ディレクトリが消えているので
+        // _preparedSessions / _liquidContextCache を残しておくと TryGetValidPreparedSession
+        // の Directory.Exists チェックでは弾けるものの無駄なメモリを抱え続けることになる。
+        _preparedSessions.Clear();
+        _liquidContextCache.Clear();
+        return removed;
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
