@@ -213,16 +213,17 @@ Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPal
 
 #### node_modules の扱い (案 A / 案 B)
 
-worktree ごとに作業ディレクトリが分かれるため、`npm install` の置き場所を選ぶ必要があります。既定ではアプリが各 worktree で自動実行します。ディスク消費を抑えたい場合は案 B を使ってください。
+worktree ごとに作業ディレクトリが分かれるため、`npm install` の置き場所を選ぶ必要があります。**案 B (junction で共有)** をアプリが自動で行うようになったため、通常は手動の設定は不要です。
 
-- **案 A — 各 worktree で個別に `npm install`** (デフォルト・確実):
+- **案 A — 各 worktree で個別に `npm install`** (フォールバック・確実):
    1. アプリが `node_modules` 不在を検知したら自動で `npm install` を実行
    2. 初回 5〜15 分・1〜2 GB 消費。worktree を削除すれば一緒に消えます
-- **案 B — bare clone 親で 1 度だけ `npm install` → 各 worktree から junction で共有** (高速・ディスク節約):
-   1. `cd <BareCloneDir> && npm install` を 1 回だけ実行
-   2. 各 worktree で `cmd /c mklink /J node_modules "<BareCloneDir>\node_modules"` を作成
-   3. `next dev` の watch は junction を透過するため、PR head を切り替えるたびに `node_modules` を再生成しなくて済みます
-   - 注意: `package.json` の依存が PR 内で書き換わっている場合は案 A に戻るか、当該 worktree だけ junction を消して個別 install してください
+- **案 B — `<WorktreeRoot>/.shared-node-modules/<hash>` に 1 度だけ `npm install` → 各 worktree から junction で共有** (既定・高速・ディスク節約):
+   1. `NodeModulesShareManager` が `package-lock.json` の SHA-256 短ハッシュをスロット ID に使い、`<WorktreeRoot>/.shared-node-modules/<hash>/node_modules` を 1 度だけ作成
+   2. 各 worktree の `node_modules` は `cmd /c mklink /J` で共有スロットへの directory junction
+   3. `next dev` の watch は junction を透過するため、PR head を切り替えるたびに `node_modules` を再生成しなくて済みます (2 回目以降の起動は数秒)
+   4. junction 作成に失敗した場合や package-lock.json が見つからない場合は自動的に案 A にフォールバックします
+   - 注意: `package.json` の依存が PR 内で書き換わっている (= `package-lock.json` のハッシュが変わっている) と新しいスロットが切られて再 install されます。これは期待動作です
 
 #### キャッシュ (worktree) のクリーンアップ
 

@@ -18,13 +18,14 @@ public sealed class PreviewServerHostFactory : IPreviewServerHostFactory
     private readonly IOptions<DocsRepositoryOptions> _options;
     private readonly ILogger<PreviewServerHost> _logger;
     private readonly IPreviewServerProcessCleaner _processCleaner;
+    private readonly INodeModulesShareManager _shareManager;
 
     public PreviewServerHostFactory(
         IProcessRunner runner,
         IPortReadyProbe probe,
         IOptions<DocsRepositoryOptions> options,
         ILogger<PreviewServerHost> logger)
-        : this(runner, probe, options, logger, NoopPreviewServerProcessCleaner.Instance)
+        : this(runner, probe, options, logger, NoopPreviewServerProcessCleaner.Instance, NoopNodeModulesShareManager.Instance)
     {
     }
 
@@ -34,21 +35,34 @@ public sealed class PreviewServerHostFactory : IPreviewServerHostFactory
         IOptions<DocsRepositoryOptions> options,
         ILogger<PreviewServerHost> logger,
         IPreviewServerProcessCleaner processCleaner)
+        : this(runner, probe, options, logger, processCleaner, NoopNodeModulesShareManager.Instance)
+    {
+    }
+
+    public PreviewServerHostFactory(
+        IProcessRunner runner,
+        IPortReadyProbe probe,
+        IOptions<DocsRepositoryOptions> options,
+        ILogger<PreviewServerHost> logger,
+        IPreviewServerProcessCleaner processCleaner,
+        INodeModulesShareManager shareManager)
     {
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(probe);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(processCleaner);
+        ArgumentNullException.ThrowIfNull(shareManager);
         _runner = runner;
         _probe = probe;
         _options = options;
         _logger = logger;
         _processCleaner = processCleaner;
+        _shareManager = shareManager;
     }
 
     public PreviewServerHost Create()
-        => new(_runner, _probe, _options, _logger, _processCleaner);
+        => new(_runner, _probe, _options, _logger, _processCleaner, _shareManager);
 }
 
 /// <summary>
@@ -67,6 +81,7 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
     private readonly IProcessRunner _runner;
     private readonly IPortReadyProbe _probe;
     private readonly IPreviewServerProcessCleaner _processCleaner;
+    private readonly INodeModulesShareManager _shareManager;
     private readonly DocsRepositoryOptions _options;
     private readonly ILogger<PreviewServerHost> _logger;
     private IProcessHandle? _current;
@@ -77,7 +92,7 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         IPortReadyProbe probe,
         IOptions<DocsRepositoryOptions> options,
         ILogger<PreviewServerHost> logger)
-        : this(runner, probe, options, logger, NoopPreviewServerProcessCleaner.Instance)
+        : this(runner, probe, options, logger, NoopPreviewServerProcessCleaner.Instance, NoopNodeModulesShareManager.Instance)
     {
     }
 
@@ -87,15 +102,28 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         IOptions<DocsRepositoryOptions> options,
         ILogger<PreviewServerHost> logger,
         IPreviewServerProcessCleaner processCleaner)
+        : this(runner, probe, options, logger, processCleaner, NoopNodeModulesShareManager.Instance)
+    {
+    }
+
+    public PreviewServerHost(
+        IProcessRunner runner,
+        IPortReadyProbe probe,
+        IOptions<DocsRepositoryOptions> options,
+        ILogger<PreviewServerHost> logger,
+        IPreviewServerProcessCleaner processCleaner,
+        INodeModulesShareManager shareManager)
     {
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(probe);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(processCleaner);
+        ArgumentNullException.ThrowIfNull(shareManager);
         _runner = runner;
         _probe = probe;
         _processCleaner = processCleaner;
+        _shareManager = shareManager;
         _options = options.Value;
         _logger = logger;
     }
@@ -333,6 +361,12 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
     /// <summary>
     /// When the preview command is Node-based, installs dependencies before
     /// starting the sidecar if the worktree does not have <c>node_modules</c> yet.
+    /// Delegates the heavy install to <see cref="INodeModulesShareManager"/>
+    /// so multiple worktrees can share a single <c>node_modules</c> tree via a
+    /// Windows directory junction (see <c>INodeModulesShareManager</c> for the
+    /// fast-path / install-once mechanics). When the share manager opts out
+    /// it just runs the same install that was here historically — making this
+    /// change a pure no-op for tests that wire <c>NoopNodeModulesShareManager</c>.
     /// The check is intentionally narrow so non-Node preview commands (e.g.
     /// <c>hugo</c>, <c>jekyll</c>) keep working.
     /// </summary>
@@ -349,6 +383,20 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
             return;
         }
 
+        await _shareManager.EnsureAsync(
+            worktreePath,
+            ct => RunNodeModulesInstallAsync(worktreePath, ct),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Runs <c>{PreviewCommand} {PreviewInstallArguments}</c> in the worktree
+    /// and waits for completion. Extracted as a callback so the share manager
+    /// can pre-link <c>node_modules</c> to a shared store before the install
+    /// writes through it.
+    /// </summary>
+    private async Task RunNodeModulesInstallAsync(string worktreePath, CancellationToken cancellationToken)
+    {
         var installArgs = _options.PreviewInstallArguments;
         LogInstallStarted(_logger, _options.PreviewCommand, installArgs, worktreePath);
         var handle = _runner.Start(
