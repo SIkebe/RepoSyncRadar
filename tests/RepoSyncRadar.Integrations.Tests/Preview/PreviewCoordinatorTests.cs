@@ -138,6 +138,56 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PrepareComparisonPreviewAsync_Starts_Before_And_After_Servers_In_Parallel()
+    {
+        // Regression guard for the bottleneck where before-server cold start
+        // blocked after-server start, doubling total wait time. Both StartAsync
+        // invocations must reach the readiness probe concurrently — the probe
+        // uses a Barrier so a sequential implementation deadlocks and the test
+        // fails fast.
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-parallel");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
+            .Returns(_ =>
+            {
+                var handle = Substitute.For<IProcessHandle>();
+                handle.HasExited.Returns(false);
+                return handle;
+            });
+
+        using var barrier = new Barrier(participantCount: 2);
+        var probe = Substitute.For<IPortReadyProbe>();
+        probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
+                Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>())
+            // Run the barrier on a thread-pool thread so the synchronous portion
+            // of PreviewServerHost.StartAsync can return Task and the caller can
+            // begin the *other* server's StartAsync. SignalAndWait blocks the
+            // worker thread until both servers signal; if the implementation is
+            // sequential the second signal never arrives, the 5-second timeout
+            // expires, the lambda returns false, and StartAsync throws — making
+            // the test fail fast instead of hanging.
+            .Returns(_ => Task.Run(() => barrier.SignalAndWait(TimeSpan.FromSeconds(5))));
+
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            probe: probe);
+
+        var link = await sut.PrepareComparisonPreviewAsync(123, "headsha", "content/foo/bar.md", cancellationToken: ct);
+
+        Assert.NotNull(link);
+    }
+
+    [Fact]
     public async Task PrepareMarkdownComparisonPreviewAsync_Renders_Markdown_Without_Npm_Server()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -383,7 +433,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
         int previewBasePort = 4500,
         PreviewSession? session = null,
         ILocalPreviewContentServer? contentServer = null,
-        Action<string, string>? onWorktreeAdd = null)
+        Action<string, string>? onWorktreeAdd = null,
+        IPortReadyProbe? probe = null)
     {
         var options = Options.Create(new DocsRepositoryOptions
         {
@@ -422,9 +473,13 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 }
             });
         var worktree = new DocsWorktreeManager(runner, options, NullLogger<DocsWorktreeManager>.Instance);
-        var probe = Substitute.For<IPortReadyProbe>();
-        probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
-            Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
+        if (probe is null)
+        {
+            var defaultProbe = Substitute.For<IPortReadyProbe>();
+            defaultProbe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
+                Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
+            probe = defaultProbe;
+        }
         var server = new PreviewServerHost(runner, probe, options, NullLogger<PreviewServerHost>.Instance);
         var serverFactory = new PreviewServerHostFactory(
             runner,

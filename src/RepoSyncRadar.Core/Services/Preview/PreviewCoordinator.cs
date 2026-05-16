@@ -243,30 +243,49 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         var afterPort = ports.AfterPort;
         var beforePort = ports.BeforePort;
 
-        if (!string.Equals(_activeBeforeSha, beforeSha, StringComparison.Ordinal)
+        var beforeNeedsStart = !string.Equals(_activeBeforeSha, beforeSha, StringComparison.Ordinal)
             || _beforeServer.CurrentPort != beforePort
-            || !_beforeServer.IsProcessRunning)
+            || !_beforeServer.IsProcessRunning;
+        var afterNeedsStart = !string.Equals(_activeSha, sha, StringComparison.Ordinal)
+            || _server.CurrentPort != afterPort
+            || !_server.IsProcessRunning;
+
+        if (beforeNeedsStart && afterNeedsStart)
         {
-            progress?.Report($"変更前プレビューサーバを起動中… (ポート {beforePort.ToString(CultureInfo.InvariantCulture)})");
+            // Parallel cold start cuts wall-clock time roughly in half because
+            // each PreviewServerHost instance is independent (own process, own
+            // worktree path) and the long phases (`npm install`, Next.js
+            // initial compile) overlap instead of running back-to-back.
+            progress?.Report(string.Create(
+                CultureInfo.InvariantCulture,
+                $"変更前 (ポート {beforePort}) と PR HEAD (ポート {afterPort}) のプレビューサーバを並列起動中…"));
+            var beforeTask = _beforeServer.StartAsync(beforeWorktreePath, beforePort, cancellationToken);
+            var afterTask = _server.StartAsync(afterWorktreePath, afterPort, cancellationToken);
+            await Task.WhenAll(beforeTask, afterTask).ConfigureAwait(false);
+            _activeBeforeSha = beforeSha;
+            _activeSha = sha;
+        }
+        else if (beforeNeedsStart)
+        {
+            progress?.Report(string.Create(
+                CultureInfo.InvariantCulture,
+                $"変更前プレビューサーバを起動中… (ポート {beforePort})"));
             await _beforeServer.StartAsync(beforeWorktreePath, beforePort, cancellationToken).ConfigureAwait(false);
             _activeBeforeSha = beforeSha;
+            progress?.Report("既存の PR HEAD プレビューサーバを再利用します");
         }
-        else
+        else if (afterNeedsStart)
         {
             progress?.Report("既存の変更前プレビューサーバを再利用します");
-        }
-
-        if (!string.Equals(_activeSha, sha, StringComparison.Ordinal)
-            || _server.CurrentPort != afterPort
-            || !_server.IsProcessRunning)
-        {
-            progress?.Report($"PR HEAD プレビューサーバを起動中… (ポート {afterPort.ToString(CultureInfo.InvariantCulture)})");
+            progress?.Report(string.Create(
+                CultureInfo.InvariantCulture,
+                $"PR HEAD プレビューサーバを起動中… (ポート {afterPort})"));
             await _server.StartAsync(afterWorktreePath, afterPort, cancellationToken).ConfigureAwait(false);
             _activeSha = sha;
         }
         else
         {
-            progress?.Report("既存の PR HEAD プレビューサーバを再利用します");
+            progress?.Report("既存の変更前および PR HEAD プレビューサーバを再利用します");
         }
 
         _session.Activate(afterPort, beforePort);
