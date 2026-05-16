@@ -1,15 +1,37 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using Markdig;
 
 namespace RepoSyncRadar.Core.Services.Preview;
 
-internal static class MarkdownPreviewRenderer
+/// <summary>
+/// Renders a single Markdown document to a self-contained HTML page used by
+/// the Markdown-first preview path (IMPLEMENTATION_PLAN.md §Step 19.7). This
+/// is the substitute for the Next.js dev server: instead of compiling the
+/// whole github/docs site we read one file from the worktree and feed it to
+/// Markdig directly. Frontmatter is stripped (title / intro promoted to a
+/// header), and Liquid tags such as <c>{% data variables.x %}</c> are
+/// replaced with grey placeholder spans so the raw template syntax never
+/// leaks into the rendered body.
+/// </summary>
+internal static partial class MarkdownPreviewRenderer
 {
     private static readonly MarkdownPipeline s_pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
         .DisableHtml()
         .Build();
+
+    // Liquid block / variable syntax used pervasively in github/docs content.
+    // We never attempt to evaluate these — only to neutralise them so Markdig
+    // does not render literal `{% ifversion fpt %}` into a <p> tag and the
+    // reviewer can still see which tag was present at that position.
+    [GeneratedRegex(@"\{%-?\s*(.*?)\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex LiquidBlockRegex();
+
+    [GeneratedRegex(@"\{\{-?\s*(.*?)\s*-?\}\}", RegexOptions.Singleline)]
+    private static partial Regex LiquidVariableRegex();
 
     public static string RenderDocument(
         string repoPath,
@@ -21,18 +43,34 @@ internal static class MarkdownPreviewRenderer
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
 
-        var title = WebUtility.HtmlEncode(repoPath.Trim());
+        var repoPathDisplay = WebUtility.HtmlEncode(repoPath.Trim());
         var meta = WebUtility.HtmlEncode($"{label} {ShortSha(sha)}");
-        var body = markdown is null
-            ? "<p class=\"rsr-empty\">この時点にはファイルがありません。</p>"
-            : Markdown.ToHtml(markdown, s_pipeline);
+        string title;
+        string? intro;
+        string body;
 
-        if (string.IsNullOrWhiteSpace(body))
+        if (markdown is null)
         {
-            body = "<p class=\"rsr-empty\">空の Markdown ファイルです。</p>";
+            title = repoPathDisplay;
+            intro = null;
+            body = "<p class=\"rsr-empty\">この時点にはファイルがありません。</p>";
+        }
+        else
+        {
+            var (frontmatter, content) = SplitFrontmatter(markdown);
+            title = WebUtility.HtmlEncode(
+                ExtractFrontmatterScalar(frontmatter, "title")
+                ?? repoPath.Trim());
+            intro = ExtractFrontmatterScalar(frontmatter, "intro");
+            var liquidNeutralized = NeutralizeLiquid(content);
+            body = Markdown.ToHtml(liquidNeutralized, s_pipeline);
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                body = "<p class=\"rsr-empty\">空の Markdown ファイルです。</p>";
+            }
         }
 
-        var html = new StringBuilder(capacity: body.Length + 1800);
+        var html = new StringBuilder(capacity: body.Length + 2200);
         html.AppendLine("<!doctype html>");
         html.AppendLine("<html lang=\"ja\">");
         html.AppendLine("<head>");
@@ -47,12 +85,15 @@ internal static class MarkdownPreviewRenderer
         html.AppendLine("h1,h2,h3,h4,h5,h6{line-height:1.25;margin:1.25em 0 .55em;font-weight:650;}");
         html.AppendLine("header h1{font-size:1.55rem;margin:0 0 6px;}");
         html.AppendLine(".rsr-meta{color:#57606a;font-size:.85rem;margin:0;}");
+        html.AppendLine(".rsr-path{color:#57606a;font-size:.78rem;margin:4px 0 0;font-family:'Cascadia Mono',Consolas,monospace;}");
+        html.AppendLine(".rsr-intro{color:#24292f;font-size:1.05rem;margin:0 0 1.25rem;font-weight:500;}");
         html.AppendLine("p,ul,ol,pre,blockquote,table{margin:0 0 1rem;}");
         html.AppendLine("a{color:#0969da;}code{background:#afb8c133;border-radius:4px;padding:.12em .28em;font-family:'Cascadia Mono',Consolas,monospace;font-size:.92em;}");
         html.AppendLine("pre{background:#f6f8fa;border-radius:6px;overflow:auto;padding:16px;}pre code{background:transparent;padding:0;}");
         html.AppendLine("blockquote{border-left:4px solid #d0d7de;color:#57606a;padding-left:1rem;}table{border-collapse:collapse;display:block;overflow:auto;}td,th{border:1px solid #d0d7de;padding:6px 13px;}th{background:#f6f8fa;}");
+        html.AppendLine(".rsr-liquid{display:inline-block;background:#fff8c5;color:#7d4e00;border:1px solid #d4a72c;border-radius:3px;padding:0 .35em;margin:0 .15em;font-size:.82em;font-family:'Cascadia Mono',Consolas,monospace;}");
         html.AppendLine(".rsr-empty{color:#57606a;font-style:italic;}");
-        html.AppendLine("@media (prefers-color-scheme: dark){body{background:#0d1117;color:#c9d1d9;}article{background:#0d1117;border-color:#30363d;}header{border-color:#30363d}.rsr-meta,.rsr-empty{color:#8b949e;}a{color:#58a6ff;}code{background:#6e768166;}pre{background:#161b22;}blockquote{border-color:#30363d;color:#8b949e;}td,th{border-color:#30363d;}th{background:#161b22;}}");
+        html.AppendLine("@media (prefers-color-scheme: dark){body{background:#0d1117;color:#c9d1d9;}article{background:#0d1117;border-color:#30363d;}header{border-color:#30363d}.rsr-meta,.rsr-path,.rsr-empty{color:#8b949e;}.rsr-intro{color:#c9d1d9;}a{color:#58a6ff;}code{background:#6e768166;}pre{background:#161b22;}blockquote{border-color:#30363d;color:#8b949e;}td,th{border-color:#30363d;}th{background:#161b22;}.rsr-liquid{background:#3c2e00;color:#e3b341;border-color:#9e6a03;}}");
         html.AppendLine("</style>");
         html.AppendLine("</head>");
         html.AppendLine("<body>");
@@ -61,13 +102,146 @@ internal static class MarkdownPreviewRenderer
         html.AppendLine("<header>");
         html.Append("<h1>").Append(title).AppendLine("</h1>");
         html.Append("<p class=\"rsr-meta\">").Append(meta).AppendLine("</p>");
+        if (!string.Equals(title, repoPathDisplay, StringComparison.Ordinal))
+        {
+            // Surface the source repo path when the frontmatter title differs
+            // from it, so reviewers can still match the rendered page back to
+            // the file they clicked on.
+            html.Append("<p class=\"rsr-path\">").Append(repoPathDisplay).AppendLine("</p>");
+        }
         html.AppendLine("</header>");
+        if (!string.IsNullOrWhiteSpace(intro))
+        {
+            html.Append("<p class=\"rsr-intro\">")
+                .Append(WebUtility.HtmlEncode(intro))
+                .AppendLine("</p>");
+        }
         html.AppendLine(body);
         html.AppendLine("</article>");
         html.AppendLine("</main>");
         html.AppendLine("</body>");
         html.AppendLine("</html>");
         return html.ToString();
+    }
+
+    /// <summary>
+    /// Splits a Markdown document into its leading YAML frontmatter (between
+    /// two <c>---</c> fences on lines of their own) and the body. When no
+    /// frontmatter block is found the whole input is treated as body.
+    /// </summary>
+    private static (string Frontmatter, string Body) SplitFrontmatter(string markdown)
+    {
+        if (!markdown.StartsWith("---", StringComparison.Ordinal))
+        {
+            return (string.Empty, markdown);
+        }
+
+        var span = markdown.AsSpan();
+        var openLineEnd = span.IndexOf('\n');
+        if (openLineEnd < 0)
+        {
+            return (string.Empty, markdown);
+        }
+        var openLine = span[..openLineEnd].TrimEnd('\r');
+        if (!openLine.SequenceEqual("---"))
+        {
+            return (string.Empty, markdown);
+        }
+
+        var rest = span[(openLineEnd + 1)..];
+        var cursor = 0;
+        while (cursor < rest.Length)
+        {
+            var remainder = rest[cursor..];
+            var lineEnd = remainder.IndexOf('\n');
+            var lineLen = lineEnd < 0 ? remainder.Length : lineEnd;
+            var line = remainder[..lineLen].TrimEnd('\r');
+            if (line.SequenceEqual("---"))
+            {
+                var frontmatter = rest[..cursor].ToString();
+                var bodyStart = cursor + lineLen + (lineEnd < 0 ? 0 : 1);
+                var body = bodyStart >= rest.Length ? string.Empty : rest[bodyStart..].ToString();
+                return (frontmatter, body);
+            }
+            if (lineEnd < 0)
+            {
+                break;
+            }
+            cursor += lineEnd + 1;
+        }
+
+        // No closing fence — treat the whole document as body so the
+        // unterminated YAML block is at least visible.
+        return (string.Empty, markdown);
+    }
+
+    /// <summary>
+    /// Reads a top-level scalar from a YAML frontmatter block (no nested
+    /// objects, no anchors). Returns <c>null</c> when the key is missing or
+    /// the value spans multiple lines (which we don't support).
+    /// </summary>
+    private static string? ExtractFrontmatterScalar(string frontmatter, string key)
+    {
+        if (string.IsNullOrEmpty(frontmatter))
+        {
+            return null;
+        }
+        using var reader = new StringReader(frontmatter);
+        string? line;
+        var prefix = key + ":";
+        while ((line = reader.ReadLine()) is not null)
+        {
+            // Top-level keys are not indented; ignore nested entries entirely.
+            if (line.Length == 0 || char.IsWhiteSpace(line[0]))
+            {
+                continue;
+            }
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            var rawValue = line[prefix.Length..].Trim();
+            if (rawValue.Length == 0)
+            {
+                return null;
+            }
+            return UnquoteYaml(rawValue);
+        }
+        return null;
+    }
+
+    private static string UnquoteYaml(string value)
+    {
+        if (value.Length >= 2 &&
+            ((value[0] == '\'' && value[^1] == '\'') ||
+             (value[0] == '"' && value[^1] == '"')))
+        {
+            return value[1..^1];
+        }
+        return value;
+    }
+
+    /// <summary>
+    /// Replaces every Liquid block (<c>{% ... %}</c>) and variable
+    /// (<c>{{ ... }}</c>) with a span carrying the original syntax for
+    /// reviewer reference. Markdig then sees no template syntax and renders
+    /// surrounding prose as expected.
+    /// </summary>
+    private static string NeutralizeLiquid(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return content;
+        }
+        var blocks = LiquidBlockRegex().Replace(content, static m =>
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"<span class=\"rsr-liquid\" title=\"Liquid タグ (プレビューでは未評価)\">{{% {WebUtility.HtmlEncode(m.Groups[1].Value)} %}}</span>"));
+        var vars = LiquidVariableRegex().Replace(blocks, static m =>
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"<span class=\"rsr-liquid\" title=\"Liquid 変数 (プレビューでは未評価)\">{{{{ {WebUtility.HtmlEncode(m.Groups[1].Value)} }}}}</span>"));
+        return vars;
     }
 
     private static string ShortSha(string sha)

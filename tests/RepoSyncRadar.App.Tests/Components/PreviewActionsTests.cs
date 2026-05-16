@@ -60,10 +60,10 @@ public sealed class PreviewActionsTests
     public void Click_Publishes_Comparison_From_Coordinator()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
@@ -105,15 +105,15 @@ public sealed class PreviewActionsTests
     {
         string? capturedPath = null;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                capturedPath = call.ArgAt<string?>(2);
+                capturedPath = call.ArgAt<string>(2);
                 return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
                     beforeUrl: "http://localhost:4501/en/copilot/about-copilot",
                     afterUrl: "http://localhost:4500/en/copilot/about-copilot"));
@@ -149,15 +149,15 @@ public sealed class PreviewActionsTests
     {
         string? capturedPath = null;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                capturedPath = call.ArgAt<string?>(2);
+                capturedPath = call.ArgAt<string>(2);
                 return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
                     beforeUrl: "http://localhost:4501/en/second",
                     afterUrl: "http://localhost:4500/en/second"));
@@ -234,7 +234,7 @@ public sealed class PreviewActionsTests
             _ = coordinator.DidNotReceive().PreparePreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>());
             _ = coordinator.DidNotReceive().PrepareMarkdownComparisonPreviewAsync(
@@ -295,7 +295,7 @@ public sealed class PreviewActionsTests
         _ = coordinator.DidNotReceive().PreparePreviewAsync(
             Arg.Any<int>(),
             Arg.Any<string>(),
-            Arg.Any<string?>(),
+            Arg.Any<string>(),
             Arg.Any<IProgress<string>?>(),
             Arg.Any<CancellationToken>());
     }
@@ -304,10 +304,10 @@ public sealed class PreviewActionsTests
     public void Click_Shows_Worktree_Path_And_Automatic_Npm_Install_Hint()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink(
@@ -344,10 +344,10 @@ public sealed class PreviewActionsTests
     public void Click_When_Disabled_Shows_Hint()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(null));
@@ -376,10 +376,10 @@ public sealed class PreviewActionsTests
     public void Click_When_Coordinator_Throws_Shows_Error()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns<Task<PreviewComparisonLink?>>(_ => throw new InvalidOperationException("git fetch failed"));
@@ -412,10 +412,10 @@ public sealed class PreviewActionsTests
         // host process terminated. The component must swallow any non-cancellation
         // exception and surface its Message in the status.
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns<Task<PreviewComparisonLink?>>(_ =>
@@ -446,10 +446,10 @@ public sealed class PreviewActionsTests
     {
         IProgress<string>? capturedProgress = null;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -509,10 +509,10 @@ public sealed class PreviewActionsTests
         // container), not the silent "起動中…" button text.
         var tcs = new TaskCompletionSource<PreviewComparisonLink?>();
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(_ => tcs.Task);
@@ -555,10 +555,10 @@ public sealed class PreviewActionsTests
         var tcs = new TaskCompletionSource<PreviewComparisonLink?>();
         CancellationToken receivedToken = default;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -602,10 +602,10 @@ public sealed class PreviewActionsTests
         var tcs = new TaskCompletionSource<PreviewComparisonLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationToken receivedToken = default;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>

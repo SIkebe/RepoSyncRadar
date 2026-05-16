@@ -320,9 +320,12 @@
             return;
         }
 
-        if (Commit is not null && IsPreviewMappable(file)
+        if (Commit is not null && IsPreviewMappable(file) && !IsMarkdownPreviewable(file)
             && Services.GetService<IPreviewCoordinator>() is { } coordinator)
         {
+            // Step 19.7: Markdown ファイルは下の Markdig 経路に流す。ここに来るのは
+            // content/ 配下で .md/.markdown 以外の公開対象 (現状は事実上存在しない)
+            // のみで、将来 YAML データファイル等を公開した場合の保険として残す。
             _previewBusyPath = file.Path;
             _previewCanceling = false;
             _previewStatus = $"{file.Path} のローカルプレビューを準備中…";

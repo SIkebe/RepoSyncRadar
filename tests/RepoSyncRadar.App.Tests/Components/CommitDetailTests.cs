@@ -221,7 +221,7 @@ public class CommitDetailTests
         navigator.ComparisonRequested += (_, request) => captured = request;
         var session = new PreviewSession();
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 commit.PrNumber,
                 commit.Sha,
                 "content/copilot/about-copilot.md",
@@ -252,7 +252,7 @@ public class CommitDetailTests
                 cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
                 StringComparison.Ordinal);
         });
-        _ = coordinator.Received(1).PrepareComparisonPreviewAsync(
+        _ = coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
             commit.PrNumber,
             commit.Sha,
             "content/copilot/about-copilot.md",
@@ -323,10 +323,10 @@ public class CommitDetailTests
         var tcs = new TaskCompletionSource<PreviewComparisonLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationToken receivedToken = default;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -373,10 +373,10 @@ public class CommitDetailTests
         var tcs = new TaskCompletionSource<PreviewComparisonLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationToken receivedToken = default;
         var coordinator = Substitute.For<IPreviewCoordinator>();
-        coordinator.PrepareComparisonPreviewAsync(
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
-                Arg.Any<string?>(),
+                Arg.Any<string>(),
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>

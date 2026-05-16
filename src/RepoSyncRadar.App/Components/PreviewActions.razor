@@ -216,15 +216,23 @@ npm install</code></pre>
                 return;
             }
 
-            if (PreviewPathMapper.Map(targetFilePath, "en") is not null)
-            {
-                await PreviewContentComparisonAsync(coordinator, targetFilePath, progress, token);
-                return;
-            }
-
+            // Step 19.7: Markdown ファイルは content/ 配下でも (= 公開記事 URL に
+            // 対応していても) 必ず Markdig インプロセスレンダリング経路を使う。
+            // これで Next.js dev サーバ起動 (npm install 5〜15 分 + コンパイル 10〜30 秒)
+            // を完全に経路から外し、git worktree add + Markdig レンダリング (数秒) で
+            // 表示できる。
             if (PreviewPathMapper.IsMarkdown(targetFilePath))
             {
                 await PreviewMarkdownAsync(coordinator, targetFilePath, progress, token);
+                return;
+            }
+
+            if (PreviewPathMapper.Map(targetFilePath, "en") is not null)
+            {
+                // Markdown でない公開記事 (現状は事実上発生しないが、将来
+                // YAML データファイル等を公開対象にした場合の保険) は引き続き
+                // Next.js 経路にフォールバック。
+                await PreviewContentComparisonAsync(coordinator, targetFilePath, progress, token);
                 return;
             }
 

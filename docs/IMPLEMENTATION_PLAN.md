@@ -29,6 +29,8 @@
 - [Step 18. `radar_query` と Ask Palette](#step-18-radar_query-と-ask-palette)
 - [Step 19. ローカルプレビュー(bare clone + worktree)](#step-19-ローカルプレビューbare-clone--worktree)
 - [Step 19.5. ローカルプレビューの UI 配線](#step-195-ローカルプレビューの-ui-配線)
+- [Step 19.6. ローカルプレビューの起動時間を抜本短縮](#step-196-ローカルプレビューの起動時間を抜本短縮)
+- [Step 19.7. 対象ページのインプロセス・レンダリング (Next.js バイパス)](#step-197-対象ページのインプロセスレンダリング-nextjs-バイパス)
 - [Step 20. 配布(Velopack)とシークレット保管(DPAPI)](#step-20-配布velopackとシークレット保管dpapi)
 - [付録 A — テスト命名規約](#付録-a--テスト命名規約)
 - [付録 B — テスト固定値 / フィクスチャ管理](#付録-b--テスト固定値--フィクスチャ管理)
@@ -945,6 +947,50 @@ Step 19.5 完了後、ユーザから「プレビューが利用できるよう�
 
 ---
 
+## Step 19.7. 対象ページのインプロセス・レンダリング (Next.js バイパス)
+
+### 19.7.1 目的
+
+Step 19.6 を 5 イテレーション回しても、`content/**/*.md` の比較プレビューは Next.js dev サーバの初回コンパイル (10〜30 秒) が hot path に残るため、ユーザ視点では依然として「遅い」と感じる。github/docs の重い Next.js ランタイムを丸ごとロードする必要はなく、**変更が入った 1 ファイルだけ** を Markdig で in-process レンダリングできれば、起動コストは数十ミリ秒オーダーまで落ちる。Step 19 以前から非 content 配下の Markdown 専用に存在していた `MarkdownPreviewRenderer` + `LocalPreviewContentServer` の経路を、`content/` 配下の Markdown まで拡張する。
+
+### 19.7.2 スコープ
+
+1. **ルーティングの切替** — `PreviewActions.razor` と `CommitDetail.razor` の発火条件を以下に変更。
+    - `PreviewPathMapper.IsMarkdown(path)` が真 → `PrepareMarkdownComparisonPreviewAsync` (Markdig 経路)。
+    - それ以外で `PreviewPathMapper.Map(path, lang)` が非 null → `PrepareComparisonPreviewAsync` (Next.js 経路、将来の非 .md 用に温存)。
+    - これにより `content/**/*.md` も Markdig 経路へ流れ、Next.js dev サーバを一切触らない。
+2. **`MarkdownPreviewRenderer` の強化** — `content/` の Markdown は Jekyll/Liquid 風 frontmatter + Liquid タグを含むため、そのままだと title が抽出されず Liquid タグが生のまま表示される。以下を追加。
+    - **Frontmatter 解析**: ファイル先頭の `---` 〜 `---` ブロックを抽出し、`title` / `intro` スカラーをトップレベルから取り出す (ネスト行はスキップ、`'…'` / `"…"` を unquote)。残りの本文だけを Markdig に渡す。
+    - **Liquid プレースホルダ化**: `{% … %}` (ブロック) と `{{ … }}` (変数) を `<span class="rsr-liquid" title="…">…</span>` に置換 (`[GeneratedRegex]` + `RegexOptions.Singleline`)。Markdig が誤って解釈するのを防ぎつつ、ソースをそのまま視認できる。
+    - **ヘッダ表示**: `<h1>{title}</h1>` + `<p class="rsr-meta">{label} · {sha8}</p>`。title がパスと異なる場合のみ `<p class="rsr-path">{repoPath}</p>` を併記。`intro` があれば lead paragraph として表示。
+    - **CSS**: `.rsr-path` (淡色 monospace)、`.rsr-intro` (太字 lead)、`.rsr-liquid` (淡黄ハイライト、dark-mode 対応) を style ブロックに追加。
+3. **テストの再配線** — 既存 13 件の `App.Tests` (PreviewActions / CommitDetail) は `content/**/*.md` 経路を `PrepareComparisonPreviewAsync` でモックしていたため、`PrepareMarkdownComparisonPreviewAsync` に置換 (filePath は non-nullable なので `Arg.Any<string?>()` → `Arg.Any<string>()` も連動)。検証の本意 (ボタン押下 → URL 公開、ファイル切替、プログレス、エラー、キャンセル等) は不変。
+
+### 19.7.3 テスト
+
+`Core.Tests/Services/Preview/MarkdownPreviewRendererTests.cs` (新規, 9 件)
+
+| テスト | 内容 |
+|---|---|
+| `Renders_Title_From_Frontmatter_As_H1` | `title: About GitHub Copilot` → `<h1>About GitHub Copilot</h1>` |
+| `Renders_Intro_As_Lead_Paragraph_When_Provided` | `intro:` 行があれば `class="rsr-intro"` の `<p>` |
+| `Strips_Frontmatter_Block_From_Body` | `versions:` / `fpt:` 等のメタ行は本文 HTML に出ない |
+| `Placeholds_Liquid_Block_Tags` | `{% ifversion fpt %}` 等が `rsr-liquid` の `<span>` 内に入り、本文段落 `<p>{%` が漏れない |
+| `Placeholds_Liquid_Variable_Tags` | `{{ data variables.product.prodname_copilot }}` も同様にプレースホルダ化 |
+| `Renders_Plain_Markdown_Without_Frontmatter` | frontmatter なし → Markdig の AutoIdentifier により `<h1 id="hello">Hello</h1>` (ヘッダ部の `<h1>CHANGELOG.md</h1>` は別途確認) |
+| `Falls_Back_When_Markdown_Is_Null` | side が存在しない場合は `rsr-empty` + 「この時点にはファイルがありません」 |
+| `Extracts_Title_With_Various_Quote_Styles` (Theory ×3) | `'Quoted'` / `"Double quoted"` / `Bare title` のいずれも正しく unquote |
+
+`App.Tests/Components/PreviewActionsTests.cs` (11 件) / `CommitDetailTests.cs` (4 件) — モックのターゲットメソッドを `PrepareMarkdownComparisonPreviewAsync` に差し替え (テスト本意は不変)。
+
+### 19.7.4 完了基準
+
+- 新規 9 件 + 既存テスト総数 = `Category!=Manual` で 449/449 緑 (Integrations 59 + Core 168 + App 210 + E2E 12)
+- `dotnet build -warnaserror` 緑
+- 手動: コールド起動でも `content/**/*.md` の比較プレビューが Next.js を一切起動せず、サブ秒で表示される。Liquid タグはハイライト span として可視化される
+
+---
+
 ## Step 20. 配布(Velopack)とシークレット保管(DPAPI)
 
 ### 20.1 目的
@@ -1058,6 +1104,10 @@ Step 19.5 完了後、ユーザから「プレビューが利用できるよう�
 - [x] Step 19.6 — ローカルプレビュー起動時間の抜本短縮 (5 イテレーション)
   - 並列起動 / `node_modules` ジャンクション共有 / bare clone プリウォーム / 予測プリウォーム / フェーズ可視化
   - 新規テスト件数 13 (合計 439/439 緑)
+- [x] Step 19.7 — 対象ページのインプロセス・レンダリング (Next.js バイパス)
+  - `content/**/*.md` を Markdig + LocalPreviewContentServer で in-process 描画。Next.js dev サーバはバイパス
+  - `MarkdownPreviewRenderer` に frontmatter (title / intro) 解析と Liquid プレースホルダ化を追加
+  - 新規テスト件数 9 (合計 449/449 緑、App.Tests の 13 件はモック差し替えで再緑化)
 - [ ] Step 20 — 配布 + DPAPI
 
 ---
