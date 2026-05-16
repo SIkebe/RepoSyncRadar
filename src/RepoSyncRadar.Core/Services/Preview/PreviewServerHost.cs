@@ -191,6 +191,19 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         string worktreePath,
         int port,
         CancellationToken cancellationToken = default)
+        => await StartAsync(worktreePath, port, progress: null, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Overload that surfaces sub-phase progress ("node_modules を準備中…", "dev サーバを起動中…")
+    /// so the UI can distinguish the long npm-install phase from the Next.js
+    /// compile phase. Both phases live before <see cref="IPortReadyProbe.WaitForListenAsync"/>
+    /// returns, so without this signal the user only sees a single opaque "起動中…".
+    /// </summary>
+    public async Task<IProcessHandle?> StartAsync(
+        string worktreePath,
+        int port,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(worktreePath);
         if (!IsEnabled)
@@ -205,7 +218,9 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
                 .ConfigureAwait(false);
         }
 
-        await EnsureNodeModulesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
+        await EnsureNodeModulesAsync(worktreePath, progress, cancellationToken).ConfigureAwait(false);
+
+        progress?.Report($"Next.js dev サーバを起動中 (ポート {port.ToString(CultureInfo.InvariantCulture)})…");
 
         var args = ReplacePort(_options.PreviewArguments, port);
         var env = BuildEnvironment(
@@ -370,7 +385,7 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
     /// The check is intentionally narrow so non-Node preview commands (e.g.
     /// <c>hugo</c>, <c>jekyll</c>) keep working.
     /// </summary>
-    private async Task EnsureNodeModulesAsync(string worktreePath, CancellationToken cancellationToken)
+    private async Task EnsureNodeModulesAsync(string worktreePath, IProgress<string>? progress, CancellationToken cancellationToken)
     {
         if (!IsNpmCommand(_options.PreviewCommand)
             || string.IsNullOrWhiteSpace(_options.PreviewInstallArguments))
@@ -382,6 +397,8 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         {
             return;
         }
+
+        progress?.Report("node_modules を準備中… (このリポジトリでの初回は数分かかります)");
 
         await _shareManager.EnsureAsync(
             worktreePath,

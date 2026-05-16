@@ -199,7 +199,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             progress?.Report(
                 $"依存関係を確認してプレビューサーバを起動中… (node_modules がなければ {_options.PreviewCommand} {_options.PreviewInstallArguments} を自動実行 / ポート {port.ToString(CultureInfo.InvariantCulture)})");
-            await _server.StartAsync(worktreePath, port, cancellationToken).ConfigureAwait(false);
+            await _server.StartAsync(worktreePath, port, progress, cancellationToken).ConfigureAwait(false);
             _activeSha = sha;
         }
         else
@@ -280,8 +280,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             progress?.Report(string.Create(
                 CultureInfo.InvariantCulture,
                 $"変更前 (ポート {beforePort}) と PR HEAD (ポート {afterPort}) のプレビューサーバを並列起動中…"));
-            var beforeTask = _beforeServer.StartAsync(beforeWorktreePath, beforePort, cancellationToken);
-            var afterTask = _server.StartAsync(afterWorktreePath, afterPort, cancellationToken);
+            var beforeTask = _beforeServer.StartAsync(beforeWorktreePath, beforePort, progress, cancellationToken);
+            var afterTask = _server.StartAsync(afterWorktreePath, afterPort, progress, cancellationToken);
             await Task.WhenAll(beforeTask, afterTask).ConfigureAwait(false);
             _activeBeforeSha = beforeSha;
             _activeSha = sha;
@@ -291,7 +291,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             progress?.Report(string.Create(
                 CultureInfo.InvariantCulture,
                 $"変更前プレビューサーバを起動中… (ポート {beforePort})"));
-            await _beforeServer.StartAsync(beforeWorktreePath, beforePort, cancellationToken).ConfigureAwait(false);
+            await _beforeServer.StartAsync(beforeWorktreePath, beforePort, progress, cancellationToken).ConfigureAwait(false);
             _activeBeforeSha = beforeSha;
             progress?.Report("既存の PR HEAD プレビューサーバを再利用します");
         }
@@ -301,7 +301,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             progress?.Report(string.Create(
                 CultureInfo.InvariantCulture,
                 $"PR HEAD プレビューサーバを起動中… (ポート {afterPort})"));
-            await _server.StartAsync(afterWorktreePath, afterPort, cancellationToken).ConfigureAwait(false);
+            await _server.StartAsync(afterWorktreePath, afterPort, progress, cancellationToken).ConfigureAwait(false);
             _activeSha = sha;
         }
         else

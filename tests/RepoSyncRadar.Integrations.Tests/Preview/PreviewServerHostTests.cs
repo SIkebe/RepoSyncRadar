@@ -77,6 +77,77 @@ public sealed class PreviewServerHostTests : IDisposable
         await handle.Received(1).DisposeAsync();
     }
 
+    [Fact]
+    public async Task StartAsync_Reports_Dev_Server_Progress_On_Warm_Path()
+    {
+        // When node_modules already exists, install is skipped but the "dev サーバを起動中"
+        // message must still fire so the UI can flip from the worktree-prep phase
+        // to a more specific compile phase.
+        var ct = TestContext.Current.CancellationToken;
+        var runner = Substitute.For<IProcessRunner>();
+        var handle = Substitute.For<IProcessHandle>();
+        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
+        var probe = Substitute.For<IPortReadyProbe>();
+        probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
+            Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
+        var sut = BuildSut(runner, probe, command: "npm", arguments: "run dev -- --port {port}");
+        var messages = new List<string>();
+        var progress = new Progress<string>(messages.Add);
+
+        await sut.StartAsync(_wt, 4500, progress, ct);
+
+        // Progress<string> dispatches asynchronously via SynchronizationContext.Post —
+        // give the captured continuation a chance to run on the current scheduler.
+        await Task.Yield();
+        Assert.Contains(messages, m => m.Contains("Next.js", StringComparison.Ordinal));
+        Assert.DoesNotContain(messages, m => m.Contains("node_modules", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task StartAsync_Reports_Install_Phase_When_Node_Modules_Missing()
+    {
+        // When node_modules is missing the install phase can take minutes. The
+        // UI must be able to distinguish it from the much faster Next.js compile
+        // phase, otherwise the user has no way to tell whether the install is
+        // hung or normally progressing.
+        var ct = TestContext.Current.CancellationToken;
+        var cold = Path.Combine(Path.GetTempPath(), "rsr-psh-cold-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(cold);
+        try
+        {
+            var runner = Substitute.For<IProcessRunner>();
+            var handle = Substitute.For<IProcessHandle>();
+            runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+                Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
+            var probe = Substitute.For<IPortReadyProbe>();
+            probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
+                Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
+
+            // The default IShareManager defers to the install callback when no
+            // package-lock.json exists. The callback runs `npm install`, so we
+            // need to satisfy that too with a handle that exits cleanly.
+            var installHandle = Substitute.For<IProcessHandle>();
+            installHandle.WaitForExitAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(0));
+            runner.Start("npm", "install", cold,
+                Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(installHandle);
+
+            var sut = BuildSut(runner, probe, command: "npm", arguments: "run dev -- --port {port}");
+            var messages = new List<string>();
+            var progress = new Progress<string>(messages.Add);
+
+            await sut.StartAsync(cold, 4500, progress, ct);
+
+            await Task.Yield();
+            Assert.Contains(messages, m => m.Contains("node_modules", StringComparison.Ordinal));
+            Assert.Contains(messages, m => m.Contains("Next.js", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try { Directory.Delete(cold, recursive: true); } catch (IOException) { }
+        }
+    }
+
     private static PreviewServerHost BuildSut(
         IProcessRunner runner,
         IPortReadyProbe probe,
@@ -87,6 +158,7 @@ public sealed class PreviewServerHostTests : IDisposable
         {
             PreviewCommand = command,
             PreviewArguments = arguments,
+            PreviewInstallArguments = "install",
             PreviewEnvironment = new Dictionary<string, string>(),
         });
         return new PreviewServerHost(runner, probe, options, NullLogger<PreviewServerHost>.Instance);
