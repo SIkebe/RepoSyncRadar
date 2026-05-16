@@ -292,6 +292,43 @@ public sealed class PreviewServerHostTests : IDisposable
     }
 
     [Fact]
+    public async Task StartAsync_Includes_Stdout_Tail_When_Probe_Times_Out_With_Stderr()
+    {
+        // Regression for the case where Next.js dev compile is still in
+        // progress when the ready timeout fires: stderr only carries
+        // informational warnings (i18n config, missing content file, ...),
+        // so the dialog must also surface the stdout tail (where
+        // "Compiling...", "ready - started server", and the like live).
+        var worktree = CreateWorktree();
+        var host = CreateHost(out var runner, out var probe, options =>
+        {
+            options.PreviewCommand = "npm";
+            options.PreviewReadyTimeoutSeconds = 1;
+        });
+        probe.NextResult = false;
+        runner.NextHandle = new FakeHandle
+        {
+            HasExited = false,
+            RecentStderrLines = new[]
+            {
+                "⚠ i18n configuration in next.config.ts is unsupported in App Router.",
+            },
+            RecentStdoutLines = new[]
+            {
+                "  ▲ Next.js 15.5.4",
+                " ✓ Compiling /[...slug] in 42s",
+            },
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.StartAsync(worktree, 4500, TestContext.Current.CancellationToken));
+
+        Assert.Contains("待ち受け状態", ex.Message);
+        Assert.Contains("i18n configuration", ex.Message);
+        Assert.Contains("Compiling /[...slug] in 42s", ex.Message);
+    }
+
+    [Fact]
     public async Task StartAsync_Includes_Stdout_When_Stderr_Empty_And_Process_Exited()
     {
         var worktree = CreateWorktree();

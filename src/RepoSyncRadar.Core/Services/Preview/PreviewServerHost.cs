@@ -219,7 +219,14 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
             var exited = handle.HasExited;
             LogReadyFailed(_logger, port, (int)timeout.TotalSeconds, exited);
             var stderrTail = SnapshotTail(handle.RecentStderrLines, take: 8);
-            var stdoutTail = exited && stderrTail.Length == 0
+            // On a ready-probe timeout the Next.js dev child is still running and
+            // its progress markers ("▲ Next.js ...", "✓ Compiling ... in 42s",
+            // "ready - started server on http://localhost:4500") live on stdout —
+            // stderr typically only carries informational warnings. Surface
+            // stdout in that case so the user can tell "still compiling" apart
+            // from "stuck/dead". When the process already exited and stderr
+            // explained why, keep the dialog concise by omitting stdout.
+            var stdoutTail = (!exited || stderrTail.Length == 0)
                 ? SnapshotTail(handle.RecentStdoutLines, take: 8)
                 : string.Empty;
             await StopAsync(CancellationToken.None).ConfigureAwait(false);
