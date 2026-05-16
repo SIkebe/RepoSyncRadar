@@ -33,6 +33,7 @@
 
   <ItemGroup Label="Markdown">
     <PackageVersion Include="Markdig" Version="1.2.0" />
+    <PackageVersion Include="YamlDotNet" Version="16.2.1" />
   </ItemGroup>
 
   <ItemGroup Label="GitHub / Copilot">

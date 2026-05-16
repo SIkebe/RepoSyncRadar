@@ -25,6 +25,7 @@
     <PackageReference Include="Markdig" />
     <PackageReference Include="Octokit" />
     <PackageReference Include="GitHub.Copilot.SDK" />
+    <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
 </Project>

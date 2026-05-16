@@ -60,11 +60,16 @@ public interface IPreviewCoordinator
     /// Renders a non-publishable Markdown file from the first parent and PR HEAD
     /// worktrees, hosts both rendered pages on localhost, and returns before/after URLs.
     /// </summary>
+    /// <param name="version">
+    /// 描画する <see cref="DocsVersion"/>。未指定なら <see cref="DocsVersionCatalog.Default"/> (= fpt)。
+    /// <c>{% ifversion ... %}</c> がこの版で評価される。
+    /// </param>
     Task<PreviewComparisonLink?> PrepareMarkdownComparisonPreviewAsync(
         int prNumber,
         string sha,
         string filePath,
         IProgress<string>? progress = null,
+        DocsVersion? version = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>Stops the running preview server (if any) and clears the active session.</summary>
@@ -115,7 +120,21 @@ public sealed record PreviewComparisonLink(
     string BeforeWorktreePath,
     string AfterWorktreePath,
     string BeforeSha,
-    string AfterSha);
+    string AfterSha)
+{
+    /// <summary>
+    /// Markdown プレビューで描画したときの <see cref="DocsVersion"/>。
+    /// 通常の Next.js 経路では <see cref="DocsVersionCatalog.Default"/> 固定 (= fpt)。
+    /// </summary>
+    public DocsVersion? CurrentVersion { get; init; }
+
+    /// <summary>
+    /// この PR でレンダリング結果が変わる <see cref="DocsVersion"/> の一覧。
+    /// 公式 docs と同じく fpt/ghec/ghes を並べた dropdown 順 (見落とし防止用)。
+    /// Markdown プレビュー以外では <c>null</c>。
+    /// </summary>
+    public IReadOnlyList<DocsVersion>? AffectedVersions { get; init; }
+}
 
 /// <inheritdoc cref="IPreviewCoordinator" />
 public sealed partial class PreviewCoordinator : IPreviewCoordinator
@@ -333,6 +352,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         string sha,
         string filePath,
         IProgress<string>? progress = null,
+        DocsVersion? version = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(prNumber);
@@ -342,6 +362,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             throw new InvalidOperationException($"'{filePath}' は Markdown ファイルではありません。");
         }
+
+        var effectiveVersion = version ?? DocsVersionCatalog.Default;
 
         if (!_worktree.IsEnabled)
         {
@@ -379,10 +401,32 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         progress?.Report($"{filePath} を Markdown としてレンダリング中…");
         var beforeMarkdown = await ReadWorktreeFileOrNullAsync(beforeWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
         var afterMarkdown = await ReadWorktreeFileOrNullAsync(afterWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
+
+        progress?.Report("Liquid 変数・再利用ブロックを読み込み中…");
+        var beforeLiquid = await DocsLiquidContextLoader.LoadAsync(beforeWorktreePath, cancellationToken).ConfigureAwait(false);
+        var afterLiquid = await DocsLiquidContextLoader.LoadAsync(afterWorktreePath, cancellationToken).ConfigureAwait(false);
+
+        progress?.Report("公式版 (fpt/ghec/ghes) で差分の出る版を解析中…");
+        var affectedVersions = DocsVersionImpactAnalyzer.Analyze(beforeMarkdown, beforeLiquid, afterMarkdown, afterLiquid);
+
         var pages = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["/markdown/before"] = MarkdownPreviewRenderer.RenderDocument(filePath, beforeMarkdown, beforeSha, "変更前"),
-            ["/markdown/after"] = MarkdownPreviewRenderer.RenderDocument(filePath, afterMarkdown, sha, "PR HEAD"),
+            ["/markdown/before"] = MarkdownPreviewRenderer.RenderDocument(
+                filePath,
+                beforeMarkdown,
+                beforeSha,
+                "変更前",
+                beforeLiquid,
+                effectiveVersion,
+                affectedVersions),
+            ["/markdown/after"] = MarkdownPreviewRenderer.RenderDocument(
+                filePath,
+                afterMarkdown,
+                sha,
+                "PR HEAD",
+                afterLiquid,
+                effectiveVersion,
+                affectedVersions),
         };
 
         var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
@@ -401,7 +445,11 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             beforeWorktreePath,
             afterWorktreePath,
             beforeSha,
-            sha);
+            sha)
+        {
+            CurrentVersion = effectiveVersion,
+            AffectedVersions = affectedVersions,
+        };
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)

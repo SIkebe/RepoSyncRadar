@@ -1,0 +1,24 @@
+namespace RepoSyncRadar.Core.Services.Preview;
+
+/// <summary>
+/// github/docs リポジトリ固有の Liquid 評価コンテキスト
+/// (IMPLEMENTATION_PLAN.md §Step 19.8)。
+/// <list type="bullet">
+///   <item><see cref="Variables"/>: <c>data/variables/&lt;file&gt;.yml</c> を
+///   <c>"&lt;file&gt;.&lt;key&gt;[.&lt;sub&gt;...]"</c> 形式にフラット化した辞書。</item>
+///   <item><see cref="Reusables"/>: <c>data/reusables/**/&lt;name&gt;.md</c> を
+///   ディレクトリ区切りをドットに変換した相対パス (<c>copilot.about-copilot</c> 等)
+///   をキー、本文を値とする辞書。</item>
+/// </list>
+/// 値は加工せず生のまま保持し、評価時に <see cref="DocsLiquidEvaluator"/> が
+/// 再帰展開する。
+/// </summary>
+public sealed record DocsLiquidContext(
+    IReadOnlyDictionary<string, string> Variables,
+    IReadOnlyDictionary<string, string> Reusables)
+{
+    /// <summary>variables / reusables が一つも見つからなかったときの空コンテキスト。</summary>
+    public static DocsLiquidContext Empty { get; } = new(
+        new Dictionary<string, string>(StringComparer.Ordinal),
+        new Dictionary<string, string>(StringComparer.Ordinal));
+}

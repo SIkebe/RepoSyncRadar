@@ -86,7 +86,7 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
-    public void Placeholds_Liquid_Block_Tags()
+    public void Resolves_Ifversion_To_First_Branch_So_Body_Survives()
     {
         var markdown = """
             ---
@@ -104,19 +104,108 @@ public sealed class MarkdownPreviewRendererTests
             "abc1234",
             "PR HEAD");
 
-        // Raw `{% ifversion %}` syntax must not leak into a Markdig <p>
-        // block. We accept it appearing inside a placeholder <span>, so the
-        // assertion targets the markup shape — not the inner text — to stay
-        // robust against HTML-encoding changes inside the span.
+        // Step 19.8: Liquid evaluator now strips the ifversion gate and emits
+        // the first branch as-is. The reviewer therefore sees prose, not a
+        // yellow placeholder for the version condition.
+        Assert.Contains("Plain text in between.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("ifversion", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<p>{%", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<p>{% endif", html, StringComparison.Ordinal);
-        Assert.Contains("rsr-liquid", html, StringComparison.Ordinal);
-        Assert.Contains("Plain text in between.", html, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Placeholds_Liquid_Variable_Tags()
+    public void Resolves_Ifversion_With_Else_Branch_To_First_Branch_Only()
     {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            {% ifversion fpt %}
+            primary
+            {% elsif ghec %}
+            secondary
+            {% else %}
+            tertiary
+            {% endif %}
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        // Only the first branch should survive — preview is rendered for the
+        // dotcom audience by default; the other branches are noise for reviewers.
+        Assert.Contains("primary", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("secondary", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("tertiary", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Expands_Data_Variable_From_LiquidContext()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["product.prodname_copilot"] = "GitHub Copilot",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal));
+
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            Welcome to {% data variables.product.prodname_copilot %}.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        // The variable must be inlined as literal text, NOT wrapped in a
+        // placeholder span: the whole point of Step 19.8 is to make the
+        // preview readable, not just visually neutralise the raw syntax.
+        Assert.Contains("Welcome to GitHub Copilot.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% data variables", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Unresolved_Variable_Tag_Is_Wrapped_In_Liquid_Placeholder_Span()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            Welcome to {% data variables.product.prodname_copilot %}.
+            """;
+
+        // Empty context — the variable cannot be resolved.
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.DoesNotContain("<p>Welcome to {% data variables", html, StringComparison.Ordinal);
+        Assert.Contains("rsr-liquid", html, StringComparison.Ordinal);
+        Assert.Contains("Welcome to", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Liquid_Placeholder_Span_Is_Not_Escaped_As_Literal_Text()
+    {
+        // Regression guard for Step 19.8: with DisableHtml() the placeholder
+        // <span class="rsr-liquid"> NeutralizeLiquid injected was rendered as
+        // literal "&lt;span class=&quot;rsr-liquid&quot;…&gt;" inside <p>,
+        // which is what the user reported. The span must reach the browser
+        // as real HTML so the highlight is applied.
         var markdown = """
             ---
             title: Sample
@@ -131,12 +220,70 @@ public sealed class MarkdownPreviewRendererTests
             "abc1234",
             "PR HEAD");
 
-        // The Liquid tag must be wrapped in a placeholder <span>, not
-        // rendered as a bare literal inside a Markdig <p>.
-        Assert.DoesNotContain("<p>Welcome to {% data variables", html, StringComparison.Ordinal);
-        Assert.Contains("rsr-liquid", html, StringComparison.Ordinal);
-        // Surrounding prose must remain intact.
-        Assert.Contains("Welcome to", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=&quot;rsr-liquid", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-liquid", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Expands_Reusable_Block_From_LiquidContext()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["product.prodname_copilot"] = "GitHub Copilot",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["copilot.about-copilot"] = "Try {% data variables.product.prodname_copilot %} today.",
+            });
+
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            {% data reusables.copilot.about-copilot %}
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        // Reusable block is inlined AND its inner variable is expanded.
+        Assert.Contains("Try GitHub Copilot today.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% data reusables", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% data variables", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Preserves_Inline_Html_Like_Picture_Tags()
+    {
+        // Step 19.8: DisableHtml() was removed so github/docs inline HTML
+        // (which appears in many content/**/*.md files for responsive images)
+        // reaches the browser. Without this, <picture> showed up as literal text.
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            <picture>
+              <source srcset="dark.png" media="(prefers-color-scheme: dark)">
+              <img src="light.png" alt="example">
+            </picture>
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("<picture>", html, StringComparison.Ordinal);
+        Assert.Contains("<img src=\"light.png\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;picture&gt;", html, StringComparison.Ordinal);
     }
 
     [Fact]

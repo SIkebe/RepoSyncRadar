@@ -8,19 +8,28 @@ namespace RepoSyncRadar.Core.Services.Preview;
 
 /// <summary>
 /// Renders a single Markdown document to a self-contained HTML page used by
-/// the Markdown-first preview path (IMPLEMENTATION_PLAN.md §Step 19.7). This
-/// is the substitute for the Next.js dev server: instead of compiling the
+/// the Markdown-first preview path (IMPLEMENTATION_PLAN.md §Step 19.7 / 19.8).
+/// This is the substitute for the Next.js dev server: instead of compiling the
 /// whole github/docs site we read one file from the worktree and feed it to
 /// Markdig directly. Frontmatter is stripped (title / intro promoted to a
-/// header), and Liquid tags such as <c>{% data variables.x %}</c> are
-/// replaced with grey placeholder spans so the raw template syntax never
-/// leaks into the rendered body.
+/// header), and Liquid tags such as <c>{% data variables.x %}</c> are first
+/// evaluated by <see cref="DocsLiquidEvaluator"/> using
+/// <see cref="DocsLiquidContext"/> read from the worktree; anything that
+/// remains unresolved is wrapped in a grey placeholder span so the raw
+/// template syntax never leaks into the rendered body.
 /// </summary>
 internal static partial class MarkdownPreviewRenderer
 {
     private static readonly MarkdownPipeline s_pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
-        .DisableHtml()
+        // NOTE: We intentionally do NOT call DisableHtml() here. github/docs
+        // markdown sources ship with inline HTML (<picture>, <video>, tables
+        // with <thead>, <details>/<summary>, etc.) that are integral to the
+        // rendered article; disabling HTML would leak the literal tags as
+        // text. The same applies to the <span class="rsr-liquid"> markers
+        // NeutralizeLiquid injects for unresolved Liquid tags — with HTML
+        // disabled they showed up as raw "<span class=…>" strings in the
+        // preview (the visual regression that motivated Step 19.8).
         .Build();
 
     // Liquid block / variable syntax used pervasively in github/docs content.
@@ -37,12 +46,17 @@ internal static partial class MarkdownPreviewRenderer
         string repoPath,
         string? markdown,
         string sha,
-        string label)
+        string label,
+        DocsLiquidContext? liquidContext = null,
+        DocsVersion? version = null,
+        IReadOnlyList<DocsVersion>? affectedVersions = null,
+        DocsVersion? selectedVersion = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repoPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
 
+        var effectiveVersion = version ?? DocsVersionCatalog.Default;
         var repoPathDisplay = WebUtility.HtmlEncode(repoPath.Trim());
         var meta = WebUtility.HtmlEncode($"{label} {ShortSha(sha)}");
         string title;
@@ -62,7 +76,15 @@ internal static partial class MarkdownPreviewRenderer
                 ExtractFrontmatterScalar(frontmatter, "title")
                 ?? repoPath.Trim());
             intro = ExtractFrontmatterScalar(frontmatter, "intro");
-            var liquidNeutralized = NeutralizeLiquid(content);
+            // First expand Liquid tags whose definitions we found in the
+            // worktree (variables / reusables / ifversion per `effectiveVersion`);
+            // any tag left behind is then wrapped in <span class="rsr-liquid"> by
+            // NeutralizeLiquid so the reviewer still sees its original syntax.
+            var liquidEvaluated = DocsLiquidEvaluator.Evaluate(
+                content,
+                liquidContext ?? DocsLiquidContext.Empty,
+                effectiveVersion);
+            var liquidNeutralized = NeutralizeLiquid(liquidEvaluated);
             body = Markdown.ToHtml(liquidNeutralized, s_pipeline);
             if (string.IsNullOrWhiteSpace(body))
             {
@@ -106,6 +128,13 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("blockquote{border-left:4px solid var(--rsr-blockquote-border);color:var(--rsr-muted);padding-left:1rem;}table{border-collapse:collapse;display:block;overflow:auto;}td,th{border:1px solid var(--rsr-border);padding:6px 13px;}th{background:var(--rsr-th-bg);}");
         html.AppendLine(".rsr-liquid{display:inline-block;background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border:1px solid var(--rsr-liquid-border);border-radius:3px;padding:0 .35em;margin:0 .15em;font-size:.82em;font-family:'Cascadia Mono',Consolas,monospace;}");
         html.AppendLine(".rsr-empty{color:var(--rsr-muted);font-style:italic;}");
+        html.AppendLine(".rsr-version-bar{margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.82rem;}");
+        html.AppendLine(".rsr-version-current{color:var(--rsr-muted);}");
+        html.AppendLine(".rsr-version-impact-label{color:var(--rsr-muted);}");
+        html.AppendLine(".rsr-version-badges{display:inline-flex;flex-wrap:wrap;gap:6px;padding:0;margin:0;list-style:none;}");
+        html.AppendLine(".rsr-version-badge{display:inline-block;padding:2px 8px;background:var(--rsr-th-bg);border:1px solid var(--rsr-border);border-radius:12px;font-size:.76rem;color:var(--rsr-fg);}");
+        html.AppendLine(".rsr-version-badge--current{background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);font-weight:600;}");
+        html.AppendLine(".rsr-version-empty{color:var(--rsr-muted);font-style:italic;}");
         html.AppendLine("</style>");
         html.AppendLine("</head>");
         html.AppendLine("<body>");
@@ -121,6 +150,7 @@ internal static partial class MarkdownPreviewRenderer
             // the file they clicked on.
             html.Append("<p class=\"rsr-path\">").Append(repoPathDisplay).AppendLine("</p>");
         }
+        AppendVersionBadgeMarkup(html, selectedVersion ?? effectiveVersion, affectedVersions);
         html.AppendLine("</header>");
         if (!string.IsNullOrWhiteSpace(intro))
         {
@@ -129,8 +159,7 @@ internal static partial class MarkdownPreviewRenderer
                 .AppendLine("</p>");
         }
         html.AppendLine(body);
-        html.AppendLine("</article>");
-        html.AppendLine("</main>");
+        html.AppendLine("</article>");        html.AppendLine("</main>");
         html.AppendLine("</body>");
         html.AppendLine("</html>");
         return html.ToString();
@@ -258,4 +287,55 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string ShortSha(string sha)
         => sha.Length <= 7 ? sha : sha[..7];
+
+    /// <summary>
+    /// Appends the "影響を受ける版" badge bar to <paramref name="html"/> when
+    /// <paramref name="affectedVersions"/> is non-null (the caller wants the
+    /// UI). The currently-rendered version is highlighted so the reviewer
+    /// can tell which badge corresponds to what they're looking at; the
+    /// remaining badges signal versions where the PR also changes content
+    /// but the reviewer is not currently viewing — preventing them from
+    /// missing per-version diffs (IMPLEMENTATION_PLAN.md §Step 19.9).
+    /// </summary>
+    private static void AppendVersionBadgeMarkup(
+        StringBuilder html,
+        DocsVersion currentVersion,
+        IReadOnlyList<DocsVersion>? affectedVersions)
+    {
+        if (affectedVersions is null)
+        {
+            return;
+        }
+
+        html.Append("<div class=\"rsr-version-bar\" data-testid=\"rsr-version-bar\">");
+        html.Append("<span class=\"rsr-version-current\">表示中: ")
+            .Append(WebUtility.HtmlEncode(currentVersion.DisplayLabel))
+            .Append("</span>");
+
+        if (affectedVersions.Count == 0)
+        {
+            html.Append("<span class=\"rsr-version-empty\">この PR ではどの版にも差分はありません。</span>");
+        }
+        else
+        {
+            html.Append("<span class=\"rsr-version-impact-label\">この PR で差分のある版:</span>");
+            html.Append("<ul class=\"rsr-version-badges\">");
+            foreach (var version in affectedVersions)
+            {
+                var isCurrent = version == currentVersion;
+                html.Append("<li class=\"rsr-version-badge");
+                if (isCurrent)
+                {
+                    html.Append(" rsr-version-badge--current");
+                }
+                html.Append("\" data-version-slug=\"")
+                    .Append(WebUtility.HtmlEncode(version.Slug))
+                    .Append("\">")
+                    .Append(WebUtility.HtmlEncode(version.DisplayLabel))
+                    .Append("</li>");
+            }
+            html.Append("</ul>");
+        }
+        html.AppendLine("</div>");
+    }
 }
