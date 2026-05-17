@@ -57,38 +57,51 @@ internal static partial class MarkdownPreviewRenderer
         ArgumentException.ThrowIfNullOrWhiteSpace(label);
 
         var effectiveVersion = version ?? DocsVersionCatalog.Default;
-        var repoPathDisplay = WebUtility.HtmlEncode(repoPath.Trim());
+        var effectiveLiquidContext = liquidContext ?? DocsLiquidContext.Empty;
+        var trimmedRepoPath = repoPath.Trim();
+        var repoPathDisplay = WebUtility.HtmlEncode(trimmedRepoPath);
         var meta = WebUtility.HtmlEncode($"{label} {ShortSha(sha)}");
-        string title;
-        string? intro;
+        string titleText;
+        string titleHtml;
+        string? introHtml;
+        var showRepoPath = false;
         string body;
 
         if (markdown is null)
         {
-            title = repoPathDisplay;
-            intro = null;
+            titleText = trimmedRepoPath;
+            titleHtml = repoPathDisplay;
+            introHtml = null;
             body = "<p class=\"rsr-empty\">この時点にはファイルがありません。</p>";
         }
         else
         {
             var (frontmatter, content) = SplitFrontmatter(markdown);
-            title = WebUtility.HtmlEncode(
-                ExtractFrontmatterScalar(frontmatter, "title")
-                ?? repoPath.Trim());
-            intro = ExtractFrontmatterScalar(frontmatter, "intro");
+            var frontmatterTitle = ExtractFrontmatterScalar(frontmatter, "title");
+            var frontmatterIntro = ExtractFrontmatterScalar(frontmatter, "intro");
+            var displayTitle = frontmatterTitle ?? trimmedRepoPath;
+            titleText = EvaluateLiquidText(displayTitle, effectiveLiquidContext, effectiveVersion);
+            titleHtml = RenderInlineWithLiquid(displayTitle, effectiveLiquidContext, effectiveVersion);
+            introHtml = frontmatterIntro is null
+                ? null
+                : RenderInlineWithLiquid(frontmatterIntro, effectiveLiquidContext, effectiveVersion);
+            showRepoPath = frontmatterTitle is not null
+                && !string.Equals(displayTitle, trimmedRepoPath, StringComparison.Ordinal);
             // First expand Liquid tags whose definitions we found in the
             // worktree (variables / reusables / ifversion per `effectiveVersion`);
             // any tag left behind is then wrapped in <span class="rsr-liquid"> by
             // NeutralizeLiquid so the reviewer still sees its original syntax.
             var liquidEvaluated = DocsLiquidEvaluator.Evaluate(
                 content,
-                liquidContext ?? DocsLiquidContext.Empty,
+                effectiveLiquidContext,
                 effectiveVersion);
             var liquidNeutralized = NeutralizeLiquid(liquidEvaluated);
             body = Markdown.ToHtml(liquidNeutralized, s_pipeline);
             if (string.IsNullOrWhiteSpace(body))
             {
-                body = "<p class=\"rsr-empty\">空の Markdown ファイルです。</p>";
+                body = frontmatterTitle is null && frontmatterIntro is null
+                    ? "<p class=\"rsr-empty\">空の Markdown ファイルです。</p>"
+                    : string.Empty;
             }
         }
 
@@ -98,7 +111,7 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("<head>");
         html.AppendLine("<meta charset=\"utf-8\">");
         html.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
-        html.Append("<title>").Append(title).AppendLine("</title>");
+        html.Append("<title>").Append(WebUtility.HtmlEncode(titleText)).AppendLine("</title>");
         html.AppendLine("<style>");
         // Light palette (default). Both the WPF theme toggle
         // (MainWindow.xaml.cs `BuildDocsThemeScript`) and the OS
@@ -132,18 +145,24 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-version-current{color:var(--rsr-muted);}");
         html.AppendLine(".rsr-version-impact-label{color:var(--rsr-muted);}");
         html.AppendLine(".rsr-version-badges{display:inline-flex;flex-wrap:wrap;gap:6px;padding:0;margin:0;list-style:none;}");
-        html.AppendLine(".rsr-version-badge{display:inline-block;padding:2px 8px;background:var(--rsr-th-bg);border:1px solid var(--rsr-border);border-radius:12px;font-size:.76rem;color:var(--rsr-fg);}");
+        html.AppendLine(".rsr-version-badge{display:inline-block;padding:2px 8px;background:var(--rsr-th-bg);border:1px solid var(--rsr-border);border-radius:12px;font:inherit;font-size:.76rem;color:var(--rsr-fg);cursor:pointer;}");
+        html.AppendLine(".rsr-version-badge:hover{border-color:var(--rsr-link);color:var(--rsr-link);}");
+        html.AppendLine(".rsr-version-badge:focus-visible{outline:2px solid var(--rsr-link);outline-offset:2px;}");
         html.AppendLine(".rsr-version-badge--current{background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);font-weight:600;}");
+        html.AppendLine(".rsr-version-badge--current:hover{color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);cursor:default;}");
         html.AppendLine(".rsr-version-empty{color:var(--rsr-muted);font-style:italic;}");
         html.AppendLine("</style>");
+        html.AppendLine("<script>");
+        html.AppendLine("(() => { document.addEventListener('click', event => { const button = event.target?.closest?.('[data-rsr-version-slug]'); if (!button || button.getAttribute('aria-current') === 'true') return; const slug = button.getAttribute('data-rsr-version-slug'); if (!slug) return; window.chrome?.webview?.postMessage(`rsr-preview-version:${slug}`); }); })();");
+        html.AppendLine("</script>");
         html.AppendLine("</head>");
         html.AppendLine("<body>");
         html.AppendLine("<main>");
         html.AppendLine("<article data-testid=\"article-body\">");
         html.AppendLine("<header>");
-        html.Append("<h1>").Append(title).AppendLine("</h1>");
+        html.Append("<h1>").Append(titleHtml).AppendLine("</h1>");
         html.Append("<p class=\"rsr-meta\">").Append(meta).AppendLine("</p>");
-        if (!string.Equals(title, repoPathDisplay, StringComparison.Ordinal))
+        if (showRepoPath)
         {
             // Surface the source repo path when the frontmatter title differs
             // from it, so reviewers can still match the rendered page back to
@@ -152,10 +171,10 @@ internal static partial class MarkdownPreviewRenderer
         }
         AppendVersionBadgeMarkup(html, selectedVersion ?? effectiveVersion, affectedVersions);
         html.AppendLine("</header>");
-        if (!string.IsNullOrWhiteSpace(intro))
+        if (!string.IsNullOrWhiteSpace(introHtml))
         {
             html.Append("<p class=\"rsr-intro\">")
-                .Append(WebUtility.HtmlEncode(intro))
+            .Append(introHtml)
                 .AppendLine("</p>");
         }
         html.AppendLine(body);
@@ -262,6 +281,22 @@ internal static partial class MarkdownPreviewRenderer
         return value;
     }
 
+    private static string EvaluateLiquidText(
+        string source,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+        => DocsLiquidEvaluator.Evaluate(source, liquidContext, version);
+
+    private static string RenderInlineWithLiquid(
+        string source,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        var evaluated = EvaluateLiquidText(source, liquidContext, version);
+        var encoded = WebUtility.HtmlEncode(evaluated);
+        return NeutralizeLiquid(encoded);
+    }
+
     /// <summary>
     /// Replaces every Liquid block (<c>{% ... %}</c>) and variable
     /// (<c>{{ ... }}</c>) with a span carrying the original syntax for
@@ -323,16 +358,31 @@ internal static partial class MarkdownPreviewRenderer
             foreach (var version in affectedVersions)
             {
                 var isCurrent = version == currentVersion;
-                html.Append("<li class=\"rsr-version-badge");
+                html.Append("<li><button type=\"button\" class=\"rsr-version-badge");
                 if (isCurrent)
                 {
                     html.Append(" rsr-version-badge--current");
                 }
-                html.Append("\" data-version-slug=\"")
+                html.Append("\" data-rsr-version-slug=\"")
                     .Append(WebUtility.HtmlEncode(version.Slug))
-                    .Append("\">")
+                    .Append("\" data-version-slug=\"")
+                    .Append(WebUtility.HtmlEncode(version.Slug))
+                    .Append('"');
+                if (isCurrent)
+                {
+                    html.Append(" aria-current=\"true\" aria-label=\"")
+                        .Append(WebUtility.HtmlEncode($"{version.DisplayLabel} を表示中"))
+                        .Append('"');
+                }
+                else
+                {
+                    html.Append(" aria-label=\"")
+                        .Append(WebUtility.HtmlEncode($"{version.DisplayLabel} に切り替え"))
+                        .Append('"');
+                }
+                html.Append('>')
                     .Append(WebUtility.HtmlEncode(version.DisplayLabel))
-                    .Append("</li>");
+                    .Append("</button></li>");
             }
             html.Append("</ul>");
         }

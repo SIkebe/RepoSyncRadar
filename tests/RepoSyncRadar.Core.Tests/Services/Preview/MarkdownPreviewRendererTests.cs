@@ -61,6 +61,62 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Expands_Liquid_Data_Variables_In_Frontmatter_Title_And_Intro()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["product.prodname_copilot"] = "GitHub Copilot",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal));
+        var markdown = """
+            ---
+            title: '{% data variables.product.prodname_copilot %} usage metrics'
+            intro: 'Find information about usage metrics for {% data variables.product.prodname_copilot %}.'
+            ---
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/reference/copilot-usage-metrics/index.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        Assert.Contains("<h1>GitHub Copilot usage metrics</h1>", html, StringComparison.Ordinal);
+        Assert.Contains("Find information about usage metrics for GitHub Copilot.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% data variables.product.prodname_copilot %}", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Frontmatter_Only_Index_Page_Does_Not_Show_Empty_Markdown_Message()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["product.prodname_copilot"] = "GitHub Copilot",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal));
+        var markdown = """
+            ---
+            title: GitHub Copilot usage metrics
+            intro: Find information about usage metrics for {% data variables.product.prodname_copilot %}.
+            ---
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/reference/copilot-usage-metrics/index.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        Assert.Contains("GitHub Copilot usage metrics", html, StringComparison.Ordinal);
+        Assert.Contains("Find information about usage metrics for GitHub Copilot.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("空の Markdown", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Strips_Frontmatter_Block_From_Body()
     {
         var markdown = """
@@ -384,5 +440,39 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("@media (prefers-color-scheme: dark)", html, StringComparison.Ordinal);
         Assert.Contains(":not([data-color-mode=\"light\"])", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Version_Badges_Are_Buttons_That_Post_Version_Change_Message()
+    {
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            "# Hello",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec, DocsVersion.Ghes("3.21")],
+            selectedVersion: DocsVersion.Ghec);
+
+        Assert.Contains("<button type=\"button\" class=\"rsr-version-badge", html, StringComparison.Ordinal);
+        Assert.Contains("data-rsr-version-slug=\"fpt\"", html, StringComparison.Ordinal);
+        Assert.Contains("data-rsr-version-slug=\"ghec\"", html, StringComparison.Ordinal);
+        Assert.Contains("aria-current=\"true\"", html, StringComparison.Ordinal);
+        Assert.Contains("rsr-preview-version:${slug}", html, StringComparison.Ordinal);
+        Assert.Contains("window.chrome?.webview?.postMessage", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Version_Badge_Current_State_Has_Accessible_Label()
+    {
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            "# Hello",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Fpt);
+
+        Assert.Contains("aria-label=\"Free, Pro, &amp; Team を表示中\"", html, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Enterprise Cloud に切り替え\"", html, StringComparison.Ordinal);
     }
 }
