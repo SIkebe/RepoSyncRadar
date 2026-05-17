@@ -1,5 +1,6 @@
 using System.Windows;
 using RepoSyncRadar.App;
+using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Services.Preview;
 using Xunit;
 
@@ -395,6 +396,45 @@ public sealed class MainWindowPreviewComparisonTests
     public void TryParsePreviewVersionMessage_Rejects_Non_Version_Messages(string? message)
     {
         Assert.False(MainWindow.TryParsePreviewVersionMessage(message, out _));
+    }
+
+    [Theory]
+    [InlineData(1, 7, true, false, true)]
+    [InlineData(4, 7, true, true, true)]
+    [InlineData(7, 7, true, true, false)]
+    [InlineData(1, 1, false, false, false)]
+    [InlineData(8, 7, false, false, false)]
+    [InlineData(0, 7, false, false, false)]
+    [InlineData(null, null, false, false, false)]
+    public void ResolvePreviewFileNavigationState_Enables_Header_Arrows_By_Position(
+        int? ordinal,
+        int? count,
+        bool expectedVisible,
+        bool expectedPrevious,
+        bool expectedNext)
+    {
+        var state = MainWindow.ResolvePreviewFileNavigationState(ordinal, count);
+
+        Assert.Equal(expectedVisible, state.IsVisible);
+        Assert.Equal(expectedPrevious, state.CanPrevious);
+        Assert.Equal(expectedNext, state.CanNext);
+    }
+
+    [Theory]
+    [InlineData(PreviewFileNavigationDirection.Previous, true, "前のファイル差分へ")]
+    [InlineData(PreviewFileNavigationDirection.Previous, false, "最初のファイル差分です")]
+    [InlineData(PreviewFileNavigationDirection.Next, true, "次のファイル差分へ")]
+    [InlineData(PreviewFileNavigationDirection.Next, false, "最後のファイル差分です")]
+    public void BuildPreviewFileNavigationToolTip_Describes_Available_Action(
+        PreviewFileNavigationDirection direction,
+        bool enabled,
+        string expected)
+    {
+        var state = direction == PreviewFileNavigationDirection.Previous
+            ? new PreviewFileNavigationState(true, enabled, false, 2, 3)
+            : new PreviewFileNavigationState(true, false, enabled, 2, 3);
+
+        Assert.Equal(expected, MainWindow.BuildPreviewFileNavigationToolTip(direction, state));
     }
 
     [Theory]

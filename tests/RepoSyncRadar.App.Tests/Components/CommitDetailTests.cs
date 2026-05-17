@@ -2,6 +2,7 @@ using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NSubstitute;
+using System.IO;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Options;
@@ -364,6 +365,109 @@ public class CommitDetailTests
             Assert.True(receivedToken.IsCancellationRequested);
             Assert.Contains("中止", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public void FileNavigationRequested_Opens_Adjacent_Commit_File_With_Current_Version()
+    {
+        var commit = MakeCommit(
+            ("content/copilot/first.md", 1, 0),
+            ("content/copilot/second.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var fpt = DocsVersionCatalog.All.First(v => v.Slug == "fpt");
+        var requested = new List<(string Path, DocsVersion? Version)>();
+        var navigator = new PreviewNavigator();
+        var session = new PreviewSession();
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var path = call.ArgAt<string>(2);
+                var version = call.ArgAt<DocsVersion?>(4);
+                requested.Add((path, version));
+                return Task.FromResult<PreviewComparisonLink?>(new PreviewComparisonLink(
+                    new Uri($"http://localhost:4501/en/{Path.GetFileNameWithoutExtension(path)}"),
+                    new Uri($"http://localhost:4500/en/{Path.GetFileNameWithoutExtension(path)}"),
+                    4501,
+                    4500,
+                    @"C:\github\.cache\docs-worktrees\parent",
+                    @"C:\github\.cache\docs-worktrees\feedface",
+                    "parent1234567890",
+                    commit.Sha)
+                {
+                    CurrentVersion = version ?? fpt,
+                    AffectedVersions = [fpt],
+                });
+            });
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, session, coordinator);
+        cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]")[0].Click();
+        cut.WaitForAssertion(() => Assert.Single(requested));
+        cut.WaitForAssertion(() =>
+            Assert.Contains("content/copilot/first.md", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal));
+
+        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(2, requested.Count);
+            Assert.Equal("content/copilot/second.md", requested[1].Path);
+            Assert.Equal(fpt, requested[1].Version);
+        });
+        cut.WaitForAssertion(() =>
+            Assert.Contains("content/copilot/second.md", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal));
+
+        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(3, requested.Count);
+            Assert.Equal("content/copilot/first.md", requested[2].Path);
+            Assert.Equal(fpt, requested[2].Version);
+        });
+
+        navigator.RequestFileNavigation((PreviewFileNavigationDirection)42);
+
+        Thread.Sleep(200);
+        Assert.Equal(3, requested.Count);
+    }
+
+    [Fact]
+    public void FileNavigationRequested_Without_Active_Preview_Does_Not_Run_Coordinator()
+    {
+        var commit = MakeCommit(
+            ("content/copilot/first.md", 1, 0),
+            ("content/copilot/second.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var navigator = new PreviewNavigator();
+        var session = new PreviewSession();
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, session, coordinator);
+
+        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next);
+
+        coordinator.DidNotReceive().PrepareMarkdownComparisonPreviewAsync(
+            Arg.Any<int>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<IProgress<string>?>(),
+            Arg.Any<DocsVersion?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

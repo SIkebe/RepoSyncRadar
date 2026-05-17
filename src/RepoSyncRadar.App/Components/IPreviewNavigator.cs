@@ -29,6 +29,12 @@ public interface IPreviewNavigator
     /// </summary>
     event EventHandler<DocsVersion>? VersionChangeRequested;
 
+    /// <summary>
+    /// Raised when the WPF host wants the active preview component to move to
+    /// the previous or next previewable file in the current commit.
+    /// </summary>
+    event EventHandler<PreviewFileNavigationDirection>? FileNavigationRequested;
+
     /// <summary>Notifies subscribers that the WebView2 should navigate to <paramref name="url"/>.</summary>
     void Publish(Uri url);
 
@@ -40,6 +46,17 @@ public interface IPreviewNavigator
     /// Triggered by the host when the user picks a new entry in the Version ComboBox.
     /// </summary>
     void RequestVersionChange(DocsVersion version);
+
+    /// <summary>
+    /// Asks the active preview component to switch to the adjacent previewable file.
+    /// </summary>
+    void RequestFileNavigation(PreviewFileNavigationDirection direction);
+}
+
+public enum PreviewFileNavigationDirection
+{
+    Previous = -1,
+    Next = 1,
 }
 
 public sealed record PreviewComparisonRequest(
@@ -59,6 +76,7 @@ public sealed class PreviewNavigator : IPreviewNavigator
     public event EventHandler<Uri>? Requested;
     public event EventHandler<PreviewComparisonRequest>? ComparisonRequested;
     public event EventHandler<DocsVersion>? VersionChangeRequested;
+    public event EventHandler<PreviewFileNavigationDirection>? FileNavigationRequested;
 
     public void Publish(Uri url)
     {
@@ -79,4 +97,7 @@ public sealed class PreviewNavigator : IPreviewNavigator
         ArgumentNullException.ThrowIfNull(version);
         VersionChangeRequested?.Invoke(this, version);
     }
+
+    public void RequestFileNavigation(PreviewFileNavigationDirection direction)
+        => FileNavigationRequested?.Invoke(this, direction);
 }

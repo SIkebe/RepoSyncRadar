@@ -57,6 +57,22 @@ public sealed class PreviewActionsTests
     }
 
     [Fact]
+    public void PreviewNavigator_Public_Methods_Do_Not_Require_Subscribers()
+    {
+        var sut = new PreviewNavigator();
+        var request = new PreviewComparisonRequest(
+            new Uri("http://localhost:4501/en/foo"),
+            new Uri("http://localhost:4500/en/foo"),
+            "変更前",
+            "PR HEAD");
+
+        sut.Publish(new Uri("http://localhost:4500/en/foo"));
+        sut.PublishComparison(request);
+        sut.RequestVersionChange(DocsVersionCatalog.Default);
+        sut.RequestFileNavigation(PreviewFileNavigationDirection.Next);
+    }
+
+    [Fact]
     public void Click_Publishes_Comparison_From_Coordinator()
     {
         var coordinator = Substitute.For<IPreviewCoordinator>();
@@ -767,6 +783,29 @@ public sealed class PreviewActionsTests
     }
 
     [Fact]
+    public void PreviewNavigator_RequestFileNavigation_Raises_Event_With_Direction()
+    {
+        var sut = new PreviewNavigator();
+        PreviewFileNavigationDirection? captured = null;
+        sut.FileNavigationRequested += (_, direction) => captured = direction;
+
+        sut.RequestFileNavigation(PreviewFileNavigationDirection.Next);
+
+        Assert.Equal(PreviewFileNavigationDirection.Next, captured);
+    }
+
+    [Theory]
+    [InlineData(PreviewFileNavigationDirection.Previous, -1)]
+    [InlineData(PreviewFileNavigationDirection.Next, 1)]
+    [InlineData((PreviewFileNavigationDirection)42, 0)]
+    public void GetFileNavigationOffset_Maps_Direction_To_Index_Delta(
+        PreviewFileNavigationDirection direction,
+        int expected)
+    {
+        Assert.Equal(expected, PreviewActions.GetFileNavigationOffset(direction));
+    }
+
+    [Fact]
     public void PreviewComparisonRequest_Defaults_Version_Metadata_To_Null()
     {
         var sut = new PreviewComparisonRequest(
@@ -833,6 +872,8 @@ public sealed class PreviewActionsTests
                 Arg.Is<DocsVersion?>(v => v == null),
                 Arg.Any<CancellationToken>());
         });
+        cut.WaitForAssertion(() =>
+            Assert.Contains("content/foo/bar.md", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal));
 
         // ② Version ComboBox の操作を模擬 → broadcast。
         navigator.RequestVersionChange(ghec);
@@ -848,6 +889,182 @@ public sealed class PreviewActionsTests
                 Arg.Any<CancellationToken>());
         });
     }
+
+    [Fact]
+    public void FileNavigationRequested_Opens_Adjacent_File_With_Current_Version()
+    {
+        var fpt = DocsVersionCatalog.All.First(v => v.Slug == "fpt");
+        var captured = new List<(string Path, DocsVersion? Version)>();
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var path = call.ArgAt<string>(2);
+                var version = call.ArgAt<DocsVersion?>(4) ?? fpt;
+                captured.Add((path, call.ArgAt<DocsVersion?>(4)));
+                return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink() with
+                {
+                    CurrentVersion = version,
+                    AffectedVersions = [fpt],
+                });
+            });
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.BunitContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files =
+            {
+                new CommitFile { Sha = "deadbeef", Path = "content/foo/first.md", Status = "modified" },
+                new CommitFile { Sha = "deadbeef", Path = "content/foo/second.md", Status = "modified" },
+            },
+        };
+        var cut = ctx.Render<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+        cut.WaitForAssertion(() => Assert.Single(captured));
+        cut.WaitForAssertion(() =>
+            Assert.Contains("content/foo/first.md", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal));
+
+        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(2, captured.Count);
+            Assert.Equal("content/foo/second.md", captured[1].Path);
+            Assert.Equal(fpt, captured[1].Version);
+        });
+        cut.WaitForAssertion(() =>
+            Assert.Contains("content/foo/second.md", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal));
+
+        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(3, captured.Count);
+            Assert.Equal("content/foo/first.md", captured[2].Path);
+            Assert.Equal(fpt, captured[2].Version);
+        });
+    }
+
+    [Fact]
+    public void FileNavigationRequested_At_Boundary_Or_Invalid_Direction_Does_Not_Rerun()
+    {
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink() with
+            {
+                CurrentVersion = DocsVersionCatalog.Default,
+                AffectedVersions = [DocsVersionCatalog.Default],
+            }));
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.BunitContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files =
+            {
+                new CommitFile { Sha = "deadbeef", Path = "content/foo/first.md", Status = "modified" },
+                new CommitFile { Sha = "deadbeef", Path = "content/foo/second.md", Status = "modified" },
+            },
+        };
+        var cut = ctx.Render<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+        cut.WaitForAssertion(() =>
+            coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>()));
+        cut.WaitForAssertion(() =>
+            Assert.Contains("content/foo/first.md", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal));
+
+        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous);
+
+        Thread.Sleep(200);
+        coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+            Arg.Any<int>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<IProgress<string>?>(),
+            Arg.Any<DocsVersion?>(),
+            Arg.Any<CancellationToken>());
+
+            navigator.RequestFileNavigation((PreviewFileNavigationDirection)42);
+
+            Thread.Sleep(200);
+            coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>());
+    }
+
+        [Fact]
+        public void FileNavigationRequested_Without_Active_Preview_Does_Not_Run_Coordinator()
+        {
+            var coordinator = Substitute.For<IPreviewCoordinator>();
+            var navigator = new PreviewNavigator();
+            var sp = BuildServices(coordinator, navigator);
+            using var ctx = new Bunit.BunitContext();
+            var commit = new Commit
+            {
+                Sha = "deadbeef",
+                PrNumber = 123,
+                Message = "msg",
+                Author = "alice",
+                Files =
+                {
+                    new CommitFile { Sha = "deadbeef", Path = "content/foo/first.md", Status = "modified" },
+                    new CommitFile { Sha = "deadbeef", Path = "content/foo/second.md", Status = "modified" },
+                },
+            };
+
+            using var cut = ctx.Render<PreviewActions>(p => p
+                .AddCascadingValue<IServiceProvider>(sp)
+                .Add(c => c.Commit, commit));
+
+            navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next);
+
+            coordinator.DidNotReceive().PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>());
+        }
 
     [Fact]
     public async Task VersionChangeRequested_Hides_Progress_When_Rerender_Completes()

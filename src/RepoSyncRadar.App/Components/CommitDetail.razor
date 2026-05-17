@@ -201,6 +201,7 @@
         if (navigator is not null)
         {
             navigator.VersionChangeRequested += OnVersionChangeRequested;
+            navigator.FileNavigationRequested += OnFileNavigationRequested;
             _subscribedNavigator = navigator;
         }
     }
@@ -210,6 +211,7 @@
         if (_subscribedNavigator is not null)
         {
             _subscribedNavigator.VersionChangeRequested -= OnVersionChangeRequested;
+            _subscribedNavigator.FileNavigationRequested -= OnFileNavigationRequested;
             _subscribedNavigator = null;
         }
         try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
@@ -239,6 +241,34 @@
             return;
         }
         _ = InvokeAsync(async () => await OpenInWebViewAsync(file, version));
+    }
+
+    private void OnFileNavigationRequested(object? sender, PreviewFileNavigationDirection direction)
+    {
+        if (_previewBusyPath is not null || _activePreviewPath is null || Commit is null)
+        {
+            return;
+        }
+
+        var previewFiles = Commit.Files
+            .Where(IsLocalComparisonPreviewable)
+            .ToList();
+        var offset = PreviewActions.GetFileNavigationOffset(direction);
+        if (offset == 0)
+        {
+            return;
+        }
+
+        var currentIndex = previewFiles.FindIndex(file => string.Equals(file.Path, _activePreviewPath, StringComparison.Ordinal));
+        var targetIndex = currentIndex + offset;
+        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= previewFiles.Count)
+        {
+            return;
+        }
+
+        var targetFile = previewFiles[targetIndex];
+        var version = _activeVersion;
+        _ = InvokeAsync(async () => await OpenInWebViewAsync(targetFile, version));
     }
 
     protected override async Task OnParametersSetAsync()

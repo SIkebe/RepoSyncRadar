@@ -163,6 +163,7 @@ npm install</code></pre>
         if (navigator is not null)
         {
             navigator.VersionChangeRequested += OnVersionChangeRequested;
+            navigator.FileNavigationRequested += OnFileNavigationRequested;
             _subscribedNavigator = navigator;
         }
     }
@@ -615,11 +616,46 @@ npm install</code></pre>
         });
     }
 
+    private void OnFileNavigationRequested(object? sender, PreviewFileNavigationDirection direction)
+    {
+        if (_busy || _activePreviewPath is null || Commit is null)
+        {
+            return;
+        }
+
+        var previewFiles = GetPreviewableFiles(Commit);
+        var offset = GetFileNavigationOffset(direction);
+        if (offset == 0)
+        {
+            return;
+        }
+
+        var currentIndex = previewFiles.FindIndex(file => string.Equals(file.Path, _activePreviewPath, StringComparison.Ordinal));
+        var targetIndex = currentIndex + offset;
+        if (currentIndex < 0 || targetIndex < 0 || targetIndex >= previewFiles.Count)
+        {
+            return;
+        }
+
+        var targetPath = previewFiles[targetIndex].Path;
+        var version = _activeVersion;
+        _ = InvokeAsync(async () => await PreviewFileAsync(targetPath, version));
+    }
+
+    internal static int GetFileNavigationOffset(PreviewFileNavigationDirection direction)
+        => direction switch
+        {
+            PreviewFileNavigationDirection.Previous => -1,
+            PreviewFileNavigationDirection.Next => 1,
+            _ => 0,
+        };
+
     public void Dispose()
     {
         if (_subscribedNavigator is not null)
         {
             _subscribedNavigator.VersionChangeRequested -= OnVersionChangeRequested;
+            _subscribedNavigator.FileNavigationRequested -= OnFileNavigationRequested;
             _subscribedNavigator = null;
         }
         try { _cts?.Cancel(); } catch (ObjectDisposedException) { }

@@ -48,6 +48,13 @@ internal readonly record struct AppChromeThemePalette(
     string IconHoverBackground,
     string IconPressedBackground);
 
+internal readonly record struct PreviewFileNavigationState(
+    bool IsVisible,
+    bool CanPrevious,
+    bool CanNext,
+    int Ordinal,
+    int Count);
+
 /// <summary>
 /// Top-level shell. Hosts a BlazorWebView (UI shell) and WebView2 docs surfaces.
 /// Rendering mode C from DESIGN.md §9.3.
@@ -688,6 +695,22 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnPreviousPreviewFileClicked(object sender, RoutedEventArgs e)
+        => RequestPreviewFileNavigation(PreviewFileNavigationDirection.Previous);
+
+    private void OnNextPreviewFileClicked(object sender, RoutedEventArgs e)
+        => RequestPreviewFileNavigation(PreviewFileNavigationDirection.Next);
+
+    private void RequestPreviewFileNavigation(PreviewFileNavigationDirection direction)
+    {
+        if (_activePreviewDiffRequest is not { FileOrdinal: > 0, FileCount: > 1 })
+        {
+            return;
+        }
+
+        _previewNavigator.RequestFileNavigation(direction);
+    }
+
     private void StartPreviewDiffTracking(PreviewComparisonRequest request)
     {
         _activePreviewDiffRequest = request;
@@ -1048,7 +1071,30 @@ public partial class MainWindow : Window
         PreviewDocsFilePathText.ToolTip = text.Length == 0 ? null : text;
         SetFileBadge(OfficialDocsFileBadge, OfficialDocsFileBadgeText, indexText);
         SetFileBadge(PreviewDocsFileBadge, PreviewDocsFileBadgeText, indexText);
+        UpdatePreviewFileNavigationButtons(fileOrdinal, fileCount);
         UpdateOpenOfficialDocsButton(filePath);
+    }
+
+    private void UpdatePreviewFileNavigationButtons(int? fileOrdinal, int? fileCount)
+    {
+        var state = ResolvePreviewFileNavigationState(fileOrdinal, fileCount);
+        var visibility = state.IsVisible ? Visibility.Visible : Visibility.Collapsed;
+        PreviousPreviewFileButton.Visibility = visibility;
+        NextPreviewFileButton.Visibility = visibility;
+        PreviousPreviewFileButton.IsEnabled = state.CanPrevious;
+        NextPreviewFileButton.IsEnabled = state.CanNext;
+        PreviousPreviewFileButton.ToolTip = state.IsVisible
+            ? BuildPreviewFileNavigationToolTip(PreviewFileNavigationDirection.Previous, state)
+            : null;
+        NextPreviewFileButton.ToolTip = state.IsVisible
+            ? BuildPreviewFileNavigationToolTip(PreviewFileNavigationDirection.Next, state)
+            : null;
+        AutomationProperties.SetName(
+            PreviousPreviewFileButton,
+            state.IsVisible ? BuildPreviewFileNavigationToolTip(PreviewFileNavigationDirection.Previous, state) : "前のファイル差分へ");
+        AutomationProperties.SetName(
+            NextPreviewFileButton,
+            state.IsVisible ? BuildPreviewFileNavigationToolTip(PreviewFileNavigationDirection.Next, state) : "次のファイル差分へ");
     }
 
     private void UpdateOpenOfficialDocsButton(string? filePath)
@@ -1115,6 +1161,28 @@ public partial class MainWindow : Window
         => fileOrdinal is > 0 && fileCount is > 0
             ? string.Create(CultureInfo.InvariantCulture, $"{fileOrdinal}/{fileCount}")
             : string.Empty;
+
+    internal static PreviewFileNavigationState ResolvePreviewFileNavigationState(int? fileOrdinal, int? fileCount)
+    {
+        if (fileOrdinal is not > 0 || fileCount is not > 1 || fileOrdinal > fileCount)
+        {
+            return new PreviewFileNavigationState(false, false, false, 0, 0);
+        }
+
+        return new PreviewFileNavigationState(
+            IsVisible: true,
+            CanPrevious: fileOrdinal.Value > 1,
+            CanNext: fileOrdinal.Value < fileCount.Value,
+            Ordinal: fileOrdinal.Value,
+            Count: fileCount.Value);
+    }
+
+    internal static string BuildPreviewFileNavigationToolTip(
+        PreviewFileNavigationDirection direction,
+        PreviewFileNavigationState state)
+        => direction == PreviewFileNavigationDirection.Previous
+            ? state.CanPrevious ? "前のファイル差分へ" : "最初のファイル差分です"
+            : state.CanNext ? "次のファイル差分へ" : "最後のファイル差分です";
 
     internal static AppChromeThemePalette ResolveAppChromeThemePalette(DocsThemeMode theme)
         => theme == DocsThemeMode.Light

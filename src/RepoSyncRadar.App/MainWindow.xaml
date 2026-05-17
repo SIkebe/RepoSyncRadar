@@ -148,6 +148,16 @@
           </DockPanel>
           <DockPanel Grid.Row="1"
                      LastChildFill="True">
+              <Button x:Name="PreviousPreviewFileButton"
+                DockPanel.Dock="Left"
+                Style="{StaticResource PreviewFocusIconButtonStyle}"
+                Width="20"
+                Height="18"
+                FontSize="12"
+                Margin="0,0,4,0"
+                Content="‹"
+                Visibility="Collapsed"
+                Click="OnPreviousPreviewFileClicked" />
             <Border x:Name="OfficialDocsFileBadge"
                     DockPanel.Dock="Left"
                     Background="#1F6FEB"
@@ -160,6 +170,16 @@
                          FontSize="10"
                          FontWeight="SemiBold" />
             </Border>
+              <Button x:Name="NextPreviewFileButton"
+                DockPanel.Dock="Left"
+                Style="{StaticResource PreviewFocusIconButtonStyle}"
+                Width="20"
+                Height="18"
+                FontSize="12"
+                Margin="0,0,6,0"
+                Content="›"
+                Visibility="Collapsed"
+                Click="OnNextPreviewFileClicked" />
             <TextBlock x:Name="OfficialDocsFilePathText"
                        Foreground="#8B949E"
                        FontSize="11"
