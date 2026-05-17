@@ -339,6 +339,68 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
+    public async Task Bulk_Delete_Selected_Unseen_Commits_Removes_Them_From_Local_Inbox()
+    {
+        var commits = new List<Commit>
+        {
+            MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "first"),
+            MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "second"),
+            MakeWorkbenchCommit("ccc3333ccc3333ccc3333ccc3333ccc3333ccc3", "third"),
+        };
+        var statuses = commits.ToDictionary(static commit => commit.Sha, _ => ReviewStatus.Unseen, StringComparer.Ordinal);
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(statuses.Values)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = commits
+                    .Where(commit => filter.Status is null || statuses[commit.Sha] == filter.Status)
+                    .ToArray();
+                return Task.FromResult(visible);
+            });
+        repo.DeleteUnseenCommitsAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var shas = call.Arg<IEnumerable<string>>().ToHashSet(StringComparer.Ordinal);
+                var deleted = commits.RemoveAll(commit => shas.Contains(commit.Sha));
+                foreach (var sha in shas)
+                {
+                    statuses.Remove(sha);
+                }
+                return deleted;
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"commit-row\"]").Count));
+
+        cut.FindAll("[data-testid=\"commit-select\"]")[0].Change(true);
+        cut.FindAll("[data-testid=\"commit-select\"]")[1].Change(true);
+        cut.WaitForAssertion(() => Assert.False(cut.Find("[data-testid=\"bulk-delete-unseen\"]").HasAttribute("disabled")));
+
+        cut.Find("[data-testid=\"bulk-delete-unseen\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var row = Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Equal(commits[0].Sha, row.GetAttribute("data-sha"));
+            Assert.Contains("2 件をローカル DB から削除しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.NotNull(cut.Find("[data-testid=\"commit-detail-empty\"]"));
+        });
+        var expectedDeletedShas = new[]
+        {
+            "aaa1111aaa1111aaa1111aaa1111aaa1111aaa1",
+            "bbb2222bbb2222bbb2222bbb2222bbb2222bbb2",
+        };
+        await repo.Received(1).DeleteUnseenCommitsAsync(
+            Arg.Is<IEnumerable<string>>(shas => shas.SequenceEqual(expectedDeletedShas)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Selecting_Unseen_Commit_Does_Not_Render_Drafts_Panel()
     {
         var target = new Commit

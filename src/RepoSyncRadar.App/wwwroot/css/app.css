@@ -248,6 +248,12 @@ html, body {
     color: #0550ae;
 }
 
+.bulk-review-button.delete {
+    background: #ffebe9;
+    border-color: #ff8182;
+    color: #cf222e;
+}
+
 .commit-row {
     display: grid;
     grid-template-columns: auto 8ch minmax(0, 1fr) auto auto;

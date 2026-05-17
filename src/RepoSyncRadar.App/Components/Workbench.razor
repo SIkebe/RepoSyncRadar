@@ -60,6 +60,11 @@
                             data-testid="bulk-review-unseen"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Unseen)"
                             @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Unseen)">未読へ戻す</button>
+                        <button type="button"
+                            class="bulk-review-button delete"
+                            data-testid="bulk-delete-unseen"
+                            disabled="@IsBulkDeleteDisabled()"
+                            @onclick="DeleteSelectedUnseenCommitsAsync">削除して再スコアリングへ</button>
                         </div>
                     }
                         @if (!string.IsNullOrWhiteSpace(_bulkReviewStatus))
@@ -233,6 +238,11 @@
             || _selectedCommitShas.Count == 0
             || _selectedStatus == status;
 
+    private bool IsBulkDeleteDisabled()
+        => _bulkReviewBusy
+            || _selectedCommitShas.Count == 0
+            || _selectedStatus != ReviewStatus.Unseen;
+
     private async Task MoveSelectedCommitsAsync(ReviewStatus status)
     {
         if (IsBulkMoveDisabled(status))
@@ -272,6 +282,35 @@
 
     private static bool IsBulkMoveSupported(ReviewStatus status)
         => status is ReviewStatus.Adopted or ReviewStatus.Later or ReviewStatus.Unseen;
+
+    private async Task DeleteSelectedUnseenCommitsAsync()
+    {
+        if (IsBulkDeleteDisabled())
+        {
+            return;
+        }
+
+        var shas = _selectedCommitShas.ToArray();
+        _bulkReviewBusy = true;
+        try
+        {
+            var deleted = await Services.GetRequiredService<IRadarRepository>()
+                .DeleteUnseenCommitsAsync(shas);
+            _selectedCommit = null;
+            _selectedCommitShas.Clear();
+            _selectedStatus = ReviewStatus.Unseen;
+            _filter = new CommitQueryFilter { Status = _selectedStatus };
+            _listRefreshVersion++;
+            _bulkReviewStatus = string.Create(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"{deleted} 件をローカル DB から削除しました。次回 Triage で再取得できます");
+            Services.GetRequiredService<IReviewBroadcaster>().Publish();
+        }
+        finally
+        {
+            _bulkReviewBusy = false;
+        }
+    }
 
     private static string BuildStatusDestinationLabel(ReviewStatus status)
         => status switch
