@@ -71,6 +71,23 @@ public sealed class RadarToolsTests
     }
 
     [Fact]
+    public async Task RadarListCommits_Unseen_Requests_Unscored_Commits_Only()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var repo = new StubRadarRepository([
+            MakeCommit("aaa1111111111111111111111111111111111111", ReviewStatus.Unseen, scored: true),
+            MakeCommit("bbb2222222222222222222222222222222222222", ReviewStatus.Unseen, scored: false),
+        ]);
+        var tools = new RadarTools(repo, new StubDocsGitHubClient(), new StubDocsApiClient());
+
+        var result = await tools.ListCommitsAsync("Unseen", limit: 50, ct);
+
+        Assert.True(repo.LastFilter?.UnscoredOnly);
+        var commit = Assert.Single(result.Commits);
+        Assert.Equal("bbb2222222222222222222222222222222222222", commit.Sha);
+    }
+
+    [Fact]
     public async Task RadarGetDiff_Masks_Secrets()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -189,7 +206,7 @@ public sealed class RadarToolsTests
         Assert.Equal("content/copilot/x.md", Assert.Single(c.Files));
     }
 
-    private static Commit MakeCommit(string sha, ReviewStatus status)
+    private static Commit MakeCommit(string sha, ReviewStatus status, bool scored = false)
     {
         return new Commit
         {
@@ -204,6 +221,20 @@ public sealed class RadarToolsTests
                 new() { Sha = sha, Path = "content/x.md", Status = "modified", Additions = 1, Deletions = 0 },
             },
             Review = new Review { Sha = sha, Status = status },
+            Scoring = scored
+                ? new Scoring
+                {
+                    Sha = sha,
+                    Score = 0.7,
+                    Category = "feature-update",
+                    AudienceJson = "[]",
+                    SummaryJa = "要約",
+                    WhyJa = "理由",
+                    DetailsJa = "詳細",
+                    Model = "gpt-5",
+                    ScoredAt = new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+                }
+                : null,
         };
     }
 
@@ -225,12 +256,19 @@ public sealed class RadarToolsTests
         public Task SetReviewAsync(string sha, ReviewStatus status, string? reason, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
+        public Task<int> DeleteUnseenCommitsAsync(IEnumerable<string> shas, CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
+
         public Task<IReadOnlyList<Commit>> QueryCommitsAsync(CommitQueryFilter filter, CancellationToken cancellationToken = default)
         {
             LastFilter = filter;
             var filtered = filter.Status is null
                 ? _commits
                 : _commits.Where(c => (c.Review?.Status ?? ReviewStatus.Unseen) == filter.Status);
+            if (filter.UnscoredOnly)
+            {
+                filtered = filtered.Where(c => c.Scoring is null);
+            }
             if (filter.Limit is int n)
             {
                 filtered = filtered.Take(n);
@@ -246,6 +284,9 @@ public sealed class RadarToolsTests
 
         public Task<IReadOnlyList<IgnoreRule>> GetIgnoreRulesAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<IgnoreRule>>(Array.Empty<IgnoreRule>());
+
+        public Task<int> DeleteIgnoreRulesAsync(IEnumerable<string> patterns, CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
 
         public Task<int> BulkRejectByPathPrefixAsync(string pathPrefix, string reason, CancellationToken cancellationToken = default)
             => Task.FromResult(0);

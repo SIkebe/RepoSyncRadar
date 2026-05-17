@@ -69,6 +69,7 @@ public sealed class RadarTools
         {
             Status = parsedStatus,
             Limit = limit ?? DefaultCommitLimit,
+            UnscoredOnly = parsedStatus == ReviewStatus.Unseen,
         };
 
         var commits = await _repo.QueryCommitsAsync(filter, cancellationToken).ConfigureAwait(false);

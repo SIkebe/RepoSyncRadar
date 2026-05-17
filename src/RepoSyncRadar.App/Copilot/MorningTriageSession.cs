@@ -23,7 +23,7 @@ public sealed partial class MorningTriageSession
         最新の `github/docs` Repo sync PR 由来のコミットを処理してください。
 
         手順:
-        1. `radar_list_commits` を `status="Unseen"`, `limit=50` で呼び、未読コミット一覧を取得する。
+        1. `radar_list_commits` を `status="Unseen"`, `limit=50` で呼び、まだスコアリングされていない未読コミット一覧を取得する。
         2. 各コミットについて必要に応じて `radar_get_diff` で差分を確認し、`radar_resolve_url` / `radar_fetch_rendered` で出典ページを確認する。
           3. 影響範囲・新規性・読者層を判断し、`radar_score_commit` でスコア・カテゴリ・読者・要約・理由・詳細分析を保存する。
               `DetailsJa` には次のラベルを含めて、各 1〜2 文で具体的に書く: `変更内容`, `根拠`, `影響`, `確認観点`。

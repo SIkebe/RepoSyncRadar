@@ -19,4 +19,9 @@ public sealed record CommitQueryFilter
     /// Maximum number of commits to return. When null, no limit is applied.
     /// </summary>
     public int? Limit { get; init; }
+
+    /// <summary>
+    /// When true, only commits that do not yet have a <see cref="Scoring"/> row are returned.
+    /// </summary>
+    public bool UnscoredOnly { get; init; }
 }

@@ -144,6 +144,41 @@ public sealed class RadarRepository : IRadarRepository
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<int> DeleteUnseenCommitsAsync(
+        IEnumerable<string> shas,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(shas);
+
+        var candidates = shas
+            .Where(s => !string.IsNullOrEmpty(s))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return 0;
+        }
+
+        using var db = _contextFactory.CreateDbContext();
+        var commits = await db.Commits
+            .Include(c => c.Review)
+            .Where(c => candidates.Contains(c.Sha))
+            .Where(c => c.Review == null
+                || c.Review.Status == ReviewStatus.Unseen
+                || c.Review.Status == ReviewStatus.Seen)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        if (commits.Count == 0)
+        {
+            return 0;
+        }
+
+        db.Commits.RemoveRange(commits);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return commits.Count;
+    }
+
     public async Task<IReadOnlyList<Commit>> QueryCommitsAsync(
         CommitQueryFilter filter,
         CancellationToken cancellationToken = default)
@@ -164,6 +199,11 @@ public sealed class RadarRepository : IRadarRepository
                     || c.Review.Status == ReviewStatus.Unseen
                     || c.Review.Status == ReviewStatus.Seen)
                 : query.Where(c => c.Review != null && c.Review.Status == status);
+        }
+
+        if (filter.UnscoredOnly)
+        {
+            query = query.Where(c => c.Scoring == null);
         }
 
         query = query.OrderByDescending(c => c.AuthoredAt);
@@ -255,6 +295,37 @@ public sealed class RadarRepository : IRadarRepository
             .ThenBy(rule => rule.Pattern)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    public async Task<int> DeleteIgnoreRulesAsync(
+        IEnumerable<string> patterns,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(patterns);
+
+        var candidates = patterns
+            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Select(static pattern => pattern.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return 0;
+        }
+
+        using var db = _contextFactory.CreateDbContext();
+        var rules = await db.IgnoreRules
+            .Where(rule => candidates.Contains(rule.Pattern))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (rules.Count == 0)
+        {
+            return 0;
+        }
+
+        db.IgnoreRules.RemoveRange(rules);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return rules.Count;
     }
 
     public async Task<int> BulkRejectByPathPrefixAsync(

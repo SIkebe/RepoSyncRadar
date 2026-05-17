@@ -51,6 +51,16 @@ public interface IRadarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Deletes the selected commits from the local store only when they are still considered
+    /// <see cref="ReviewStatus.Unseen"/>. Removing the commit also cascades local scoring,
+    /// review, file, and draft rows so a later triage run can ingest and score it again.
+    /// </summary>
+    /// <returns>The number of commits actually deleted.</returns>
+    Task<int> DeleteUnseenCommitsAsync(
+        IEnumerable<string> shas,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns commits matching <paramref name="filter"/>, eagerly loading <see cref="Commit.Files"/>
     /// and <see cref="Commit.Review"/>, ordered by <see cref="Commit.AuthoredAt"/> descending.
     /// A commit without a <see cref="Review"/> row is treated as <see cref="ReviewStatus.Unseen"/>.
@@ -85,6 +95,15 @@ public interface IRadarRepository
     /// show what will be auto-archived before the user adds more rules.
     /// </summary>
     Task<IReadOnlyList<IgnoreRule>> GetIgnoreRulesAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes ignore rules whose primary key matches one of <paramref name="patterns"/>.
+    /// Existing reviews are left unchanged; this only affects future ignore matching.
+    /// </summary>
+    /// <returns>The number of ignore rules actually deleted.</returns>
+    Task<int> DeleteIgnoreRulesAsync(
+        IEnumerable<string> patterns,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -258,6 +258,119 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
+    public async Task DeleteUnseenCommitsAsync_Removes_Only_Unseen_And_Cascades_Local_Rows()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        await repository.UpsertCommitsAsync(
+            new[]
+            {
+                MakeCommit("sha-missing-review", prNumber: 1),
+                MakeCommit("sha-unseen", prNumber: 1),
+                MakeCommit("sha-seen", prNumber: 1),
+                MakeCommit("sha-adopted", prNumber: 1),
+            },
+            ct);
+        await repository.SetReviewAsync("sha-unseen", ReviewStatus.Unseen, null, ct);
+        await repository.SetReviewAsync("sha-seen", ReviewStatus.Seen, null, ct);
+        await repository.SetReviewAsync("sha-adopted", ReviewStatus.Adopted, null, ct);
+
+        using (var seed = fixture.CreateContext())
+        {
+            seed.Scorings.Add(new Scoring
+            {
+                Sha = "sha-unseen",
+                Score = 0.75,
+                Category = "feature-update",
+                AudienceJson = "[]",
+                SummaryJa = "要約",
+                WhyJa = "理由",
+                DetailsJa = "詳細",
+                Model = "gpt-5",
+                ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+            });
+            seed.CommitFiles.Add(new CommitFile
+            {
+                Sha = "sha-unseen",
+                Path = "content/unseen.md",
+                Status = "modified",
+                Additions = 1,
+                Deletions = 0,
+            });
+            seed.Drafts.Add(new Draft
+            {
+                Sha = "sha-unseen",
+                Channel = "teams",
+                Body = "draft",
+                GeneratedAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+            });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var deleted = await repository.DeleteUnseenCommitsAsync(
+            ["sha-missing-review", "sha-unseen", "sha-seen", "sha-adopted"],
+            ct);
+
+        Assert.Equal(3, deleted);
+        using var verify = fixture.CreateContext();
+        Assert.Equal(["sha-adopted"], verify.Commits.Select(static commit => commit.Sha).ToArray());
+        Assert.Empty(verify.Scorings.Where(static scoring => scoring.Sha == "sha-unseen"));
+        Assert.Empty(verify.CommitFiles.Where(static file => file.Sha == "sha-unseen"));
+        Assert.Empty(verify.Drafts.Where(static draft => draft.Sha == "sha-unseen"));
+        Assert.Equal(ReviewStatus.Adopted, verify.Reviews.Single().Status);
+    }
+
+    [Fact]
+    public async Task QueryCommitsAsync_UnscoredOnly_Filters_Before_Limit()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+        var baseTime = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await repository.UpsertCommitsAsync(
+            new[]
+            {
+                MakeCommit("sha-unscored-old", prNumber: 1, authoredAt: baseTime),
+                MakeCommit("sha-unscored-new", prNumber: 1, authoredAt: baseTime.AddDays(1)),
+                MakeCommit("sha-scored-newest", prNumber: 1, authoredAt: baseTime.AddDays(2)),
+            },
+            ct);
+
+        using (var seed = fixture.CreateContext())
+        {
+            seed.Scorings.Add(new Scoring
+            {
+                Sha = "sha-scored-newest",
+                Score = 0.75,
+                Category = "feature-update",
+                AudienceJson = "[]",
+                SummaryJa = "要約",
+                WhyJa = "理由",
+                DetailsJa = "詳細",
+                Model = "gpt-5",
+                ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+            });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var commits = await repository.QueryCommitsAsync(
+            new CommitQueryFilter
+            {
+                Status = ReviewStatus.Unseen,
+                Limit = 1,
+                UnscoredOnly = true,
+            },
+            ct);
+
+        var commit = Assert.Single(commits);
+        Assert.Equal("sha-unscored-new", commit.Sha);
+        Assert.Null(commit.Scoring);
+    }
+
+    [Fact]
     public async Task GetReviewCountsAsync_Counts_All_Buckets()
     {
         using var fixture = new SqliteFixture();
@@ -318,6 +431,47 @@ public sealed class RadarRepositoryTests
 
         Assert.Equal(["content/copilot/**", "data/release-notes/**"], rules.Select(rule => rule.Pattern).ToArray());
         Assert.Equal("ignore-directory", rules[0].Reason);
+    }
+
+    [Fact]
+    public async Task DeleteIgnoreRulesAsync_Removes_Selected_Patterns()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        using (var seed = fixture.CreateContext())
+        {
+            seed.IgnoreRules.AddRange(
+                new IgnoreRule
+                {
+                    Pattern = "data/release-notes/**",
+                    Reason = "noisy",
+                    CreatedAt = new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Utc),
+                },
+                new IgnoreRule
+                {
+                    Pattern = "content/copilot/**",
+                    Reason = "ignore-directory",
+                    CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+                },
+                new IgnoreRule
+                {
+                    Pattern = "content/actions/**",
+                    Reason = "keep",
+                    CreatedAt = new DateTime(2026, 5, 15, 9, 0, 0, DateTimeKind.Utc),
+                });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var deleted = await repository.DeleteIgnoreRulesAsync(
+            [" content/copilot/** ", "data/release-notes/**", "missing/**", "content/copilot/**"],
+            ct);
+
+        Assert.Equal(2, deleted);
+        var rules = await repository.GetIgnoreRulesAsync(ct);
+        var rule = Assert.Single(rules);
+        Assert.Equal("content/actions/**", rule.Pattern);
     }
 
     private static Commit MakeCommit(
