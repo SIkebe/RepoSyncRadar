@@ -270,7 +270,7 @@ DESIGN.md §10 のドメインモデルを EF Core の **初回 migration** と�
 - `RepoSyncRadar.Core/Services/GitHub/DocsGitHubClient.cs`
 - Octokit の `IGitHubClient` を DI(`RepoSyncRadar.App` で `new GitHubClient(...)` を生成)
 - `FetchUnseenCommitsAsync` の挙動
-  - `MaxPullRequests` 件の直近 PR を取得し、タイトルが `PullRequestTitleFilter` で始まるものに絞る
+  - 直近更新 PR をページングし、タイトルが `PullRequestTitleFilter` で始まる PR を `MaxPullRequests` 件集める
   - 各 PR の commits をページネーション込みで列挙
   - DB に既存の `Sha` を除外(`IRadarRepository` 経由)
   - 1 コミットあたりの files は **遅延ロード**(`GetCommitFilesAsync(sha)` を別メソッドで提供)
@@ -286,7 +286,7 @@ DESIGN.md §10 のドメインモデルを EF Core の **初回 migration** と�
 |---|---|
 | `FetchUnseenCommitsAsync_Filters_By_Title` | 5 件中タイトルが `Repo sync` で始まる 3 件のみ採用 |
 | `FetchUnseenCommitsAsync_Excludes_Known_Shas` | `IRadarRepository.GetKnownShasAsync` のスタブが返した SHA を除外 |
-| `FetchUnseenCommitsAsync_Paginates` | `ApiOptions { PageCount = 2 }` を渡し、2 ページ走査される |
+| `FetchUnseenCommitsAsync_Paginates_Until_Title_Matches_Reach_Limit` | `Repo sync` が必要件数集まるまで PR 一覧をページング |
 | `GetUnifiedDiffAsync_Sets_Accept_Header` | Octokit の `IConnection.Get<string>` 呼び出し時の Accept ヘッダを検証 |
 | `GetFileContentAsync_Decodes_Base64` | `RepositoryContent.EncodedContent` を base64 デコード |
 | `Token_Empty_Logs_Warning` | `ILogger<DocsGitHubClient>` に warning が出る |

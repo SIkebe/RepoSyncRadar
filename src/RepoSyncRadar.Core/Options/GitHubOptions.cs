@@ -21,7 +21,7 @@ public sealed class GitHubOptions
     [Required(AllowEmptyStrings = false)]
     public string PullRequestTitleFilter { get; set; } = "Repo sync";
 
-    /// <summary>How many PRs to scan on each fetch.</summary>
+    /// <summary>How many title-matching PRs to collect on each fetch.</summary>
     [Range(1, 100)]
     public int MaxPullRequests { get; set; } = 5;
 }

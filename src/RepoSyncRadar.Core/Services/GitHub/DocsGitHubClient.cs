@@ -23,11 +23,11 @@ namespace RepoSyncRadar.Core.Services.GitHub;
 /// surface; there is no separate personal access token.
 /// </para>
 /// <para>
-/// PR listing is paginated using Octokit's <see cref="ApiOptions"/> so that arbitrary
-/// <see cref="GitHubOptions.MaxPullRequests"/> values are honored even when they exceed the
-/// per-page maximum of 100. Per-PR commit listings are auto-paginated by Octokit; the resulting
-/// <see cref="DomainCommit"/> objects are returned with an empty <see cref="DomainCommit.Files"/>
-/// list and callers must invoke <see cref="GetCommitFilesAsync"/> when they need file metadata.
+/// PR listing is paginated using Octokit's <see cref="ApiOptions"/> until
+/// <see cref="GitHubOptions.MaxPullRequests"/> title-matching PRs have been collected.
+/// Per-PR commit listings are auto-paginated by Octokit; the resulting <see cref="DomainCommit"/>
+/// objects are returned with an empty <see cref="DomainCommit.Files"/> list and callers must invoke
+/// <see cref="GetCommitFilesAsync"/> when they need file metadata.
 /// </para>
 /// </remarks>
 public sealed class DocsGitHubClient : IDocsGitHubClient
@@ -71,19 +71,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
             SortProperty = PullRequestSort.Updated,
             SortDirection = SortDirection.Descending,
         };
-        var apiOptions = BuildPullRequestApiOptions(_options.MaxPullRequests);
-
-        cancellationToken.ThrowIfCancellationRequested();
-        var prs = await _github.PullRequest.GetAllForRepository(
-            _options.Owner,
-            _options.Repo,
-            pullRequestRequest,
-            apiOptions).ConfigureAwait(false);
-
-        var matchingPrs = prs
-            .Where(pr => pr.Title is not null && pr.Title.StartsWith(_options.PullRequestTitleFilter, StringComparison.Ordinal))
-            .Take(_options.MaxPullRequests)
-            .ToList();
+        var matchingPrs = await FetchMatchingPullRequestsAsync(pullRequestRequest, cancellationToken).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
         var knownShas = await _repository.GetKnownShasAsync(cancellationToken).ConfigureAwait(false);
@@ -180,21 +168,48 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
         return first.Content ?? string.Empty;
     }
 
-    /// <summary>
-    /// Computes <see cref="ApiOptions"/> that fetch enough pages to cover
-    /// <paramref name="maxPullRequests"/> entries while never overshooting GitHub's per-page cap.
-    /// </summary>
-    private static ApiOptions BuildPullRequestApiOptions(int maxPullRequests)
+    private async Task<List<PullRequest>> FetchMatchingPullRequestsAsync(
+        PullRequestRequest pullRequestRequest,
+        CancellationToken cancellationToken)
     {
-        var pageSize = Math.Clamp(maxPullRequests, 1, GitHubMaxPageSize);
-        var pageCount = Math.Max(1, (int)Math.Ceiling(maxPullRequests / (double)pageSize));
-        return new ApiOptions
+        var matchingPrs = new List<PullRequest>(_options.MaxPullRequests);
+        for (var page = 1; matchingPrs.Count < _options.MaxPullRequests; page++)
         {
-            PageSize = pageSize,
-            PageCount = pageCount,
-            StartPage = 1,
-        };
+            cancellationToken.ThrowIfCancellationRequested();
+            var prs = await _github.PullRequest.GetAllForRepository(
+                _options.Owner,
+                _options.Repo,
+                pullRequestRequest,
+                BuildPullRequestPageOptions(page)).ConfigureAwait(false);
+
+            foreach (var pr in prs)
+            {
+                if (pr.Title is not null
+                    && pr.Title.StartsWith(_options.PullRequestTitleFilter, StringComparison.Ordinal))
+                {
+                    matchingPrs.Add(pr);
+                    if (matchingPrs.Count == _options.MaxPullRequests)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (prs.Count < GitHubMaxPageSize)
+            {
+                break;
+            }
+        }
+        return matchingPrs;
     }
+
+    private static ApiOptions BuildPullRequestPageOptions(int page)
+        => new()
+        {
+            PageSize = GitHubMaxPageSize,
+            PageCount = 1,
+            StartPage = page,
+        };
 
     private static DomainCommit MapCommit(PullRequestCommit prCommit, int prNumber, DateTime fetchedAt)
     {

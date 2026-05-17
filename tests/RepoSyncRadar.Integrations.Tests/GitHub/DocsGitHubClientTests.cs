@@ -86,22 +86,63 @@ public class DocsGitHubClientTests
     }
 
     [Fact]
-    public async Task FetchUnseenCommitsAsync_Paginates()
+    public async Task FetchUnseenCommitsAsync_Paginates_Until_Title_Matches_Reach_Limit()
     {
-        var (client, github, _, _) = CreateClient(options => options.MaxPullRequests = 200);
+        var (client, github, _, _) = CreateClient(options => options.MaxPullRequests = 2);
         var ct = TestContext.Current.CancellationToken;
 
-        github.PullRequest.GetAllForRepository(
-            Owner, Repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>())
-            .Returns((IReadOnlyList<PullRequest>)Array.Empty<PullRequest>());
+        var firstPage = Enumerable.Range(1, 100)
+            .Select(i => MakePullRequest(1000 + i, $"Unrelated docs update {i}"))
+            .ToArray();
+        var secondPage = new[]
+        {
+            MakePullRequest(2001, "Repo sync 2026-05-15"),
+            MakePullRequest(2002, "Fix typo"),
+            MakePullRequest(2003, "Repo sync 2026-05-16"),
+            MakePullRequest(2004, "Repo sync 2026-05-17"),
+        };
 
-        _ = await client.FetchUnseenCommitsAsync(ct);
+        github.PullRequest.GetAllForRepository(
+            Owner,
+            Repo,
+            Arg.Any<PullRequestRequest>(),
+            Arg.Is<ApiOptions>(o => o.StartPage == 1 && o.PageSize == 100 && o.PageCount == 1))
+            .Returns(firstPage);
+        github.PullRequest.GetAllForRepository(
+            Owner,
+            Repo,
+            Arg.Any<PullRequestRequest>(),
+            Arg.Is<ApiOptions>(o => o.StartPage == 2 && o.PageSize == 100 && o.PageCount == 1))
+            .Returns(secondPage);
+        github.PullRequest.Commits(Owner, Repo, Arg.Any<int>())
+            .Returns(call =>
+            {
+                var number = call.Arg<int>();
+                return (IReadOnlyList<PullRequestCommit>)new[]
+                {
+                    MakePullRequestCommit($"sha-{number}", "msg", "octocat"),
+                };
+            });
+
+        var commits = await client.FetchUnseenCommitsAsync(ct);
+
+        Assert.Equal([2001, 2003], commits.Select(static commit => commit.PrNumber).ToArray());
 
         await github.PullRequest.Received(1).GetAllForRepository(
             Owner,
             Repo,
             Arg.Any<PullRequestRequest>(),
-            Arg.Is<ApiOptions>(o => o.PageCount == 2 && o.PageSize == 100));
+            Arg.Is<ApiOptions>(o => o.StartPage == 1 && o.PageSize == 100 && o.PageCount == 1));
+        await github.PullRequest.Received(1).GetAllForRepository(
+            Owner,
+            Repo,
+            Arg.Any<PullRequestRequest>(),
+            Arg.Is<ApiOptions>(o => o.StartPage == 2 && o.PageSize == 100 && o.PageCount == 1));
+        await github.PullRequest.DidNotReceive().GetAllForRepository(
+            Owner,
+            Repo,
+            Arg.Any<PullRequestRequest>(),
+            Arg.Is<ApiOptions>(o => o.StartPage == 3));
     }
 
     [Fact]
