@@ -1212,3 +1212,263 @@ html, body {
     border-left: 3px solid #ffc107;
     color: #f0b050;
 }
+
+.radar-shell {
+    --radar-app-bg: #fafafa;
+    --radar-panel-bg: #ffffff;
+    --radar-panel-alt-bg: #f6f8fa;
+    --radar-fg: #24292f;
+    --radar-muted-fg: #57606a;
+    --radar-border: #d8dee4;
+    --radar-border-subtle: #eaeef2;
+    --radar-hover-bg: #eef2f6;
+    --radar-active-bg: #f0f6ff;
+    --radar-active-border: #0969da;
+    --radar-input-bg: #ffffff;
+    --radar-danger-bg: #fff1f1;
+    --radar-danger-fg: #a40e26;
+    --radar-warning-bg: #fff8c5;
+    --radar-warning-fg: #7d4e00;
+    --radar-accent-bg: #eaf3ff;
+    --radar-accent-hover-bg: #d6e7ff;
+    --radar-accent-border: #2f6fd0;
+    --radar-accent-fg: #1f4f99;
+    --radar-chip-bg: #e6f6ff;
+    --radar-chip-fg: #0550ae;
+    background: var(--radar-app-bg);
+    color: var(--radar-fg);
+    color-scheme: light;
+}
+
+.radar-shell.radar-theme-dark {
+    --radar-app-bg: #0d1117;
+    --radar-panel-bg: #161b22;
+    --radar-panel-alt-bg: #21262d;
+    --radar-fg: #c9d1d9;
+    --radar-muted-fg: #8b949e;
+    --radar-border: #30363d;
+    --radar-border-subtle: #30363d;
+    --radar-hover-bg: #21262d;
+    --radar-active-bg: #0d2d4d;
+    --radar-active-border: #58a6ff;
+    --radar-input-bg: #0d1117;
+    --radar-danger-bg: #3f1518;
+    --radar-danger-fg: #ff7b72;
+    --radar-warning-bg: #3c2e00;
+    --radar-warning-fg: #e3b341;
+    --radar-accent-bg: #0d2d4d;
+    --radar-accent-hover-bg: #1f4f78;
+    --radar-accent-border: #58a6ff;
+    --radar-accent-fg: #dbeafe;
+    --radar-chip-bg: #102a43;
+    --radar-chip-fg: #dbeafe;
+    color-scheme: dark;
+}
+
+.radar-theme-dark .radar-sidebar-pane,
+.radar-theme-dark .radar-workbench,
+.radar-theme-dark .mud-paper,
+.radar-theme-dark .action-panel,
+.radar-theme-dark .radar-commit-detail .scoring,
+.radar-theme-dark .ignore-rule-row,
+.radar-theme-dark .drafts-channel header {
+    background: var(--radar-panel-bg) !important;
+    color: var(--radar-fg) !important;
+}
+
+.radar-theme-dark .radar-sidebar-pane,
+.radar-theme-dark .radar-commit-detail .commit-header,
+.radar-theme-dark .radar-commit-detail .scoring-note,
+.radar-theme-dark .action-panel,
+.radar-theme-dark .app-settings-panel,
+.radar-theme-dark .ignore-rule-list,
+.radar-theme-dark .ignore-rule-row + .ignore-rule-row,
+.radar-theme-dark .review-ignore-panel,
+.radar-theme-dark .preview-file-switcher,
+.radar-theme-dark .preview-hint,
+.radar-theme-dark .drafts-channel,
+.radar-theme-dark .drafts-channel header {
+    border-color: var(--radar-border) !important;
+}
+
+.radar-theme-dark .radar-sidebar-resizer {
+    background: var(--radar-border);
+}
+
+.radar-theme-dark .radar-sidebar-resizer::before {
+    background: var(--radar-active-border);
+}
+
+.radar-theme-dark .mud-typography,
+.radar-theme-dark .radar-commit-detail .commit-header .message,
+.radar-theme-dark .radar-commit-detail .scoring-note dd,
+.radar-theme-dark .action-panel-header h3,
+.radar-theme-dark .app-settings-header h2,
+.radar-theme-dark .settings-section h3,
+.radar-theme-dark .review-field-label,
+.radar-theme-dark .drafts-channel h4,
+.radar-theme-dark .drafts-channel pre {
+    color: var(--radar-fg) !important;
+}
+
+.radar-theme-dark .sidebar-item .description,
+.radar-theme-dark .sidebar-item .count,
+.radar-theme-dark .commit-row .sha,
+.radar-theme-dark .commit-row .author,
+.radar-theme-dark .commit-row .authored,
+.radar-theme-dark .radar-placeholder,
+.radar-theme-dark .radar-commit-detail .commit-header .author,
+.radar-theme-dark .radar-commit-detail .commit-header .sha,
+.radar-theme-dark .radar-commit-detail .score-label,
+.radar-theme-dark .radar-commit-detail .scoring-meta dt,
+.radar-theme-dark .radar-commit-detail .scoring-note dt,
+.radar-theme-dark .radar-commit-detail .file-row .stats,
+.radar-theme-dark .radar-commit-detail .preview-status,
+.radar-theme-dark .empty,
+.radar-theme-dark .loading,
+.radar-theme-dark .action-panel-header p,
+.radar-theme-dark .app-settings-header p,
+.radar-theme-dark .settings-muted,
+.radar-theme-dark .ignore-rule-meta,
+.radar-theme-dark .review-ignore-panel summary,
+.radar-theme-dark .review-suggestions-label,
+.radar-theme-dark .review-suggestion-meta,
+.radar-theme-dark .action-status,
+.radar-theme-dark .drafts-status,
+.radar-theme-dark .drafts-empty,
+.radar-theme-dark .drafts-busy,
+.radar-theme-dark .preview-file-switcher-header,
+.radar-theme-dark .preview-hint,
+.radar-theme-dark .ask-palette-input label,
+.radar-theme-dark .ask-palette-busy,
+.radar-theme-dark .preview-progress-text,
+.radar-theme-dark .preview-progress-elapsed,
+.radar-theme-dark .preview-progress-pid {
+    color: var(--radar-muted-fg) !important;
+}
+
+.radar-theme-dark .sidebar-item:hover,
+.radar-theme-dark .commit-row:hover,
+.radar-theme-dark .toolbar-button.secondary:hover:not(:disabled),
+.radar-theme-dark .review-button:hover:not(:disabled),
+.radar-theme-dark .review-reason-chip:hover:not(:disabled),
+.radar-theme-dark .ask-palette-input button:hover:not([disabled]),
+.radar-theme-dark .preview-file-switch:hover:not(:disabled) {
+    background: var(--radar-hover-bg) !important;
+}
+
+.radar-theme-dark .sidebar-item.active,
+.radar-theme-dark .commit-row.active,
+.radar-theme-dark .radar-commit-detail .file-row.preview-active,
+.radar-theme-dark .preview-file-switch.active {
+    background: var(--radar-active-bg) !important;
+    border-color: var(--radar-active-border) !important;
+}
+
+.radar-theme-dark .radar-commit-detail .commit-header .sha,
+.radar-theme-dark .toolbar-button,
+.radar-theme-dark .review-button,
+.radar-theme-dark .review-reason-chip,
+.radar-theme-dark .settings-theme-options,
+.radar-theme-dark .settings-theme-option,
+.radar-theme-dark .ignore-rule-row code,
+.radar-theme-dark .review-input-action input,
+.radar-theme-dark .review-suggestion-chip.already-ignored,
+.radar-theme-dark .preview-file-switch,
+.radar-theme-dark .ask-palette-input input[type="text"],
+.radar-theme-dark .ask-palette-input button,
+.radar-theme-dark .ask-palette-result,
+.radar-theme-dark .preview-progress,
+.radar-theme-dark .preview-cancel {
+    background: var(--radar-panel-alt-bg) !important;
+    border-color: var(--radar-border) !important;
+    color: var(--radar-fg) !important;
+}
+
+.radar-theme-dark .radar-commit-detail .scoring,
+.radar-theme-dark .radar-commit-detail .file-row,
+.radar-theme-dark .drafts-channel,
+.radar-theme-dark .ask-palette-result,
+.radar-theme-dark .preview-progress {
+    background: var(--radar-panel-bg) !important;
+}
+
+.radar-theme-dark .radar-commit-detail .score-tile,
+.radar-theme-dark .review-suggestion-chip {
+    background: var(--radar-active-bg) !important;
+    border-color: var(--radar-active-border) !important;
+    color: var(--radar-chip-fg) !important;
+}
+
+.radar-theme-dark .radar-commit-detail .score-value,
+.radar-theme-dark .review-suggestion-pattern {
+    color: var(--radar-chip-fg) !important;
+}
+
+.radar-theme-dark .radar-commit-detail .category-chip,
+.radar-theme-dark .preview-file-switch-kind,
+.radar-theme-dark .review-button.later {
+    background: var(--radar-warning-bg) !important;
+    border-color: #9e6a03 !important;
+    color: var(--radar-warning-fg) !important;
+}
+
+.radar-theme-dark .review-button.reject,
+.radar-theme-dark .review-reason-chip.active,
+.radar-theme-dark .settings-error {
+    background: var(--radar-danger-bg) !important;
+    border-color: #f85149 !important;
+    color: var(--radar-danger-fg) !important;
+}
+
+.radar-theme-dark .toolbar-button.primary,
+.radar-theme-dark .review-button.adopt,
+.radar-theme-dark .settings-theme-option.active,
+.radar-theme-dark .radar-commit-detail .preview-file-index,
+.radar-theme-dark .preview-file-switch-index {
+    background: #1f6feb !important;
+    border-color: #1f6feb !important;
+    color: #fff !important;
+}
+
+.radar-theme-dark a,
+.radar-theme-dark .radar-preview-actions .preview-url {
+    color: #58a6ff;
+}
+
+.radar-theme-dark .radar-commit-detail .file-row .open-in-webview {
+    background: var(--radar-accent-bg) !important;
+    border-color: var(--radar-accent-border) !important;
+    color: var(--radar-accent-fg) !important;
+    font-weight: 700;
+}
+
+.radar-theme-dark .radar-commit-detail .file-row .open-in-webview:hover:not(:disabled) {
+    background: var(--radar-accent-hover-bg) !important;
+    color: #fff !important;
+}
+
+.radar-theme-dark .radar-commit-detail .audience-chip,
+.radar-theme-dark .radar-commit-detail .preview-active-badge {
+    background: var(--radar-chip-bg) !important;
+    border: 1px solid var(--radar-accent-border) !important;
+    color: var(--radar-chip-fg) !important;
+}
+
+.radar-theme-dark .review-suggestion-state {
+    border-color: var(--radar-accent-border) !important;
+    color: var(--radar-accent-fg) !important;
+}
+
+.radar-theme-dark .toolbar-button:focus-visible,
+.radar-theme-dark .review-button:focus-visible,
+.radar-theme-dark .review-reason-chip:focus-visible,
+.radar-theme-dark .review-suggestion-chip:focus-visible,
+.radar-theme-dark .settings-theme-option:focus-visible,
+.radar-theme-dark .preview-file-switch:focus-visible,
+.radar-theme-dark .radar-commit-detail .file-row .open-in-webview:focus-visible,
+.radar-theme-dark .ask-palette-input button:focus-visible,
+.radar-theme-dark .preview-cancel:focus-visible {
+    outline: 2px solid var(--radar-accent-border);
+    outline-offset: 2px;
+}

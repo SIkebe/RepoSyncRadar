@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.AspNetCore.Components.WebView;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +31,22 @@ public enum DocsThemeMode
     Dark,
     Light,
 }
+
+internal readonly record struct AppChromeThemePalette(
+    string HeaderBackground,
+    string HeaderBorder,
+    string HeaderForeground,
+    string HeaderMutedForeground,
+    string SplitterBackground,
+    string OverlayBackground,
+    string OverlayBorder,
+    string OverlayForeground,
+    string OverlayMutedForeground,
+    string LayoutShieldBackground,
+    string IconForeground,
+    string IconHoverForeground,
+    string IconHoverBackground,
+    string IconPressedBackground);
 
 /// <summary>
 /// Top-level shell. Hosts a BlazorWebView (UI shell) and WebView2 docs surfaces.
@@ -121,6 +138,7 @@ public partial class MainWindow : Window
 
         UpdatePreviewFocusToggleButton();
         UpdateDocsThemeToggleButton();
+    ApplyAppChromeTheme(_docsTheme);
         BlazorView.Services = services;
 
         var copilotOptions = services.GetRequiredService<IOptions<CopilotOptions>>().Value;
@@ -327,9 +345,18 @@ public partial class MainWindow : Window
         AutomationProperties.SetName(DocsThemeToggleButton, BuildDocsThemeToggleToolTip(_docsTheme));
     }
 
-    private void OnDocsThemeToggleClicked(object sender, RoutedEventArgs e)
+    private async void OnDocsThemeToggleClicked(object sender, RoutedEventArgs e)
     {
-        SetDocsTheme(ToggleDocsTheme(_docsTheme), applyToViews: true);
+        var nextTheme = ToggleDocsTheme(_docsTheme);
+        SetDocsTheme(nextTheme, applyToViews: true);
+        try
+        {
+            await _userSettingsStore.SaveDefaultDocsThemeAsync(nextTheme, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogDocsThemePreferenceSaveFailed(_logger, ex);
+        }
     }
 
     private void OnUserSettingsChanged(AppUserSettings settings)
@@ -354,6 +381,7 @@ public partial class MainWindow : Window
 
         _docsTheme = theme;
         UpdateDocsThemeToggleButton();
+        ApplyAppChromeTheme(theme);
         if (!applyToViews)
         {
             return;
@@ -361,6 +389,52 @@ public partial class MainWindow : Window
 
         _ = ApplyDocsThemeAsync(DocsView);
         _ = ApplyDocsThemeAsync(PreviewView);
+    }
+
+    private void ApplyAppChromeTheme(DocsThemeMode theme)
+    {
+        var palette = ResolveAppChromeThemePalette(theme);
+        var headerBackground = BrushFromHex(palette.HeaderBackground);
+        var headerBorder = BrushFromHex(palette.HeaderBorder);
+        var headerForeground = BrushFromHex(palette.HeaderForeground);
+        var headerMutedForeground = BrushFromHex(palette.HeaderMutedForeground);
+        var splitterBackground = BrushFromHex(palette.SplitterBackground);
+        var overlayBackground = BrushFromHex(palette.OverlayBackground);
+        var overlayBorder = BrushFromHex(palette.OverlayBorder);
+        var overlayForeground = BrushFromHex(palette.OverlayForeground);
+        var overlayMutedForeground = BrushFromHex(palette.OverlayMutedForeground);
+        var layoutShieldBackground = BrushFromHex(palette.LayoutShieldBackground);
+        var iconForeground = BrushFromHex(palette.IconForeground);
+        var iconHoverForeground = BrushFromHex(palette.IconHoverForeground);
+        var iconHoverBackground = BrushFromHex(palette.IconHoverBackground);
+        var iconPressedBackground = BrushFromHex(palette.IconPressedBackground);
+
+        OfficialDocsHeader.Background = headerBackground;
+        OfficialDocsHeader.BorderBrush = headerBorder;
+        PreviewDocsHeader.Background = headerBackground;
+        PreviewDocsHeader.BorderBrush = headerBorder;
+        OfficialDocsHeaderText.Foreground = headerForeground;
+        PreviewDocsHeaderText.Foreground = headerForeground;
+        OfficialDocsFilePathText.Foreground = headerMutedForeground;
+        PreviewDocsFilePathText.Foreground = headerMutedForeground;
+        WorkbenchPreviewSplitter.Background = splitterBackground;
+        PreviewDocsSplitter.Background = splitterBackground;
+        DocsPreviewStatusOverlay.Background = overlayBackground;
+        DocsPreviewStatusOverlay.BorderBrush = overlayBorder;
+        PreviewStatusOverlay.Background = overlayBackground;
+        PreviewStatusOverlay.BorderBrush = overlayBorder;
+        DocsPreviewStatusText.Foreground = overlayForeground;
+        PreviewStatusText.Foreground = overlayForeground;
+        DocsPreviewStatusDetailText.Foreground = overlayMutedForeground;
+        PreviewStatusDetailText.Foreground = overlayMutedForeground;
+        PreviewFocusLayoutShield.Background = layoutShieldBackground;
+        Resources["PreviewChromeIconForegroundBrush"] = iconForeground;
+        Resources["PreviewChromeIconHoverForegroundBrush"] = iconHoverForeground;
+        Resources["PreviewChromeIconHoverBackgroundBrush"] = iconHoverBackground;
+        Resources["PreviewChromeIconPressedBackgroundBrush"] = iconPressedBackground;
+        DocsThemeToggleButton.Foreground = iconForeground;
+        OpenOfficialDocsButton.Foreground = iconForeground;
+        PreviewFocusToggleButton.Foreground = iconForeground;
     }
 
     private async Task ApplyDocsThemeAsync(WebView2CompositionControl view)
@@ -749,7 +823,7 @@ public partial class MainWindow : Window
 
     private void OnPreviewScrollMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (_activePreviewDiffRequest is null || !_beforePreviewDiffReady || !_afterPreviewDiffReady)
+        if (_activePreviewDiffRequest is null)
         {
             return;
         }
@@ -760,6 +834,17 @@ public partial class MainWindow : Window
             message = e.TryGetWebMessageAsString();
         }
         catch (ArgumentException)
+        {
+            return;
+        }
+
+        if (TryParsePreviewVersionMessage(message, out var requestedVersion))
+        {
+            HandlePreviewVersionMessage(sender, requestedVersion);
+            return;
+        }
+
+        if (!_beforePreviewDiffReady || !_afterPreviewDiffReady)
         {
             return;
         }
@@ -791,6 +876,28 @@ public partial class MainWindow : Window
             anchorOffsetPx,
             anchorFingerprint,
             _previewDiffGeneration);
+    }
+
+    private void HandlePreviewVersionMessage(object? sender, DocsVersion version)
+    {
+        if (_activePreviewDiffRequest is not { CurrentVersion: { } currentVersion })
+        {
+            return;
+        }
+
+        if (currentVersion == version)
+        {
+            return;
+        }
+
+        var senderCore = sender as CoreWebView2;
+        if (!ReferenceEquals(senderCore, DocsView.CoreWebView2)
+            && !ReferenceEquals(senderCore, PreviewView.CoreWebView2))
+        {
+            return;
+        }
+
+        _previewNavigator.RequestVersionChange(version);
     }
 
     private async Task ApplySynchronizedScrollAsync(
@@ -1008,6 +1115,46 @@ public partial class MainWindow : Window
         => fileOrdinal is > 0 && fileCount is > 0
             ? string.Create(CultureInfo.InvariantCulture, $"{fileOrdinal}/{fileCount}")
             : string.Empty;
+
+    internal static AppChromeThemePalette ResolveAppChromeThemePalette(DocsThemeMode theme)
+        => theme == DocsThemeMode.Light
+            ? new AppChromeThemePalette(
+                HeaderBackground: "#F6F8FA",
+                HeaderBorder: "#D0D7DE",
+                HeaderForeground: "#24292F",
+                HeaderMutedForeground: "#57606A",
+                SplitterBackground: "#D8DEE4",
+                OverlayBackground: "#F2FFFFFF",
+                OverlayBorder: "#D0D7DE",
+                OverlayForeground: "#24292F",
+                OverlayMutedForeground: "#57606A",
+                LayoutShieldBackground: "#F6F8FA",
+                IconForeground: "#57606A",
+                IconHoverForeground: "#24292F",
+                IconHoverBackground: "#EAEEF2",
+                IconPressedBackground: "#D8DEE4")
+            : new AppChromeThemePalette(
+                HeaderBackground: "#0D1117",
+                HeaderBorder: "#30363D",
+                HeaderForeground: "#C9D1D9",
+                HeaderMutedForeground: "#8B949E",
+                SplitterBackground: "#30363D",
+                OverlayBackground: "#E60D1117",
+                OverlayBorder: "#30363D",
+                OverlayForeground: "#F0F6FC",
+                OverlayMutedForeground: "#8B949E",
+                LayoutShieldBackground: "#0D1117",
+                IconForeground: "#8B949E",
+                IconHoverForeground: "#F0F6FC",
+                IconHoverBackground: "#21262D",
+                IconPressedBackground: "#30363D");
+
+    private static SolidColorBrush BrushFromHex(string value)
+    {
+        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value)!);
+        brush.Freeze();
+        return brush;
+    }
 
         internal static DocsThemeMode ToggleDocsTheme(DocsThemeMode current)
             => current == DocsThemeMode.Dark ? DocsThemeMode.Light : DocsThemeMode.Dark;
@@ -1260,6 +1407,29 @@ public partial class MainWindow : Window
                 out double ratio)
             => TryParsePreviewScrollMessage(message, out pane, out ratio, out _, out _);
 
+        internal static bool TryParsePreviewVersionMessage(string? message, out DocsVersion version)
+        {
+            version = DocsVersionCatalog.Default;
+            const string Prefix = "rsr-preview-version:";
+            if (string.IsNullOrWhiteSpace(message)
+                || !message.StartsWith(Prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var slug = message[Prefix.Length..].Trim();
+            foreach (var candidate in DocsVersionCatalog.All)
+            {
+                if (string.Equals(candidate.Slug, slug, StringComparison.OrdinalIgnoreCase))
+                {
+                    version = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         internal static bool TryParsePreviewScrollMessage(
                 string? message,
                 out PreviewDiffPane pane,
@@ -1402,4 +1572,10 @@ public partial class MainWindow : Window
         Level = LogLevel.Warning,
         Message = "Failed to open official docs in default browser: {Url}")]
     private static partial void LogOpenOfficialDocsFailed(ILogger logger, Exception exception, string url);
+
+    [LoggerMessage(
+        EventId = 7,
+        Level = LogLevel.Warning,
+        Message = "Docs theme preference save failed.")]
+    private static partial void LogDocsThemePreferenceSaveFailed(ILogger logger, Exception exception);
 }

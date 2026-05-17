@@ -8,14 +8,15 @@
 @implements IDisposable
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.JSInterop
+@using RepoSyncRadar.App.Settings
 
-<MudThemeProvider />
+<MudThemeProvider IsDarkMode="@(_theme == DocsThemeMode.Dark)" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <CascadingValue Value="Services" IsFixed="true">
-    <div class="radar-shell" data-testid="radar-shell">
+    <div class="@BuildShellClass(_theme)" data-theme="@BuildThemeName(_theme)" data-testid="radar-shell">
         <aside class="radar-sidebar-pane">
             <MudText Typo="Typo.h6" Class="mb-2">Inbox</MudText>
             <Sidebar Selected="_selectedStatus"
@@ -69,13 +70,37 @@
     private CommitQueryFilter _filter = new() { Status = ReviewStatus.Unseen };
     private int _listRefreshVersion;
     private IReviewBroadcaster? _broadcaster;
+    private IAppUserSettingsStore? _settingsStore;
+    private DocsThemeMode _theme = AppUserSettings.Default.DefaultDocsTheme;
 
     protected override void OnInitialized()
     {
+        _settingsStore = Services.GetService<IAppUserSettingsStore>();
+        if (_settingsStore is not null)
+        {
+            _theme = _settingsStore.Current.DefaultDocsTheme;
+            _settingsStore.SettingsChanged += OnSettingsChanged;
+        }
+
         _broadcaster = Services.GetService<IReviewBroadcaster>();
         if (_broadcaster is not null)
         {
             _broadcaster.Reviewed += OnReviewed;
+        }
+    }
+
+    private async void OnSettingsChanged(AppUserSettings settings)
+    {
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                _theme = settings.DefaultDocsTheme;
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 
@@ -121,7 +146,17 @@
         {
             _broadcaster.Reviewed -= OnReviewed;
         }
+        if (_settingsStore is not null)
+        {
+            _settingsStore.SettingsChanged -= OnSettingsChanged;
+        }
     }
+
+    internal static string BuildShellClass(DocsThemeMode theme)
+        => $"radar-shell radar-theme-{BuildThemeName(theme)}";
+
+    internal static string BuildThemeName(DocsThemeMode theme)
+        => theme == DocsThemeMode.Light ? "light" : "dark";
 
     private Task HandleStatusChanged(ReviewStatus? status)
     {

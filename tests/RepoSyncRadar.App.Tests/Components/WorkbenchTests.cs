@@ -5,6 +5,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.App.Settings;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Options;
@@ -19,6 +20,42 @@ namespace RepoSyncRadar.App.Tests.Components;
 /// </summary>
 public sealed class WorkbenchTests
 {
+    [Theory]
+    [InlineData(DocsThemeMode.Dark, "radar-shell radar-theme-dark", "dark")]
+    [InlineData(DocsThemeMode.Light, "radar-shell radar-theme-light", "light")]
+    public void Theme_Class_And_Name_Follow_DocsThemeMode(
+        DocsThemeMode theme,
+        string expectedClass,
+        string expectedThemeName)
+    {
+        Assert.Equal(expectedClass, Workbench.BuildShellClass(theme));
+        Assert.Equal(expectedThemeName, Workbench.BuildThemeName(theme));
+    }
+
+    [Theory]
+    [InlineData(DocsThemeMode.Dark, "radar-theme-dark", "dark")]
+    [InlineData(DocsThemeMode.Light, "radar-theme-light", "light")]
+    public async Task Workbench_Renders_Theme_From_User_Settings(
+        DocsThemeMode theme,
+        string expectedClass,
+        string expectedThemeName)
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(CountsFor(ReviewStatus.Unseen)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Commit>>([]));
+        var settingsStore = Substitute.For<IAppUserSettingsStore>();
+        settingsStore.Current.Returns(new AppUserSettings { DefaultDocsTheme = theme });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _, settingsStore);
+        var cut = ctx.Render<Workbench>();
+
+        var shell = cut.Find("[data-testid=\"radar-shell\"]");
+        Assert.Contains(expectedClass, shell.GetAttribute("class"), StringComparison.Ordinal);
+        Assert.Equal(expectedThemeName, shell.GetAttribute("data-theme"));
+    }
+
     [Fact]
     public async Task Workbench_Renders_Resizable_Three_Column_Shell()
     {
@@ -274,13 +311,21 @@ public sealed class WorkbenchTests
         });
     }
 
-    private static Bunit.BunitContext CreateWorkbenchTestContext(IRadarRepository repo, out ReviewBroadcaster broadcaster)
+    private static Bunit.BunitContext CreateWorkbenchTestContext(
+        IRadarRepository repo,
+        out ReviewBroadcaster broadcaster,
+        IAppUserSettingsStore? settingsStore = null)
     {
         broadcaster = new ReviewBroadcaster();
         var auth = Substitute.For<IGitHubAuthSession>();
         auth.GetStateAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(GitHubAuthState.SignedIn));
         auth.GetCurrentLoginAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("octocat"));
         var resolver = Substitute.For<IPathToUrlResolver>();
+        if (settingsStore is null)
+        {
+            settingsStore = Substitute.For<IAppUserSettingsStore>();
+            settingsStore.Current.Returns(AppUserSettings.Default);
+        }
 
         var ctx = new Bunit.BunitContext();
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
@@ -294,7 +339,8 @@ public sealed class WorkbenchTests
             .AddSingleton<IOptions<DocsApiOptions>>(Options.Create(new DocsApiOptions
             {
                 BaseAddress = new Uri("https://docs.github.com/"),
-            }));
+            }))
+            .AddSingleton(settingsStore);
         return ctx;
     }
 

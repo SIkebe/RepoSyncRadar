@@ -1,5 +1,6 @@
 using System.Windows;
 using RepoSyncRadar.App;
+using RepoSyncRadar.Core.Services.Preview;
 using Xunit;
 
 namespace RepoSyncRadar.App.Tests;
@@ -354,6 +355,46 @@ public sealed class MainWindowPreviewComparisonTests
 
         Assert.Contains("data-color-mode", script, StringComparison.Ordinal);
         Assert.Contains("\"light\"", script, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(DocsThemeMode.Dark, "#0D1117", "#C9D1D9")]
+    [InlineData(DocsThemeMode.Light, "#F6F8FA", "#24292F")]
+    public void ResolveAppChromeThemePalette_Uses_Mode_Appropriate_Header_Colors(
+        DocsThemeMode theme,
+        string expectedBackground,
+        string expectedForeground)
+    {
+        var palette = MainWindow.ResolveAppChromeThemePalette(theme);
+
+        Assert.Equal(expectedBackground, palette.HeaderBackground);
+        Assert.Equal(expectedForeground, palette.HeaderForeground);
+    }
+
+    [Theory]
+    [InlineData("rsr-preview-version:fpt", DocsPlan.Fpt, null)]
+    [InlineData("rsr-preview-version:ghec", DocsPlan.Ghec, null)]
+    [InlineData("rsr-preview-version:ghes-3.21", DocsPlan.Ghes, "3.21")]
+    public void TryParsePreviewVersionMessage_Parses_Known_Version_Slug(
+        string message,
+        DocsPlan expectedPlan,
+        string? expectedRelease)
+    {
+        var parsed = MainWindow.TryParsePreviewVersionMessage(message, out var version);
+
+        Assert.True(parsed);
+        Assert.Equal(expectedPlan, version.Plan);
+        Assert.Equal(expectedRelease, version.GhesRelease);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("rsr-preview-scroll:before:0.5")]
+    [InlineData("rsr-preview-version:unknown")]
+    public void TryParsePreviewVersionMessage_Rejects_Non_Version_Messages(string? message)
+    {
+        Assert.False(MainWindow.TryParsePreviewVersionMessage(message, out _));
     }
 
     [Theory]

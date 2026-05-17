@@ -10,6 +10,10 @@
         Width="1600"
         WindowStartupLocation="CenterScreen">
   <Window.Resources>
+    <SolidColorBrush x:Key="PreviewChromeIconForegroundBrush" Color="#8B949E" />
+    <SolidColorBrush x:Key="PreviewChromeIconHoverForegroundBrush" Color="#F0F6FC" />
+    <SolidColorBrush x:Key="PreviewChromeIconHoverBackgroundBrush" Color="#21262D" />
+    <SolidColorBrush x:Key="PreviewChromeIconPressedBackgroundBrush" Color="#30363D" />
     <Style x:Key="PreviewFocusIconButtonStyle" TargetType="{x:Type Button}">
       <Setter Property="Width" Value="28" />
       <Setter Property="Height" Value="28" />
@@ -17,7 +21,7 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Foreground" Value="#8B949E" />
+      <Setter Property="Foreground" Value="{DynamicResource PreviewChromeIconForegroundBrush}" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="FontFamily" Value="Segoe UI Symbol" />
       <Setter Property="FontSize" Value="16" />
@@ -36,11 +40,11 @@
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="ButtonChrome" Property="Background" Value="#21262D" />
-                <Setter Property="Foreground" Value="#F0F6FC" />
+                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource PreviewChromeIconHoverBackgroundBrush}" />
+                <Setter Property="Foreground" Value="{DynamicResource PreviewChromeIconHoverForegroundBrush}" />
               </Trigger>
               <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="ButtonChrome" Property="Background" Value="#30363D" />
+                <Setter TargetName="ButtonChrome" Property="Background" Value="{DynamicResource PreviewChromeIconPressedBackgroundBrush}" />
               </Trigger>
               <Trigger Property="IsKeyboardFocused" Value="True">
                 <Setter TargetName="ButtonChrome" Property="BorderBrush" Value="#58A6FF" />
@@ -94,7 +98,8 @@
         <ColumnDefinition x:Name="PreviewDocsColumn" Width="0" />
       </Grid.ColumnDefinitions>
 
-      <Border Grid.Row="0"
+            <Border x:Name="OfficialDocsHeader"
+              Grid.Row="0"
               Grid.Column="0"
               Background="#0D1117"
               BorderBrush="#30363D"
