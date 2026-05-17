@@ -120,6 +120,52 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void AnalyzeDetails_Separates_Fpt_And_Ghec_Change_Text()
+    {
+        var before = "Common header.\n{% ifversion fpt %}Free old note{% endif %}\n{% ifversion ghec %}Cloud old note{% endif %}";
+        var after = "Common header.\n{% ifversion fpt %}Free updated note{% endif %}\n{% ifversion ghec %}Cloud updated note{% endif %}";
+
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        var fpt = Assert.Single(details, detail => detail.Version == DocsVersion.Fpt);
+        var ghec = Assert.Single(details, detail => detail.Version == DocsVersion.Ghec);
+        var fptChange = Assert.Single(fpt.Changes);
+        var ghecChange = Assert.Single(ghec.Changes);
+        Assert.Equal(DocsVersionChangeKind.Updated, fptChange.Kind);
+        Assert.Contains("Free old note", fptChange.BeforeExcerpt, StringComparison.Ordinal);
+        Assert.Contains("Free updated note", fptChange.AfterExcerpt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Cloud", fptChange.AfterExcerpt, StringComparison.Ordinal);
+        Assert.Equal(DocsVersionChangeKind.Updated, ghecChange.Kind);
+        Assert.Contains("Cloud old note", ghecChange.BeforeExcerpt, StringComparison.Ordinal);
+        Assert.Contains("Cloud updated note", ghecChange.AfterExcerpt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Free", ghecChange.AfterExcerpt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnalyzeDetails_Reports_Ghec_Only_Additions()
+    {
+        var before = "Common header.";
+        var after = "Common header.\n\n{% ifversion ghec %}Enterprise Cloud only addition.{% endif %}";
+
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        var detail = Assert.Single(details);
+        Assert.Equal(DocsVersion.Ghec, detail.Version);
+        var change = Assert.Single(detail.Changes);
+        Assert.Equal(DocsVersionChangeKind.Added, change.Kind);
+        Assert.Null(change.BeforeExcerpt);
+        Assert.Contains("Enterprise Cloud only addition", change.AfterExcerpt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Empty_Before_Is_Treated_As_Add_To_All_Versions()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(

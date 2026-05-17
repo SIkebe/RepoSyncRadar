@@ -50,7 +50,8 @@ internal static partial class MarkdownPreviewRenderer
         DocsLiquidContext? liquidContext = null,
         DocsVersion? version = null,
         IReadOnlyList<DocsVersion>? affectedVersions = null,
-        DocsVersion? selectedVersion = null)
+        DocsVersion? selectedVersion = null,
+        IReadOnlyList<DocsVersionImpactDetail>? versionImpacts = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repoPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
@@ -151,6 +152,26 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-version-badge--current{background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);font-weight:600;}");
         html.AppendLine(".rsr-version-badge--current:hover{color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);cursor:default;}");
         html.AppendLine(".rsr-version-empty{color:var(--rsr-muted);font-style:italic;}");
+        html.AppendLine(".rsr-version-diff-summary{margin:14px 0 0;border:1px solid var(--rsr-border);border-radius:6px;background:var(--rsr-pre-bg);padding:12px;}");
+        html.AppendLine(".rsr-version-diff-summary h2{font-size:.92rem;margin:0 0 6px;}");
+        html.AppendLine(".rsr-version-diff-overview{color:var(--rsr-muted);font-size:.78rem;margin:0 0 10px;}");
+        html.AppendLine(".rsr-version-diff-list{display:grid;gap:8px;list-style:none;margin:0;padding:0;}");
+        html.AppendLine(".rsr-version-diff-item{border:1px solid var(--rsr-border);border-radius:6px;background:var(--rsr-article-bg);padding:10px;}");
+        html.AppendLine(".rsr-version-diff-item--current{box-shadow:inset 3px 0 0 var(--rsr-link);}");
+        html.AppendLine(".rsr-version-diff-title{align-items:center;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px;font-size:.84rem;}");
+        html.AppendLine(".rsr-version-pattern-versions{display:flex;flex-wrap:wrap;gap:5px;list-style:none;margin:0 0 8px;padding:0;}");
+        html.AppendLine(".rsr-version-pattern-badge{display:inline-block;padding:2px 7px;background:var(--rsr-th-bg);border:1px solid var(--rsr-border);border-radius:12px;font:inherit;font-size:.72rem;color:var(--rsr-fg);cursor:pointer;}");
+        html.AppendLine(".rsr-version-pattern-badge:hover{border-color:var(--rsr-link);color:var(--rsr-link);}");
+        html.AppendLine(".rsr-version-pattern-badge--current{background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);font-weight:600;}");
+        html.AppendLine(".rsr-version-current-chip{border:1px solid var(--rsr-liquid-border);border-radius:999px;color:var(--rsr-liquid-fg);font-size:.7rem;padding:1px 7px;}");
+        html.AppendLine(".rsr-version-change{border-left:3px solid var(--rsr-border);display:grid;gap:4px;margin-top:8px;padding-left:8px;}");
+        html.AppendLine(".rsr-version-change[data-change-kind='added']{border-left-color:#2da44e;}");
+        html.AppendLine(".rsr-version-change[data-change-kind='removed']{border-left-color:#cf222e;}");
+        html.AppendLine(".rsr-version-change[data-change-kind='updated']{border-left-color:#bf8700;}");
+        html.AppendLine(".rsr-version-change-kind{color:var(--rsr-muted);font-size:.72rem;font-weight:700;}");
+        html.AppendLine(".rsr-version-change p{margin:0;font-size:.78rem;}");
+        html.AppendLine(".rsr-version-change-label{color:var(--rsr-muted);font-weight:700;margin-right:.35rem;}");
+        html.AppendLine(".rsr-version-diff-more{color:var(--rsr-muted);font-size:.76rem;margin:8px 0 0;}");
         html.AppendLine("</style>");
         html.AppendLine("<script>");
         html.AppendLine("(() => { document.addEventListener('click', event => { const button = event.target?.closest?.('[data-rsr-version-slug]'); if (!button || button.getAttribute('aria-current') === 'true') return; const slug = button.getAttribute('data-rsr-version-slug'); if (!slug) return; window.chrome?.webview?.postMessage(`rsr-preview-version:${slug}`); }); })();");
@@ -170,6 +191,7 @@ internal static partial class MarkdownPreviewRenderer
             html.Append("<p class=\"rsr-path\">").Append(repoPathDisplay).AppendLine("</p>");
         }
         AppendVersionBadgeMarkup(html, selectedVersion ?? effectiveVersion, affectedVersions);
+        AppendVersionDiffSummary(html, selectedVersion ?? effectiveVersion, versionImpacts);
         html.AppendLine("</header>");
         if (!string.IsNullOrWhiteSpace(introHtml))
         {
@@ -387,5 +409,220 @@ internal static partial class MarkdownPreviewRenderer
             html.Append("</ul>");
         }
         html.AppendLine("</div>");
+    }
+
+    private static void AppendVersionDiffSummary(
+        StringBuilder html,
+        DocsVersion currentVersion,
+        IReadOnlyList<DocsVersionImpactDetail>? versionImpacts)
+    {
+        if (versionImpacts is null || versionImpacts.Count == 0)
+        {
+            return;
+        }
+
+        var groups = BuildVersionImpactGroups(versionImpacts, currentVersion);
+        html.Append("<section class=\"rsr-version-diff-summary\" data-testid=\"rsr-version-diff-summary\" aria-label=\"版別差分\">");
+        html.Append("<h2>変更パターン</h2>");
+        html.Append("<p class=\"rsr-version-diff-overview\">");
+        if (groups.Count == 1)
+        {
+            html.Append(versionImpacts.Count.ToString(CultureInfo.InvariantCulture))
+                .Append(" 版で同じ変更内容です。");
+        }
+        else
+        {
+            html.Append(groups.Count.ToString(CultureInfo.InvariantCulture))
+                .Append(" 種類の変更内容があります。版チップが同じ変更を共有する範囲です。");
+        }
+        html.Append("</p>");
+        html.Append("<ul class=\"rsr-version-diff-list\">");
+        for (var groupIndex = 0; groupIndex < groups.Count; groupIndex++)
+        {
+            var group = groups[groupIndex];
+            var isCurrent = group.Versions.Contains(currentVersion);
+            html.Append("<li class=\"rsr-version-diff-item");
+            if (isCurrent)
+            {
+                html.Append(" rsr-version-diff-item--current");
+            }
+            html.Append("\">");
+            html.Append("<h3 class=\"rsr-version-diff-title\"><span>")
+                .Append(WebUtility.HtmlEncode(BuildVersionImpactGroupTitle(group, groupIndex)))
+                .Append("</span>");
+            if (isCurrent)
+            {
+                html.Append("<span class=\"rsr-version-current-chip\">表示中</span>");
+            }
+            html.Append("</h3>");
+
+            AppendVersionPatternBadges(html, group.Versions, currentVersion);
+
+            var visibleChanges = group.Changes.Take(3).ToArray();
+            foreach (var change in visibleChanges)
+            {
+                AppendVersionChange(html, change);
+            }
+            if (group.Changes.Count > visibleChanges.Length)
+            {
+                html.Append("<p class=\"rsr-version-diff-more\">")
+                    .Append((group.Changes.Count - visibleChanges.Length).ToString(CultureInfo.InvariantCulture))
+                    .Append(" 件の追加差分があります</p>");
+            }
+            html.Append("</li>");
+        }
+        html.AppendLine("</ul></section>");
+    }
+
+    private static List<VersionImpactGroup> BuildVersionImpactGroups(
+        IReadOnlyList<DocsVersionImpactDetail> versionImpacts,
+        DocsVersion currentVersion)
+    {
+        var builders = new List<VersionImpactGroupBuilder>();
+        var lookup = new Dictionary<string, VersionImpactGroupBuilder>(StringComparer.Ordinal);
+        for (var index = 0; index < versionImpacts.Count; index++)
+        {
+            var impact = versionImpacts[index];
+            var key = BuildChangeSignature(impact.Changes);
+            if (!lookup.TryGetValue(key, out var builder))
+            {
+                builder = new VersionImpactGroupBuilder(index, impact.Changes);
+                lookup.Add(key, builder);
+                builders.Add(builder);
+            }
+            builder.Versions.Add(impact.Version);
+        }
+
+        builders.Sort((left, right) =>
+        {
+            var leftIsCurrent = left.Versions.Contains(currentVersion);
+            var rightIsCurrent = right.Versions.Contains(currentVersion);
+            if (leftIsCurrent != rightIsCurrent)
+            {
+                return leftIsCurrent ? -1 : 1;
+            }
+            return left.FirstIndex.CompareTo(right.FirstIndex);
+        });
+
+        return builders
+            .Select(static builder => new VersionImpactGroup(builder.Versions, builder.Changes))
+            .ToList();
+    }
+
+    private static string BuildChangeSignature(IReadOnlyList<DocsVersionChangeSnippet> changes)
+    {
+        var signature = new StringBuilder();
+        foreach (var change in changes)
+        {
+            AppendSignaturePart(signature, change.Kind.ToString());
+            AppendSignaturePart(signature, change.BeforeExcerpt ?? string.Empty);
+            AppendSignaturePart(signature, change.AfterExcerpt ?? string.Empty);
+        }
+        return signature.ToString();
+    }
+
+    private static void AppendSignaturePart(StringBuilder signature, string value)
+    {
+        signature.Append(value.Length.ToString(CultureInfo.InvariantCulture))
+            .Append(':')
+            .Append(value)
+            .Append('|');
+    }
+
+    private static string BuildVersionImpactGroupTitle(VersionImpactGroup group, int groupIndex)
+        => group.Versions.Count == 1
+            ? group.Versions[0].DisplayLabel + " のみ"
+            : string.Create(CultureInfo.InvariantCulture, $"変更パターン {groupIndex + 1}: {group.Versions.Count} 版で同じ変更");
+
+    private static void AppendVersionPatternBadges(
+        StringBuilder html,
+        IReadOnlyList<DocsVersion> versions,
+        DocsVersion currentVersion)
+    {
+        html.Append("<ul class=\"rsr-version-pattern-versions\" aria-label=\"この変更が出る版\">");
+        foreach (var version in versions)
+        {
+            var isCurrent = version == currentVersion;
+            html.Append("<li><button type=\"button\" class=\"rsr-version-pattern-badge");
+            if (isCurrent)
+            {
+                html.Append(" rsr-version-pattern-badge--current");
+            }
+            html.Append("\" data-rsr-version-slug=\"")
+                .Append(WebUtility.HtmlEncode(version.Slug))
+                .Append("\" data-version-slug=\"")
+                .Append(WebUtility.HtmlEncode(version.Slug))
+                .Append('"');
+            if (isCurrent)
+            {
+                html.Append(" aria-current=\"true\" aria-label=\"")
+                    .Append(WebUtility.HtmlEncode(version.DisplayLabel + " を表示中"))
+                    .Append('"');
+            }
+            else
+            {
+                html.Append(" aria-label=\"")
+                    .Append(WebUtility.HtmlEncode(version.DisplayLabel + " に切り替え"))
+                    .Append('"');
+            }
+            html.Append('>')
+                .Append(WebUtility.HtmlEncode(version.DisplayLabel))
+                .Append("</button></li>");
+        }
+        html.Append("</ul>");
+    }
+
+    private static void AppendVersionChange(StringBuilder html, DocsVersionChangeSnippet change)
+    {
+        html.Append("<div class=\"rsr-version-change\" data-change-kind=\"")
+            .Append(WebUtility.HtmlEncode(BuildChangeKindSlug(change.Kind)))
+            .Append("\">");
+        html.Append("<span class=\"rsr-version-change-kind\">")
+            .Append(WebUtility.HtmlEncode(BuildChangeKindLabel(change.Kind)))
+            .Append("</span>");
+        if (!string.IsNullOrWhiteSpace(change.BeforeExcerpt))
+        {
+            html.Append("<p><span class=\"rsr-version-change-label\">変更前</span>")
+                .Append(WebUtility.HtmlEncode(change.BeforeExcerpt))
+                .Append("</p>");
+        }
+        if (!string.IsNullOrWhiteSpace(change.AfterExcerpt))
+        {
+            html.Append("<p><span class=\"rsr-version-change-label\">PR HEAD</span>")
+                .Append(WebUtility.HtmlEncode(change.AfterExcerpt))
+                .Append("</p>");
+        }
+        html.Append("</div>");
+    }
+
+    private static string BuildChangeKindSlug(DocsVersionChangeKind kind)
+        => kind switch
+        {
+            DocsVersionChangeKind.Added => "added",
+            DocsVersionChangeKind.Removed => "removed",
+            DocsVersionChangeKind.Updated => "updated",
+            _ => "updated",
+        };
+
+    private static string BuildChangeKindLabel(DocsVersionChangeKind kind)
+        => kind switch
+        {
+            DocsVersionChangeKind.Added => "追加",
+            DocsVersionChangeKind.Removed => "削除",
+            DocsVersionChangeKind.Updated => "更新",
+            _ => "更新",
+        };
+
+    private sealed record VersionImpactGroup(
+        IReadOnlyList<DocsVersion> Versions,
+        IReadOnlyList<DocsVersionChangeSnippet> Changes);
+
+    private sealed class VersionImpactGroupBuilder(int firstIndex, IReadOnlyList<DocsVersionChangeSnippet> changes)
+    {
+        public int FirstIndex { get; } = firstIndex;
+
+        public IReadOnlyList<DocsVersionChangeSnippet> Changes { get; } = changes;
+
+        public List<DocsVersion> Versions { get; } = [];
     }
 }

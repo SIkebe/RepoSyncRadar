@@ -418,7 +418,12 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         var afterMarkdown = await ReadWorktreeFileOrNullAsync(session.AfterWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
 
         progress?.Report("公式版 (fpt/ghec/ghes) で差分の出る版を解析中…");
-        var affectedVersions = DocsVersionImpactAnalyzer.Analyze(beforeMarkdown, session.BeforeLiquid, afterMarkdown, session.AfterLiquid);
+        var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            beforeMarkdown,
+            session.BeforeLiquid,
+            afterMarkdown,
+            session.AfterLiquid);
+        var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
 
         var pages = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -429,7 +434,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 "変更前",
                 session.BeforeLiquid,
                 effectiveVersion,
-                affectedVersions),
+                affectedVersions,
+                versionImpacts: versionImpacts),
             ["/markdown/after"] = MarkdownPreviewRenderer.RenderDocument(
                 filePath,
                 afterMarkdown,
@@ -437,7 +443,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 "PR HEAD",
                 session.AfterLiquid,
                 effectiveVersion,
-                affectedVersions),
+                affectedVersions,
+                versionImpacts: versionImpacts),
         };
 
         var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());

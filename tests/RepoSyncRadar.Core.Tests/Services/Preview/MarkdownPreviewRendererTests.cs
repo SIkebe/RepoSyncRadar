@@ -475,4 +475,78 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("aria-label=\"Free, Pro, &amp; Team を表示中\"", html, StringComparison.Ordinal);
         Assert.Contains("aria-label=\"Enterprise Cloud に切り替え\"", html, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Version_Diff_Summary_Renders_Per_Version_Changes()
+    {
+        var impacts = new[]
+        {
+            new DocsVersionImpactDetail(
+                DocsVersion.Fpt,
+                [new DocsVersionChangeSnippet(DocsVersionChangeKind.Updated, "Free old note", "Free updated note")]),
+            new DocsVersionImpactDetail(
+                DocsVersion.Ghec,
+                [new DocsVersionChangeSnippet(DocsVersionChangeKind.Added, null, "Enterprise Cloud only addition")]),
+        };
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            "# Hello",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Ghec,
+            versionImpacts: impacts);
+
+        Assert.Contains("data-testid=\"rsr-version-diff-summary\"", html, StringComparison.Ordinal);
+        Assert.Contains("変更パターン", html, StringComparison.Ordinal);
+        Assert.Contains("Free old note", html, StringComparison.Ordinal);
+        Assert.Contains("Free updated note", html, StringComparison.Ordinal);
+        Assert.Contains("Enterprise Cloud only addition", html, StringComparison.Ordinal);
+        Assert.Contains("rsr-version-diff-item--current", html, StringComparison.Ordinal);
+        Assert.Contains("data-change-kind=\"added\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Version_Diff_Summary_Groups_Identical_Changes_By_Pattern()
+    {
+        var sharedChange = new DocsVersionChangeSnippet(DocsVersionChangeKind.Updated, "Shared old note", "Shared updated note");
+        var impacts = new[]
+        {
+            new DocsVersionImpactDetail(DocsVersion.Fpt, [sharedChange]),
+            new DocsVersionImpactDetail(DocsVersion.Ghec, [sharedChange]),
+            new DocsVersionImpactDetail(
+                DocsVersion.Ghes("3.21"),
+                [new DocsVersionChangeSnippet(DocsVersionChangeKind.Added, null, "GHES only addition")]),
+        };
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            "# Hello",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec, DocsVersion.Ghes("3.21")],
+            selectedVersion: DocsVersion.Ghec,
+            versionImpacts: impacts);
+
+        Assert.Contains("2 種類の変更内容があります", html, StringComparison.Ordinal);
+        Assert.Contains("変更パターン 1: 2 版で同じ変更", html, StringComparison.Ordinal);
+        Assert.Contains("Free, Pro, &amp; Team", html, StringComparison.Ordinal);
+        Assert.Contains("Enterprise Cloud", html, StringComparison.Ordinal);
+        Assert.Contains("Enterprise Server 3.21 のみ", html, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(html, "Shared old note"));
+        Assert.Equal(1, CountOccurrences(html, "Shared updated note"));
+    }
+
+    private static int CountOccurrences(string value, string search)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = value.IndexOf(search, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += search.Length;
+        }
+        return count;
+    }
 }
