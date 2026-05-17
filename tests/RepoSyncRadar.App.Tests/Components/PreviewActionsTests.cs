@@ -850,6 +850,78 @@ public sealed class PreviewActionsTests
     }
 
     [Fact]
+    public async Task VersionChangeRequested_Hides_Progress_When_Rerender_Completes()
+    {
+        var fpt = DocsVersionCatalog.All.First(v => v.Slug == "fpt");
+        var ghec = DocsVersionCatalog.All.First(v => v.Slug == "ghec");
+        var affected = new[] { fpt, ghec };
+        var secondCall = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondResult = new TaskCompletionSource<PreviewComparisonLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var callCount = 0;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                callCount++;
+                var requestedVersion = call.ArgAt<DocsVersion?>(4) ?? fpt;
+                if (callCount == 2)
+                {
+                    call.ArgAt<IProgress<string>?>(3)?.Report("Markdown 比較プレビューを起動中… (ポート 4502)");
+                    secondCall.SetResult();
+                    return secondResult.Task;
+                }
+
+                return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLink() with
+                {
+                    CurrentVersion = requestedVersion,
+                    AffectedVersions = affected,
+                });
+            });
+        var navigator = new PreviewNavigator();
+        var sp = BuildServices(coordinator, navigator);
+        using var ctx = new Bunit.BunitContext();
+
+        var commit = new Commit
+        {
+            Sha = "deadbeef",
+            PrNumber = 123,
+            Message = "msg",
+            Author = "alice",
+            Files = { new CommitFile { Sha = "deadbeef", Path = "content/foo/bar.md", Status = "modified" } },
+        };
+        var cut = ctx.Render<PreviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Commit, commit));
+
+        cut.Find("[data-testid=\"preview-button\"]").Click();
+        cut.WaitForAssertion(() =>
+            Assert.Contains("content/foo/bar.md", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal));
+
+        navigator.RequestVersionChange(ghec);
+        await secondCall.Task.WaitAsync(TimeSpan.FromSeconds(3), Xunit.TestContext.Current.CancellationToken);
+        cut.WaitForAssertion(() =>
+            Assert.Contains("Markdown 比較プレビューを起動中", cut.Find("[data-testid=\"preview-progress-text\"]").TextContent, StringComparison.Ordinal));
+
+        secondResult.SetResult(MakeComparisonLink() with
+        {
+            CurrentVersion = ghec,
+            AffectedVersions = affected,
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll("[data-testid=\"preview-progress\"]"));
+            Assert.Contains("content/foo/bar.md", cut.Find("[data-testid=\"preview-status\"]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void VersionChangeRequested_Same_Version_Does_Not_Rerun()
     {
         // 既に表示中の版と同じ要求は no-op (無駄な prepare 抑止)。

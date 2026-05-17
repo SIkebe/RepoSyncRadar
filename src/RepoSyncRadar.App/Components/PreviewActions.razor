@@ -326,6 +326,13 @@ npm install</code></pre>
         _cts = null;
         _busy = false;
         _canceling = false;
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     /// <summary>

@@ -451,6 +451,13 @@
                 _previewCts = null;
                 _previewBusyPath = null;
                 _previewCanceling = false;
+                try
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
             }
         }
 
@@ -533,6 +540,13 @@
                 _previewCts = null;
                 _previewBusyPath = null;
                 _previewCanceling = false;
+                try
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (ObjectDisposedException)
+                {
+                }
             }
         }
 
