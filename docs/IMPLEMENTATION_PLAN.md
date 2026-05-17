@@ -271,6 +271,7 @@ DESIGN.md §10 のドメインモデルを EF Core の **初回 migration** と�
 - Octokit の `IGitHubClient` を DI(`RepoSyncRadar.App` で `new GitHubClient(...)` を生成)
 - `FetchUnseenCommitsAsync` の挙動
   - 直近更新 PR をページングし、タイトルが `PullRequestTitleFilter` で始まる PR を `MaxPullRequests` 件集める
+  - `PullRequestCreatedAtOrAfter` が指定されている場合は、PR 作成日降順でページングし、その日時以降に作成された PR だけを候補にする
   - 各 PR の commits をページネーション込みで列挙
   - DB に既存の `Sha` を除外(`IRadarRepository` 経由)
   - 1 コミットあたりの files は **遅延ロード**(`GetCommitFilesAsync(sha)` を別メソッドで提供)

@@ -42,8 +42,25 @@ public class OptionsValidationTests
         var copilot = sp.GetRequiredService<IOptions<CopilotOptions>>().Value;
 
         Assert.Equal("github", github.Owner);
+        Assert.Null(github.PullRequestCreatedAtOrAfter);
         Assert.Equal(new Uri("https://docs.github.com/"), docs.BaseAddress);
         Assert.Equal("gpt-5", copilot.DefaultModel);
+    }
+
+    [Fact]
+    public void Bind_GitHubPullRequestCreatedAtOrAfter_BindsIsoTimestamp()
+    {
+        var json = ValidJson.Replace(
+            "\"MaxPullRequests\": 5",
+            "\"MaxPullRequests\": 5,\n        \"PullRequestCreatedAtOrAfter\": \"2026-05-15T00:00:00Z\"",
+            StringComparison.Ordinal);
+        using var sp = BuildServiceProvider(json);
+
+        var github = sp.GetRequiredService<IOptions<GitHubOptions>>().Value;
+
+        Assert.Equal(
+            new DateTimeOffset(2026, 5, 15, 0, 0, 0, TimeSpan.Zero),
+            github.PullRequestCreatedAtOrAfter);
     }
 
     [Fact]

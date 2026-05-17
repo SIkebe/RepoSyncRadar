@@ -24,4 +24,10 @@ public sealed class GitHubOptions
     /// <summary>How many title-matching PRs to collect on each fetch.</summary>
     [Range(1, 100)]
     public int MaxPullRequests { get; set; } = 5;
+
+    /// <summary>
+    /// Optional lower bound for PR creation time. When set, triage only considers PRs whose
+    /// <c>CreatedAt</c> is greater than or equal to this value.
+    /// </summary>
+    public DateTimeOffset? PullRequestCreatedAtOrAfter { get; set; }
 }

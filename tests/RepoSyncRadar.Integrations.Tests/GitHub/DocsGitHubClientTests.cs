@@ -146,6 +146,90 @@ public class DocsGitHubClientTests
     }
 
     [Fact]
+    public async Task FetchUnseenCommitsAsync_Filters_By_PullRequest_CreatedAt_Lower_Bound()
+    {
+        var lowerBound = new DateTimeOffset(2026, 5, 15, 0, 0, 0, TimeSpan.Zero);
+        var (client, github, _, _) = CreateClient(options => options.PullRequestCreatedAtOrAfter = lowerBound);
+        var ct = TestContext.Current.CancellationToken;
+
+        github.PullRequest.GetAllForRepository(
+            Owner, Repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>())
+            .Returns((IReadOnlyList<PullRequest>)new[]
+            {
+                MakePullRequest(3003, "Repo sync 2026-05-16", lowerBound.AddDays(1)),
+                MakePullRequest(3002, "Repo sync 2026-05-15", lowerBound),
+                MakePullRequest(3004, "Unrelated docs update", lowerBound),
+                MakePullRequest(3001, "Repo sync 2026-05-14", lowerBound.AddTicks(-1)),
+            });
+        github.PullRequest.Commits(Owner, Repo, Arg.Any<int>())
+            .Returns(call =>
+            {
+                var number = call.Arg<int>();
+                return (IReadOnlyList<PullRequestCommit>)new[]
+                {
+                    MakePullRequestCommit($"sha-{number}", "msg", "octocat"),
+                };
+            });
+
+        var commits = await client.FetchUnseenCommitsAsync(ct);
+
+        Assert.Equal([3003, 3002], commits.Select(static commit => commit.PrNumber).ToArray());
+        await github.PullRequest.DidNotReceive().Commits(Owner, Repo, 3001);
+        await github.PullRequest.DidNotReceive().Commits(Owner, Repo, 3004);
+        await github.PullRequest.Received(1).GetAllForRepository(
+            Owner,
+            Repo,
+            Arg.Is<PullRequestRequest>(request => request.SortProperty == PullRequestSort.Created
+                && request.SortDirection == SortDirection.Descending),
+            Arg.Any<ApiOptions>());
+    }
+
+    [Fact]
+    public async Task FetchUnseenCommitsAsync_Stops_Paging_When_CreatedAt_Is_Older_Than_Lower_Bound()
+    {
+        var lowerBound = new DateTimeOffset(2026, 5, 15, 0, 0, 0, TimeSpan.Zero);
+        var (client, github, _, _) = CreateClient(options => options.PullRequestCreatedAtOrAfter = lowerBound);
+        var ct = TestContext.Current.CancellationToken;
+
+        var firstPage = Enumerable.Range(1, 100)
+            .Select(i => i <= 2
+                ? MakePullRequest(4000 + i, $"Repo sync recent {i}", lowerBound.AddDays(3 - i))
+                : MakePullRequest(4000 + i, $"Repo sync old {i}", lowerBound.AddTicks(-1)))
+            .ToArray();
+
+        github.PullRequest.GetAllForRepository(
+            Owner,
+            Repo,
+            Arg.Any<PullRequestRequest>(),
+            Arg.Is<ApiOptions>(o => o.StartPage == 1 && o.PageSize == 100 && o.PageCount == 1))
+            .Returns(firstPage);
+        github.PullRequest.GetAllForRepository(
+            Owner,
+            Repo,
+            Arg.Any<PullRequestRequest>(),
+            Arg.Is<ApiOptions>(o => o.StartPage == 2))
+            .Returns((IReadOnlyList<PullRequest>)Array.Empty<PullRequest>());
+        github.PullRequest.Commits(Owner, Repo, Arg.Any<int>())
+            .Returns(call =>
+            {
+                var number = call.Arg<int>();
+                return (IReadOnlyList<PullRequestCommit>)new[]
+                {
+                    MakePullRequestCommit($"sha-{number}", "msg", "octocat"),
+                };
+            });
+
+        var commits = await client.FetchUnseenCommitsAsync(ct);
+
+        Assert.Equal([4001, 4002], commits.Select(static commit => commit.PrNumber).ToArray());
+        await github.PullRequest.DidNotReceive().GetAllForRepository(
+            Owner,
+            Repo,
+            Arg.Any<PullRequestRequest>(),
+            Arg.Is<ApiOptions>(o => o.StartPage == 2));
+    }
+
+    [Fact]
     public async Task GetUnifiedDiffAsync_Sets_Accept_Header()
     {
         var (client, github, _, _) = CreateClient();
@@ -262,12 +346,17 @@ public class DocsGitHubClientTests
     }
 
     private static PullRequest MakePullRequest(int number, string title)
+        => MakePullRequest(number, title, new DateTimeOffset(2026, 5, 13, 0, 0, 0, TimeSpan.Zero));
+
+    private static PullRequest MakePullRequest(int number, string title, DateTimeOffset createdAt)
     {
         var pr = new PullRequest(number);
         // Title has a private setter; reflection is the only practical seam since Octokit
         // does not expose builders for response DTOs in v14.
         var titleProp = typeof(PullRequest).GetProperty(nameof(PullRequest.Title))!;
         titleProp.SetValue(pr, title);
+        var createdAtProp = typeof(PullRequest).GetProperty(nameof(PullRequest.CreatedAt))!;
+        createdAtProp.SetValue(pr, createdAt);
         return pr;
     }
 

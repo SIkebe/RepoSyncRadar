@@ -58,6 +58,11 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 
 ```jsonc
 {
+   "GitHub": {
+      // 任意: この日時以降に作成された Repo sync PR だけを Morning Triage の対象にする。
+      // null / 未指定なら作成日では絞り込まない。
+      "PullRequestCreatedAtOrAfter": "2026-05-15T00:00:00Z"
+   },
   "Copilot": {
     "DefaultModel": "gpt-5",
     "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ],
@@ -144,6 +149,7 @@ dotnet run --project src/RepoSyncRadar.App
 画面上部でサインイン済みになっていることを確認し、**Triage** ボタンを押します。
 
 1. `github/docs` の Repo sync PR を最大 `MaxPullRequests` 件取得
+   - `GitHub:PullRequestCreatedAtOrAfter` を設定している場合は、その日時以降に作成された PR だけを対象にします
 2. 各 PR のコミットを SQLite に **冪等取り込み**(既知 SHA はスキップ)
 3. Copilot に「Must read 5 件 / Skim 15 件 / 残りは Archive」の方針でスコアリング
 4. `radar_score_commit` で `Scoring` テーブルに要約・理由・スコアを保存

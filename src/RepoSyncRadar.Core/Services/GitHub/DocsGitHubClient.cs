@@ -25,6 +25,8 @@ namespace RepoSyncRadar.Core.Services.GitHub;
 /// <para>
 /// PR listing is paginated using Octokit's <see cref="ApiOptions"/> until
 /// <see cref="GitHubOptions.MaxPullRequests"/> title-matching PRs have been collected.
+/// If <see cref="GitHubOptions.PullRequestCreatedAtOrAfter"/> is set, only PRs created at or
+/// after that timestamp are eligible for triage.
 /// Per-PR commit listings are auto-paginated by Octokit; the resulting <see cref="DomainCommit"/>
 /// objects are returned with an empty <see cref="DomainCommit.Files"/> list and callers must invoke
 /// <see cref="GetCommitFilesAsync"/> when they need file metadata.
@@ -68,7 +70,9 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
         var pullRequestRequest = new PullRequestRequest
         {
             State = ItemStateFilter.All,
-            SortProperty = PullRequestSort.Updated,
+            SortProperty = _options.PullRequestCreatedAtOrAfter is null
+                ? PullRequestSort.Updated
+                : PullRequestSort.Created,
             SortDirection = SortDirection.Descending,
         };
         var matchingPrs = await FetchMatchingPullRequestsAsync(pullRequestRequest, cancellationToken).ConfigureAwait(false);
@@ -182,10 +186,16 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
                 pullRequestRequest,
                 BuildPullRequestPageOptions(page)).ConfigureAwait(false);
 
+            var reachedCreatedAtLowerBound = false;
             foreach (var pr in prs)
             {
-                if (pr.Title is not null
-                    && pr.Title.StartsWith(_options.PullRequestTitleFilter, StringComparison.Ordinal))
+                if (IsOlderThanCreatedAtLowerBound(pr))
+                {
+                    reachedCreatedAtLowerBound = true;
+                    break;
+                }
+
+                if (IsTriageCandidate(pr))
                 {
                     matchingPrs.Add(pr);
                     if (matchingPrs.Count == _options.MaxPullRequests)
@@ -195,13 +205,33 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
                 }
             }
 
-            if (prs.Count < GitHubMaxPageSize)
+            if (reachedCreatedAtLowerBound || prs.Count < GitHubMaxPageSize)
             {
                 break;
             }
         }
         return matchingPrs;
     }
+
+    private bool IsTriageCandidate(PullRequest pr)
+    {
+        if (pr.Title is null
+            || !pr.Title.StartsWith(_options.PullRequestTitleFilter, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (_options.PullRequestCreatedAtOrAfter is not { } lowerBound)
+        {
+            return true;
+        }
+
+        return pr.CreatedAt >= lowerBound;
+    }
+
+    private bool IsOlderThanCreatedAtLowerBound(PullRequest pr)
+        => _options.PullRequestCreatedAtOrAfter is { } lowerBound
+            && pr.CreatedAt < lowerBound;
 
     private static ApiOptions BuildPullRequestPageOptions(int page)
         => new()
