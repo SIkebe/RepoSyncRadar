@@ -95,6 +95,7 @@ public class CommitDetailTests
             AudienceJson = "[\"devrel\",\"customer\"]",
             SummaryJa = "Copilot Workspace の挙動を明確化する変更。",
             WhyJa = "公式 docs の更新で、顧客向け説明にも影響するため重要。",
+            DetailsJa = "変更内容: Copilot Workspace の説明を具体化。\n根拠: about-copilot.md の本文差分。\n影響: 顧客説明と DevRel 共有に利用可能。\n確認観点: 既存 GA 表現と矛盾しないか確認。",
             Model = "gpt-5",
             ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
         };
@@ -120,6 +121,10 @@ public class CommitDetailTests
         Assert.Equal(
             "公式 docs の更新で、顧客向け説明にも影響するため重要。",
             cut.Find("[data-testid=\"commit-detail-why\"]").TextContent);
+        var details = cut.Find("[data-testid=\"commit-detail-details\"]").TextContent;
+        Assert.Contains("変更内容", details, StringComparison.Ordinal);
+        Assert.Contains("根拠", details, StringComparison.Ordinal);
+        Assert.Contains("確認観点", details, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -152,6 +157,7 @@ public class CommitDetailTests
             AudienceJson = "not-json",
             SummaryJa = "summary",
             WhyJa = "why",
+            DetailsJa = string.Empty,
             Model = "gpt-5",
             ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
         };
@@ -165,6 +171,7 @@ public class CommitDetailTests
 
         // The audience element is omitted entirely when AudienceJson cannot be parsed.
         Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-audience\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-details\"]"));
         Assert.Equal("doc-fix", cut.Find("[data-testid=\"commit-detail-category\"]").TextContent);
     }
 

@@ -240,6 +240,7 @@ public sealed class RadarRepositoryTests
                 AudienceJson = "[\"devrel\"]",
                 SummaryJa = "要約",
                 WhyJa = "理由",
+                DetailsJa = "詳細",
                 Model = "gpt-5",
                 ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
             });
@@ -253,6 +254,7 @@ public sealed class RadarRepositoryTests
         Assert.Equal(0.81, commit.Scoring!.Score);
         Assert.Equal("feature-update", commit.Scoring.Category);
         Assert.Equal("要約", commit.Scoring.SummaryJa);
+        Assert.Equal("詳細", commit.Scoring.DetailsJa);
     }
 
     [Fact]

@@ -365,6 +365,10 @@ html, body {
     overflow-wrap: anywhere;
 }
 
+.radar-commit-detail .scoring-note dd.analysis-detail {
+    white-space: pre-wrap;
+}
+
 .radar-commit-detail .files {
     list-style: none;
     margin: 0;

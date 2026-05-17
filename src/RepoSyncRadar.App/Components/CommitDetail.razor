@@ -10,9 +10,9 @@
 @*
     CommitDetail — Phase 1 commit inspector. Shows the file list with +/- stats and any
     canonical docs.github.com URLs returned by IPathToUrlResolver. Also surfaces the
-    LLM-produced Scoring (score / category / audience / summary / why) so the morning
-    triage output is visible to the user. Diff rendering and Adopt/Reject actions live
-    in sibling components.
+    LLM-produced Scoring (score / category / audience / summary / why / detailed analysis)
+    so the morning triage output is visible to the user. Diff rendering and Adopt/Reject
+    actions live in sibling components.
 
     Each publishable file row carries a "WebView2 で開く" button. Clicking it starts
     the local PR-HEAD preview pipeline when needed, then navigates the right-side
@@ -73,6 +73,13 @@
                         <dt>理由</dt>
                         <dd data-testid="commit-detail-why">@scoring.WhyJa</dd>
                     </div>
+                    @if (!string.IsNullOrWhiteSpace(scoring.DetailsJa))
+                    {
+                        <div class="scoring-note scoring-detail-note">
+                            <dt>詳細分析</dt>
+                            <dd class="analysis-detail" data-testid="commit-detail-details">@scoring.DetailsJa</dd>
+                        </div>
+                    }
                 </dl>
             </section>
         }

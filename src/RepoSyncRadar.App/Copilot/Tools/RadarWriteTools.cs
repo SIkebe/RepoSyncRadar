@@ -104,6 +104,7 @@ public sealed class RadarWriteTools
                 AudienceJson = audienceJson,
                 SummaryJa = args.SummaryJa ?? string.Empty,
                 WhyJa = args.WhyJa ?? string.Empty,
+                DetailsJa = args.DetailsJa ?? string.Empty,
                 Model = args.Model ?? string.Empty,
                 PromptHash = args.PromptHash ?? string.Empty,
                 ScoredAt = nowUtc,
@@ -116,6 +117,7 @@ public sealed class RadarWriteTools
             existing.AudienceJson = audienceJson;
             existing.SummaryJa = args.SummaryJa ?? string.Empty;
             existing.WhyJa = args.WhyJa ?? string.Empty;
+            existing.DetailsJa = args.DetailsJa ?? string.Empty;
             existing.Model = args.Model ?? string.Empty;
             existing.PromptHash = args.PromptHash ?? string.Empty;
             existing.ScoredAt = nowUtc;
@@ -230,13 +232,13 @@ public sealed class RadarWriteTools
     private AIFunction CreateScoreCommit()
     {
         return AIFunctionFactory.Create(
-            ([Description("Side-effecting: writes Scoring row to radar.db.")] ScoreCommitArgs args,
+            ([Description("Side-effecting: writes a Scoring row to radar.db, including score, category, audience, short summary, reason, and detailed Japanese analysis.")] ScoreCommitArgs args,
              CancellationToken cancellationToken)
                 => ScoreCommitAsync(args, cancellationToken),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_score_commit",
-                Description = "Stores or updates the LLM-produced score, category, audience tags, and summary for a commit. Side-effecting.",
+                Description = "Stores or updates the LLM-produced score, category, audience tags, summary, reason, and detailed analysis for a commit. Side-effecting.",
             });
     }
 

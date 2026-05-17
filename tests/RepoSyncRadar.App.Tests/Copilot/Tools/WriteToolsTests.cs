@@ -78,6 +78,7 @@ public sealed class WriteToolsTests
             Audience: ["devrel", "customer"],
             SummaryJa: "要約",
             WhyJa: "理由",
+            DetailsJa: "変更内容: 詳細\n根拠: diff",
             Model: "gpt-test",
             PromptHash: "deadbee");
 
@@ -90,6 +91,7 @@ public sealed class WriteToolsTests
         Assert.Equal("deadbee", row.PromptHash);
         Assert.Equal(0.82, row.Score, precision: 4);
         Assert.Equal("feature", row.Category);
+        Assert.Equal("変更内容: 詳細\n根拠: diff", row.DetailsJa);
         Assert.Contains("devrel", row.AudienceJson, StringComparison.Ordinal);
     }
 

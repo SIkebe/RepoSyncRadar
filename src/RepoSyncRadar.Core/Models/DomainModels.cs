@@ -61,6 +61,8 @@ public sealed class Scoring
 
     public string WhyJa { get; set; } = string.Empty;
 
+    public string DetailsJa { get; set; } = string.Empty;
+
     public string Model { get; set; } = string.Empty;
 
     public string PromptHash { get; set; } = string.Empty;

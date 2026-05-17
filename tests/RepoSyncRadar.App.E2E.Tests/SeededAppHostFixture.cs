@@ -30,6 +30,7 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
     public const string SeededAudienceJson = "[\"devrel\",\"customer\"]";
     public const string SeededSummaryJa = "Copilot Workspace の挙動を明確化する変更。";
     public const string SeededWhyJa = "公式 docs の更新で、顧客向け説明にも影響するため重要。";
+    public const string SeededDetailsJa = "変更内容: Copilot Workspace の説明を具体化。\n根拠: content/copilot/about-copilot.md の本文更新。\n影響: DevRel と顧客向け説明で参照しやすい。\n確認観点: 既存の GA/preview 表現と矛盾しないか確認。";
 
     public const string SeededTeamsBody = "【Teams 共有用 (E2E seed)】\n変更点: Copilot Workspace の説明を改訂。";
     public const string SeededTwitterBody = "Twitter 用本文 (E2E seed)";
@@ -126,6 +127,7 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
             AudienceJson = SeededAudienceJson,
             SummaryJa = SeededSummaryJa,
             WhyJa = SeededWhyJa,
+            DetailsJa = SeededDetailsJa,
             Model = "gpt-5",
             PromptHash = "e2e-seed",
             ScoredAt = fetchedAt,

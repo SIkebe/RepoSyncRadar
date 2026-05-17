@@ -37,7 +37,7 @@ public sealed class ScoringDisplayE2ETests
             scoreText,
             StringComparison.Ordinal);
 
-        // Category, summary, why must render verbatim.
+        // Category, summary, why, and detailed analysis must render verbatim.
         Assert.Equal(
             SeededAppHostFixture.SeededCategory,
             (await page.Locator("[data-testid='commit-detail-category']").InnerTextAsync()).Trim());
@@ -47,6 +47,9 @@ public sealed class ScoringDisplayE2ETests
         Assert.Equal(
             SeededAppHostFixture.SeededWhyJa,
             (await page.Locator("[data-testid='commit-detail-why']").InnerTextAsync()).Trim());
+        Assert.Equal(
+            SeededAppHostFixture.SeededDetailsJa,
+            (await page.Locator("[data-testid='commit-detail-details']").InnerTextAsync()).Trim());
 
         // Audience JSON contains both tags; the UI joins them so we only assert
         // membership to stay tolerant of the chosen separator.

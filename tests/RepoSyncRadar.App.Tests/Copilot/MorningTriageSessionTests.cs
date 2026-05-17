@@ -81,6 +81,11 @@ public sealed class MorningTriageSessionTests
         Assert.Contains("radar_list_commits", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("radar_score_commit", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("radar_save_review", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("DetailsJa", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("詳細分析", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("変更内容", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("根拠", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("確認観点", capturedPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Skim", capturedPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("`Seen`", capturedPrompt, StringComparison.Ordinal);
     }
