@@ -996,6 +996,7 @@ html, body {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
+    justify-content: flex-start;
 }
 
 .review-suggestion-chip {
@@ -1007,9 +1008,12 @@ html, body {
     cursor: pointer;
     display: inline-flex;
     gap: 0.4rem;
+    justify-content: flex-start;
     font: inherit;
     font-size: 0.76rem;
+    max-width: 100%;
     padding: 0.25rem 0.55rem;
+    text-align: left;
 }
 
 .review-suggestion-chip.already-ignored {
@@ -1030,10 +1034,14 @@ html, body {
 
 .review-suggestion-pattern {
     font-family: "Cascadia Mono", "Consolas", monospace;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: left;
 }
 
 .review-suggestion-meta {
     color: #57606a;
+    flex: 0 0 auto;
     font-size: 0.72rem;
     font-weight: 700;
 }
