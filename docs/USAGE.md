@@ -270,8 +270,8 @@ worktree ごとに作業ディレクトリが分かれるため、`npm install` 
 # 厳格ビルド(警告=エラー)
 dotnet build -warnaserror
 
-# 自動テスト(手動カテゴリ除く / 全 167 件)
-dotnet test --no-build --filter "Category!=Manual"
+# 自動テスト(手動カテゴリ除く)
+dotnet test --no-build -- --filter-not-trait Category=Manual
 
 # 一発スクリプト
 .\scripts\check.ps1

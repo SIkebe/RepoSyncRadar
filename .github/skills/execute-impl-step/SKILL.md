@@ -1,6 +1,6 @@
 ---
 name: execute-impl-step
-description: 'Execute the next pending step from docs/IMPLEMENTATION_PLAN.md in the RepoSyncRadar workspace. USE FOR: 実装プランの次のステップを進める、Step N を実装する、進捗を進める、IMPLEMENTATION_PLAN を 1 段階前進、次の TODO、execute next step, advance plan, implement next step, run next implementation step. Follows the strict test-first workflow defined in the plan: identifies the first unchecked step, implements its scope test-first, runs `dotnet build -warnaserror` + `dotnet test --filter "Category!=Manual"`, updates the progress checkbox only when green, and proposes a commit message for user approval. ALWAYS stops after one step — never auto-advances to the next.'
+description: 'Execute the next pending step from docs/IMPLEMENTATION_PLAN.md in the RepoSyncRadar workspace. USE FOR: 実装プランの次のステップを進める、Step N を実装する、進捗を進める、IMPLEMENTATION_PLAN を 1 段階前進、次の TODO、execute next step, advance plan, implement next step, run next implementation step. Follows the strict test-first workflow defined in the plan: identifies the first unchecked step, implements its scope test-first, runs `dotnet build -warnaserror` + `dotnet test -- --filter-not-trait Category=Manual`, updates the progress checkbox only when green, and proposes a commit message for user approval. ALWAYS stops after one step — never auto-advances to the next.'
 argument-hint: '(任意) Step 番号を指定。省略時は最初の未完了ステップ。例: 3, Step 5'
 ---
 
@@ -19,7 +19,7 @@ argument-hint: '(任意) Step 番号を指定。省略時は最初の未完了�
 ## 絶対ルール
 
 1. **1 回の呼び出しで 1 ステップだけ進める**。複数ステップを連結しない。
-2. **テストが緑** で初めて当該ステップの完了とする。`dotnet build -warnaserror` と `dotnet test --filter "Category!=Manual"` の両方をローカルで通すこと。
+2. **テストが緑** で初めて当該ステップの完了とする。`dotnet build -warnaserror` と `dotnet test -- --filter-not-trait Category=Manual` の両方をローカルで通すこと。
 3. **進捗チェックボックスを書き換えるのはテスト緑後のみ**。失敗時は触らない。
 4. **コミットは提案のみ**。ユーザーが「コミットして」と明言したときだけ `git commit` を実行する。`git push` は絶対にしない。
 5. **`Category=Manual` のテストは合格条件に含めない**。完了基準内の「手動スモーク」は完了基準とは別物として、最後にチェックリストとして提示する。
@@ -56,7 +56,7 @@ argument-hint: '(任意) Step 番号を指定。省略時は最初の未完了�
 
 ```powershell
 dotnet build -warnaserror
-dotnet test --no-build --filter "Category!=Manual"
+dotnet test --no-build -- --filter-not-trait Category=Manual
 ```
 
 両方が **完全に緑** であること。警告 1 つでも残せば失敗扱い。

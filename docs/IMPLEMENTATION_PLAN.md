@@ -75,7 +75,7 @@
 
 ```powershell
 dotnet build -warnaserror
-dotnet test --no-build --filter "Category!=Manual"
+dotnet test --no-build -- --filter-not-trait Category=Manual
 ```
 
 加えて、各ステップ末尾の **「完了基準」** に列挙されたテストクラス / シナリオが実在し、通過していること。
@@ -496,7 +496,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 ### 11.4 完了基準
 
 - 自動テスト 8+1 件が緑
-- 手動スモーク(`Category=Manual` でマーク、`dotnet test --filter "Category=Manual"` で別走):
+- 手動スモーク(`Category=Manual` でマーク、`dotnet test -- --filter-trait Category=Manual` で別走):
   - 実際の `CopilotClient` を起動
   - `radar_list_commits` を 1 件だけ登録した最小セッションが `SessionIdleEvent` まで進む
 
@@ -1266,13 +1266,13 @@ E2E は **過去に起きたバグそのもの** を assertion で固定しま�
 
 ```powershell
 # 全テスト (E2E 含む)
-dotnet test --filter "Category!=Manual"
+dotnet test -- --filter-not-trait Category=Manual
 
 # E2E のみ
-dotnet test tests/RepoSyncRadar.App.E2E.Tests --filter "Category=E2E"
+dotnet test tests/RepoSyncRadar.App.E2E.Tests -- --filter-trait Category=E2E
 
 # CI で E2E をスキップ (デスクトップセッションが無い場合)
-dotnet test --filter "Category!=Manual&Category!=E2E"
+dotnet test -- --filter-not-trait Category=Manual --filter-not-trait Category=E2E
 ```
 
 E2E は **対話的デスクトップセッション** を必要とします (WebView2 の OS-window を実際に開くため)。Windows ヘッドレス CI 上ではスキップしてください。
