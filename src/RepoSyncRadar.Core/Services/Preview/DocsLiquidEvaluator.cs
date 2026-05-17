@@ -12,7 +12,7 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// <list type="bullet">
 ///   <item><c>{% data variables.X.Y %}</c> / <c>{{ variables.X.Y }}</c> →
 ///   <see cref="DocsLiquidContext.Variables"/> から値を取得。</item>
-///   <item><c>{% data reusables.X.Y %}</c> →
+///   <item><c>{% data reusables.X.Y %}</c> / <c>{% data reusables.X.Y+arg %}</c> →
 ///   <see cref="DocsLiquidContext.Reusables"/> 本文を埋め込み (再帰評価)。</item>
 ///   <item><c>{% indented_data_reference reusables.X spaces=N %}</c> →
 ///   reusables を取得し、各行に <c>spaces</c> 個の空白を prefix。</item>
@@ -39,12 +39,12 @@ internal static partial class DocsLiquidEvaluator
     [GeneratedRegex(@"\{%\s*raw\s*%\}(?<content>.*?)\{%\s*endraw\s*%\}", RegexOptions.Singleline)]
     private static partial Regex RawBlockRegex();
 
-    // {% data variables.X.Y %} / {% data reusables.X.Y %}
-    [GeneratedRegex(@"\{%-?\s*data\s+(?<expr>[A-Za-z0-9_.\-/]+)\s*-?%\}")]
+    // {% data variables.X.Y %} / {% data reusables.X.Y %} / {% data reusables.X.Y+arg %}
+    [GeneratedRegex(@"\{%-?\s*data\s+(?<expr>[A-Za-z0-9_.\-/+]+)\s*-?%\}")]
     private static partial Regex DataTagRegex();
 
     // {% indented_data_reference reusables.X spaces=N %}
-    [GeneratedRegex(@"\{%-?\s*indented_data_reference\s+(?<expr>[A-Za-z0-9_.\-/]+)(?:\s+spaces=(?<spaces>\d+))?\s*-?%\}")]
+    [GeneratedRegex(@"\{%-?\s*indented_data_reference\s+(?<expr>[A-Za-z0-9_.\-/+]+)(?:\s+spaces=(?<spaces>\d+))?\s*-?%\}")]
     private static partial Regex IndentedDataRegex();
 
     // {{ variables.X.Y }} / {{ X.Y }}
@@ -96,6 +96,8 @@ internal static partial class DocsLiquidEvaluator
 
         // 2. ifversion / if を内側から再帰的に解く。ifversion は version で真評価、
         //    if (= 版に依存しない) は最初の分岐を採用 (保守的)。
+        //    variables / reusables の展開で新しい ifversion が現れることがあるため、
+        //    反復展開の中でも毎回 ResolveConditionals を通す。
         current = ResolveConditionals(current, version);
 
         // 3. variables / reusables を反復展開。
@@ -105,6 +107,7 @@ internal static partial class DocsLiquidEvaluator
             current = DataTagRegex().Replace(current, m => ResolveDataExpr(m.Groups["expr"].Value, context, m.Value));
             current = IndentedDataRegex().Replace(current, m => ResolveIndentedDataExpr(m, context));
             current = VariableExprRegex().Replace(current, m => ResolveDataExpr(m.Groups["expr"].Value, context, m.Value));
+            current = ResolveConditionals(current, version);
             if (string.Equals(before, current, StringComparison.Ordinal))
             {
                 break;
@@ -139,7 +142,7 @@ internal static partial class DocsLiquidEvaluator
         if (expr.StartsWith("variables.", StringComparison.Ordinal))
         {
             var key = expr["variables.".Length..];
-            if (context.Variables.TryGetValue(key, out var v))
+            if (TryGetValueWithArgumentFallback(context.Variables, key, out var v))
             {
                 return v;
             }
@@ -147,7 +150,7 @@ internal static partial class DocsLiquidEvaluator
         else if (expr.StartsWith("reusables.", StringComparison.Ordinal))
         {
             var key = expr["reusables.".Length..];
-            if (context.Reusables.TryGetValue(key, out var v))
+            if (TryGetValueWithArgumentFallback(context.Reusables, key, out var v))
             {
                 return v;
             }
@@ -164,7 +167,7 @@ internal static partial class DocsLiquidEvaluator
             return m.Value;
         }
         var key = expr["reusables.".Length..];
-        if (!context.Reusables.TryGetValue(key, out var v))
+        if (!TryGetValueWithArgumentFallback(context.Reusables, key, out var v))
         {
             return m.Value;
         }
@@ -182,6 +185,25 @@ internal static partial class DocsLiquidEvaluator
             return v;
         }
         return IndentLines(v, spaces);
+    }
+
+    private static bool TryGetValueWithArgumentFallback(
+        IReadOnlyDictionary<string, string> source,
+        string key,
+        out string value)
+    {
+        if (source.TryGetValue(key, out value!))
+        {
+            return true;
+        }
+
+        var plus = key.IndexOf('+', StringComparison.Ordinal);
+        if (plus <= 0)
+        {
+            return false;
+        }
+
+        return source.TryGetValue(key[..plus], out value!);
     }
 
     private static string IndentLines(string content, int spaces)

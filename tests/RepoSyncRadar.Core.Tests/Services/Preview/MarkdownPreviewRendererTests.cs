@@ -315,6 +315,51 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Expands_Docs_Security_Page_Liquid_Patterns()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["product.github"] = "GitHub",
+                ["product.prodname_team"] = "GitHub Team",
+                ["product.prodname_ghe_cloud"] = "GitHub Enterprise Cloud",
+                ["product.prodname_GHAS"] = "GitHub Advanced Security",
+                ["product.prodname_GH_cs_or_sp"] = "{% ifversion ghas-products %}GitHub Secret Protection or GitHub Code Security{% else %}GitHub Advanced Security{% endif %}",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["advanced-security.ghas-products-bullets"] = "* **GitHub Secret Protection**\n* **GitHub Code Security**",
+            });
+
+        var markdown = """
+            ---
+            title: About security
+            ---
+
+            {% data variables.product.github %} has features. Additional features are available {% ifversion fpt or ghec %}to organizations on {% data variables.product.prodname_team %} and {% data variables.product.prodname_ghe_cloud %} that{% else %} if you {% endif %} purchase a {% data variables.product.prodname_GHAS %} product:
+
+            {% data reusables.advanced-security.ghas-products-bullets+ghas %}
+
+            For more information on purchasing {% data variables.product.prodname_GH_cs_or_sp %}, see the documentation.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context,
+            DocsVersion.Fpt);
+
+        Assert.Contains("GitHub Secret Protection", html, StringComparison.Ordinal);
+        Assert.Contains("GitHub Code Security", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% data", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% ifversion", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% endif", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-liquid", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Preserves_Inline_Html_Like_Picture_Tags()
     {
         // Step 19.8: DisableHtml() was removed so github/docs inline HTML

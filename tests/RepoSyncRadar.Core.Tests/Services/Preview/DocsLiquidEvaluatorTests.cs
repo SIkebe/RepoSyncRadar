@@ -101,6 +101,52 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Expands_Reusable_With_Plus_Argument_By_Base_Key()
+    {
+        var ctx = WithReusables(
+            ("advanced-security.ghas-products-bullets", "* Secret Protection\n* Code Security"));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% data reusables.advanced-security.ghas-products-bullets+ghas %}",
+            ctx);
+
+        Assert.Equal("* Secret Protection\n* Code Security", result);
+    }
+
+    [Fact]
+    public void Evaluates_Ifversion_Introduced_By_Variable_Expansion()
+    {
+        var ctx = WithVariables(
+            ("product.choice", "{% ifversion fpt %}Free{% else %}Enterprise{% endif %}"));
+
+        var fpt = DocsLiquidEvaluator.Evaluate(
+            "Plan: {% data variables.product.choice %}.",
+            ctx,
+            DocsVersion.Fpt);
+        var ghec = DocsLiquidEvaluator.Evaluate(
+            "Plan: {% data variables.product.choice %}.",
+            ctx,
+            DocsVersion.Ghec);
+
+        Assert.Equal("Plan: Free.", fpt);
+        Assert.Equal("Plan: Enterprise.", ghec);
+    }
+
+    [Fact]
+    public void Evaluates_Ifversion_Introduced_By_Reusable_Expansion()
+    {
+        var ctx = WithReusables(
+            ("guide.note", "{% ifversion ghec %}Cloud{% else %}Server{% endif %}"));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% data reusables.guide.note %}",
+            ctx,
+            DocsVersion.Ghec);
+
+        Assert.Equal("Cloud", result);
+    }
+
+    [Fact]
     public void Ifversion_Without_Else_Returns_Body_When_Condition_True()
     {
         var result = DocsLiquidEvaluator.Evaluate(
