@@ -203,6 +203,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         contentServer.StartAsync(
                 Arg.Any<int>(),
                 Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
                 Arg.Any<CancellationToken>())
             .Returns(call =>
             {
@@ -247,7 +248,69 @@ public sealed class PreviewCoordinatorTests : IDisposable
         await contentServer.Received(1).StartAsync(
             4500,
             Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Is<IReadOnlyDictionary<string, string>>(roots =>
+                roots.ContainsKey("/markdown-assets/before")
+                && roots.ContainsKey("/markdown-assets/after")),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Rewrites_Autotitle_From_Worktree_Page_Titles()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-autotitle.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-markdown-autotitle");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+        var sourcePath = "content/code-security/how-tos/secure-at-scale/apply-security-configuration.md";
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, sha) =>
+            {
+                var contentRoot = Path.Combine(path, "content", "code-security", "how-tos", "secure-at-scale");
+                Directory.CreateDirectory(contentRoot);
+                var targetTitle = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "Configuring organization security"
+                    : "Applying security configurations in your organization";
+                File.WriteAllText(
+                    Path.Combine(contentRoot, "configure-organization-security.md"),
+                    $"---\ntitle: {targetTitle}\n---\n\nTarget page");
+                File.WriteAllText(
+                    Path.Combine(contentRoot, "apply-security-configuration.md"),
+                    "---\ntitle: Source\n---\n\nSee [AUTOTITLE](/code-security/how-tos/secure-at-scale/configure-organization-security).");
+            });
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", sourcePath, cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Contains(">Configuring organization security</a>", capturedPages["/markdown/before"], StringComparison.Ordinal);
+        Assert.Contains(">Applying security configurations in your organization</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.DoesNotContain(">AUTOTITLE</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
     }
 
     // §Step 19.9 regression: docs version ドロップダウンで Free / Enterprise Cloud /
@@ -274,6 +337,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         contentServer.StartAsync(
                 Arg.Any<int>(),
                 Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         var sut = BuildSut(
@@ -326,6 +390,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         contentServer.StartAsync(
                 Arg.Any<int>(),
                 Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         var sut = BuildSut(
@@ -519,6 +584,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         contentServer.StartAsync(
                 Arg.Any<int>(),
                 Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         var sut = BuildSut(
@@ -575,6 +641,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         contentServer.StartAsync(
                 Arg.Any<int>(),
                 Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
                 Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         var sut = BuildSut(

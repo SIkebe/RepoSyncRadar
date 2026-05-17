@@ -9,16 +9,30 @@ namespace RepoSyncRadar.Core.Services.Preview;
 ///   <item><see cref="Reusables"/>: <c>data/reusables/**/&lt;name&gt;.md</c> を
 ///   ディレクトリ区切りをドットに変換した相対パス (<c>copilot.about-copilot</c> 等)
 ///   をキー、本文を値とする辞書。</item>
+///   <item><see cref="PageTitles"/>: <c>content/**/*.md</c> の frontmatter
+///   <c>title</c> をリンク解決用の repo path / docs path alias で引ける辞書。</item>
 /// </list>
 /// 値は加工せず生のまま保持し、評価時に <see cref="DocsLiquidEvaluator"/> が
 /// 再帰展開する。
 /// </summary>
 public sealed record DocsLiquidContext(
     IReadOnlyDictionary<string, string> Variables,
-    IReadOnlyDictionary<string, string> Reusables)
+    IReadOnlyDictionary<string, string> Reusables,
+    IReadOnlyDictionary<string, string> PageTitles)
 {
+    public DocsLiquidContext(
+        IReadOnlyDictionary<string, string> variables,
+        IReadOnlyDictionary<string, string> reusables)
+        : this(
+            variables,
+            reusables,
+            new Dictionary<string, string>(StringComparer.Ordinal))
+    {
+    }
+
     /// <summary>variables / reusables が一つも見つからなかったときの空コンテキスト。</summary>
     public static DocsLiquidContext Empty { get; } = new(
+        new Dictionary<string, string>(StringComparer.Ordinal),
         new Dictionary<string, string>(StringComparer.Ordinal),
         new Dictionary<string, string>(StringComparer.Ordinal));
 }

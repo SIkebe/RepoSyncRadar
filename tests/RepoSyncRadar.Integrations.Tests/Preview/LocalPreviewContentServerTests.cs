@@ -40,6 +40,79 @@ public sealed class LocalPreviewContentServerTests
         Assert.Contains("new page", second, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task StartAsync_Serves_Asset_Root_Files_With_Content_Type()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var server = new LocalPreviewContentServer(NullLogger<LocalPreviewContentServer>.Instance);
+        var port = GetFreeLoopbackPort();
+        var root = Path.Combine(Path.GetTempPath(), "rsr-preview-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "assets", "images"));
+        var imagePath = Path.Combine(root, "assets", "images", "sample.png");
+        await File.WriteAllBytesAsync(imagePath, [0x89, 0x50, 0x4e, 0x47], ct);
+        using var http = new HttpClient();
+
+        try
+        {
+            await server.StartAsync(
+                port,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["/markdown/after"] = "<html><body>page</body></html>",
+                },
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["/markdown-assets/after"] = root,
+                },
+                ct);
+
+            using var response = await http.GetAsync(new Uri($"http://127.0.0.1:{port}/markdown-assets/after/assets/images/sample.png"), ct);
+            var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("image/png", response.Content.Headers.ContentType?.MediaType);
+            Assert.Equal([0x89, 0x50, 0x4e, 0x47], bytes);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task StartAsync_Rejects_Asset_Path_Traversal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var server = new LocalPreviewContentServer(NullLogger<LocalPreviewContentServer>.Instance);
+        var port = GetFreeLoopbackPort();
+        var root = Path.Combine(Path.GetTempPath(), "rsr-preview-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        using var http = new HttpClient();
+
+        try
+        {
+            await server.StartAsync(
+                port,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["/markdown/after"] = "<html><body>page</body></html>",
+                },
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["/markdown-assets/after"] = root,
+                },
+                ct);
+
+            using var response = await http.GetAsync(new Uri($"http://127.0.0.1:{port}/markdown-assets/after/%2e%2e/outside.png"), ct);
+
+            Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static int GetFreeLoopbackPort()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);

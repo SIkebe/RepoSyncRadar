@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -23,6 +24,7 @@ namespace RepoSyncRadar.Core.Services.Preview;
 ///   どの分岐も真でなければ <c>{% else %}</c> → なければ空。</item>
 ///   <item><c>{% if X %}A{% endif %}</c> → 版に依存しないため、最初の分岐を採用
 ///   (公式 docs 上は条件式が真の場合のみ表示されるが、レビューでは保守的に表示)。</item>
+///   <item><c>{% octicon "name" ... %}</c> → Primer Octicons 相当の SVG に展開する。</item>
 ///   <item><c>{% raw %}…{% endraw %}</c> → 中身を保護し、評価対象から外す。</item>
 /// </list>
 /// 解決できないタグはそのまま残し、後段の
@@ -40,16 +42,51 @@ internal static partial class DocsLiquidEvaluator
     private static partial Regex RawBlockRegex();
 
     // {% data variables.X.Y %} / {% data reusables.X.Y %} / {% data reusables.X.Y+arg %}
-    [GeneratedRegex(@"\{%-?\s*data\s+(?<expr>[A-Za-z0-9_.\-/+]+)\s*-?%\}")]
+    [GeneratedRegex(@"\{%-?\s*data\s+(?<expr>[A-Za-z0-9_.\-/+\[\]]+)\s*-?%\}")]
     private static partial Regex DataTagRegex();
 
     // {% indented_data_reference reusables.X spaces=N %}
     [GeneratedRegex(@"\{%-?\s*indented_data_reference\s+(?<expr>[A-Za-z0-9_.\-/+]+)(?:\s+spaces=(?<spaces>\d+))?\s*-?%\}")]
     private static partial Regex IndentedDataRegex();
 
-    // {{ variables.X.Y }} / {{ X.Y }}
-    [GeneratedRegex(@"\{\{-?\s*(?<expr>[A-Za-z0-9_.\-/]+)\s*-?\}\}")]
+    // {{ variables.X.Y }} / {{ site.data.variables.X.Y }}
+    [GeneratedRegex(@"\{\{-?\s*(?<expr>[A-Za-z0-9_.\-/\[\]]+)\s*-?\}\}")]
     private static partial Regex VariableExprRegex();
+
+    [GeneratedRegex(@"(\r?\n){3,}")]
+    private static partial Regex ExtraEmptyLinesRegex();
+
+    private static readonly Dictionary<string, OcticonDefinition> s_octicons =
+        new Dictionary<string, OcticonDefinition>(StringComparer.Ordinal)
+        {
+            ["codescan"] = new(
+                16,
+                16,
+                """<path d="M8.47 4.97a.75.75 0 0 0 0 1.06L9.94 7.5 8.47 8.97a.75.75 0 1 0 1.06 1.06l2-2a.75.75 0 0 0 0-1.06l-2-2a.75.75 0 0 0-1.06 0ZM6.53 6.03a.75.75 0 0 0-1.06-1.06l-2 2a.75.75 0 0 0 0 1.06l2 2a.75.75 0 1 0 1.06-1.06L5.06 7.5l1.47-1.47Z"></path><path d="M12.246 13.307a7.501 7.501 0 1 1 1.06-1.06l2.474 2.473a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM1.5 7.5a6.002 6.002 0 0 0 3.608 5.504 6.002 6.002 0 0 0 6.486-1.117.748.748 0 0 1 .292-.293A6 6 0 1 0 1.5 7.5Z"></path>"""),
+            ["gear"] = new(
+                16,
+                16,
+                """<path d="M8 0a8.2 8.2 0 0 1 .701.031C9.444.095 9.99.645 10.16 1.29l.288 1.107c.018.066.079.158.212.224.231.114.454.243.668.386.123.082.233.09.299.071l1.103-.303c.644-.176 1.392.021 1.82.63.27.385.506.792.704 1.218.315.675.111 1.422-.364 1.891l-.814.806c-.049.048-.098.147-.088.294.016.257.016.515 0 .772-.01.147.038.246.088.294l.814.806c.475.469.679 1.216.364 1.891a7.977 7.977 0 0 1-.704 1.217c-.428.61-1.176.807-1.82.63l-1.102-.302c-.067-.019-.177-.011-.3.071a5.909 5.909 0 0 1-.668.386c-.133.066-.194.158-.211.224l-.29 1.106c-.168.646-.715 1.196-1.458 1.26a8.006 8.006 0 0 1-1.402 0c-.743-.064-1.289-.614-1.458-1.26l-.289-1.106c-.018-.066-.079-.158-.212-.224a5.738 5.738 0 0 1-.668-.386c-.123-.082-.233-.09-.299-.071l-1.103.303c-.644.176-1.392-.021-1.82-.63a8.12 8.12 0 0 1-.704-1.218c-.315-.675-.111-1.422.363-1.891l.815-.806c.05-.048.098-.147.088-.294a6.214 6.214 0 0 1 0-.772c.01-.147-.038-.246-.088-.294l-.815-.806C.635 6.045.431 5.298.746 4.623a7.92 7.92 0 0 1 .704-1.217c.428-.61 1.176-.807 1.82-.63l1.102.302c.067.019.177.011.3-.071.214-.143.437-.272.668-.386.133-.066.194-.158.211-.224l.29-1.106C6.009.645 6.556.095 7.299.03 7.53.01 7.764 0 8 0Zm-.571 1.525c-.036.003-.108.036-.137.146l-.289 1.105c-.147.561-.549.967-.998 1.189-.173.086-.34.183-.5.29-.417.278-.97.423-1.529.27l-1.103-.303c-.109-.03-.175.016-.195.045-.22.312-.412.644-.573.99-.014.031-.021.11.059.19l.815.806c.411.406.562.957.53 1.456a4.709 4.709 0 0 0 0 .582c.032.499-.119 1.05-.53 1.456l-.815.806c-.081.08-.073.159-.059.19.162.346.353.677.573.989.02.03.085.076.195.046l1.102-.303c.56-.153 1.113-.008 1.53.27.161.107.328.204.501.29.447.222.85.629.997 1.189l.289 1.105c.029.109.101.143.137.146a6.6 6.6 0 0 0 1.142 0c.036-.003.108-.036.137-.146l.289-1.105c.147-.561.549-.967.998-1.189.173-.086.34-.183.5-.29.417-.278.97-.423 1.529-.27l1.103.303c.109.029.175-.016.195-.045.22-.313.411-.644.573-.99.014-.031.021-.11-.059-.19l-.815-.806c-.411-.406-.562-.957-.53-1.456a4.709 4.709 0 0 0 0-.582c-.032-.499.119-1.05.53-1.456l.815-.806c.081-.08.073-.159.059-.19a6.464 6.464 0 0 0-.573-.989c-.02-.03-.085-.076-.195-.046l-1.102.303c-.56.153-1.113.008-1.53-.27a4.44 4.44 0 0 0-.501-.29c-.447-.222-.85-.629-.997-1.189l-.289-1.105c-.029-.11-.101-.143-.137-.146a6.6 6.6 0 0 0-1.142 0ZM11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0ZM9.5 8a1.5 1.5 0 1 0-3.001.001A1.5 1.5 0 0 0 9.5 8Z"></path>"""),
+            ["kebab-horizontal"] = new(
+                16,
+                16,
+                """<path d="M8 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM1.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm13 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"></path>"""),
+            ["organization"] = new(
+                16,
+                16,
+                """<path d="M1.75 16A1.75 1.75 0 0 1 0 14.25V1.75C0 .784.784 0 1.75 0h8.5C11.216 0 12 .784 12 1.75v12.5c0 .085-.006.168-.018.25h2.268a.25.25 0 0 0 .25-.25V8.285a.25.25 0 0 0-.111-.208l-1.055-.703a.749.749 0 1 1 .832-1.248l1.055.703c.487.325.779.871.779 1.456v5.965A1.75 1.75 0 0 1 14.25 16h-3.5a.766.766 0 0 1-.197-.026c-.099.017-.2.026-.303.026h-3a.75.75 0 0 1-.75-.75V14h-1v1.25a.75.75 0 0 1-.75.75Zm-.25-1.75c0 .138.112.25.25.25H4v-1.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 .75.75v1.25h2.25a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25ZM3.75 6h.5a.75.75 0 0 1 0 1.5h-.5a.75.75 0 0 1 0-1.5ZM3 3.75A.75.75 0 0 1 3.75 3h.5a.75.75 0 0 1 0 1.5h-.5A.75.75 0 0 1 3 3.75Zm4 3A.75.75 0 0 1 7.75 6h.5a.75.75 0 0 1 0 1.5h-.5A.75.75 0 0 1 7 6.75ZM7.75 3h.5a.75.75 0 0 1 0 1.5h-.5a.75.75 0 0 1 0-1.5ZM3 9.75A.75.75 0 0 1 3.75 9h.5a.75.75 0 0 1 0 1.5h-.5A.75.75 0 0 1 3 9.75ZM7.75 9h.5a.75.75 0 0 1 0 1.5h-.5a.75.75 0 0 1 0-1.5Z"></path>"""),
+            ["triangle-down"] = new(
+                16,
+                16,
+                """<path d="m4.427 7.427 3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z"></path>"""),
+        };
+
+    // {% octicon "gear" aria-hidden="true" aria-label="gear" %}
+    [GeneratedRegex("""\{%-?\s*octicon\s+["'](?<icon>[A-Za-z0-9-]+)["'](?<options>.*?)\s*-?%\}""", RegexOptions.Singleline)]
+    private static partial Regex OcticonTagRegex();
+
+    [GeneratedRegex("""(?<key>[A-Za-z_:][-A-Za-z0-9_:.]*)=(?<quote>["'])(?<value>.*?)\k<quote>""", RegexOptions.Singleline)]
+    private static partial Regex OcticonOptionRegex();
 
     // 最も内側の {% if(version) %}...{% endif %}。body に if/ifversion を含まない
     // ものだけマッチするので、反復置換でネストを下から解決できる。
@@ -99,15 +136,18 @@ internal static partial class DocsLiquidEvaluator
         //    variables / reusables の展開で新しい ifversion が現れることがあるため、
         //    反復展開の中でも毎回 ResolveConditionals を通す。
         current = ResolveConditionals(current, version);
+        current = OcticonTagRegex().Replace(current, ResolveOcticonTag);
 
         // 3. variables / reusables を反復展開。
         for (var depth = 0; depth < maxRecursionDepth; depth++)
         {
             var before = current;
-            current = DataTagRegex().Replace(current, m => ResolveDataExpr(m.Groups["expr"].Value, context, m.Value));
+            var dataSource = current;
+            current = DataTagRegex().Replace(current, m => ResolveDataExpr(m, context, dataSource));
             current = IndentedDataRegex().Replace(current, m => ResolveIndentedDataExpr(m, context));
             current = VariableExprRegex().Replace(current, m => ResolveDataExpr(m.Groups["expr"].Value, context, m.Value));
             current = ResolveConditionals(current, version);
+            current = OcticonTagRegex().Replace(current, ResolveOcticonTag);
             if (string.Equals(before, current, StringComparison.Ordinal))
             {
                 break;
@@ -124,6 +164,8 @@ internal static partial class DocsLiquidEvaluator
             });
         }
 
+        current = CleanUpLiquidPost(current);
+
         return current;
     }
 
@@ -137,14 +179,24 @@ internal static partial class DocsLiquidEvaluator
         int maxRecursionDepth = DefaultMaxRecursionDepth)
         => Evaluate(source, context, DocsVersionCatalog.Default, maxRecursionDepth);
 
+    private static string ResolveDataExpr(Match match, DocsLiquidContext context, string source)
+    {
+        var expr = match.Groups["expr"].Value;
+        var resolved = ResolveDataExpr(expr, context, match.Value);
+        return string.Equals(resolved, match.Value, StringComparison.Ordinal)
+            ? resolved
+            : ApplyDataTagContext(match, source, resolved);
+    }
+
     private static string ResolveDataExpr(string expr, DocsLiquidContext context, string originalTag)
     {
+        expr = NormalizeDataExpr(expr);
         if (expr.StartsWith("variables.", StringComparison.Ordinal))
         {
             var key = expr["variables.".Length..];
             if (TryGetValueWithArgumentFallback(context.Variables, key, out var v))
             {
-                return v;
+                return v.Trim();
             }
         }
         else if (expr.StartsWith("reusables.", StringComparison.Ordinal))
@@ -152,11 +204,88 @@ internal static partial class DocsLiquidEvaluator
             var key = expr["reusables.".Length..];
             if (TryGetValueWithArgumentFallback(context.Reusables, key, out var v))
             {
-                return v;
+                return v.Trim();
             }
         }
         // 解決不能 — 後段の NeutralizeLiquid に任せるためタグをそのまま残す。
         return originalTag;
+    }
+
+    private static string NormalizeDataExpr(string expr)
+    {
+        if (expr.StartsWith("site.data.", StringComparison.Ordinal))
+        {
+            return expr["site.data.".Length..];
+        }
+        if (expr.StartsWith("data.", StringComparison.Ordinal))
+        {
+            return expr["data.".Length..];
+        }
+        return expr;
+    }
+
+    private static string ApplyDataTagContext(Match match, string source, string text)
+    {
+        if (!text.Contains('\n', StringComparison.Ordinal))
+        {
+            return text;
+        }
+
+        var lineStart = match.Index;
+        while (lineStart > 0 && source[lineStart - 1] != '\n')
+        {
+            lineStart--;
+        }
+        var prefix = source[lineStart..match.Index];
+        if (string.IsNullOrEmpty(prefix))
+        {
+            return text;
+        }
+
+        var blockquotePrefix = MatchBlockquotePrefix(prefix);
+        if (blockquotePrefix is not null)
+        {
+            return PrefixContinuationLines(text, blockquotePrefix);
+        }
+        if (prefix.All(static c => c is ' ' or '\t'))
+        {
+            return PrefixContinuationLines(text, prefix);
+        }
+        return text;
+    }
+
+    private static string? MatchBlockquotePrefix(string prefix)
+    {
+        var index = 0;
+        while (index < prefix.Length && prefix[index] is ' ' or '\t')
+        {
+            index++;
+        }
+        if (index >= prefix.Length || prefix[index] != '>')
+        {
+            return null;
+        }
+        index++;
+        if (index < prefix.Length && prefix[index] is ' ' or '\t')
+        {
+            index++;
+        }
+        return prefix[..index];
+    }
+
+    private static string PrefixContinuationLines(string text, string prefix)
+    {
+        var sb = new StringBuilder(text.Length + prefix.Length * 4);
+        for (var index = 0; index < text.Length; index++)
+        {
+            var ch = text[index];
+            sb.Append(ch);
+            if (ch == '\n' && index + 1 < text.Length)
+            {
+                sb.Append(prefix);
+            }
+        }
+        return sb.ToString();
     }
 
     private static string ResolveIndentedDataExpr(Match m, DocsLiquidContext context)
@@ -205,6 +334,136 @@ internal static partial class DocsLiquidEvaluator
 
         return source.TryGetValue(key[..plus], out value!);
     }
+
+    private static string ResolveOcticonTag(Match match)
+    {
+        var iconName = NormalizeOcticonName(match.Groups["icon"].Value);
+        if (!s_octicons.TryGetValue(iconName, out var definition))
+        {
+            return match.Value;
+        }
+
+        var options = ParseOcticonOptions(match.Groups["options"].Value);
+        if (!options.ContainsKey("aria-label"))
+        {
+            options["aria-label"] = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{DefaultOcticonLabel(iconName)} icon");
+        }
+
+        return RenderOcticonSvg(iconName, definition, options);
+    }
+
+    private static string NormalizeOcticonName(string iconName)
+        => iconName switch
+        {
+            "clippy" => "paste",
+            "duplicate" => "copy",
+            "trashcan" => "trash",
+            _ => iconName,
+        };
+
+    private static Dictionary<string, string> ParseOcticonOptions(string optionsSource)
+    {
+        var options = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (Match option in OcticonOptionRegex().Matches(optionsSource))
+        {
+            var key = option.Groups["key"].Value;
+            var value = option.Groups["value"].Value;
+            options[key] = value;
+            if (string.Equals(key, "label", StringComparison.Ordinal))
+            {
+                options["aria-label"] = value;
+            }
+        }
+        return options;
+    }
+
+    private static string RenderOcticonSvg(
+        string iconName,
+        OcticonDefinition definition,
+        Dictionary<string, string> options)
+    {
+        var attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["version"] = "1.1",
+            ["width"] = definition.Width.ToString(CultureInfo.InvariantCulture),
+            ["height"] = definition.Height.ToString(CultureInfo.InvariantCulture),
+            ["viewBox"] = string.Create(CultureInfo.InvariantCulture, $"0 0 {definition.Width} {definition.Height}"),
+            ["class"] = string.Create(CultureInfo.InvariantCulture, $"octicon octicon-{iconName}"),
+            ["aria-hidden"] = "true",
+            ["data-component"] = "Octicon",
+        };
+
+        foreach (var (key, value) in options)
+        {
+            attributes[key] = value;
+        }
+        var requestedWidth = options.TryGetValue("width", out var width) ? width : null;
+        var requestedHeight = options.TryGetValue("height", out var height) ? height : null;
+        if (requestedWidth is not null || requestedHeight is not null)
+        {
+            ApplyOcticonSize(attributes, definition, requestedWidth, requestedHeight);
+        }
+        if (options.TryGetValue("class", out var extraClass))
+        {
+            attributes["class"] = string.Create(
+                CultureInfo.InvariantCulture,
+                $"octicon octicon-{iconName} {extraClass}").TrimEnd();
+        }
+        if (options.ContainsKey("aria-label"))
+        {
+            attributes["role"] = "img";
+            attributes.Remove("aria-hidden");
+        }
+
+        var sb = new StringBuilder(definition.Path.Length + attributes.Count * 32 + 16);
+        sb.Append("<svg");
+        foreach (var (key, value) in attributes)
+        {
+            sb.Append(' ')
+                .Append(key)
+                .Append("=\"")
+                .Append(WebUtility.HtmlEncode(value))
+                .Append('"');
+        }
+        sb.Append('>')
+            .Append(definition.Path)
+            .Append("</svg>");
+        return sb.ToString();
+    }
+
+    private static void ApplyOcticonSize(
+        Dictionary<string, string> attributes,
+        OcticonDefinition definition,
+        string? requestedWidth,
+        string? requestedHeight)
+    {
+        if (!string.IsNullOrEmpty(requestedWidth))
+        {
+            attributes["width"] = requestedWidth;
+        }
+        if (!string.IsNullOrEmpty(requestedHeight))
+        {
+            attributes["height"] = requestedHeight;
+        }
+        if (!string.IsNullOrEmpty(requestedWidth) && string.IsNullOrEmpty(requestedHeight)
+            && int.TryParse(requestedWidth, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedWidth))
+        {
+            attributes["height"] = ((parsedWidth * definition.Height) / definition.Width).ToString(CultureInfo.InvariantCulture);
+        }
+        if (string.IsNullOrEmpty(requestedWidth) && !string.IsNullOrEmpty(requestedHeight)
+            && int.TryParse(requestedHeight, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedHeight))
+        {
+            attributes["width"] = ((parsedHeight * definition.Width) / definition.Height).ToString(CultureInfo.InvariantCulture);
+        }
+    }
+
+    private static string DefaultOcticonLabel(string iconName)
+        => NonAlphanumericRegex().Replace(iconName.ToLowerInvariant(), " ").Trim();
+
+    [GeneratedRegex(@"[^a-z0-9]+", RegexOptions.IgnoreCase)]
+    private static partial Regex NonAlphanumericRegex();
 
     private static string IndentLines(string content, int spaces)
     {
@@ -321,4 +580,9 @@ internal static partial class DocsLiquidEvaluator
 
     private static string CreateRawSentinel(int index)
         => string.Create(CultureInfo.InvariantCulture, $"{RawSentinelStart}RAW{index}{RawSentinelEnd}");
+
+    private static string CleanUpLiquidPost(string source)
+        => ExtraEmptyLinesRegex().Replace(source, "\n\n");
+
+    private sealed record OcticonDefinition(int Width, int Height, string Path);
 }

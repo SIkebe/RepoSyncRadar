@@ -17,6 +17,12 @@ public interface ILocalPreviewContentServer
         IReadOnlyDictionary<string, string> pages,
         CancellationToken cancellationToken = default);
 
+    Task StartAsync(
+        int port,
+        IReadOnlyDictionary<string, string> pages,
+        IReadOnlyDictionary<string, string> assetRoots,
+        CancellationToken cancellationToken = default);
+
     Task StopAsync(CancellationToken cancellationToken = default);
 }
 
@@ -25,6 +31,7 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
     private readonly Lock _gate = new();
     private readonly ILogger<LocalPreviewContentServer> _logger;
     private Dictionary<string, byte[]> _pages = new(StringComparer.Ordinal);
+    private Dictionary<string, string> _assetRoots = new(StringComparer.Ordinal);
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _acceptLoop;
@@ -52,10 +59,19 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
         int port,
         IReadOnlyDictionary<string, string> pages,
         CancellationToken cancellationToken = default)
+        => await StartAsync(port, pages, new Dictionary<string, string>(StringComparer.Ordinal), cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task StartAsync(
+        int port,
+        IReadOnlyDictionary<string, string> pages,
+        IReadOnlyDictionary<string, string> assetRoots,
+        CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(port, 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(port, 65535);
         ArgumentNullException.ThrowIfNull(pages);
+        ArgumentNullException.ThrowIfNull(assetRoots);
         if (pages.Count == 0)
         {
             throw new ArgumentException("At least one page is required.", nameof(pages));
@@ -67,12 +83,24 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
             encodedPages[NormalizeRoute(page.Key)] = Encoding.UTF8.GetBytes(page.Value);
         }
 
+        var normalizedAssetRoots = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var assetRoot in assetRoots)
+        {
+            var routePrefix = NormalizeRoute(assetRoot.Key).TrimEnd('/');
+            if (routePrefix.Length == 0)
+            {
+                routePrefix = "/";
+            }
+            normalizedAssetRoots[routePrefix] = Path.GetFullPath(assetRoot.Value);
+        }
+
         lock (_gate)
         {
             if (_listener is not null && CurrentPort == port)
             {
                 _pages = encodedPages;
-                LogUpdated(_logger, port, pages.Count);
+                _assetRoots = normalizedAssetRoots;
+                LogUpdated(_logger, port, pages.Count, assetRoots.Count);
                 return;
             }
         }
@@ -86,12 +114,13 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
         lock (_gate)
         {
             _pages = encodedPages;
+            _assetRoots = normalizedAssetRoots;
             _listener = listener;
             _cts = cts;
             CurrentPort = port;
             _acceptLoop = Task.Run(() => AcceptLoopAsync(listener, cts.Token), CancellationToken.None);
         }
-        LogStarted(_logger, port, pages.Count);
+        LogStarted(_logger, port, pages.Count, assetRoots.Count);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken = default)
@@ -108,6 +137,7 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
             _cts = null;
             _acceptLoop = null;
             _pages = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            _assetRoots = new Dictionary<string, string>(StringComparer.Ordinal);
             CurrentPort = 0;
         }
 
@@ -192,6 +222,21 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
 
             if (body is null)
             {
+                if (TryResolveAssetPath(route, out var assetPath))
+                {
+                    var assetBody = await File.ReadAllBytesAsync(assetPath, cancellationToken).ConfigureAwait(false);
+                    await WriteResponseAsync(
+                        stream,
+                        200,
+                        "OK",
+                        ResolveContentType(assetPath),
+                        assetBody,
+                        includeBody: !string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase),
+                        cancellationToken)
+                        .ConfigureAwait(false);
+                    return;
+                }
+
                 await WriteResponseAsync(stream, 404, "Not Found", "text/plain; charset=utf-8", Encoding.UTF8.GetBytes("Not Found"), includeBody: !string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(false);
                 return;
             }
@@ -203,6 +248,77 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
             LogRequestFailed(_logger, ex.Message);
         }
     }
+
+    private bool TryResolveAssetPath(string route, out string assetPath)
+    {
+        Dictionary<string, string> roots;
+        lock (_gate)
+        {
+            roots = new Dictionary<string, string>(_assetRoots, StringComparer.Ordinal);
+        }
+
+        foreach (var (prefix, root) in roots)
+        {
+            if (!route.StartsWith(prefix + "/", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var relativeRoute = route[(prefix.Length + 1)..];
+            if (TryCombineAssetPath(root, relativeRoute, out assetPath))
+            {
+                return File.Exists(assetPath);
+            }
+        }
+
+        assetPath = string.Empty;
+        return false;
+    }
+
+    private static bool TryCombineAssetPath(string root, string relativeRoute, out string assetPath)
+    {
+        var current = Path.GetFullPath(root);
+        foreach (var segment in relativeRoute.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var decoded = Uri.UnescapeDataString(segment);
+            if (decoded.Length == 0
+                || decoded.Equals(".", StringComparison.Ordinal)
+                || decoded.Equals("..", StringComparison.Ordinal)
+                || decoded.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                || decoded.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                assetPath = string.Empty;
+                return false;
+            }
+            current = Path.Combine(current, decoded);
+        }
+
+        var fullPath = Path.GetFullPath(current);
+        var rootWithSeparator = Path.EndsInDirectorySeparator(root) ? root : root + Path.DirectorySeparatorChar;
+        var fullRoot = Path.GetFullPath(rootWithSeparator);
+        if (!fullPath.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            assetPath = string.Empty;
+            return false;
+        }
+
+        assetPath = fullPath;
+        return true;
+    }
+
+    private static string ResolveContentType(string path)
+        => Path.GetExtension(path).ToLowerInvariant() switch
+        {
+            ".avif" => "image/avif",
+            ".gif" => "image/gif",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".svg" => "image/svg+xml; charset=utf-8",
+            ".webp" => "image/webp",
+            ".mp4" => "video/mp4",
+            ".webm" => "video/webm",
+            _ => "application/octet-stream",
+        };
 
     private static async Task WriteResponseAsync(
         NetworkStream stream,
@@ -233,12 +349,12 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
         return withoutQuery[0] == '/' ? withoutQuery : "/" + withoutQuery;
     }
 
-    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Local preview content server started on port {Port} with {PageCount} pages.")]
-    private static partial void LogStarted(ILogger logger, int port, int pageCount);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "Local preview content server started on port {Port} with {PageCount} pages and {AssetRootCount} asset roots.")]
+    private static partial void LogStarted(ILogger logger, int port, int pageCount, int assetRootCount);
 
     [LoggerMessage(EventId = 2, Level = LogLevel.Debug, Message = "Local preview content server request failed: {Message}")]
     private static partial void LogRequestFailed(ILogger logger, string message);
 
-    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Local preview content server updated on port {Port} with {PageCount} pages.")]
-    private static partial void LogUpdated(ILogger logger, int port, int pageCount);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "Local preview content server updated on port {Port} with {PageCount} pages and {AssetRootCount} asset roots.")]
+    private static partial void LogUpdated(ILogger logger, int port, int pageCount, int assetRootCount);
 }

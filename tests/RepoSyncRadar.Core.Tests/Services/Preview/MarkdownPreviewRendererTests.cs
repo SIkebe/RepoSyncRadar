@@ -232,6 +232,73 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Rewrites_Autotitle_Link_Text_From_Page_Title_Index()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/code-security/how-tos/secure-at-scale/configure-organization-security"] = "Applying security configurations in your organization",
+            });
+
+        var markdown = "See [AUTOTITLE](/code-security/how-tos/secure-at-scale/configure-organization-security#creating-a-custom-security-configuration).";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/how-tos/secure-at-scale/apply-security-configuration.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        Assert.Contains(">Applying security configurations in your organization</a>", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"/code-security/how-tos/secure-at-scale/configure-organization-security#creating-a-custom-security-configuration\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">AUTOTITLE</a>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rewrites_Relative_Autotitle_Link_Text_And_Evaluates_Target_Title_Liquid()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["product.prodname_copilot"] = "GitHub Copilot",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["content/copilot/concepts/about-copilot.md"] = "About {% data variables.product.prodname_copilot %}",
+            });
+
+        var markdown = "For more information, see [AUTOTITLE](../concepts/about-copilot.md?tool=vscode).";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/use-copilot.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        Assert.Contains(">About GitHub Copilot</a>", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"../concepts/about-copilot.md?tool=vscode\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">AUTOTITLE</a>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Leaves_Unresolved_Autotitle_Link_Text_Untouched()
+    {
+        var markdown = "See [AUTOTITLE](/missing/page).";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains(">AUTOTITLE</a>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Unresolved_Variable_Tag_Is_Wrapped_In_Liquid_Placeholder_Span()
     {
         var markdown = """
@@ -360,6 +427,120 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Renders_Docs_Octicon_Tags_As_Inline_Svg()
+    {
+        var markdown = """
+            ---
+            title: Apply security configurations
+            ---
+
+            1. At the top of the page, click {% octicon "gear" aria-hidden="true" aria-label="gear" %} **Settings**.
+            2. Select the **Apply to** {% octicon "triangle-down" aria-hidden="true" aria-label="triangle-down" %} dropdown menu.
+            3. In the left sidebar, click {% octicon "codescan" aria-hidden="true" aria-label="codescan" %} **Code security**.
+            4. Click {% octicon "organization" aria-hidden="true" aria-label="organization" %} **Organizations**, then {% octicon "kebab-horizontal" aria-label="More" %} **More**.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("<strong>Settings</strong>", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-gear\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-triangle-down\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-codescan\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-organization\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-kebab-horizontal\"", html, StringComparison.Ordinal);
+        Assert.Contains(".octicon{display:inline-block;vertical-align:text-bottom;fill:currentColor;overflow:visible;}", html, StringComparison.Ordinal);
+        Assert.Contains("dropdown menu", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-liquid", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_Docs_Spotlight_Blocks_As_Official_Alert_Html()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            {% warning %}
+
+            This is **important**.
+
+            {% endwarning %}
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("class=\"ghd-alert ghd-alert-attention ghd-spotlight-attention\"", html, StringComparison.Ordinal);
+        Assert.Contains("This is <strong>important</strong>.", html, StringComparison.Ordinal);
+        Assert.Contains(".ghd-alert{", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% warning", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% endwarning", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-liquid", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_Docs_Tool_Blocks_As_Official_Tool_Html()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            {% vscode %}
+
+            Use the **Command Palette**.
+
+            {% endvscode %}
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("class=\"ghd-tool vscode\"", html, StringComparison.Ordinal);
+        Assert.Contains("Use the <strong>Command Palette</strong>.", html, StringComparison.Ordinal);
+        Assert.Contains(".ghd-tool{", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% vscode", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% endvscode", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_Docs_Prompt_Blocks_With_Copilot_Link_And_Icon()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            {% prompt %}Explain this function{% endprompt %}
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("Explain this function", html, StringComparison.Ordinal);
+        Assert.Contains("https://github.com/copilot?prompt=Explain%20this%20function", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-copilot\"", html, StringComparison.Ordinal);
+        Assert.Contains("copilot-prompt-long", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% prompt", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% endprompt", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Preserves_Inline_Html_Like_Picture_Tags()
     {
         // Step 19.8: DisableHtml() was removed so github/docs inline HTML
@@ -385,6 +566,40 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("<picture>", html, StringComparison.Ordinal);
         Assert.Contains("<img src=\"light.png\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;picture&gt;", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rewrites_Local_Image_Assets_To_Preview_Asset_Routes()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            ![Settings tab](/assets/images/help/organizations/settings-tab.png)
+
+            ![Local diagram](<images/local diagram.png>)
+
+            <picture>
+              <source srcset="/assets/images/help/organizations/settings-dark.png 1x, /assets/images/help/organizations/settings-dark@2x.png 2x" media="(prefers-color-scheme: dark)">
+              <img src="../shared/light.png" alt="example">
+            </picture>
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/how-to/secure-at-scale/configure-organization-security/page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains("src=\"/markdown-assets/after/assets/images/help/organizations/settings-tab.png\"", html, StringComparison.Ordinal);
+        Assert.Contains("src=\"/markdown-assets/after/content/code-security/how-to/secure-at-scale/configure-organization-security/images/local%20diagram.png\"", html, StringComparison.Ordinal);
+        Assert.Contains("srcset=\"/markdown-assets/after/assets/images/help/organizations/settings-dark.png 1x, /markdown-assets/after/assets/images/help/organizations/settings-dark%402x.png 2x\"", html, StringComparison.Ordinal);
+        Assert.Contains("src=\"/markdown-assets/after/content/code-security/how-to/secure-at-scale/shared/light.png\"", html, StringComparison.Ordinal);
+        Assert.Contains("img,video{max-width:100%;height:auto;}", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("src=\"/assets/images", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("srcset=\"/assets/images", html, StringComparison.Ordinal);
     }
 
     [Fact]

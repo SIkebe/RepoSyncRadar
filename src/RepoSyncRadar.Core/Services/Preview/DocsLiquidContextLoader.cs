@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using YamlDotNet.RepresentationModel;
 
 namespace RepoSyncRadar.Core.Services.Preview;
@@ -26,6 +27,7 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 internal static class DocsLiquidContextLoader
 {
+    private const string ContentDir = "content";
     private const string VariablesSubdir = "variables";
     private const string ReusablesSubdir = "reusables";
     private const string DataDir = "data";
@@ -41,11 +43,178 @@ internal static class DocsLiquidContextLoader
 
         var variables = await LoadVariablesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
         var reusables = await LoadReusablesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
-        if (variables.Count == 0 && reusables.Count == 0)
+        var pageTitles = await LoadPageTitlesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
+        if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0)
         {
             return DocsLiquidContext.Empty;
         }
-        return new DocsLiquidContext(variables, reusables);
+        return new DocsLiquidContext(variables, reusables, pageTitles);
+    }
+
+    private static async Task<IReadOnlyDictionary<string, string>> LoadPageTitlesAsync(
+        string worktreePath,
+        CancellationToken cancellationToken)
+    {
+        var contentDir = Path.Combine(worktreePath, ContentDir);
+        if (!Directory.Exists(contentDir))
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        IEnumerable<string> files;
+        try
+        {
+            files = Directory.EnumerateFiles(contentDir, "*.md", SearchOption.AllDirectories);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return result;
+        }
+
+        var root = Path.GetFullPath(worktreePath);
+        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+
+        foreach (var file in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            string frontmatter;
+            try
+            {
+                frontmatter = await ReadLeadingFrontmatterAsync(file, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            var rawTitle = ExtractFrontmatterScalar(frontmatter, "title")
+                ?? ExtractFrontmatterScalar(frontmatter, "shortTitle");
+            if (string.IsNullOrWhiteSpace(rawTitle))
+            {
+                continue;
+            }
+
+            var fullPath = Path.GetFullPath(file);
+            var repoPath = fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
+                ? fullPath[rootWithSeparator.Length..]
+                : Path.GetRelativePath(root, fullPath);
+            AddPageTitleAliases(result, repoPath, rawTitle);
+        }
+
+        return result;
+    }
+
+    private static async Task<string> ReadLeadingFrontmatterAsync(
+        string file,
+        CancellationToken cancellationToken)
+    {
+        using var reader = new StreamReader(file);
+        var firstLine = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+        if (firstLine is null || !string.Equals(firstLine.TrimStart('\uFEFF').TrimEnd('\r'), "---", StringComparison.Ordinal))
+        {
+            return string.Empty;
+        }
+
+        var frontmatter = new StringBuilder();
+        string? line;
+        while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
+        {
+            if (string.Equals(line.TrimEnd('\r'), "---", StringComparison.Ordinal))
+            {
+                return frontmatter.ToString();
+            }
+            frontmatter.AppendLine(line);
+        }
+        return string.Empty;
+    }
+
+    private static string? ExtractFrontmatterScalar(string frontmatter, string key)
+    {
+        if (string.IsNullOrEmpty(frontmatter))
+        {
+            return null;
+        }
+        using var reader = new StringReader(frontmatter);
+        string? line;
+        var prefix = key + ":";
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (line.Length == 0 || char.IsWhiteSpace(line[0]))
+            {
+                continue;
+            }
+            if (!line.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                continue;
+            }
+            var rawValue = line[prefix.Length..].Trim();
+            return rawValue.Length == 0 ? null : UnquoteYaml(rawValue);
+        }
+        return null;
+    }
+
+    private static string UnquoteYaml(string value)
+    {
+        if (value.Length >= 2 &&
+            ((value[0] == '\'' && value[^1] == '\'') ||
+             (value[0] == '"' && value[^1] == '"')))
+        {
+            return value[1..^1];
+        }
+        return value;
+    }
+
+    private static void AddPageTitleAliases(
+        IDictionary<string, string> sink,
+        string repoPath,
+        string rawTitle)
+    {
+        var normalized = repoPath.Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return;
+        }
+
+        AddAlias(sink, normalized, rawTitle);
+        if (normalized.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        {
+            AddAlias(sink, normalized[..^3], rawTitle);
+        }
+
+        if (!normalized.StartsWith("content/", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var route = normalized["content/".Length..];
+        if (route.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+        {
+            route = route[..^3];
+        }
+        if (route.EndsWith("/index", StringComparison.Ordinal))
+        {
+            route = route[..^"/index".Length];
+        }
+        route = route.Trim('/');
+        if (route.Length == 0)
+        {
+            return;
+        }
+
+        AddAlias(sink, route, rawTitle);
+        AddAlias(sink, "/" + route, rawTitle);
+        AddAlias(sink, "/en/" + route, rawTitle);
+    }
+
+    private static void AddAlias(IDictionary<string, string> sink, string key, string rawTitle)
+    {
+        if (!string.IsNullOrWhiteSpace(key))
+        {
+            sink[key] = rawTitle;
+        }
     }
 
     private static async Task<IReadOnlyDictionary<string, string>> LoadVariablesAsync(

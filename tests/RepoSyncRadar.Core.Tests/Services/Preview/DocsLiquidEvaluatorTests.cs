@@ -71,6 +71,18 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Expands_Site_Data_Variable_Interpolation()
+    {
+        var ctx = WithVariables(("product.prodname", "GitHub"));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "Welcome to {{ site.data.variables.product.prodname }}!",
+            ctx);
+
+        Assert.Equal("Welcome to GitHub!", result);
+    }
+
+    [Fact]
     public void Leaves_Unknown_Variable_Tag_Unchanged_For_Span_Wrapping_Later()
     {
         var result = DocsLiquidEvaluator.Evaluate(
@@ -114,6 +126,53 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Trims_Data_Tag_Expansion_Like_Official_Docs()
+    {
+        var ctx = WithReusables(("guide.note", "\nUse this note.\n"));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% data reusables.guide.note %}",
+            ctx);
+
+        Assert.Equal("Use this note.", result);
+    }
+
+    [Fact]
+    public void Preserves_Data_Tag_Indent_For_Multiline_Reusables()
+    {
+        var ctx = WithReusables(("guide.steps", "first\nsecond"));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "1. Do the thing\n   {% data reusables.guide.steps %}",
+            ctx);
+
+        Assert.Equal("1. Do the thing\n   first\n   second", result);
+    }
+
+    [Fact]
+    public void Preserves_Data_Tag_Blockquote_Context_For_Multiline_Reusables()
+    {
+        var ctx = WithReusables(("guide.note", "first\nsecond"));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "> {% data reusables.guide.note %}",
+            ctx);
+
+        Assert.Equal("> first\n> second", result);
+    }
+
+    [Fact]
+    public void Collapses_Extra_Blank_Lines_Left_By_Liquid_Evaluation()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            "before\n\n\n{% ifversion fpt %}after{% endif %}",
+            DocsLiquidContext.Empty,
+            DocsVersion.Fpt);
+
+        Assert.Equal("before\n\nafter", result);
+    }
+
+    [Fact]
     public void Evaluates_Ifversion_Introduced_By_Variable_Expansion()
     {
         var ctx = WithVariables(
@@ -144,6 +203,54 @@ public sealed class DocsLiquidEvaluatorTests
             DocsVersion.Ghec);
 
         Assert.Equal("Cloud", result);
+    }
+
+    [Fact]
+    public void Renders_Octicon_Tags_As_Primer_Svg()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            "Click {% octicon \"gear\" aria-hidden=\"true\" aria-label=\"gear\" %} Settings.",
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("Click <svg", result, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-gear\"", result, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"gear\"", result, StringComparison.Ordinal);
+        Assert.Contains("role=\"img\"", result, StringComparison.Ordinal);
+        Assert.Contains("data-component=\"Octicon\"", result, StringComparison.Ordinal);
+        Assert.Contains("Settings.", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("aria-hidden", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_Security_Configuration_Octicons_As_Primer_Svg()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            "Click {% octicon \"organization\" aria-hidden=\"true\" aria-label=\"organization\" %} Organizations, then {% octicon \"kebab-horizontal\" aria-label=\"More\" %} More.",
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("class=\"octicon octicon-organization\"", result, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-kebab-horizontal\"", result, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"organization\"", result, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"More\"", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_Octicon_Tags_Introduced_By_Reusable_Expansion()
+    {
+        var ctx = WithReusables(
+            ("admin.apply", "Apply to {% octicon \"triangle-down\" aria-hidden=\"true\" aria-label=\"triangle-down\" %} dropdown."));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% data reusables.admin.apply %}",
+            ctx);
+
+        Assert.Contains("Apply to <svg", result, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-triangle-down\"", result, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"triangle-down\"", result, StringComparison.Ordinal);
+        Assert.Contains("dropdown.", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
     }
 
     [Fact]

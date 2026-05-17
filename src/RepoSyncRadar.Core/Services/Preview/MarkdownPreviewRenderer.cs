@@ -42,6 +42,31 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex(@"\{\{-?\s*(.*?)\s*-?\}\}", RegexOptions.Singleline)]
     private static partial Regex LiquidVariableRegex();
 
+    [GeneratedRegex(@"\{%-?\s*(?<tag>note|tip|warning|danger)\s*-?%\}(?<body>.*?)\{%-?\s*end\k<tag>\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex SpotlightBlockRegex();
+
+    [GeneratedRegex(@"\{%-?\s*(?<tag>vscode|jetbrains|visualstudio|cli|webui|eclipse|desktop|vimneovim|azure_data_studio|xcode|curl|javascript|windowsterminal|codespaces|api|mobile|copilotcli|bash|powershell|skillsets|agents|jetbrains_beta|github_mobile|ides|importer_cli|mac|windows|linux|rowheaders)\s*-?%\}(?<body>.*?)\{%-?\s*end\k<tag>\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex ToolBlockRegex();
+
+    [GeneratedRegex(@"\{%-?\s*prompt\s*-?%\}(?<body>.*?)\{%-?\s*endprompt\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex PromptBlockRegex();
+
+    [GeneratedRegex("""<a\b(?<attrs>[^>]*)>(?<body>.*?)</a>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex AnchorRegex();
+
+    [GeneratedRegex("""\bhref\s*=\s*(?<quote>["'])(?<href>.*?)\k<quote>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex AnchorHrefRegex();
+
+    [GeneratedRegex("""(?<attr>\b(?:src|poster)\s*=\s*)(?<quote>["'])(?<url>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
+    private static partial Regex HtmlAssetUrlRegex();
+
+    [GeneratedRegex("""(?<attr>\bsrcset\s*=\s*)(?<quote>["'])(?<value>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
+    private static partial Regex HtmlSrcSetRegex();
+
+    private const string CopilotOcticonSvg = """
+        <svg version="1.1" width="16" height="16" viewBox="0 0 16 16" class="octicon octicon-copilot" aria-hidden="true" data-component="Octicon"><path d="M7.998 15.035c-4.562 0-7.873-2.914-7.998-3.749V9.338c.085-.628.677-1.686 1.588-2.065.013-.07.024-.143.036-.218.029-.183.06-.384.126-.612-.201-.508-.254-1.084-.254-1.656 0-.87.128-1.769.693-2.484.579-.733 1.494-1.124 2.724-1.261 1.206-.134 2.262.034 2.944.765.05.053.096.108.139.165.044-.057.094-.112.143-.165.682-.731 1.738-.899 2.944-.765 1.23.137 2.145.528 2.724 1.261.566.715.693 1.614.693 2.484 0 .572-.053 1.148-.254 1.656.066.228.098.429.126.612.012.076.024.148.037.218.924.385 1.522 1.471 1.591 2.095v1.872c0 .766-3.351 3.795-8.002 3.795Zm0-1.485c2.28 0 4.584-1.11 5.002-1.433V7.862l-.023-.116c-.49.21-1.075.291-1.727.291-1.146 0-2.059-.327-2.71-.991A3.222 3.222 0 0 1 8 6.303a3.24 3.24 0 0 1-.544.743c-.65.664-1.563.991-2.71.991-.652 0-1.236-.081-1.727-.291l-.023.116v4.255c.419.323 2.722 1.433 5.002 1.433ZM6.762 2.83c-.193-.206-.637-.413-1.682-.297-1.019.113-1.479.404-1.713.7-.247.312-.369.789-.369 1.554 0 .793.129 1.171.308 1.371.162.181.519.379 1.442.379.853 0 1.339-.235 1.638-.54.315-.322.527-.827.617-1.553.117-.935-.037-1.395-.241-1.614Zm4.155-.297c-1.044-.116-1.488.091-1.681.297-.204.219-.359.679-.242 1.614.091.726.303 1.231.618 1.553.299.305.784.54 1.638.54.922 0 1.28-.198 1.442-.379.179-.2.308-.578.308-1.371 0-.765-.123-1.242-.37-1.554-.233-.296-.693-.587-1.713-.7Z"></path><path d="M6.25 9.037a.75.75 0 0 1 .75.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 .75-.75Zm4.25.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 1.5 0Z"></path></svg>
+        """;
+
     public static string RenderDocument(
         string repoPath,
         string? markdown,
@@ -51,7 +76,8 @@ internal static partial class MarkdownPreviewRenderer
         DocsVersion? version = null,
         IReadOnlyList<DocsVersion>? affectedVersions = null,
         DocsVersion? selectedVersion = null,
-        IReadOnlyList<DocsVersionImpactDetail>? versionImpacts = null)
+        IReadOnlyList<DocsVersionImpactDetail>? versionImpacts = null,
+        string? assetBasePath = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repoPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
@@ -96,7 +122,8 @@ internal static partial class MarkdownPreviewRenderer
                 content,
                 effectiveLiquidContext,
                 effectiveVersion);
-            var liquidNeutralized = NeutralizeLiquid(liquidEvaluated);
+            var liquidBlocksRendered = RenderOfficialLiquidBlocks(liquidEvaluated);
+            var liquidNeutralized = NeutralizeLiquid(liquidBlocksRendered);
             body = Markdown.ToHtml(liquidNeutralized, s_pipeline);
             if (string.IsNullOrWhiteSpace(body))
             {
@@ -104,6 +131,8 @@ internal static partial class MarkdownPreviewRenderer
                     ? "<p class=\"rsr-empty\">空の Markdown ファイルです。</p>"
                     : string.Empty;
             }
+            body = RewriteAutotitleLinks(body, trimmedRepoPath, effectiveLiquidContext, effectiveVersion);
+            body = RewriteAssetReferences(body, trimmedRepoPath, assetBasePath);
         }
 
         var html = new StringBuilder(capacity: body.Length + 2200);
@@ -139,7 +168,14 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("p,ul,ol,pre,blockquote,table{margin:0 0 1rem;}");
         html.AppendLine("a{color:var(--rsr-link);}code{background:var(--rsr-code-bg);border-radius:4px;padding:.12em .28em;font-family:'Cascadia Mono',Consolas,monospace;font-size:.92em;}");
         html.AppendLine("pre{background:var(--rsr-pre-bg);border-radius:6px;overflow:auto;padding:16px;}pre code{background:transparent;padding:0;}");
+        html.AppendLine("img,video{max-width:100%;height:auto;}picture{display:block;margin:0 0 1rem;}picture img{margin-bottom:0;}");
         html.AppendLine("blockquote{border-left:4px solid var(--rsr-blockquote-border);color:var(--rsr-muted);padding-left:1rem;}table{border-collapse:collapse;display:block;overflow:auto;}td,th{border:1px solid var(--rsr-border);padding:6px 13px;}th{background:var(--rsr-th-bg);}");
+        html.AppendLine(".octicon{display:inline-block;vertical-align:text-bottom;fill:currentColor;overflow:visible;}");
+        html.AppendLine(".ghd-alert{border:1px solid var(--rsr-border);border-left-width:4px;border-radius:6px;margin:0 0 1rem;padding:12px 14px;background:var(--rsr-article-bg);}");
+        html.AppendLine(".ghd-alert>:last-child,.ghd-tool>:last-child{margin-bottom:0;}");
+        html.AppendLine(".ghd-alert-accent{border-left-color:#0969da;}.ghd-alert-success{border-left-color:#1a7f37;}.ghd-alert-attention{border-left-color:#9a6700;}.ghd-alert-danger{border-left-color:#cf222e;}");
+        html.AppendLine(".ghd-tool{border:1px solid var(--rsr-border);border-left:4px solid var(--rsr-link);border-radius:6px;margin:0 0 1rem;padding:12px 14px;background:var(--rsr-pre-bg);}");
+        html.AppendLine(".copilot-prompt-long,.copilot-prompt-short{display:inline-flex;align-items:center;color:var(--rsr-link);margin-left:.25rem;text-decoration:none;}.copilot-prompt-short{display:none;}");
         html.AppendLine(".rsr-liquid{display:inline-block;background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border:1px solid var(--rsr-liquid-border);border-radius:3px;padding:0 .35em;margin:0 .15em;font-size:.82em;font-family:'Cascadia Mono',Consolas,monospace;}");
         html.AppendLine(".rsr-empty{color:var(--rsr-muted);font-style:italic;}");
         html.AppendLine(".rsr-version-bar{margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.82rem;}");
@@ -200,7 +236,8 @@ internal static partial class MarkdownPreviewRenderer
                 .AppendLine("</p>");
         }
         html.AppendLine(body);
-        html.AppendLine("</article>");        html.AppendLine("</main>");
+        html.AppendLine("</article>");
+        html.AppendLine("</main>");
         html.AppendLine("</body>");
         html.AppendLine("</html>");
         return html.ToString();
@@ -340,6 +377,438 @@ internal static partial class MarkdownPreviewRenderer
                 CultureInfo.InvariantCulture,
                 $"<span class=\"rsr-liquid\" title=\"Liquid 変数 (プレビューでは未評価)\">{{{{ {WebUtility.HtmlEncode(m.Groups[1].Value)} }}}}</span>"));
         return vars;
+    }
+
+    private static string RenderOfficialLiquidBlocks(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return content;
+        }
+
+        var current = content;
+        for (var safety = 0; safety < 16; safety++)
+        {
+            var before = current;
+            current = SpotlightBlockRegex().Replace(current, RenderSpotlightBlock);
+            current = ToolBlockRegex().Replace(current, RenderToolBlock);
+            current = PromptBlockRegex().Replace(current, RenderPromptBlock);
+            if (string.Equals(before, current, StringComparison.Ordinal))
+            {
+                break;
+            }
+        }
+        return current;
+    }
+
+    private static string RenderSpotlightBlock(Match match)
+    {
+        var tag = match.Groups["tag"].Value;
+        var color = tag switch
+        {
+            "note" => "accent",
+            "tip" => "success",
+            "warning" => "attention",
+            "danger" => "danger",
+            _ => "accent",
+        };
+        var innerHtml = RenderLiquidBlockBody(match.Groups["body"].Value);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"\n<div class=\"ghd-alert ghd-alert-{color} ghd-spotlight-{color}\">\n{innerHtml}\n</div>\n");
+    }
+
+    private static string RenderToolBlock(Match match)
+    {
+        var tag = match.Groups["tag"].Value;
+        var innerHtml = RenderLiquidBlockBody(match.Groups["body"].Value);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"\n<div class=\"ghd-tool {WebUtility.HtmlEncode(tag)}\">\n{innerHtml}\n</div>\n");
+    }
+
+    private static string RenderPromptBlock(Match match)
+    {
+        var prompt = match.Groups["body"].Value.Trim();
+        var promptId = BuildPromptId(prompt);
+        var href = "https://github.com/copilot?prompt=" + Uri.EscapeDataString(prompt);
+        var encodedPrompt = WebUtility.HtmlEncode(prompt);
+        var encodedHref = WebUtility.HtmlEncode(href);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"<code id=\"{promptId}\">{encodedPrompt}</code><a href=\"{encodedHref}\" target=\"_blank\" class=\"tooltipped tooltipped-n ml-1 copilot-prompt-long\" aria-label=\"Run this prompt in Copilot Chat\" aria-describedby=\"{promptId}\" style=\"text-decoration:none;\">{CopilotOcticonSvg}</a><a href=\"{encodedHref}\" target=\"_blank\" class=\"tooltipped tooltipped-n ml-1 copilot-prompt-short\" aria-label=\"Run prompt\" aria-describedby=\"{promptId}\" style=\"text-decoration:none;\">{CopilotOcticonSvg}</a>");
+    }
+
+    private static string RenderLiquidBlockBody(string body)
+    {
+        var nestedBlocksRendered = RenderOfficialLiquidBlocks(body.Trim('\r', '\n'));
+        var neutralized = NeutralizeLiquid(nestedBlocksRendered);
+        return Markdown.ToHtml(neutralized, s_pipeline).TrimEnd();
+    }
+
+    private static string BuildPromptId(string prompt)
+    {
+        const uint offsetBasis = 2166136261;
+        const uint prime = 16777619;
+        var hash = offsetBasis;
+        foreach (var b in Encoding.UTF8.GetBytes(prompt))
+        {
+            hash ^= b;
+            hash *= prime;
+        }
+        return string.Create(CultureInfo.InvariantCulture, $"copilot-prompt-{hash:x8}");
+    }
+
+    private static string RewriteAutotitleLinks(
+        string html,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        if (string.IsNullOrEmpty(html) || liquidContext.PageTitles.Count == 0)
+        {
+            return html;
+        }
+
+        return AnchorRegex().Replace(html, match =>
+        {
+            var innerHtml = match.Groups["body"].Value;
+            if (!string.Equals(WebUtility.HtmlDecode(innerHtml).Trim(), "AUTOTITLE", StringComparison.Ordinal))
+            {
+                return match.Value;
+            }
+
+            var attrs = match.Groups["attrs"].Value;
+            var hrefMatch = AnchorHrefRegex().Match(attrs);
+            if (!hrefMatch.Success)
+            {
+                return match.Value;
+            }
+
+            var href = WebUtility.HtmlDecode(hrefMatch.Groups["href"].Value);
+            var rawTitle = ResolveAutotitleRawTitle(href, repoPath, liquidContext.PageTitles);
+            if (string.IsNullOrWhiteSpace(rawTitle))
+            {
+                return match.Value;
+            }
+
+            var titleHtml = RenderInlineWithLiquid(rawTitle, liquidContext, version).Trim();
+            if (titleHtml.Length == 0)
+            {
+                return match.Value;
+            }
+
+            return string.Concat("<a", attrs, ">", titleHtml, "</a>");
+        });
+    }
+
+    private static string? ResolveAutotitleRawTitle(
+        string href,
+        string repoPath,
+        IReadOnlyDictionary<string, string> pageTitles)
+    {
+        var normalizedHref = NormalizeAutotitleHref(href, repoPath);
+        if (normalizedHref is null)
+        {
+            return null;
+        }
+
+        foreach (var candidate in BuildAutotitleLookupCandidates(normalizedHref))
+        {
+            if (pageTitles.TryGetValue(candidate, out var title))
+            {
+                return title;
+            }
+        }
+        return null;
+    }
+
+    private static string? NormalizeAutotitleHref(string href, string repoPath)
+    {
+        if (string.IsNullOrWhiteSpace(href))
+        {
+            return null;
+        }
+
+        var trimmed = href.Trim();
+        if (trimmed.StartsWith('#'))
+        {
+            return null;
+        }
+
+        if (trimmed.StartsWith("//", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var pathWithSuffix = trimmed;
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absoluteUri))
+        {
+            if (!string.Equals(absoluteUri.Host, "docs.github.com", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            pathWithSuffix = absoluteUri.AbsolutePath;
+        }
+
+        var suffixStart = FindUrlSuffixStart(pathWithSuffix);
+        var path = suffixStart < 0 ? pathWithSuffix : pathWithSuffix[..suffixStart];
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        var isRootRelative = path.StartsWith('/');
+        var unescapedPath = Uri.UnescapeDataString(path).Replace('\\', '/');
+        var combined = isRootRelative
+            ? unescapedPath.TrimStart('/')
+            : CombineAssetPath(GetRepoDirectory(repoPath), unescapedPath);
+        combined = RemoveDocsRoutePrefix(combined);
+        return NormalizeAssetPath(combined);
+    }
+
+    private static string RemoveDocsRoutePrefix(string path)
+    {
+        var normalized = path.Trim('/');
+        if (normalized.Length == 0)
+        {
+            return normalized;
+        }
+
+        var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (segments.Count == 0)
+        {
+            return normalized;
+        }
+
+        if (string.Equals(segments[0], "en", StringComparison.OrdinalIgnoreCase))
+        {
+            segments.RemoveAt(0);
+        }
+
+        if (segments.Count > 0 && segments[0].Contains('@'))
+        {
+            segments.RemoveAt(0);
+        }
+
+        return string.Join('/', segments);
+    }
+
+    private static IEnumerable<string> BuildAutotitleLookupCandidates(string normalizedHref)
+    {
+        var trimmed = normalizedHref.Trim('/');
+        if (trimmed.Length == 0)
+        {
+            yield break;
+        }
+
+        yield return trimmed;
+        yield return "/" + trimmed;
+
+        if (trimmed.StartsWith("content/", StringComparison.Ordinal))
+        {
+            if (trimmed.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return trimmed;
+            }
+            else
+            {
+                yield return trimmed + ".md";
+                yield return trimmed + "/index.md";
+            }
+            yield break;
+        }
+
+        yield return "content/" + trimmed + ".md";
+        yield return "content/" + trimmed + "/index.md";
+    }
+
+    private static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
+    {
+        if (string.IsNullOrWhiteSpace(assetBasePath) || string.IsNullOrEmpty(html))
+        {
+            return html;
+        }
+
+        var rewritten = HtmlAssetUrlRegex().Replace(html, m =>
+        {
+            var quote = m.Groups["quote"].Value;
+            var url = WebUtility.HtmlDecode(m.Groups["url"].Value);
+            var next = RewriteAssetUrl(url, repoPath, assetBasePath);
+            return string.Concat(
+                m.Groups["attr"].Value,
+                quote,
+                WebUtility.HtmlEncode(next),
+                quote);
+        });
+
+        return HtmlSrcSetRegex().Replace(rewritten, m =>
+        {
+            var quote = m.Groups["quote"].Value;
+            var value = WebUtility.HtmlDecode(m.Groups["value"].Value);
+            var next = RewriteSrcSet(value, repoPath, assetBasePath);
+            return string.Concat(
+                m.Groups["attr"].Value,
+                quote,
+                WebUtility.HtmlEncode(next),
+                quote);
+        });
+    }
+
+    private static string RewriteSrcSet(string srcset, string repoPath, string assetBasePath)
+    {
+        if (srcset.Contains("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            return srcset;
+        }
+
+        var candidates = srcset.Split(',', StringSplitOptions.None);
+        var rewritten = new StringBuilder(srcset.Length + 64);
+        for (var i = 0; i < candidates.Length; i++)
+        {
+            if (i > 0)
+            {
+                rewritten.Append(',');
+            }
+
+            var candidate = candidates[i];
+            var leadingLength = candidate.Length - candidate.TrimStart().Length;
+            var trailingLength = candidate.Length - candidate.TrimEnd().Length;
+            var leading = candidate[..leadingLength];
+            var core = candidate[leadingLength..(candidate.Length - trailingLength)];
+            var trailing = candidate[(candidate.Length - trailingLength)..];
+            if (core.Length == 0)
+            {
+                rewritten.Append(candidate);
+                continue;
+            }
+
+            var descriptorStart = FindFirstWhitespace(core);
+            var url = descriptorStart < 0 ? core : core[..descriptorStart];
+            var descriptor = descriptorStart < 0 ? string.Empty : core[descriptorStart..];
+            rewritten
+                .Append(leading)
+                .Append(RewriteAssetUrl(url, repoPath, assetBasePath))
+                .Append(descriptor)
+                .Append(trailing);
+        }
+        return rewritten.ToString();
+    }
+
+    private static string RewriteAssetUrl(string url, string repoPath, string assetBasePath)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return url;
+        }
+
+        var trimmed = url.Trim();
+        if (trimmed.StartsWith('#')
+            || trimmed.StartsWith("//", StringComparison.Ordinal)
+            || Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+        {
+            return url;
+        }
+
+        var suffixStart = FindUrlSuffixStart(trimmed);
+        var path = suffixStart < 0 ? trimmed : trimmed[..suffixStart];
+        var suffix = suffixStart < 0 ? string.Empty : trimmed[suffixStart..];
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return url;
+        }
+
+        var repoRelative = ResolveRepoRelativeAssetPath(repoPath, path);
+        if (repoRelative is null)
+        {
+            return url;
+        }
+
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{assetBasePath.TrimEnd('/')}/{EscapeAssetPath(repoRelative)}{suffix}");
+    }
+
+    private static int FindUrlSuffixStart(string url)
+    {
+        var queryIndex = url.IndexOf('?');
+        var fragmentIndex = url.IndexOf('#');
+        return (queryIndex, fragmentIndex) switch
+        {
+            (>= 0, >= 0) => Math.Min(queryIndex, fragmentIndex),
+            (>= 0, _) => queryIndex,
+            (_, >= 0) => fragmentIndex,
+            _ => -1,
+        };
+    }
+
+    private static string? ResolveRepoRelativeAssetPath(string repoPath, string assetPath)
+    {
+        var normalizedAssetPath = assetPath.Replace('\\', '/');
+        var combined = normalizedAssetPath.StartsWith('/')
+            ? normalizedAssetPath.TrimStart('/')
+            : CombineAssetPath(GetRepoDirectory(repoPath), normalizedAssetPath);
+        return NormalizeAssetPath(combined);
+    }
+
+    private static string GetRepoDirectory(string repoPath)
+    {
+        var normalized = repoPath.Replace('\\', '/');
+        var lastSlash = normalized.LastIndexOf('/');
+        return lastSlash < 0 ? string.Empty : normalized[..lastSlash];
+    }
+
+    private static int FindFirstWhitespace(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (char.IsWhiteSpace(value[i]))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static string CombineAssetPath(string basePath, string relativePath)
+        => string.IsNullOrEmpty(basePath) ? relativePath : basePath + "/" + relativePath;
+
+    private static string? NormalizeAssetPath(string path)
+    {
+        var segments = new List<string>();
+        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment.Equals(".", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            if (segment.Equals("..", StringComparison.Ordinal))
+            {
+                if (segments.Count == 0)
+                {
+                    return null;
+                }
+                segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+            segments.Add(segment);
+        }
+        return segments.Count == 0 ? null : string.Join('/', segments);
+    }
+
+    private static string EscapeAssetPath(string repoRelativePath)
+    {
+        var segments = repoRelativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var escaped = new StringBuilder(repoRelativePath.Length + segments.Length * 2);
+        for (var i = 0; i < segments.Length; i++)
+        {
+            if (i > 0)
+            {
+                escaped.Append('/');
+            }
+            escaped.Append(Uri.EscapeDataString(Uri.UnescapeDataString(segments[i])));
+        }
+        return escaped.ToString();
     }
 
     private static string ShortSha(string sha)

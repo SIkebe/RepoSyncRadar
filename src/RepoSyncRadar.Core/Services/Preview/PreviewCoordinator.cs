@@ -147,6 +147,9 @@ public sealed record PreviewComparisonLink(
 /// <inheritdoc cref="IPreviewCoordinator" />
 public sealed partial class PreviewCoordinator : IPreviewCoordinator
 {
+    private const string MarkdownBeforeAssetRoute = "/markdown-assets/before";
+    private const string MarkdownAfterAssetRoute = "/markdown-assets/after";
+
     private readonly DocsWorktreeManager _worktree;
     private readonly PreviewServerHost _server;
     private readonly PreviewServerHost _beforeServer;
@@ -435,7 +438,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 session.BeforeLiquid,
                 effectiveVersion,
                 affectedVersions,
-                versionImpacts: versionImpacts),
+                versionImpacts: versionImpacts,
+                assetBasePath: MarkdownBeforeAssetRoute),
             ["/markdown/after"] = MarkdownPreviewRenderer.RenderDocument(
                 filePath,
                 afterMarkdown,
@@ -444,12 +448,19 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 session.AfterLiquid,
                 effectiveVersion,
                 affectedVersions,
-                versionImpacts: versionImpacts),
+                versionImpacts: versionImpacts,
+                assetBasePath: MarkdownAfterAssetRoute),
         };
+
+            var assetRoots = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [MarkdownBeforeAssetRoute] = session.BeforeWorktreePath,
+                [MarkdownAfterAssetRoute] = session.AfterWorktreePath,
+            };
 
         var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
         progress?.Report($"Markdown 比較プレビューを起動中… (ポート {port.ToString(CultureInfo.InvariantCulture)})");
-        await _contentServer.StartAsync(port, pages, cancellationToken).ConfigureAwait(false);
+            await _contentServer.StartAsync(port, pages, assetRoots, cancellationToken).ConfigureAwait(false);
         _session.Activate(port);
 
         // §Step 19.9/19.10: バージョン切替でもファイル切替でも同じポートで
@@ -538,7 +549,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 return null;
             }
 
-            progress?.Report("Liquid 変数・再利用ブロックを読み込み中…");
+            progress?.Report("Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
             var beforeLiquid = await LoadLiquidContextCachedAsync(beforeWorktreePath, cancellationToken).ConfigureAwait(false);
             var afterLiquid = await LoadLiquidContextCachedAsync(afterWorktreePath, cancellationToken).ConfigureAwait(false);
 
