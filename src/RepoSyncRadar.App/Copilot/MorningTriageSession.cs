@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Services;
 
 namespace RepoSyncRadar.App.Copilot;
@@ -37,19 +38,43 @@ public sealed partial class MorningTriageSession
 
     private readonly ICommitIngestionService _ingestion;
     private readonly ICopilotSessionFactory _sessionFactory;
+    private readonly TriageScoringProgressTracker _scoringProgress;
+    private readonly IReviewBroadcaster? _reviewBroadcaster;
     private readonly ILogger<MorningTriageSession> _logger;
 
     public MorningTriageSession(
         ICommitIngestionService ingestion,
         ICopilotSessionFactory sessionFactory,
         ILogger<MorningTriageSession> logger)
+        : this(ingestion, sessionFactory, new TriageScoringProgressTracker(), reviewBroadcaster: null, logger)
+    {
+    }
+
+    public MorningTriageSession(
+        ICommitIngestionService ingestion,
+        ICopilotSessionFactory sessionFactory,
+        TriageScoringProgressTracker scoringProgress,
+        ILogger<MorningTriageSession> logger)
+        : this(ingestion, sessionFactory, scoringProgress, reviewBroadcaster: null, logger)
+    {
+    }
+
+    public MorningTriageSession(
+        ICommitIngestionService ingestion,
+        ICopilotSessionFactory sessionFactory,
+        TriageScoringProgressTracker scoringProgress,
+        IReviewBroadcaster? reviewBroadcaster,
+        ILogger<MorningTriageSession> logger)
     {
         ArgumentNullException.ThrowIfNull(ingestion);
         ArgumentNullException.ThrowIfNull(sessionFactory);
+        ArgumentNullException.ThrowIfNull(scoringProgress);
         ArgumentNullException.ThrowIfNull(logger);
 
         _ingestion = ingestion;
         _sessionFactory = sessionFactory;
+        _scoringProgress = scoringProgress;
+        _reviewBroadcaster = reviewBroadcaster;
         _logger = logger;
     }
 
@@ -66,7 +91,8 @@ public sealed partial class MorningTriageSession
         LogStarting(_logger);
 
         progress?.Report("Repo sync PR を取得しています…");
-        var report = await _ingestion.IngestAsync(cancellationToken).ConfigureAwait(false);
+        var ingestionProgress = new TriageIngestionProgress(progress, _reviewBroadcaster);
+        var report = await _ingestion.IngestAsync(ingestionProgress, cancellationToken).ConfigureAwait(false);
         LogIngested(_logger, report.Total, report.Inserted, report.Skipped);
         progress?.Report($"取り込み完了: 取得 {report.Total} / 新規 {report.Inserted} / スキップ {report.Skipped}");
 
@@ -77,7 +103,8 @@ public sealed partial class MorningTriageSession
             try
             {
                 LogSending(_logger, session.SessionId);
-                progress?.Report("Copilot が未読コミットをスコアリングしています…");
+                using var scoringScope = _scoringProgress.Begin(progress);
+                progress?.Report("Copilot が未読コミット一覧を取得し、スコアリングを開始しています…");
                 _ = await session.SendAsync(TriagePrompt, TriageSendTimeout, cancellationToken).ConfigureAwait(false);
                 progress?.Report("Triage が完了しました。画面を更新しています…");
                 LogFinished(_logger, session.SessionId);
@@ -123,4 +150,34 @@ public sealed partial class MorningTriageSession
     [LoggerMessage(EventId = 6, Level = LogLevel.Warning,
         Message = "Session abort failed (session={SessionId}); the error is being swallowed.")]
     private static partial void LogAbortFailed(ILogger logger, Exception ex, string sessionId);
+
+    private sealed class TriageIngestionProgress : IProgress<CommitIngestionProgress>
+    {
+        private readonly IProgress<string>? _progress;
+        private readonly IReviewBroadcaster? _reviewBroadcaster;
+
+        public TriageIngestionProgress(IProgress<string>? progress, IReviewBroadcaster? reviewBroadcaster)
+        {
+            _progress = progress;
+            _reviewBroadcaster = reviewBroadcaster;
+        }
+
+        public void Report(CommitIngestionProgress value)
+        {
+            if (value.Total == 0)
+            {
+                _progress?.Report("Repo sync PR に新規未読コミットはありません。");
+                return;
+            }
+
+            if (value.InsertedSha is { Length: > 0 } sha)
+            {
+                _reviewBroadcaster?.Publish();
+                _progress?.Report($"未読コミットを取り込み中: 新規 {value.Inserted} / 取得 {value.Total} 件 ({ShortSha(sha)})");
+            }
+        }
+
+        private static string ShortSha(string sha)
+            => sha[..Math.Min(8, sha.Length)];
+    }
 }

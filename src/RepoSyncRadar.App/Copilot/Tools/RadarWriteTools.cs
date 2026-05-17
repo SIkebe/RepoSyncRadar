@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
 
@@ -19,11 +20,21 @@ public sealed class RadarWriteTools
     private const double BoostDeltaMin = -5.0;
 
     private readonly IDbContextFactory<RadarDbContext> _dbFactory;
+    private readonly TriageScoringProgressTracker _triageProgress;
 
     public RadarWriteTools(IDbContextFactory<RadarDbContext> dbFactory)
+        : this(dbFactory, new TriageScoringProgressTracker())
+    {
+    }
+
+    public RadarWriteTools(
+        IDbContextFactory<RadarDbContext> dbFactory,
+        TriageScoringProgressTracker triageProgress)
     {
         ArgumentNullException.ThrowIfNull(dbFactory);
+        ArgumentNullException.ThrowIfNull(triageProgress);
         _dbFactory = dbFactory;
+        _triageProgress = triageProgress;
     }
 
     /// <summary>Returns the five write tools as <see cref="AIFunction"/> instances.</summary>
@@ -124,6 +135,7 @@ public sealed class RadarWriteTools
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _triageProgress.ReportScoreSaved(args.Sha);
         return new WriteResult(Error: null);
     }
 

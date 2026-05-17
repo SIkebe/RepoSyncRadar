@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Tools;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
@@ -96,6 +97,39 @@ public sealed class WriteToolsTests
     }
 
     [Fact]
+    public async Task ScoreCommit_Reports_Triage_Current_Position_After_Save()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var progress = new CapturingProgress();
+        var tracker = new TriageScoringProgressTracker();
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("aaa1111111111111111111111111111111111111", ct);
+        await harness.InsertCommitAsync("bbb2222222222222222222222222222222222222", ct);
+        var tools = new RadarWriteTools(harness.DbFactory, tracker);
+
+        using var scope = tracker.Begin(progress);
+        tracker.ReportCommitList([
+            "aaa1111111111111111111111111111111111111",
+            "bbb2222222222222222222222222222222222222",
+        ]);
+
+        var result = await tools.ScoreCommitAsync(new ScoreCommitArgs(
+            Sha: "aaa1111111111111111111111111111111111111",
+            Score: 0.82,
+            Category: "feature",
+            Audience: ["devrel"],
+            SummaryJa: "要約",
+            WhyJa: "理由",
+            DetailsJa: "変更内容: 詳細",
+            Model: "gpt-test",
+            PromptHash: "deadbee"), ct);
+
+        Assert.Null(result.Error);
+        Assert.Contains(progress.Messages, message => message.Contains("1 / 2 件目", StringComparison.Ordinal)
+            && message.Contains("aaa11111", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task PostDraft_Allows_Empty_Body_Optional()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -167,5 +201,12 @@ public sealed class WriteToolsTests
                 Assert.NotEqual(true, value);
             }
         });
+    }
+
+    private sealed class CapturingProgress : IProgress<string>
+    {
+        public List<string> Messages { get; } = [];
+
+        public void Report(string value) => Messages.Add(value);
     }
 }

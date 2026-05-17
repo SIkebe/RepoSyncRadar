@@ -88,6 +88,58 @@ public sealed class CommitIngestionServiceTests
     }
 
     [Fact]
+    public async Task IngestAsync_Reports_Each_Inserted_Commit_After_It_Is_Saved()
+    {
+        var docs = Substitute.For<IDocsGitHubClient>();
+        var repo = Substitute.For<IRadarRepository>();
+        var progress = new CapturingProgress();
+        var ct = TestContext.Current.CancellationToken;
+
+        docs.FetchUnseenCommitsAsync(Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<Commit>)new[]
+            {
+                MakeCommit("sha-1", prNumber: 1),
+                MakeCommit("sha-2", prNumber: 1),
+            });
+        repo.GetKnownShasAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlySet<string>)new HashSet<string>(StringComparer.Ordinal));
+        docs.GetCommitFilesAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<CommitFile>)Array.Empty<CommitFile>());
+        repo.UpsertCommitsAsync(Arg.Any<IEnumerable<Commit>>(), Arg.Any<CancellationToken>())
+            .Returns(callInfo =>
+            {
+                var commit = Assert.Single(callInfo.Arg<IEnumerable<Commit>>());
+                return (IReadOnlyList<string>)[commit.Sha];
+            });
+
+        var sut = new CommitIngestionService(docs, repo);
+        var report = await sut.IngestAsync(progress, ct);
+
+        Assert.Equal(2, report.Inserted);
+        Assert.Collection(progress.Values,
+            first =>
+            {
+                Assert.Equal(2, first.Total);
+                Assert.Equal(1, first.Processed);
+                Assert.Equal(1, first.Inserted);
+                Assert.Equal("sha-1", first.InsertedSha);
+            },
+            second =>
+            {
+                Assert.Equal(2, second.Total);
+                Assert.Equal(2, second.Processed);
+                Assert.Equal(2, second.Inserted);
+                Assert.Equal("sha-2", second.InsertedSha);
+            });
+        await repo.Received(1).UpsertCommitsAsync(
+            Arg.Is<IEnumerable<Commit>>(commits => commits.Single().Sha == "sha-1"),
+            Arg.Any<CancellationToken>());
+        await repo.Received(1).UpsertCommitsAsync(
+            Arg.Is<IEnumerable<Commit>>(commits => commits.Single().Sha == "sha-2"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task IngestAsync_Respects_CancellationToken()
     {
         var docs = Substitute.For<IDocsGitHubClient>();
@@ -123,5 +175,12 @@ public sealed class CommitIngestionServiceTests
             AuthoredAt = now,
             FetchedAt = now,
         };
+    }
+
+    private sealed class CapturingProgress : IProgress<CommitIngestionProgress>
+    {
+        public List<CommitIngestionProgress> Values { get; } = [];
+
+        public void Report(CommitIngestionProgress value) => Values.Add(value);
     }
 }

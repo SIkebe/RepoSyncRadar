@@ -99,7 +99,6 @@
 
     private Task OnSelectAsync(ReviewStatus status)
     {
-        var next = Selected == status ? (ReviewStatus?)null : status;
-        return SelectedChanged.InvokeAsync(next);
+        return SelectedChanged.InvokeAsync(status);
     }
 }

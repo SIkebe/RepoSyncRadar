@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Microsoft.Extensions.AI;
+using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Services;
@@ -21,16 +22,28 @@ public sealed class RadarTools
     private readonly IRadarRepository _repo;
     private readonly IDocsGitHubClient _github;
     private readonly IDocsApiClient _docs;
+    private readonly TriageScoringProgressTracker _triageProgress;
 
     public RadarTools(IRadarRepository repo, IDocsGitHubClient github, IDocsApiClient docs)
+        : this(repo, github, docs, new TriageScoringProgressTracker())
+    {
+    }
+
+    public RadarTools(
+        IRadarRepository repo,
+        IDocsGitHubClient github,
+        IDocsApiClient docs,
+        TriageScoringProgressTracker triageProgress)
     {
         ArgumentNullException.ThrowIfNull(repo);
         ArgumentNullException.ThrowIfNull(github);
         ArgumentNullException.ThrowIfNull(docs);
+        ArgumentNullException.ThrowIfNull(triageProgress);
 
         _repo = repo;
         _github = github;
         _docs = docs;
+        _triageProgress = triageProgress;
     }
 
     /// <summary>Returns the four read-only Copilot tools as <see cref="AIFunction"/> instances.</summary>
@@ -59,6 +72,11 @@ public sealed class RadarTools
         };
 
         var commits = await _repo.QueryCommitsAsync(filter, cancellationToken).ConfigureAwait(false);
+        if (parsedStatus == ReviewStatus.Unseen)
+        {
+            _triageProgress.ReportCommitList(commits.Select(c => c.Sha).ToArray());
+        }
+
         var dtos = new List<CommitDto>(commits.Count);
         foreach (var c in commits)
         {

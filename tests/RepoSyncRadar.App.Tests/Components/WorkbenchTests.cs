@@ -236,6 +236,53 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
+    public async Task Clicking_Active_Status_Keeps_Filtered_Queue()
+    {
+        var rejected = MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "rejected docs");
+        var adopted = MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "adopted docs");
+        var statuses = new Dictionary<string, ReviewStatus>(StringComparer.Ordinal)
+        {
+            [rejected.Sha] = ReviewStatus.Rejected,
+            [adopted.Sha] = ReviewStatus.Adopted,
+        };
+        var commits = new[] { rejected, adopted };
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(statuses.Values)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = commits
+                    .Where(commit => filter.Status is null || statuses[commit.Sha] == filter.Status)
+                    .ToArray();
+                return Task.FromResult(visible);
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
+
+        cut.Find("[data-testid=\"sidebar-item-Rejected\"]").Click();
+        cut.WaitForAssertion(() =>
+        {
+            var row = Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Equal(rejected.Sha, row.GetAttribute("data-sha"));
+            Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Rejected\"]").ClassList);
+        });
+
+        cut.Find("[data-testid=\"sidebar-item-Rejected\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var row = Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Equal(rejected.Sha, row.GetAttribute("data-sha"));
+            Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Rejected\"]").ClassList);
+            Assert.DoesNotContain(adopted.Sha, cut.Markup, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task Bulk_Move_Selected_Unseen_Commits_To_Later_Updates_Each_Review()
     {
         var commits = new List<Commit>
@@ -364,6 +411,52 @@ public sealed class WorkbenchTests
         cut.WaitForAssertion(() =>
         {
             Assert.NotEmpty(cut.FindAll("[data-testid=\"drafts-panel\"]"));
+        });
+    }
+
+    [Fact]
+    public async Task Ingestion_Broadcasts_Grow_Unseen_Count_And_Rows_While_Triage_Is_Running()
+    {
+        var commits = new List<Commit>();
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(
+                commits.Select(static _ => ReviewStatus.Unseen))));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = filter.Status is null or ReviewStatus.Unseen
+                    ? commits.OrderByDescending(static commit => commit.AuthoredAt).ToArray()
+                    : [];
+                return Task.FromResult(visible);
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out var broadcaster);
+        var cut = ctx.Render<Workbench>();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("0", cut.Find("[data-testid=\"sidebar-count-Unseen\"]").TextContent);
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-row\"]"));
+        });
+
+        commits.Add(MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "first triage commit"));
+        broadcaster.Publish();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("1", cut.Find("[data-testid=\"sidebar-count-Unseen\"]").TextContent);
+            Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+        });
+
+        commits.Add(MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "second triage commit"));
+        broadcaster.Publish();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("2", cut.Find("[data-testid=\"sidebar-count-Unseen\"]").TextContent);
+            Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count);
         });
     }
 

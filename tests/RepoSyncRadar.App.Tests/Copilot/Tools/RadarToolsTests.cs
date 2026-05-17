@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
+using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Tools;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
@@ -47,6 +48,26 @@ public sealed class RadarToolsTests
         // Explicit limit
         await tools.ListCommitsAsync(status: null, limit: 7, ct);
         Assert.Equal(7, repo.LastFilter?.Limit);
+    }
+
+    [Fact]
+    public async Task RadarListCommits_Reports_Unseen_Total_To_Triage_Progress()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var progress = new CapturingProgress();
+        var tracker = new TriageScoringProgressTracker();
+        var repo = new StubRadarRepository([
+            MakeCommit("aaa1111111111111111111111111111111111111", ReviewStatus.Unseen),
+            MakeCommit("bbb2222222222222222222222222222222222222", ReviewStatus.Unseen),
+        ]);
+        var tools = new RadarTools(repo, new StubDocsGitHubClient(), new StubDocsApiClient(), tracker);
+
+        using var scope = tracker.Begin(progress);
+        await tools.ListCommitsAsync("Unseen", limit: 50, ct);
+
+        var message = Assert.Single(progress.Messages);
+        Assert.Contains("全 2 件", message, StringComparison.Ordinal);
+        Assert.Contains("0 / 2", message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -276,5 +297,12 @@ public sealed class RadarToolsTests
             }
             return Task.FromResult(Body);
         }
+    }
+
+    private sealed class CapturingProgress : IProgress<string>
+    {
+        public List<string> Messages { get; } = [];
+
+        public void Report(string value) => Messages.Add(value);
     }
 }

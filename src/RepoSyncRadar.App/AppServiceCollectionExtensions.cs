@@ -25,6 +25,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<IAuditJsonlSink>(sp =>
             FileSystemAuditJsonlSink.CreateDefault(sp.GetRequiredService<TimeProvider>()));
         services.TryAddSingleton<ToolAuditHook>();
+        services.TryAddSingleton<TriageScoringProgressTracker>();
         services.TryAddSingleton<RadarTools>();
         services.TryAddSingleton<RadarWriteTools>();
         services.TryAddSingleton<IClipboard, WpfClipboard>();

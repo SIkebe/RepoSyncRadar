@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using RepoSyncRadar.App.Copilot;
+using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Services;
 using Xunit;
 
@@ -23,7 +24,7 @@ public sealed class MorningTriageSessionTests
         var calls = new List<string>();
 
         var ingestion = Substitute.For<ICommitIngestionService>();
-        ingestion.IngestAsync(Arg.Any<CancellationToken>())
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 calls.Add("ingest");
@@ -56,7 +57,7 @@ public sealed class MorningTriageSessionTests
     {
         var ct = TestContext.Current.CancellationToken;
         var ingestion = Substitute.For<ICommitIngestionService>();
-        ingestion.IngestAsync(Arg.Any<CancellationToken>())
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new IngestionReport(0, 0, 0)));
 
         string? capturedPrompt = null;
@@ -95,7 +96,7 @@ public sealed class MorningTriageSessionTests
     {
         var ct = TestContext.Current.CancellationToken;
         var ingestion = Substitute.For<ICommitIngestionService>();
-        ingestion.IngestAsync(Arg.Any<CancellationToken>())
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new IngestionReport(0, 0, 0)));
 
         TimeSpan? capturedTimeout = null;
@@ -125,7 +126,7 @@ public sealed class MorningTriageSessionTests
         var ct = TestContext.Current.CancellationToken;
         var progress = new CapturingProgress();
         var ingestion = Substitute.For<ICommitIngestionService>();
-        ingestion.IngestAsync(Arg.Any<CancellationToken>())
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new IngestionReport(Total: 5, Inserted: 2, Skipped: 3)));
 
         var session = Substitute.For<ICopilotSession>();
@@ -147,11 +148,50 @@ public sealed class MorningTriageSessionTests
     }
 
     [Fact]
+    public async Task Run_Reports_Realtime_Scoring_Count_From_Tool_Progress()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var progress = new CapturingProgress();
+        var scoringProgress = new TriageScoringProgressTracker();
+        var ingestion = Substitute.For<ICommitIngestionService>();
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IngestionReport(Total: 2, Inserted: 2, Skipped: 0)));
+
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                scoringProgress.ReportCommitList([
+                    "aaa1111111111111111111111111111111111111",
+                    "bbb2222222222222222222222222222222222222",
+                ]);
+                scoringProgress.ReportScoreSaved("aaa1111111111111111111111111111111111111");
+                scoringProgress.ReportScoreSaved("bbb2222222222222222222222222222222222222");
+                return Task.FromResult("done");
+            });
+
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(Arg.Any<SessionPurpose>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var triage = new MorningTriageSession(
+            ingestion,
+            factory,
+            scoringProgress,
+            NullLogger<MorningTriageSession>.Instance);
+        await triage.RunAsync(progress, ct);
+
+        Assert.Contains(progress.Messages, message => message.Contains("全 2 件", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("1 / 2 件目", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("2 / 2 件目", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Run_Waits_For_Idle()
     {
         var ct = TestContext.Current.CancellationToken;
         var ingestion = Substitute.For<ICommitIngestionService>();
-        ingestion.IngestAsync(Arg.Any<CancellationToken>())
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new IngestionReport(0, 0, 0)));
 
         var gate = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -180,7 +220,7 @@ public sealed class MorningTriageSessionTests
     public async Task Run_Cancellation_Aborts_Session()
     {
         var ingestion = Substitute.For<ICommitIngestionService>();
-        ingestion.IngestAsync(Arg.Any<CancellationToken>())
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new IngestionReport(0, 0, 0)));
 
         var gate = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -213,7 +253,7 @@ public sealed class MorningTriageSessionTests
     {
         var ct = TestContext.Current.CancellationToken;
         var ingestion = Substitute.For<ICommitIngestionService>();
-        ingestion.IngestAsync(Arg.Any<CancellationToken>())
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new IngestionReport(0, 0, 0)));
 
         var session = Substitute.For<ICopilotSession>();
@@ -228,6 +268,53 @@ public sealed class MorningTriageSessionTests
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await triage.RunAsync(ct));
         Assert.Equal("boom", ex.Message);
+    }
+
+    [Fact]
+    public async Task Run_Publishes_Inbox_Refresh_When_Ingestion_Inserts_Commits()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var progress = new CapturingProgress();
+        var ingestion = Substitute.For<ICommitIngestionService>();
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var ingestionProgress = call.Arg<IProgress<CommitIngestionProgress>?>();
+                ingestionProgress?.Report(new CommitIngestionProgress(
+                    Total: 2,
+                    Processed: 1,
+                    Inserted: 1,
+                    Skipped: 0,
+                    InsertedSha: "aaa1111111111111111111111111111111111111"));
+                ingestionProgress?.Report(new CommitIngestionProgress(
+                    Total: 2,
+                    Processed: 2,
+                    Inserted: 2,
+                    Skipped: 0,
+                    InsertedSha: "bbb2222222222222222222222222222222222222"));
+                return Task.FromResult(new IngestionReport(Total: 2, Inserted: 2, Skipped: 0));
+            });
+
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("done"));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(Arg.Any<SessionPurpose>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+
+        var triage = new MorningTriageSession(
+            ingestion,
+            factory,
+            new TriageScoringProgressTracker(),
+            broadcaster,
+            NullLogger<MorningTriageSession>.Instance);
+
+        await triage.RunAsync(progress, ct);
+
+        broadcaster.Received(2).Publish();
+        Assert.Contains(progress.Messages, message => message.Contains("新規 1 / 取得 2", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("新規 2 / 取得 2", StringComparison.Ordinal));
     }
 
     private sealed class CapturingProgress : IProgress<string>
