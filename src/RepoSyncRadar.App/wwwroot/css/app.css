@@ -743,6 +743,11 @@ html, body {
     margin: 0;
 }
 
+.toolbar-button.danger {
+    border-color: #ff8182;
+    color: #cf222e;
+}
+
 .settings-theme-options {
     border: 1px solid #d0d7de;
     border-radius: 6px;
@@ -786,6 +791,13 @@ html, body {
     overflow: hidden;
 }
 
+.ignore-rule-toolbar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
 .ignore-rule-row {
     align-items: center;
     background: #fff;
@@ -794,6 +806,17 @@ html, body {
     justify-content: space-between;
     min-width: 0;
     padding: 0.55rem 0.65rem;
+}
+
+.ignore-rule-pattern-select {
+    align-items: center;
+    display: flex;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.ignore-rule-pattern-select input {
+    flex: 0 0 auto;
 }
 
 .ignore-rule-row + .ignore-rule-row {

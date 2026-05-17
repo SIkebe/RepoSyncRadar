@@ -147,11 +147,35 @@
                 }
                 else
                 {
+                    <div class="ignore-rule-toolbar" data-testid="settings-ignore-rules-toolbar">
+                        <button type="button"
+                                class="toolbar-button compact secondary"
+                                data-testid="settings-ignore-rules-select-all"
+                                disabled="@_settingsDeleteBusy"
+                                @onclick="ToggleAllIgnoreRulesAsync">@BuildIgnoreRuleSelectAllLabel()</button>
+                        <span class="settings-muted" data-testid="settings-ignore-rules-selected-count">@_selectedIgnoreRulePatterns.Count 件選択中</span>
+                        <button type="button"
+                                class="toolbar-button compact danger"
+                                data-testid="settings-delete-selected-ignore-rules"
+                                disabled="@IsDeleteSelectedIgnoreRulesDisabled()"
+                                @onclick="DeleteSelectedIgnoreRulesAsync">選択を削除</button>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(_settingsDeleteStatus))
+                    {
+                        <p class="settings-muted" data-testid="settings-ignore-rules-delete-status">@_settingsDeleteStatus</p>
+                    }
                     <div class="ignore-rule-list" data-testid="settings-ignore-rules-list">
                         @foreach (var rule in _ignoreRules)
                         {
                             <article class="ignore-rule-row" data-testid="settings-ignore-rule">
-                                <code data-testid="settings-ignore-rule-pattern">@rule.Pattern</code>
+                                <label class="ignore-rule-pattern-select">
+                                    <input type="checkbox"
+                                           data-testid="settings-ignore-rule-select"
+                                           checked="@IsIgnoreRuleSelected(rule.Pattern)"
+                                           disabled="@_settingsDeleteBusy"
+                                           @onchange="() => ToggleIgnoreRuleSelection(rule.Pattern)" />
+                                    <code data-testid="settings-ignore-rule-pattern">@rule.Pattern</code>
+                                </label>
                                 <div class="ignore-rule-meta">
                                     @if (!string.IsNullOrWhiteSpace(rule.Reason))
                                     {
@@ -159,6 +183,11 @@
                                     }
                                     <time datetime="@rule.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
                                           data-testid="settings-ignore-rule-created">@FormatCreatedAt(rule.CreatedAt)</time>
+                                    <button type="button"
+                                            class="toolbar-button compact danger"
+                                            data-testid="settings-delete-ignore-rule"
+                                            disabled="@_settingsDeleteBusy"
+                                            @onclick="() => DeleteIgnoreRulesAsync([rule.Pattern])">削除</button>
                                 </div>
                             </article>
                         }
@@ -190,6 +219,9 @@
     private string? _settingsThemeError;
     private string? _settingsThemeStatus;
     private IReadOnlyList<IgnoreRule> _ignoreRules = [];
+    private readonly HashSet<string> _selectedIgnoreRulePatterns = new(StringComparer.Ordinal);
+    private bool _settingsDeleteBusy;
+    private string? _settingsDeleteStatus;
 
     protected override async Task OnInitializedAsync()
     {
@@ -350,15 +382,18 @@
     {
         _settingsLoading = true;
         _settingsError = null;
+        _settingsDeleteStatus = null;
         StateHasChanged();
         try
         {
             var repo = Services.GetRequiredService<IRadarRepository>();
             _ignoreRules = await repo.GetIgnoreRulesAsync(CancellationToken.None);
+            RemoveSelectionsNotInIgnoreRules();
         }
         catch (Exception ex)
         {
             _ignoreRules = [];
+            _selectedIgnoreRulePatterns.Clear();
             _settingsError = $"無視リストの読み込みに失敗しました: {ex.Message}";
         }
         finally
@@ -366,6 +401,102 @@
             _settingsLoading = false;
         }
     }
+
+    private Task ToggleAllIgnoreRulesAsync()
+    {
+        if (_settingsDeleteBusy || _ignoreRules.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (_selectedIgnoreRulePatterns.Count == _ignoreRules.Count)
+        {
+            _selectedIgnoreRulePatterns.Clear();
+        }
+        else
+        {
+            _selectedIgnoreRulePatterns.Clear();
+            foreach (var rule in _ignoreRules)
+            {
+                _selectedIgnoreRulePatterns.Add(rule.Pattern);
+            }
+        }
+
+        _settingsDeleteStatus = null;
+        return Task.CompletedTask;
+    }
+
+    private void ToggleIgnoreRuleSelection(string pattern)
+    {
+        if (_settingsDeleteBusy)
+        {
+            return;
+        }
+
+        if (!_selectedIgnoreRulePatterns.Add(pattern))
+        {
+            _selectedIgnoreRulePatterns.Remove(pattern);
+        }
+        _settingsDeleteStatus = null;
+    }
+
+    private async Task DeleteSelectedIgnoreRulesAsync()
+    {
+        if (IsDeleteSelectedIgnoreRulesDisabled())
+        {
+            return;
+        }
+
+        await DeleteIgnoreRulesAsync(_selectedIgnoreRulePatterns.ToArray());
+    }
+
+    private async Task DeleteIgnoreRulesAsync(IReadOnlyList<string> patterns)
+    {
+        if (_settingsDeleteBusy || patterns.Count == 0)
+        {
+            return;
+        }
+
+        _settingsDeleteBusy = true;
+        _settingsError = null;
+        _settingsDeleteStatus = null;
+        StateHasChanged();
+        try
+        {
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            var deleted = await repo.DeleteIgnoreRulesAsync(patterns, CancellationToken.None);
+            _ignoreRules = await repo.GetIgnoreRulesAsync(CancellationToken.None);
+            RemoveSelectionsNotInIgnoreRules();
+            _settingsDeleteStatus = string.Create(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"{deleted} 件の無視リストを削除しました");
+        }
+        catch (Exception ex)
+        {
+            _settingsError = $"無視リストの削除に失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            _settingsDeleteBusy = false;
+        }
+    }
+
+    private void RemoveSelectionsNotInIgnoreRules()
+    {
+        var currentPatterns = _ignoreRules.Select(static rule => rule.Pattern).ToHashSet(StringComparer.Ordinal);
+        _selectedIgnoreRulePatterns.RemoveWhere(pattern => !currentPatterns.Contains(pattern));
+    }
+
+    private bool IsIgnoreRuleSelected(string pattern)
+        => _selectedIgnoreRulePatterns.Contains(pattern);
+
+    private bool IsDeleteSelectedIgnoreRulesDisabled()
+        => _settingsDeleteBusy || _selectedIgnoreRulePatterns.Count == 0;
+
+    private string BuildIgnoreRuleSelectAllLabel()
+        => _ignoreRules.Count > 0 && _selectedIgnoreRulePatterns.Count == _ignoreRules.Count
+            ? "全解除"
+            : "全選択";
 
     private void StartTriageTimer()
     {

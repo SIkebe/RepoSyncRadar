@@ -291,6 +291,138 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Settings_Delete_Ignore_Rule_Removes_Single_Row_And_Refreshes_List()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var rules = new List<IgnoreRule>
+        {
+            new()
+            {
+                Pattern = "content/copilot/**",
+                Reason = "ignore-directory",
+                CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+            },
+            new()
+            {
+                Pattern = "data/release-notes/**",
+                Reason = "noisy",
+                CreatedAt = new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Utc),
+            },
+        };
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyList<IgnoreRule>>(rules.ToArray()));
+        repo.DeleteIgnoreRulesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var patterns = call.Arg<IEnumerable<string>>().ToHashSet(StringComparer.Ordinal);
+                return rules.RemoveAll(rule => patterns.Contains(rule.Pattern));
+            });
+
+        var sp = BuildServices(session, out _, out _, repo);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"settings-ignore-rule\"]").Count));
+
+        cut.FindAll("[data-testid=\"settings-delete-ignore-rule\"]")[0].Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var pattern = Assert.Single(cut.FindAll("[data-testid=\"settings-ignore-rule-pattern\"]"));
+            Assert.Equal("data/release-notes/**", pattern.TextContent);
+            Assert.Contains("1 件の無視リストを削除", cut.Find("[data-testid=\"settings-ignore-rules-delete-status\"]").TextContent, StringComparison.Ordinal);
+        });
+        var expectedPatterns = new[] { "content/copilot/**" };
+        repo.Received(1).DeleteIgnoreRulesAsync(
+            Arg.Is<IEnumerable<string>>(patterns => patterns.SequenceEqual(expectedPatterns)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Settings_Delete_Selected_Ignore_Rules_Removes_Multiple_Rows()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var rules = new List<IgnoreRule>
+        {
+            new()
+            {
+                Pattern = "content/copilot/**",
+                Reason = "ignore-directory",
+                CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+            },
+            new()
+            {
+                Pattern = "data/release-notes/**",
+                Reason = "noisy",
+                CreatedAt = new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Utc),
+            },
+            new()
+            {
+                Pattern = "content/actions/**",
+                Reason = "keep",
+                CreatedAt = new DateTime(2026, 5, 12, 9, 0, 0, DateTimeKind.Utc),
+            },
+        };
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyList<IgnoreRule>>(rules.ToArray()));
+        repo.DeleteIgnoreRulesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var patterns = call.Arg<IEnumerable<string>>().ToHashSet(StringComparer.Ordinal);
+                return rules.RemoveAll(rule => patterns.Contains(rule.Pattern));
+            });
+
+        var sp = BuildServices(session, out _, out _, repo);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"settings-ignore-rule\"]").Count));
+        cut.FindAll("[data-testid=\"settings-ignore-rule-select\"]")[0].Change(true);
+        cut.FindAll("[data-testid=\"settings-ignore-rule-select\"]")[2].Change(true);
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("2 件選択中", cut.Find("[data-testid=\"settings-ignore-rules-selected-count\"]").TextContent, StringComparison.Ordinal);
+            Assert.False(cut.Find("[data-testid=\"settings-delete-selected-ignore-rules\"]").HasAttribute("disabled"));
+        });
+
+        cut.Find("[data-testid=\"settings-delete-selected-ignore-rules\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var pattern = Assert.Single(cut.FindAll("[data-testid=\"settings-ignore-rule-pattern\"]"));
+            Assert.Equal("data/release-notes/**", pattern.TextContent);
+            Assert.Contains("2 件の無視リストを削除", cut.Find("[data-testid=\"settings-ignore-rules-delete-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("0 件選択中", cut.Find("[data-testid=\"settings-ignore-rules-selected-count\"]").TextContent, StringComparison.Ordinal);
+        });
+        var expectedPatterns = new[]
+        {
+            "content/copilot/**",
+            "content/actions/**",
+        };
+        repo.Received(1).DeleteIgnoreRulesAsync(
+            Arg.Is<IEnumerable<string>>(patterns => patterns.SequenceEqual(expectedPatterns)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void Settings_Shows_Empty_State_When_No_Ignore_Rules_Exist()
     {
         var session = Substitute.For<IGitHubAuthSession>();
