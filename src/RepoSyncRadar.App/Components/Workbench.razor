@@ -53,7 +53,6 @@
                     <ReviewActions Sha="@_selectedCommit.Sha"
                                    FilePaths="@_selectedCommit.Files.Select(static file => file.Path).ToArray()"
                                    Reviewed="HandleReviewCompleted" />
-                    <PreviewActions Commit="_selectedCommit" />
                     @if (CanShowDrafts(_selectedCommit))
                     {
                         <DraftsPanel Sha="@_selectedCommit.Sha" />

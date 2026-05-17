@@ -3,7 +3,7 @@ using RepoSyncRadar.Core.Services.Preview;
 namespace RepoSyncRadar.App.Components;
 
 /// <summary>
-/// Lightweight pub/sub used by <see cref="PreviewActions"/> to ask the WPF host to
+/// Lightweight pub/sub used by preview UI components to ask the WPF host to
 /// navigate the right-side WebView2 to a freshly-prepared local preview URL
 /// (IMPLEMENTATION_PLAN.md §Step 19.5). Mirrors the <see cref="IReviewBroadcaster"/>
 /// pattern: registered as a singleton so the Razor button and the WPF window can
@@ -12,7 +12,7 @@ namespace RepoSyncRadar.App.Components;
 /// <remarks>
 /// §Step 19.9 — extended bi-directionally:
 /// the WPF host (e.g. a Version ComboBox in <c>MainWindow.xaml</c>) can ask the
-/// active <see cref="PreviewActions"/> instance to re-render the current preview
+/// active preview component to re-render the current preview
 /// for a different <see cref="DocsVersion"/> via <see cref="RequestVersionChange"/>.
 /// </remarks>
 public interface IPreviewNavigator
@@ -57,6 +57,17 @@ public enum PreviewFileNavigationDirection
 {
     Previous = -1,
     Next = 1,
+}
+
+internal static class PreviewFileNavigationDirections
+{
+    internal static int GetOffset(PreviewFileNavigationDirection direction)
+        => direction switch
+        {
+            PreviewFileNavigationDirection.Previous => -1,
+            PreviewFileNavigationDirection.Next => 1,
+            _ => 0,
+        };
 }
 
 public sealed record PreviewComparisonRequest(

@@ -438,6 +438,34 @@ html, body {
     font-size: 0.85rem;
 }
 
+.radar-commit-detail .files-toolbar {
+    align-items: center;
+    border-top: 1px solid #eaeef2;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+}
+
+.radar-commit-detail .files-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.radar-commit-detail .files-heading-label {
+    color: #24292f;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.radar-commit-detail .files-heading-count {
+    color: #57606a;
+    font-size: 0.78rem;
+}
+
 .radar-commit-detail .file-row .open-in-webview {
     align-self: flex-start;
     margin-top: 0.15rem;
@@ -905,111 +933,6 @@ html, body {
     line-height: 1.4;
 }
 
-.radar-preview-actions .preview-url,
-.radar-preview-actions a[data-testid="preview-url"] {
-    overflow-wrap: anywhere;
-    font-size: 0.85rem;
-}
-
-.preview-file-switcher {
-    border-top: 1px solid #eaeef2;
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-    padding-top: 0.6rem;
-}
-
-.preview-file-switcher-header {
-    align-items: center;
-    color: #57606a;
-    display: flex;
-    font-size: 0.78rem;
-    font-weight: 700;
-    justify-content: space-between;
-}
-
-.preview-file-switcher-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-}
-
-.preview-file-switch {
-    align-items: center;
-    background: #f6f8fa;
-    border: 1px solid #d0d7de;
-    border-radius: 6px;
-    color: #24292f;
-    cursor: pointer;
-    display: grid;
-    font: inherit;
-    gap: 0.45rem;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    min-height: 2rem;
-    padding: 0.35rem 0.55rem;
-    text-align: left;
-}
-
-.preview-file-switch:hover:not(:disabled) {
-    background: #eef2f6;
-}
-
-.preview-file-switch.active {
-    background: #f0f6ff;
-    border-color: #0969da;
-    box-shadow: inset 3px 0 0 #0969da;
-}
-
-.preview-file-switch:disabled {
-    cursor: default;
-    opacity: 0.55;
-}
-
-.preview-file-switch-index,
-.preview-file-switch-kind {
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    line-height: 1;
-    padding: 0.25rem 0.45rem;
-    white-space: nowrap;
-}
-
-.preview-file-switch-index {
-    background: #0969da;
-    color: #fff;
-}
-
-.preview-file-switch-kind {
-    background: #fff8c5;
-    border: 1px solid #eac54f;
-    color: #7d4e00;
-}
-
-.preview-file-switch-path {
-    font-family: "Cascadia Mono", "Consolas", monospace;
-    font-size: 0.78rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.preview-hint {
-    border-top: 1px solid #eaeef2;
-    padding-top: 0.5rem;
-    color: #57606a;
-    font-size: 0.8rem;
-}
-
-.preview-hint summary {
-    cursor: pointer;
-    font-weight: 600;
-}
-
-.preview-hint pre {
-    overflow-x: auto;
-}
-
 .drafts-channel {
     border: 1px solid #eaeef2;
     border-radius: 6px;
@@ -1117,7 +1040,7 @@ html, body {
     font-size: 0.85rem;
 }
 
-/* PreviewActions — P1: 起動進捗 UI (スピナー / 経過秒 / ログ tail / 中止ボタン)。
+/* Preview 起動進捗 UI (スピナー / 経過秒 / ログ tail / 中止ボタン)。
    600 秒に伸ばした PreviewReadyTimeoutSeconds の silent な待ち時間を可視化する。 */
 .preview-progress {
     border: 1px solid #ced4da;
@@ -1288,8 +1211,7 @@ html, body {
 .radar-theme-dark .ignore-rule-list,
 .radar-theme-dark .ignore-rule-row + .ignore-rule-row,
 .radar-theme-dark .review-ignore-panel,
-.radar-theme-dark .preview-file-switcher,
-.radar-theme-dark .preview-hint,
+.radar-theme-dark .radar-commit-detail .files-toolbar,
 .radar-theme-dark .drafts-channel,
 .radar-theme-dark .drafts-channel header {
     border-color: var(--radar-border) !important;
@@ -1306,6 +1228,7 @@ html, body {
 .radar-theme-dark .mud-typography,
 .radar-theme-dark .radar-commit-detail .commit-header .message,
 .radar-theme-dark .radar-commit-detail .scoring-note dd,
+.radar-theme-dark .radar-commit-detail .files-heading-label,
 .radar-theme-dark .action-panel-header h3,
 .radar-theme-dark .app-settings-header h2,
 .radar-theme-dark .settings-section h3,
@@ -1328,6 +1251,7 @@ html, body {
 .radar-theme-dark .radar-commit-detail .scoring-note dt,
 .radar-theme-dark .radar-commit-detail .file-row .stats,
 .radar-theme-dark .radar-commit-detail .preview-status,
+.radar-theme-dark .radar-commit-detail .files-heading-count,
 .radar-theme-dark .empty,
 .radar-theme-dark .loading,
 .radar-theme-dark .action-panel-header p,
@@ -1341,8 +1265,6 @@ html, body {
 .radar-theme-dark .drafts-status,
 .radar-theme-dark .drafts-empty,
 .radar-theme-dark .drafts-busy,
-.radar-theme-dark .preview-file-switcher-header,
-.radar-theme-dark .preview-hint,
 .radar-theme-dark .ask-palette-input label,
 .radar-theme-dark .ask-palette-busy,
 .radar-theme-dark .preview-progress-text,
@@ -1356,15 +1278,13 @@ html, body {
 .radar-theme-dark .toolbar-button.secondary:hover:not(:disabled),
 .radar-theme-dark .review-button:hover:not(:disabled),
 .radar-theme-dark .review-reason-chip:hover:not(:disabled),
-.radar-theme-dark .ask-palette-input button:hover:not([disabled]),
-.radar-theme-dark .preview-file-switch:hover:not(:disabled) {
+.radar-theme-dark .ask-palette-input button:hover:not([disabled]) {
     background: var(--radar-hover-bg) !important;
 }
 
 .radar-theme-dark .sidebar-item.active,
 .radar-theme-dark .commit-row.active,
-.radar-theme-dark .radar-commit-detail .file-row.preview-active,
-.radar-theme-dark .preview-file-switch.active {
+.radar-theme-dark .radar-commit-detail .file-row.preview-active {
     background: var(--radar-active-bg) !important;
     border-color: var(--radar-active-border) !important;
 }
@@ -1378,7 +1298,6 @@ html, body {
 .radar-theme-dark .ignore-rule-row code,
 .radar-theme-dark .review-input-action input,
 .radar-theme-dark .review-suggestion-chip.already-ignored,
-.radar-theme-dark .preview-file-switch,
 .radar-theme-dark .ask-palette-input input[type="text"],
 .radar-theme-dark .ask-palette-input button,
 .radar-theme-dark .ask-palette-result,
@@ -1410,7 +1329,6 @@ html, body {
 }
 
 .radar-theme-dark .radar-commit-detail .category-chip,
-.radar-theme-dark .preview-file-switch-kind,
 .radar-theme-dark .review-button.later {
     background: var(--radar-warning-bg) !important;
     border-color: #9e6a03 !important;
@@ -1428,15 +1346,13 @@ html, body {
 .radar-theme-dark .toolbar-button.primary,
 .radar-theme-dark .review-button.adopt,
 .radar-theme-dark .settings-theme-option.active,
-.radar-theme-dark .radar-commit-detail .preview-file-index,
-.radar-theme-dark .preview-file-switch-index {
+.radar-theme-dark .radar-commit-detail .preview-file-index {
     background: #1f6feb !important;
     border-color: #1f6feb !important;
     color: #fff !important;
 }
 
-.radar-theme-dark a,
-.radar-theme-dark .radar-preview-actions .preview-url {
+.radar-theme-dark a {
     color: #58a6ff;
 }
 
@@ -1469,7 +1385,6 @@ html, body {
 .radar-theme-dark .review-reason-chip:focus-visible,
 .radar-theme-dark .review-suggestion-chip:focus-visible,
 .radar-theme-dark .settings-theme-option:focus-visible,
-.radar-theme-dark .preview-file-switch:focus-visible,
 .radar-theme-dark .radar-commit-detail .file-row .open-in-webview:focus-visible,
 .radar-theme-dark .ask-palette-input button:focus-visible,
 .radar-theme-dark .preview-cancel:focus-visible {

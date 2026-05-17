@@ -11,9 +11,9 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// take minutes and require <c>git</c> + <c>npm</c> on the test host. Here we
 /// pin down the UI surface that wraps the pipeline:
 /// <list type="bullet">
-///   <item>Both action buttons render and become interactive once a commit is
-///         selected.</item>
-///   <item>Clicking "比較プレビューを開く" with the preview pipeline disabled
+///   <item>The file-row preview button and cleanup button render and become
+///         interactive once a commit is selected.</item>
+///   <item>Clicking a file-row preview button with the preview pipeline disabled
 ///         surfaces the inline disabled message instead of crashing, and the
 ///         button returns to its enabled state for retries.</item>
 ///   <item>Clicking "キャッシュをクリーンアップ" reports 0 removed when the
@@ -51,13 +51,13 @@ public sealed class PreviewE2ETests
 
         await SelectSeededCommitAsync(page);
 
-        var previewButton = page.Locator("[data-testid='preview-button']");
+        var previewButton = page.Locator("[data-testid='commit-detail-open-in-webview']").First;
         await previewButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await Assertions.Expect(previewButton).ToBeEnabledAsync(
             new() { Timeout = 5000 });
-        Assert.Equal("比較プレビューを開く", (await previewButton.InnerTextAsync()).Trim());
+        Assert.Equal("WebView2 で開く", (await previewButton.InnerTextAsync()).Trim());
 
-        var cleanupButton = page.Locator("[data-testid='preview-cleanup-button']");
+        var cleanupButton = page.Locator("[data-testid='commit-detail-preview-cleanup-button']");
         await cleanupButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await Assertions.Expect(cleanupButton).ToBeEnabledAsync(
             new() { Timeout = 5000 });
@@ -69,7 +69,7 @@ public sealed class PreviewE2ETests
         var page = await GetBlazorPageAsync();
         await SelectSeededCommitAsync(page);
 
-        var previewButton = page.Locator("[data-testid='preview-button']");
+        var previewButton = page.Locator("[data-testid='commit-detail-open-in-webview']").First;
         await previewButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await previewButton.ClickAsync();
 
@@ -77,14 +77,11 @@ public sealed class PreviewE2ETests
         // the busy state collapses back to idle almost immediately. Wait for the
         // status paragraph to settle on the disabled message rather than racing
         // the intermediate "リポジトリを準備中…" string.
-        var status = page.Locator("[data-testid='preview-status']");
+        var status = page.Locator("[data-testid='commit-detail-preview-status']");
         await status.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await Assertions.Expect(status).ToHaveTextAsync(
             PreviewDisabledStatus,
             new() { Timeout = 10000 });
-
-        // The disabled path must not produce a preview URL link.
-        Assert.Empty(await page.Locator("[data-testid='preview-url']").AllAsync());
 
         // The button is busy while the click handler runs; once we see the
         // disabled status it must become clickable again so the user can retry.
@@ -98,7 +95,7 @@ public sealed class PreviewE2ETests
         var page = await GetBlazorPageAsync();
         await SelectSeededCommitAsync(page);
 
-        var cleanupButton = page.Locator("[data-testid='preview-cleanup-button']");
+        var cleanupButton = page.Locator("[data-testid='commit-detail-preview-cleanup-button']");
         await cleanupButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await cleanupButton.ClickAsync();
 
@@ -106,7 +103,7 @@ public sealed class PreviewE2ETests
         // is disabled, and the UI maps that to the "{n} 件の worktree を削除しました"
         // string. We assert the leading "0 件" substring so we are not coupled to
         // future tweaks of the status wording.
-        var status = page.Locator("[data-testid='preview-status']");
+        var status = page.Locator("[data-testid='commit-detail-preview-status']");
         await status.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await Assertions.Expect(status).ToContainTextAsync(
             "0 件の worktree",
@@ -128,13 +125,13 @@ public sealed class PreviewE2ETests
         var docsPage = await GetDocsPageAsync();
         var beforeUrl = docsPage.Url;
 
-        var previewButton = blazorPage.Locator("[data-testid='preview-button']");
+        var previewButton = blazorPage.Locator("[data-testid='commit-detail-open-in-webview']").First;
         await previewButton.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await previewButton.ClickAsync();
 
         // Wait for the disabled status to land so we know the click has fully
         // round-tripped through the coordinator.
-        var status = blazorPage.Locator("[data-testid='preview-status']");
+        var status = blazorPage.Locator("[data-testid='commit-detail-preview-status']");
         await Assertions.Expect(status).ToHaveTextAsync(
             PreviewDisabledStatus,
             new() { Timeout = 10000 });
@@ -169,9 +166,8 @@ public sealed class PreviewE2ETests
         await row.ClickAsync();
 
         // Ensure CommitDetail bound to the row before any caller starts probing
-        // child components (PreviewActions only renders once _selectedCommit
-        // becomes non-null).
-        await page.Locator("[data-testid='preview-actions']")
+        // preview controls.
+        await page.Locator("[data-testid='commit-detail-preview-toolbar']")
             .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
     }
 

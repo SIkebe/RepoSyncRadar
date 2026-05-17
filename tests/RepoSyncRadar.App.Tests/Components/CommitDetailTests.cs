@@ -375,6 +375,222 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void OpenInWebView_When_Comparison_Disabled_Shows_Status()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var navigator = new PreviewNavigator();
+        var session = new PreviewSession();
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<PreviewComparisonLink?>(null));
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, session, coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(
+                "プレビュー機能は無効",
+                cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CleanupPreviewCache_Calls_Coordinator_And_Shows_Count()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.CleanupCacheAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(3));
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            new PreviewNavigator(),
+            new PreviewSession(),
+            coordinator);
+        cut.Find("[data-testid=\"commit-detail-preview-cleanup-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            coordinator.Received(1).CleanupCacheAsync(Arg.Any<CancellationToken>());
+            Assert.Contains(
+                "3 件の worktree",
+                cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
+                StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void CleanupPreviewCache_Shows_Progress_And_Can_Cancel()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken receivedToken = default;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.CleanupCacheAsync(Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                receivedToken = call.ArgAt<CancellationToken>(0);
+                receivedToken.Register(() =>
+                    tcs.TrySetException(new OperationCanceledException(receivedToken)));
+                return tcs.Task;
+            });
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            new PreviewNavigator(),
+            new PreviewSession(),
+            coordinator);
+        cut.Find("[data-testid=\"commit-detail-preview-cleanup-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find("[data-testid=\"commit-detail-preview-progress\"]");
+            Assert.Contains(
+                "キャッシュをクリーンアップ中",
+                cut.Find("[data-testid=\"commit-detail-preview-progress-text\"]").TextContent,
+                StringComparison.Ordinal);
+        });
+
+        cut.Find("[data-testid=\"commit-detail-preview-cancel-button\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(receivedToken.IsCancellationRequested);
+            Assert.Contains(
+                "キャッシュ削除を中止",
+                cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
+                StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void VersionChangeRequested_Reruns_Active_File_With_New_Version()
+    {
+        var commit = MakeCommit(("content/foo/bar.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var fpt = DocsVersionCatalog.All.First(version => version.Slug == "fpt");
+        var ghec = DocsVersionCatalog.All.First(version => version.Slug == "ghec");
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var requestedVersion = call.ArgAt<DocsVersion?>(4) ?? fpt;
+                return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLinkFor(commit, "content/foo/bar.md") with
+                {
+                    CurrentVersion = requestedVersion,
+                    AffectedVersions = [fpt, ghec],
+                });
+            });
+        var navigator = new PreviewNavigator();
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, new PreviewSession(), coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+        cut.WaitForAssertion(() =>
+        {
+            coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Is<DocsVersion?>(version => version == null),
+                Arg.Any<CancellationToken>());
+        });
+
+        navigator.RequestVersionChange(ghec);
+
+        cut.WaitForAssertion(() =>
+        {
+            coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Is<DocsVersion?>(version => version != null && version.Slug == "ghec"),
+                Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public void VersionChangeRequested_Same_Version_Does_Not_Rerun()
+    {
+        var commit = MakeCommit(("content/foo/bar.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var fpt = DocsVersionCatalog.All.First(version => version.Slug == "fpt");
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLinkFor(commit, "content/foo/bar.md") with
+            {
+                CurrentVersion = fpt,
+                AffectedVersions = [fpt],
+            }));
+        var navigator = new PreviewNavigator();
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, new PreviewSession(), coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+        cut.WaitForAssertion(() =>
+            coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>()));
+
+        navigator.RequestVersionChange(fpt);
+
+        Thread.Sleep(200);
+        coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
+            Arg.Any<int>(),
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<IProgress<string>?>(),
+            Arg.Any<DocsVersion?>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void FileNavigationRequested_Opens_Adjacent_Commit_File_With_Current_Version()
     {
         var commit = MakeCommit(
@@ -595,6 +811,17 @@ public class CommitDetailTests
             .AddCascadingValue<IServiceProvider>(sp)
             .Add(p => p.Commit, commit));
     }
+
+    private static PreviewComparisonLink MakeComparisonLinkFor(Commit commit, string path)
+        => new(
+            new Uri($"http://localhost:4501/en/{Path.GetFileNameWithoutExtension(path)}"),
+            new Uri($"http://localhost:4500/en/{Path.GetFileNameWithoutExtension(path)}"),
+            4501,
+            4500,
+            @"C:\github\.cache\docs-worktrees\parent",
+            @"C:\github\.cache\docs-worktrees\feedface",
+            "parent1234567890",
+            commit.Sha);
 
     private static Commit MakeCommit(params (string Path, int Additions, int Deletions)[] files)
     {

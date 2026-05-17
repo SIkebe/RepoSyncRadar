@@ -16,8 +16,7 @@
 
     Each publishable file row carries a "WebView2 で開く" button. Clicking it starts
     the local PR-HEAD preview pipeline when needed, then navigates the right-side
-    WebView2 to that exact file. If the local pipeline is disabled we fall back to
-    the resolved docs.github.com URL. This realises DESIGN.md §1.2 / §4.1
+    WebView2 to that exact file. This realises DESIGN.md §1.2 / §4.1
     "公式ドキュメントとレンダリング上区別がつかない見た目で差分を検証" — the right pane
     is always the canonical look, only the source changes.
 *@
@@ -87,6 +86,18 @@
         {
             <p class="unscored" data-testid="commit-detail-unscored">未スコアリング (Triage 未実行)</p>
         }
+        <div class="files-toolbar" data-testid="commit-detail-preview-toolbar">
+            <div class="files-heading">
+                <span class="files-heading-label">ファイル</span>
+                <span class="files-heading-count">@BuildPreviewableFileCountLabel()</span>
+            </div>
+            <button type="button"
+                    data-testid="commit-detail-preview-cleanup-button"
+                    class="toolbar-button secondary preview-cleanup"
+                    title="キャッシュされた docs worktree をすべて削除します"
+                    disabled="@IsPreviewOperationBusy"
+                    @onclick="CleanupPreviewCacheAsync">キャッシュ削除</button>
+        </div>
         <ul class="files">
             @foreach (var file in Commit.Files)
             {
@@ -114,7 +125,7 @@
                                 class="open-in-webview"
                                 data-testid="commit-detail-open-in-webview"
                                 data-path="@file.Path"
-                                disabled="@(_previewBusyPath is not null)"
+                                disabled="@IsPreviewOperationBusy"
                                 title="@BuildPreviewTitle(file, previewTarget)"
                                 @onclick="() => OpenInWebViewAsync(file)">@BuildPreviewButtonLabel(file)</button>
                     }
@@ -133,7 +144,7 @@
                 </li>
             }
         </ul>
-        @if (_previewBusyPath is not null)
+        @if (IsPreviewOperationBusy)
         {
             <div class="preview-progress" data-testid="commit-detail-preview-progress">
                 <div class="preview-progress-row">
@@ -186,13 +197,16 @@
         new(StringComparer.Ordinal);
 
     private string? _resolvedForSha;
+    private string? _activePreviewSha;
     private string? _previewBusyPath;
+    private bool _previewCleanupBusy;
     private string? _activePreviewPath;
     // §Step 19.9: 現在表示中の Markdown プレビューの docs version。
     private DocsVersion? _activeVersion;
     private IPreviewNavigator? _subscribedNavigator;
     private string? _previewStatus;
     private bool _previewCanceling;
+    private string _previewCancellationSubject = "プレビュー起動";
     private CancellationTokenSource? _previewCts;
     private DateTimeOffset _previewStartedAt;
     private int _previewElapsedSec;
@@ -201,6 +215,9 @@
     private List<string> _previewStderrTail = new();
     private int? _previewPid;
     private Task? _previewPollTask;
+    private CancellationTokenSource? _predictivePrewarmCts;
+
+    private bool IsPreviewOperationBusy => _previewBusyPath is not null || _previewCleanupBusy;
 
     protected override void OnInitialized()
     {
@@ -224,16 +241,16 @@
         try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
         _previewCts?.Dispose();
         _previewCts = null;
+        CancelPredictivePrewarm();
     }
 
     /// <summary>
     /// §Step 19.9: ホストの ComboBox で version 切替が起きた場合、アクティブな
     /// Markdown プレビューを同じ path / sha で新しい version を使って再 render する。
-    /// PreviewActions 側と同じ購読者パターン。
     /// </summary>
     private void OnVersionChangeRequested(object? sender, DocsVersion version)
     {
-        if (_previewBusyPath is not null || _activePreviewPath is null || Commit is null)
+        if (IsPreviewOperationBusy || _activePreviewPath is null || Commit is null)
         {
             return;
         }
@@ -252,7 +269,7 @@
 
     private void OnFileNavigationRequested(object? sender, PreviewFileNavigationDirection direction)
     {
-        if (_previewBusyPath is not null || _activePreviewPath is null || Commit is null)
+        if (IsPreviewOperationBusy || _activePreviewPath is null || Commit is null)
         {
             return;
         }
@@ -260,7 +277,7 @@
         var previewFiles = Commit.Files
             .Where(IsLocalComparisonPreviewable)
             .ToList();
-        var offset = PreviewActions.GetFileNavigationOffset(direction);
+        var offset = PreviewFileNavigationDirections.GetOffset(direction);
         if (offset == 0)
         {
             return;
@@ -284,11 +301,22 @@
         {
             _urlsByPath.Clear();
             _resolvedForSha = null;
+            _activePreviewSha = null;
             _previewBusyPath = null;
+            _previewCleanupBusy = false;
             _activePreviewPath = null;
             _previewStatus = null;
             _previewCanceling = false;
+            CancelPredictivePrewarm();
             return;
+        }
+
+        if (!string.Equals(_activePreviewSha, Commit.Sha, StringComparison.Ordinal))
+        {
+            _activePreviewSha = Commit.Sha;
+            _activePreviewPath = null;
+            _activeVersion = null;
+            StartPredictivePrewarm(Commit);
         }
 
         if (string.Equals(_resolvedForSha, Commit.Sha, StringComparison.Ordinal))
@@ -296,7 +324,6 @@
             return;
         }
 
-        _activePreviewPath = null;
         _urlsByPath.Clear();
         var resolver = Services.GetRequiredService<IPathToUrlResolver>();
         foreach (var file in Commit.Files)
@@ -399,13 +426,24 @@
         return new PreviewFilePosition(ordinal, total);
     }
 
+    private string BuildPreviewableFileCountLabel()
+    {
+        var count = CountLocalComparisonPreviewableFiles();
+        return count > 0
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{count} 件を比較可能")
+            : "比較可能なファイルなし";
+    }
+
+    private int CountLocalComparisonPreviewableFiles()
+        => Commit?.Files.Count(IsLocalComparisonPreviewable) ?? 0;
+
     private async Task OpenInWebViewAsync(CommitFile file)
         => await OpenInWebViewAsync(file, version: null);
 
     private async Task OpenInWebViewAsync(CommitFile file, DocsVersion? version)
     {
         var navigator = Services.GetService<IPreviewNavigator>();
-        if (navigator is null || _previewBusyPath is not null)
+        if (navigator is null || IsPreviewOperationBusy)
         {
             return;
         }
@@ -416,23 +454,12 @@
             // Step 19.7: Markdown ファイルは下の Markdig 経路に流す。ここに来るのは
             // content/ 配下で .md/.markdown 以外の公開対象 (現状は事実上存在しない)
             // のみで、将来 YAML データファイル等を公開した場合の保険として残す。
-            _previewBusyPath = file.Path;
-            _previewCanceling = false;
-            _previewStatus = $"{file.Path} のローカルプレビューを準備中…";
-            _previewStdoutTail = new List<string>();
-            _previewStderrTail = new List<string>();
-            _previewPid = null;
-            _previewStartedAt = DateTimeOffset.UtcNow;
-            _previewElapsedSec = 0;
-            _previewTimeoutSec = Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.PreviewReadyTimeoutSeconds ?? 600;
-            _previewCts = new CancellationTokenSource();
-            ArmPreviewTimeout(_previewCts);
-            var token = _previewCts.Token;
+            StartPreviewOperation(file.Path, $"{file.Path} のローカルプレビューを準備中…", "プレビュー起動");
+            var token = _previewCts!.Token;
             var host = Services.GetService<PreviewServerHost>();
-            if (host is not null)
-            {
-                _previewPollTask = Task.Run(() => PollPreviewProgressAsync(host, token), CancellationToken.None);
-            }
+            _previewPollTask = Task.Run(
+                () => PollPreviewProgressAsync(host, includePreviewServerState: host is not null, token),
+                CancellationToken.None);
             try
             {
                 var progress = new Progress<string>(message =>
@@ -464,6 +491,8 @@
                     _previewStatus = $"{file.Path} を変更前 / PR HEAD で比較表示しました";
                     return;
                 }
+                _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                return;
             }
             catch (OperationCanceledException)
             {
@@ -477,47 +506,19 @@
             }
             finally
             {
-                try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
-                if (_previewPollTask is not null)
-                {
-                    try { await _previewPollTask; }
-                    catch (OperationCanceledException) { }
-                    _previewPollTask = null;
-                }
-                _previewCts?.Dispose();
-                _previewCts = null;
-                _previewBusyPath = null;
-                _previewCanceling = false;
-                try
-                {
-                    await InvokeAsync(StateHasChanged);
-                }
-                catch (ObjectDisposedException)
-                {
-                }
+                await FinishPreviewOperationAsync();
             }
         }
 
         if (Commit is not null && IsMarkdownPreviewable(file)
             && Services.GetService<IPreviewCoordinator>() is { } markdownCoordinator)
         {
-            _previewBusyPath = file.Path;
-            _previewCanceling = false;
-            _previewStatus = $"{file.Path} を Markdown として比較準備中…";
-            _previewStdoutTail = new List<string>();
-            _previewStderrTail = new List<string>();
-            _previewPid = null;
-            _previewStartedAt = DateTimeOffset.UtcNow;
-            _previewElapsedSec = 0;
-            _previewTimeoutSec = Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.PreviewReadyTimeoutSeconds ?? 600;
-            _previewCts = new CancellationTokenSource();
-            ArmPreviewTimeout(_previewCts);
-            var token = _previewCts.Token;
+            StartPreviewOperation(file.Path, $"{file.Path} を Markdown として比較準備中…", "プレビュー起動");
+            var token = _previewCts!.Token;
             var host = Services.GetService<PreviewServerHost>();
-            if (host is not null)
-            {
-                _previewPollTask = Task.Run(() => PollPreviewProgressAsync(host, token), CancellationToken.None);
-            }
+            _previewPollTask = Task.Run(
+                () => PollPreviewProgressAsync(host, includePreviewServerState: host is not null, token),
+                CancellationToken.None);
             try
             {
                 var progress = new Progress<string>(message =>
@@ -553,6 +554,8 @@
                     _previewStatus = $"{file.Path} を Markdown として変更前 / PR HEAD で比較表示しました";
                     return;
                 }
+                _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                return;
             }
             catch (OperationCanceledException)
             {
@@ -566,24 +569,7 @@
             }
             finally
             {
-                try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
-                if (_previewPollTask is not null)
-                {
-                    try { await _previewPollTask; }
-                    catch (OperationCanceledException) { }
-                    _previewPollTask = null;
-                }
-                _previewCts?.Dispose();
-                _previewCts = null;
-                _previewBusyPath = null;
-                _previewCanceling = false;
-                try
-                {
-                    await InvokeAsync(StateHasChanged);
-                }
-                catch (ObjectDisposedException)
-                {
-                }
+                await FinishPreviewOperationAsync();
             }
         }
 
@@ -608,9 +594,84 @@
         _previewStatus = "このファイルは公開ドキュメント URL に対応していません";
     }
 
+    private void StartPreviewOperation(string? busyPath, string status, string cancellationSubject)
+    {
+        _previewBusyPath = busyPath;
+        _previewCleanupBusy = busyPath is null;
+        _previewCanceling = false;
+        _previewCancellationSubject = cancellationSubject;
+        _previewStatus = status;
+        _previewStdoutTail = new List<string>();
+        _previewStderrTail = new List<string>();
+        _previewPid = null;
+        _previewStartedAt = DateTimeOffset.UtcNow;
+        _previewElapsedSec = 0;
+        _previewTimeoutSec = Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.PreviewReadyTimeoutSeconds ?? 600;
+        _previewCts = new CancellationTokenSource();
+        ArmPreviewTimeout(_previewCts);
+    }
+
+    private async Task FinishPreviewOperationAsync()
+    {
+        try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
+        if (_previewPollTask is not null)
+        {
+            try { await _previewPollTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            _previewPollTask = null;
+        }
+        _previewCts?.Dispose();
+        _previewCts = null;
+        _previewBusyPath = null;
+        _previewCleanupBusy = false;
+        _previewCanceling = false;
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    private async Task CleanupPreviewCacheAsync()
+    {
+        if (IsPreviewOperationBusy)
+        {
+            return;
+        }
+        StartPreviewOperation(busyPath: null, "キャッシュをクリーンアップ中…", "キャッシュ削除");
+        var token = _previewCts!.Token;
+        _previewPollTask = Task.Run(
+            () => PollPreviewProgressAsync(host: null, includePreviewServerState: false, token),
+            CancellationToken.None);
+        try
+        {
+            if (Services.GetService<IPreviewCoordinator>() is not { } coordinator)
+            {
+                _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                return;
+            }
+            var removed = await coordinator.CleanupCacheAsync(token);
+            _previewStatus = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{removed} 件の worktree を削除しました");
+        }
+        catch (OperationCanceledException)
+        {
+            _previewStatus = BuildPreviewCancellationStatus();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _previewStatus = ex.Message;
+        }
+        finally
+        {
+            await FinishPreviewOperationAsync();
+        }
+    }
+
     private Task CancelPreviewAsync()
     {
-        if (_previewBusyPath is null || _previewCts is null || _previewCanceling)
+        if (!IsPreviewOperationBusy || _previewCts is null || _previewCanceling)
         {
             return Task.CompletedTask;
         }
@@ -629,19 +690,25 @@
 
     private string BuildPreviewCancellationStatus()
         => _previewCanceling
-            ? "プレビュー起動を中止しました"
-            : $"プレビュー起動が上限 {_previewTimeoutSec} 秒を超えたため中止しました";
+            ? $"{_previewCancellationSubject}を中止しました"
+            : $"{_previewCancellationSubject}が上限 {_previewTimeoutSec} 秒を超えたため中止しました";
 
-    private async Task PollPreviewProgressAsync(PreviewServerHost host, CancellationToken token)
+    private async Task PollPreviewProgressAsync(PreviewServerHost? host, bool includePreviewServerState, CancellationToken token)
     {
         try
         {
             using var timer = new PeriodicTimer(PollInterval);
             while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
-                var stdoutTail = TakeTail(host.RecentStdoutLines, MaxLogTailLines);
-                var stderrTail = TakeTail(host.RecentStderrLines, MaxLogTailLines);
-                var pid = host.CurrentProcessId;
+                var stdoutTail = includePreviewServerState && host is not null
+                    ? TakeTail(host.RecentStdoutLines, MaxLogTailLines)
+                    : _previewStdoutTail;
+                var stderrTail = includePreviewServerState && host is not null
+                    ? TakeTail(host.RecentStderrLines, MaxLogTailLines)
+                    : _previewStderrTail;
+                var pid = includePreviewServerState && host is not null
+                    ? host.CurrentProcessId
+                    : _previewPid;
                 var elapsed = (int)(DateTimeOffset.UtcNow - _previewStartedAt).TotalSeconds;
                 await InvokeAsync(() =>
                 {
@@ -671,6 +738,46 @@
             result.Add(source[i]);
         }
         return result;
+    }
+
+    private void StartPredictivePrewarm(Commit commit)
+    {
+        CancelPredictivePrewarm();
+        if (commit.PrNumber <= 0
+            || string.IsNullOrEmpty(commit.Sha)
+            || Services.GetService<IPreviewCoordinator>() is not { } coordinator)
+        {
+            return;
+        }
+
+        var cts = new CancellationTokenSource();
+        _predictivePrewarmCts = cts;
+        var prNumber = commit.PrNumber;
+        var sha = commit.Sha;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var prewarmTask = coordinator.PredictivePrewarmAsync(prNumber, sha, cts.Token);
+                if (prewarmTask is not null)
+                {
+                    await prewarmTask.ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }, CancellationToken.None);
+    }
+
+    private void CancelPredictivePrewarm()
+    {
+        try { _predictivePrewarmCts?.Cancel(); } catch (ObjectDisposedException) { }
+        _predictivePrewarmCts?.Dispose();
+        _predictivePrewarmCts = null;
     }
 
     private Uri? ResolveOfficialTarget(CommitFile file)
