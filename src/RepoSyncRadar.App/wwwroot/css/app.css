@@ -165,9 +165,92 @@ html, body {
     gap: 0.25rem;
 }
 
+.commit-list-selection-toolbar {
+    align-items: center;
+    display: flex;
+    gap: 0.55rem;
+    justify-content: space-between;
+    margin-bottom: 0.35rem;
+}
+
+.commit-list-select-all {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 4px;
+    color: #57606a;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    padding: 0.18rem 0.55rem;
+}
+
+.commit-list-select-all:hover {
+    background: #f6f8fa;
+}
+
+.commit-list-selection-count {
+    color: #57606a;
+    font-size: 0.78rem;
+}
+
+.bulk-review-toolbar {
+    align-items: center;
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding: 0.45rem 0.55rem;
+}
+
+.bulk-review-count,
+.bulk-review-status {
+    color: #57606a;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.bulk-review-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.bulk-review-button {
+    border: 1px solid #d0d7de;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    min-height: 1.8rem;
+    padding: 0.22rem 0.6rem;
+}
+
+.bulk-review-button:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.bulk-review-button.adopt {
+    background: #dafbe1;
+    border-color: #7ee787;
+    color: #116329;
+}
+
+.bulk-review-button.later,
+.bulk-review-button.unseen {
+    background: #ddf4ff;
+    border-color: #80ccff;
+    color: #0550ae;
+}
+
 .commit-row {
     display: grid;
-    grid-template-columns: 8ch 1fr auto auto;
+    grid-template-columns: auto 8ch minmax(0, 1fr) auto auto;
     gap: 0.5rem;
     align-items: baseline;
     padding: 0.4rem 0.6rem;
@@ -183,6 +266,19 @@ html, body {
 .commit-row.active {
     background: #e7f1ff;
     border-color: #b6d4ff;
+}
+
+.commit-row.selected {
+    border-color: #80b6ff;
+    box-shadow: inset 3px 0 0 #0969da;
+}
+
+.commit-row-select {
+    align-self: center;
+    cursor: pointer;
+    height: 1rem;
+    margin: 0;
+    width: 1rem;
 }
 
 .commit-row .sha {
@@ -1269,7 +1365,10 @@ html, body {
 .radar-theme-dark .ask-palette-busy,
 .radar-theme-dark .preview-progress-text,
 .radar-theme-dark .preview-progress-elapsed,
-.radar-theme-dark .preview-progress-pid {
+.radar-theme-dark .preview-progress-pid,
+.radar-theme-dark .commit-list-selection-count,
+.radar-theme-dark .bulk-review-count,
+.radar-theme-dark .bulk-review-status {
     color: var(--radar-muted-fg) !important;
 }
 
@@ -1284,6 +1383,7 @@ html, body {
 
 .radar-theme-dark .sidebar-item.active,
 .radar-theme-dark .commit-row.active,
+.radar-theme-dark .commit-row.selected,
 .radar-theme-dark .radar-commit-detail .file-row.preview-active {
     background: var(--radar-active-bg) !important;
     border-color: var(--radar-active-border) !important;
@@ -1302,7 +1402,10 @@ html, body {
 .radar-theme-dark .ask-palette-input button,
 .radar-theme-dark .ask-palette-result,
 .radar-theme-dark .preview-progress,
-.radar-theme-dark .preview-cancel {
+.radar-theme-dark .preview-cancel,
+.radar-theme-dark .commit-list-select-all,
+.radar-theme-dark .bulk-review-toolbar,
+.radar-theme-dark .bulk-review-button {
     background: var(--radar-panel-alt-bg) !important;
     border-color: var(--radar-border) !important;
     color: var(--radar-fg) !important;

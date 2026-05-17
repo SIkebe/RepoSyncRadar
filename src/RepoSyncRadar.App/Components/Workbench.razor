@@ -38,9 +38,41 @@
             </MudPaper>
 
             <MudPaper Elevation="0" Class="pa-2">
+                @if (_selectedCommitShas.Count > 0 || !string.IsNullOrWhiteSpace(_bulkReviewStatus))
+                {
+                    <div class="bulk-review-toolbar" data-testid="bulk-review-toolbar">
+                    @if (_selectedCommitShas.Count > 0)
+                    {
+                        <span class="bulk-review-count" data-testid="bulk-review-count">@_selectedCommitShas.Count 件選択中</span>
+                        <div class="bulk-review-buttons">
+                        <button type="button"
+                            class="bulk-review-button adopt"
+                            data-testid="bulk-review-adopted"
+                            disabled="@IsBulkMoveDisabled(ReviewStatus.Adopted)"
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Adopted)">採用済みへ</button>
+                        <button type="button"
+                            class="bulk-review-button later"
+                            data-testid="bulk-review-later"
+                            disabled="@IsBulkMoveDisabled(ReviewStatus.Later)"
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Later)">あとでへ</button>
+                        <button type="button"
+                            class="bulk-review-button unseen"
+                            data-testid="bulk-review-unseen"
+                            disabled="@IsBulkMoveDisabled(ReviewStatus.Unseen)"
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Unseen)">未読へ戻す</button>
+                        </div>
+                    }
+                        @if (!string.IsNullOrWhiteSpace(_bulkReviewStatus))
+                        {
+                            <span class="bulk-review-status" data-testid="bulk-review-status">@_bulkReviewStatus</span>
+                        }
+                    </div>
+                }
                 <CommitList Filter="@_filter"
                             RefreshToken="_listRefreshVersion"
                             SelectedSha="@_selectedCommit?.Sha"
+                            SelectedShas="_selectedCommitShas"
+                            SelectionChanged="HandleCommitSelectionChanged"
                             OnCommitSelected="HandleCommitSelected" />
             </MudPaper>
 
@@ -66,8 +98,11 @@
 @code {
     private ReviewStatus? _selectedStatus = ReviewStatus.Unseen;
     private Commit? _selectedCommit;
+    private readonly HashSet<string> _selectedCommitShas = new(StringComparer.Ordinal);
     private CommitQueryFilter _filter = new() { Status = ReviewStatus.Unseen };
     private int _listRefreshVersion;
+    private bool _bulkReviewBusy;
+    private string? _bulkReviewStatus;
     private IReviewBroadcaster? _broadcaster;
     private IAppUserSettingsStore? _settingsStore;
     private DocsThemeMode _theme = AppUserSettings.Default.DefaultDocsTheme;
@@ -129,6 +164,7 @@
                 // Replace the Filter reference so CommitList's OnParametersSetAsync
                 // detects the change and re-queries IRadarRepository.
                 _filter = new CommitQueryFilter { Status = _selectedStatus };
+                _selectedCommitShas.Clear();
                 _listRefreshVersion++;
                 StateHasChanged();
             });
@@ -162,6 +198,8 @@
         _selectedStatus = status;
         _filter = new CommitQueryFilter { Status = status };
         _selectedCommit = null;
+        _selectedCommitShas.Clear();
+        _bulkReviewStatus = null;
         _listRefreshVersion++;
         return Task.CompletedTask;
     }
@@ -171,6 +209,78 @@
         _selectedCommit = commit;
         return Task.CompletedTask;
     }
+
+    private Task HandleCommitSelectionChanged(CommitSelectionChange change)
+    {
+        _bulkReviewStatus = null;
+        foreach (var sha in change.Shas)
+        {
+            if (change.Selected)
+            {
+                _selectedCommitShas.Add(sha);
+            }
+            else
+            {
+                _selectedCommitShas.Remove(sha);
+            }
+        }
+        return Task.CompletedTask;
+    }
+
+    private bool IsBulkMoveDisabled(ReviewStatus status)
+        => !IsBulkMoveSupported(status)
+            || _bulkReviewBusy
+            || _selectedCommitShas.Count == 0
+            || _selectedStatus == status;
+
+    private async Task MoveSelectedCommitsAsync(ReviewStatus status)
+    {
+        if (IsBulkMoveDisabled(status))
+        {
+            return;
+        }
+
+        var shas = _selectedCommitShas.ToArray();
+        _bulkReviewBusy = true;
+        try
+        {
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            foreach (var sha in shas)
+            {
+                await repo.SetReviewAsync(sha, status, reason: null);
+            }
+
+            _selectedCommit = null;
+            _selectedCommitShas.Clear();
+            _selectedStatus = _selectedStatus switch
+            {
+                null => null,
+                ReviewStatus.Unseen => ReviewStatus.Unseen,
+                _ => status,
+            };
+            _filter = new CommitQueryFilter { Status = _selectedStatus };
+            _bulkReviewStatus = string.Create(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"{shas.Length} 件を{BuildStatusDestinationLabel(status)}に移動しました");
+            Services.GetRequiredService<IReviewBroadcaster>().Publish();
+        }
+        finally
+        {
+            _bulkReviewBusy = false;
+        }
+    }
+
+    private static bool IsBulkMoveSupported(ReviewStatus status)
+        => status is ReviewStatus.Adopted or ReviewStatus.Later or ReviewStatus.Unseen;
+
+    private static string BuildStatusDestinationLabel(ReviewStatus status)
+        => status switch
+        {
+            ReviewStatus.Unseen => "未読",
+            ReviewStatus.Adopted => "採用済み",
+            ReviewStatus.Later => "あとで",
+            _ => status.ToString(),
+        };
 
     private static bool CanShowDrafts(Commit commit)
         => commit.Review?.Status == ReviewStatus.Adopted;
@@ -185,6 +295,7 @@
         };
         _filter = new CommitQueryFilter { Status = _selectedStatus };
         _selectedCommit = null;
+        _selectedCommitShas.Clear();
         _listRefreshVersion++;
         return Task.CompletedTask;
     }

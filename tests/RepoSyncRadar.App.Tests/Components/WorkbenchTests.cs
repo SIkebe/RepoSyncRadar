@@ -236,6 +236,62 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
+    public async Task Bulk_Move_Selected_Unseen_Commits_To_Later_Updates_Each_Review()
+    {
+        var commits = new List<Commit>
+        {
+            MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "first"),
+            MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "second"),
+            MakeWorkbenchCommit("ccc3333ccc3333ccc3333ccc3333ccc3333ccc3", "third"),
+        };
+        var statuses = commits.ToDictionary(static commit => commit.Sha, _ => ReviewStatus.Unseen, StringComparer.Ordinal);
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(statuses.Values)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = commits
+                    .Where(commit => filter.Status is null || statuses[commit.Sha] == filter.Status)
+                    .ToArray();
+                return Task.FromResult(visible);
+            });
+        repo.SetReviewAsync(Arg.Any<string>(), Arg.Any<ReviewStatus>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                statuses[call.ArgAt<string>(0)] = call.ArgAt<ReviewStatus>(1);
+                return Task.CompletedTask;
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"commit-row\"]").Count));
+
+        cut.FindAll("[data-testid=\"commit-select\"]")[0].Change(true);
+        cut.FindAll("[data-testid=\"commit-select\"]")[1].Change(true);
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("2 件選択中", cut.Find("[data-testid=\"bulk-review-count\"]").TextContent, StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[data-testid=\"bulk-review-rejected\"]"));
+            Assert.DoesNotContain("却下済みへ", cut.Markup, StringComparison.Ordinal);
+        });
+
+        cut.Find("[data-testid=\"bulk-review-later\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Contains("2 件をあとでに移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("checked", cut.Markup, StringComparison.Ordinal);
+        });
+        await repo.Received(1).SetReviewAsync(commits[0].Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
+        await repo.Received(1).SetReviewAsync(commits[1].Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
+        await repo.DidNotReceive().SetReviewAsync(commits[2].Sha, Arg.Any<ReviewStatus>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Selecting_Unseen_Commit_Does_Not_Render_Drafts_Panel()
     {
         var target = new Commit
@@ -355,4 +411,26 @@ public sealed class WorkbenchTests
             [ReviewStatus.Later] = currentStatus == ReviewStatus.Later ? 1 : 0,
         };
     }
+
+    private static Dictionary<ReviewStatus, int> BuildCounts(IEnumerable<ReviewStatus> statuses)
+    {
+        var counts = Enum.GetValues<ReviewStatus>()
+            .ToDictionary(static status => status, _ => 0);
+        foreach (var status in statuses)
+        {
+            counts[status]++;
+        }
+        return counts;
+    }
+
+    private static Commit MakeWorkbenchCommit(string sha, string message)
+        => new()
+        {
+            Sha = sha,
+            PrNumber = 61075,
+            Message = message,
+            Author = "docs-bot",
+            AuthoredAt = new DateTime(2026, 5, 15, 4, 0, 0, DateTimeKind.Utc),
+            FetchedAt = new DateTime(2026, 5, 15, 4, 0, 0, DateTimeKind.Utc),
+        };
 }

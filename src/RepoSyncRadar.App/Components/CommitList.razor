@@ -26,13 +26,30 @@
     }
     else
     {
+        <div class="commit-list-selection-toolbar" data-testid="commit-list-selection-toolbar">
+            <button type="button"
+                    class="commit-list-select-all"
+                    data-testid="commit-list-select-all"
+                    @onclick="ToggleAllVisibleAsync">@BuildSelectAllLabel()</button>
+            <span class="commit-list-selection-count" data-testid="commit-list-selected-count">
+                @CountSelectedVisible() 件選択中
+            </span>
+        </div>
         <ul class="commit-rows">
             @foreach (var commit in _commits)
             {
-                <li class="commit-row @(SelectedSha == commit.Sha ? "active" : null)"
+                <li class="@BuildRowClass(commit)"
                     data-testid="commit-row"
                     data-sha="@commit.Sha"
                     @onclick="() => OnSelectAsync(commit)">
+                    <input type="checkbox"
+                           class="commit-row-select"
+                           data-testid="commit-select"
+                           data-sha="@commit.Sha"
+                           aria-label="@($"{FirstLine(commit.Message)} を選択")"
+                           checked="@IsSelected(commit.Sha)"
+                           @onclick:stopPropagation="true"
+                           @onchange="() => ToggleSelectionAsync(commit.Sha)" />
                     <span class="sha">@ShortSha(commit.Sha)</span>
                     <span class="message">@FirstLine(commit.Message)</span>
                     <span class="author">@commit.Author</span>
@@ -54,7 +71,11 @@
 
     [Parameter] public string? SelectedSha { get; set; }
 
+    [Parameter] public IReadOnlySet<string> SelectedShas { get; set; } = new HashSet<string>(StringComparer.Ordinal);
+
     [Parameter] public EventCallback<Commit> OnCommitSelected { get; set; }
+
+    [Parameter] public EventCallback<CommitSelectionChange> SelectionChanged { get; set; }
 
     private IReadOnlyList<Commit>? _commits;
     private CommitQueryFilter? _appliedFilter;
@@ -77,6 +98,46 @@
     }
 
     private Task OnSelectAsync(Commit commit) => OnCommitSelected.InvokeAsync(commit);
+
+    private Task ToggleSelectionAsync(string sha)
+        => SelectionChanged.InvokeAsync(new CommitSelectionChange([sha], !IsSelected(sha)));
+
+    private Task ToggleAllVisibleAsync()
+    {
+        if (_commits is null || _commits.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var shas = _commits.Select(static commit => commit.Sha).ToArray();
+        return SelectionChanged.InvokeAsync(new CommitSelectionChange(shas, !AreAllVisibleSelected()));
+    }
+
+    private string BuildRowClass(Commit commit)
+    {
+        var classes = new List<string> { "commit-row" };
+        if (SelectedSha == commit.Sha)
+        {
+            classes.Add("active");
+        }
+        if (IsSelected(commit.Sha))
+        {
+            classes.Add("selected");
+        }
+        return string.Join(' ', classes);
+    }
+
+    private string BuildSelectAllLabel()
+        => AreAllVisibleSelected() ? "全解除" : "全選択";
+
+    private bool AreAllVisibleSelected()
+        => _commits is { Count: > 0 } && _commits.All(commit => IsSelected(commit.Sha));
+
+    private int CountSelectedVisible()
+        => _commits?.Count(commit => IsSelected(commit.Sha)) ?? 0;
+
+    private bool IsSelected(string sha)
+        => SelectedShas.Contains(sha);
 
     private static string ShortSha(string sha)
         => string.IsNullOrEmpty(sha) ? string.Empty : sha[..Math.Min(7, sha.Length)];

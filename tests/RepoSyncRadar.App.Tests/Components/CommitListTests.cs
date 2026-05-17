@@ -75,7 +75,58 @@ public class CommitListTests
         Assert.NotNull(cut.Find("[data-testid=\"commit-list-empty\"]"));
     }
 
-    private static IRenderedComponent<CommitList> RenderListWith(List<Commit> commits)
+    [Fact]
+    public void CommitList_Checkbox_Emits_Selection_Without_Selecting_Row()
+    {
+        var commit = MakeCommit("aaaaaaa1", "first");
+        Commit? selectedCommit = null;
+        CommitSelectionChange? selectionChange = null;
+
+        using var cut = RenderListWith(
+            [commit],
+            onCommitSelected: selected => selectedCommit = selected,
+            onSelectionChanged: change => selectionChange = change);
+
+        cut.Find("[data-testid=\"commit-select\"]").Change(true);
+
+        Assert.Null(selectedCommit);
+        Assert.NotNull(selectionChange);
+        Assert.Equal([commit.Sha], selectionChange.Shas);
+        Assert.True(selectionChange.Selected);
+    }
+
+    [Fact]
+    public void CommitList_SelectAll_Toggles_Visible_Selection()
+    {
+        var commits = new List<Commit>
+        {
+            MakeCommit("aaaaaaa1", "first"),
+            MakeCommit("bbbbbbb2", "second"),
+        };
+        CommitSelectionChange? selectionChange = null;
+
+        using var cut = RenderListWith(commits, onSelectionChanged: change => selectionChange = change);
+
+        cut.Find("[data-testid=\"commit-list-select-all\"]").Click();
+
+        Assert.NotNull(selectionChange);
+        Assert.Equal(commits.Select(static commit => commit.Sha), selectionChange.Shas);
+        Assert.True(selectionChange.Selected);
+
+        cut.Render(parameters => parameters
+            .Add(c => c.SelectedShas, new HashSet<string>(commits.Select(static commit => commit.Sha), StringComparer.Ordinal)));
+
+        cut.Find("[data-testid=\"commit-list-select-all\"]").Click();
+
+        Assert.NotNull(selectionChange);
+        Assert.Equal(commits.Select(static commit => commit.Sha), selectionChange.Shas);
+        Assert.False(selectionChange.Selected);
+    }
+
+    private static IRenderedComponent<CommitList> RenderListWith(
+        List<Commit> commits,
+        Action<Commit>? onCommitSelected = null,
+        Action<CommitSelectionChange>? onSelectionChanged = null)
     {
         var repo = Substitute.For<IRadarRepository>();
         repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
@@ -87,7 +138,10 @@ public class CommitListTests
 
         var ctx = new Bunit.BunitContext();
         return ctx.Render<CommitList>(
-            parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
+            parameters => parameters
+                .AddCascadingValue<IServiceProvider>(sp)
+                .Add(c => c.OnCommitSelected, selected => onCommitSelected?.Invoke(selected))
+                .Add(c => c.SelectionChanged, change => onSelectionChanged?.Invoke(change)));
     }
 
     private static Commit MakeCommit(string sha, string message)
