@@ -41,6 +41,68 @@ public sealed class DocsViewE2ETests
         Assert.StartsWith("en", lang, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task DocsView_Pins_Color_Mode_On_GitHub_Docs_Primer_Containers()
+    {
+        var page = await GetDocsPageAsync();
+
+        var mode = await WaitForPinnedColorModeAsync(page);
+
+        Assert.True(mode is "dark" or "light", $"Unexpected docs color mode: {mode}");
+    }
+
+    [Fact]
+    public async Task DocsView_Reapplies_Color_Mode_When_GitHub_Docs_Rehydrates_Primer_Container()
+    {
+        var page = await GetDocsPageAsync();
+        var mode = await WaitForPinnedColorModeAsync(page);
+
+        var mutated = await page.EvaluateAsync<bool>(
+            """
+            () => {
+                const target = Array.from(document.querySelectorAll('[data-color-mode]'))
+                    .find(node => node !== document.documentElement);
+                if (!target) {
+                    return false;
+                }
+                target.setAttribute('data-color-mode', 'auto');
+                return target.getAttribute('data-color-mode') === 'auto';
+            }
+            """);
+
+        Assert.True(mutated);
+        await page.WaitForFunctionAsync(
+            """
+            expectedMode => {
+                const nodes = Array.from(document.querySelectorAll('[data-color-mode]'));
+                return nodes.length >= 2
+                    && nodes.every(node => node.getAttribute('data-color-mode') === expectedMode);
+            }
+            """,
+            mode,
+            new() { Timeout = 5000 });
+    }
+
+    private static async Task<string> WaitForPinnedColorModeAsync(IPage page)
+    {
+        await page.WaitForFunctionAsync(
+            """
+            () => {
+                const nodes = Array.from(document.querySelectorAll('[data-color-mode]'));
+                return nodes.length >= 2
+                    && nodes.every(node => ['dark', 'light'].includes(node.getAttribute('data-color-mode')))
+                    && new Set(nodes.map(node => node.getAttribute('data-color-mode'))).size === 1;
+            }
+            """,
+            null,
+            new() { Timeout = 30000 });
+
+        return await page.EvaluateAsync<string>(
+            """
+            () => document.documentElement.getAttribute('data-color-mode') || ''
+            """);
+    }
+
     private async Task<IPage> GetDocsPageAsync()
     {
         var contexts = _fixture.DocsBrowser.Contexts;

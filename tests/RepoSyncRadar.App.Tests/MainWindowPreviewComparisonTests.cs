@@ -350,6 +350,31 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void BuildDocsThemeScript_Applies_Mode_To_Primer_Color_Mode_Containers()
+    {
+        var script = MainWindow.BuildDocsThemeScript(DocsThemeMode.Dark);
+
+        // docs.github.com renders both <html data-color-mode="auto"> and an
+        // inner Primer container with its own data-color-mode. Updating only
+        // documentElement leaves the inner container on auto, so query all of them.
+        Assert.Contains("document.querySelectorAll('[data-color-mode]')", script, StringComparison.Ordinal);
+        Assert.Contains("document.body", script, StringComparison.Ordinal);
+        Assert.Contains("setAttributeIfChanged(target, 'data-color-mode', mode)", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildDocsThemeScript_Observes_Primer_Rehydration_Color_Mode_Changes()
+    {
+        var script = MainWindow.BuildDocsThemeScript(DocsThemeMode.Light);
+
+        // The official docs React shell can rehydrate or replace the inner
+        // color-mode node after our initial injection. Keep the selected mode pinned.
+        Assert.Contains("MutationObserver", script, StringComparison.Ordinal);
+        Assert.Contains("attributeFilter: ['data-color-mode', 'data-light-theme', 'data-dark-theme']", script, StringComparison.Ordinal);
+        Assert.Contains("__repoSyncRadarDocsTheme", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildDocsThemeScript_Light_Sets_Data_Color_Mode_Light()
     {
         var script = MainWindow.BuildDocsThemeScript(DocsThemeMode.Light);

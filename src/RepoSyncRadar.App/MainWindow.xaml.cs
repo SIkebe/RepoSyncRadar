@@ -1243,17 +1243,65 @@ public partial class MainWindow : Window
                 return $$"""
 (() => {
     const mode = {{modeJson}};
+    const stateKey = '__repoSyncRadarDocsTheme';
+    const existing = window[stateKey];
+    if (existing?.observer) {
+        existing.observer.disconnect();
+    }
+    const state = { observer: null, applying: false };
+    window[stateKey] = state;
     try { window.localStorage?.setItem('color_mode', mode); } catch (_) {}
+    try { window.localStorage?.setItem('preferred_color_mode', mode); } catch (_) {}
     try { window.localStorage?.setItem('theme', mode); } catch (_) {}
     try {
         document.cookie = 'color_mode=' + mode + '; path=/; max-age=31536000; samesite=lax';
+        document.cookie = 'preferred_color_mode=' + mode + '; path=/; max-age=31536000; samesite=lax';
     } catch (_) {}
-    const root = document.documentElement;
-    if (root) {
-        root.setAttribute('data-color-mode', mode);
-        root.setAttribute('data-light-theme', 'light');
-        root.setAttribute('data-dark-theme', 'dark');
-        root.style.colorScheme = mode;
+
+    const setAttributeIfChanged = (element, name, value) => {
+        if (element && element.getAttribute(name) !== value) {
+            element.setAttribute(name, value);
+        }
+    };
+    const setColorSchemeIfChanged = (element) => {
+        if (element?.style && element.style.colorScheme !== mode) {
+            element.style.colorScheme = mode;
+        }
+    };
+    const apply = () => {
+        if (window[stateKey] !== state) {
+            return;
+        }
+        if (state.applying) {
+            return;
+        }
+        state.applying = true;
+        try {
+            const targets = new Set([
+                document.documentElement,
+                document.body,
+                ...document.querySelectorAll('[data-color-mode]')
+            ].filter(Boolean));
+            for (const target of targets) {
+                setAttributeIfChanged(target, 'data-color-mode', mode);
+                setAttributeIfChanged(target, 'data-light-theme', 'light');
+                setAttributeIfChanged(target, 'data-dark-theme', 'dark');
+                setColorSchemeIfChanged(target);
+            }
+        } finally {
+            state.applying = false;
+        }
+    };
+    apply();
+    if (document.documentElement && typeof MutationObserver === 'function') {
+        const observer = new MutationObserver(apply);
+        observer.observe(document.documentElement, {
+            subtree: true,
+            childList: true,
+            attributes: true,
+            attributeFilter: ['data-color-mode', 'data-light-theme', 'data-dark-theme']
+        });
+        state.observer = observer;
     }
     return true;
 })();
