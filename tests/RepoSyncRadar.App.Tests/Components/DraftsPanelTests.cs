@@ -29,7 +29,8 @@ public sealed class DraftsPanelTests
             seed.Drafts.AddRange(
                 new Draft { Sha = "sha1", Channel = "twitter", Body = "TW", GeneratedAt = nowUtc },
                 new Draft { Sha = "sha1", Channel = "teams", Body = "TM", GeneratedAt = nowUtc },
-                new Draft { Sha = "sha1", Channel = "customer", Body = "CU", GeneratedAt = nowUtc });
+                new Draft { Sha = "sha1", Channel = "customer", Body = "CU", GeneratedAt = nowUtc },
+                new Draft { Sha = "sha1", Channel = "explanation", Body = "EX", GeneratedAt = nowUtc });
             await seed.SaveChangesAsync(ct);
         }
 
@@ -51,9 +52,11 @@ public sealed class DraftsPanelTests
             Assert.NotNull(cut.Find("[data-testid=\"drafts-section-twitter\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"drafts-section-teams\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"drafts-section-customer\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"drafts-section-explanation\"]"));
             Assert.Contains("TW", cut.Find("[data-testid=\"drafts-body-twitter\"]").TextContent);
             Assert.Contains("TM", cut.Find("[data-testid=\"drafts-body-teams\"]").TextContent);
             Assert.Contains("CU", cut.Find("[data-testid=\"drafts-body-customer\"]").TextContent);
+            Assert.Contains("EX", cut.Find("[data-testid=\"drafts-body-explanation\"]").TextContent);
         });
     }
 
@@ -104,7 +107,7 @@ public sealed class DraftsPanelTests
         var clipboard = Substitute.For<IClipboard>();
         var agent = Substitute.For<ICopilotAgent>();
         agent.GenerateDraftsAsync("sha1", Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new DraftBundle("new-tw", "new-sl", "new-cu")));
+            .Returns(Task.FromResult(new DraftBundle("new-tw", "new-sl", "new-cu", "new-ex")));
 
         ctx.Services
             .AddSingleton(harness.DbFactory)
@@ -119,7 +122,10 @@ public sealed class DraftsPanelTests
         cut.WaitForAssertion(() => cut.Find("[data-testid=\"drafts-regenerate\"]"));
         cut.Find("[data-testid=\"drafts-regenerate\"]").Click();
         cut.WaitForAssertion(() =>
-            Assert.Contains("new-tw", cut.Find("[data-testid=\"drafts-body-twitter\"]").TextContent));
+        {
+            Assert.Contains("new-tw", cut.Find("[data-testid=\"drafts-body-twitter\"]").TextContent);
+            Assert.Contains("new-ex", cut.Find("[data-testid=\"drafts-body-explanation\"]").TextContent);
+        });
         await agent.Received(1).GenerateDraftsAsync("sha1", Arg.Any<CancellationToken>());
     }
 }

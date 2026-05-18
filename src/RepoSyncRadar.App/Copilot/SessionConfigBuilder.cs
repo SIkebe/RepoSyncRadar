@@ -74,8 +74,8 @@ internal static class SessionConfigBuilder
             "You are the RepoSyncRadar morning triage agent. Score newly synced commits, "
             + "summarize them in Japanese, and pick the top 5 must-reads. Only call radar_* tools.",
         SessionPurpose.Adoption =>
-            "You are the RepoSyncRadar focused-commit writer. Produce three Japanese drafts "
-            + "(twitter_ja, teams_ja, customer_ja) for the chosen commit. Stay factual.",
+            "You are the RepoSyncRadar focused-commit explainer and writer. Explain the diff in Japanese, "
+            + "then produce shareable drafts for the chosen commit. Stay factual.",
         SessionPurpose.Ask =>
             "You are the RepoSyncRadar query assistant. Answer using only radar_query results. "
             + "Refuse anything that requires writes or shell access.",

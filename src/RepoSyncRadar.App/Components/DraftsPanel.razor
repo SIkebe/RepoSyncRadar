@@ -1,5 +1,5 @@
-@* Displays the three media-specific drafts (Twitter / Teams / Customer) for a focused
-   commit. Loads existing drafts on initialization; "Regenerate" re-invokes the Adoption
+@* Displays the diff explanation and media-specific drafts for a focused
+    commit. Loads existing drafts on initialization; "Regenerate" re-invokes the Adoption
    session. Implemented per IMPLEMENTATION_PLAN.md §Step 17. *@
 
 @using Microsoft.EntityFrameworkCore
@@ -14,8 +14,8 @@
 <div id="drafts-panel" class="drafts-panel action-panel" data-testid="drafts-panel">
     <header class="action-panel-header">
         <div>
-            <h3>共有文案</h3>
-            <p>注目した通知をもとに、媒体ごとの文案を確認・コピーします。</p>
+            <h3>差分解説と共有文案</h3>
+            <p>注目した通知の差分解説と、媒体ごとの文案を確認・コピーします。</p>
         </div>
         @if (!string.IsNullOrEmpty(Sha) && !_busy)
         {
@@ -23,7 +23,7 @@
                     class="toolbar-button secondary"
                     data-testid="drafts-regenerate"
                     disabled="@_busy"
-                    @onclick="RegenerateAsync">文案を再生成</button>
+                    @onclick="RegenerateAsync">解説と文案を再生成</button>
         }
     </header>
 
@@ -33,10 +33,11 @@
     }
     else if (_busy)
     {
-        <p class="drafts-busy" data-testid="drafts-busy">文案を生成中…</p>
+        <p class="drafts-busy" data-testid="drafts-busy">解説と文案を生成中…</p>
     }
     else
     {
+        @RenderChannel("explanation", "差分解説", _bundle?.ExplanationJa, large: true)
         @RenderChannel("twitter", "Twitter", _bundle?.TwitterJa)
         @RenderChannel("teams", "Teams", _bundle?.TeamsJa)
         @RenderChannel("customer", "顧客向け", _bundle?.CustomerJa)
@@ -101,7 +102,8 @@
         _bundle = new DraftBundle(
             FindDraft(drafts, "twitter"),
             FindDraft(drafts, "teams"),
-            FindDraft(drafts, "customer"));
+            FindDraft(drafts, "customer"),
+            FindDraft(drafts, "explanation"));
     }
 
     private static string FindDraft(IEnumerable<Draft> drafts, string channel)
@@ -157,10 +159,10 @@
         _status = $"{channel} の本文をコピーしました。";
     }
 
-    private RenderFragment RenderChannel(string channel, string label, string? body) => builder =>
+    private RenderFragment RenderChannel(string channel, string label, string? body, bool large = false) => builder =>
     {
         builder.OpenElement(0, "section");
-        builder.AddAttribute(1, "class", "drafts-channel");
+        builder.AddAttribute(1, "class", large ? "drafts-channel drafts-channel-large" : "drafts-channel");
         builder.AddAttribute(2, "data-testid", $"drafts-section-{channel}");
 
         builder.OpenElement(3, "header");

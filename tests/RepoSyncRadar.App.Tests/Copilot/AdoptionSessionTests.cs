@@ -31,7 +31,7 @@ public sealed class AdoptionSessionTests
         var session = Substitute.For<ICopilotSession>();
         session.SessionId.Returns("s1");
         session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -42,6 +42,7 @@ public sealed class AdoptionSessionTests
         Assert.Equal("tw", bundle.TwitterJa);
         Assert.Equal("tm", bundle.TeamsJa);
         Assert.Equal("cu", bundle.CustomerJa);
+        Assert.Equal("ex", bundle.ExplanationJa);
     }
 
     [Fact]
@@ -57,7 +58,7 @@ public sealed class AdoptionSessionTests
 
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"twitter\":\"a\",\"teams\":\"b\",\"customer\":\"c\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"diff explanation\",\"twitter\":\"a\",\"teams\":\"b\",\"customer\":\"c\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -67,7 +68,8 @@ public sealed class AdoptionSessionTests
 
         await using var db = harness.CreateDb();
         var drafts = await db.Drafts.AsNoTracking().Where(d => d.Sha == "adopt-2").ToListAsync(ct);
-        Assert.Equal(3, drafts.Count);
+        Assert.Equal(4, drafts.Count);
+        Assert.Contains(drafts, d => d.Channel == "explanation" && d.Body == "diff explanation");
         Assert.Contains(drafts, d => d.Channel == "twitter" && d.Body == "a");
         Assert.Contains(drafts, d => d.Channel == "teams" && d.Body == "b");
         Assert.Contains(drafts, d => d.Channel == "customer" && d.Body == "c");
@@ -97,7 +99,7 @@ public sealed class AdoptionSessionTests
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"twitter\":\"\",\"teams\":\"\",\"customer\":\"\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"\",\"teams\":\"\",\"customer\":\"\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -114,6 +116,10 @@ public sealed class AdoptionSessionTests
         Assert.Contains("past-03", capturedPrompt);
         Assert.DoesNotContain("past-02", capturedPrompt);
         Assert.DoesNotContain("past-01", capturedPrompt);
+        Assert.Contains("差分解説", capturedPrompt);
+        Assert.Contains("差分の見方", capturedPrompt);
+        Assert.Contains("重要なポイント", capturedPrompt);
+        Assert.Contains("細部を読まなくても変更点を理解", capturedPrompt);
     }
 
     [Fact]

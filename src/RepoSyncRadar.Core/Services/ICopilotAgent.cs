@@ -18,7 +18,7 @@ public interface ICopilotAgent
         IProgress<string>? progress,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Generates the three media drafts for a single focused commit.</summary>
+    /// <summary>Generates the media drafts and detailed diff explanation for a single focused commit.</summary>
     Task<DraftBundle> GenerateDraftsAsync(string commitSha, CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -30,6 +30,6 @@ public interface ICopilotAgent
 }
 
 /// <summary>
-/// Three-channel draft bundle. Each member is the raw body the user can copy or edit.
+/// Focused-commit draft bundle. Each member is the raw body the user can copy or edit.
 /// </summary>
-public sealed record DraftBundle(string TwitterJa, string TeamsJa, string CustomerJa);
+public sealed record DraftBundle(string TwitterJa, string TeamsJa, string CustomerJa, string ExplanationJa);

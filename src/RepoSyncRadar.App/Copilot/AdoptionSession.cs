@@ -15,8 +15,8 @@ namespace RepoSyncRadar.App.Copilot;
 /// focused commit:
 /// <list type="number">
 ///   <item><description>Loads the commit, its diff, and up to five previously focused commits as few-shot context.</description></item>
-///   <item><description>Sends an Adoption session prompt asking Copilot to return JSON with twitter/teams/customer drafts.</description></item>
-///   <item><description>Persists the three drafts to the local <c>radar.db</c>.</description></item>
+///   <item><description>Sends an Adoption session prompt asking Copilot to return JSON with a diff explanation and twitter/teams/customer drafts.</description></item>
+///   <item><description>Persists the explanation and three drafts to the local <c>radar.db</c>.</description></item>
 /// </list>
 /// Diffs larger than <see cref="MaxDiffBytes"/> are truncated with a marker so the prompt
 /// stays bounded.
@@ -57,7 +57,7 @@ public sealed partial class AdoptionSession
     }
 
     /// <summary>
-    /// Generates a three-channel <see cref="DraftBundle"/> for the focused commit and
+    /// Generates a <see cref="DraftBundle"/> for the focused commit and
     /// persists it. Throws <see cref="InvalidOperationException"/> when the commit is
     /// not in <see cref="ReviewStatus.Adopted"/>.
     /// </summary>
@@ -139,14 +139,23 @@ public sealed partial class AdoptionSession
         string diff)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# 注目コミット — 共有文案生成");
+        sb.AppendLine("# 注目コミット — 差分解説と共有文案生成");
         sb.AppendLine();
-        sb.AppendLine("以下のコミットを注目対象にしました。Twitter / Teams / 顧客向けの 3 つの日本語下書きを生成してください。");
+        sb.AppendLine("以下のコミットを注目対象にしました。差分を読まなくても変更点を理解できる日本語解説と、Twitter / Teams / 顧客向けの 3 つの日本語下書きを生成してください。");
         sb.AppendLine();
         sb.AppendLine("## 入出力");
         sb.AppendLine("- 出力は **必ず JSON のみ**。説明文や Markdown コードブロックは禁止。");
-        sb.AppendLine("- スキーマ: `{ \"twitter\": string, \"teams\": string, \"customer\": string }`");
+        sb.AppendLine("- スキーマ: `{ \"explanation\": string, \"twitter\": string, \"teams\": string, \"customer\": string }`");
+        sb.AppendLine("- explanation は 1200〜2000 文字程度。差分の細部を読まなくても変更点を理解できる密度にする。");
         sb.AppendLine("- twitter は 140 文字以内、teams は 800 文字以内、customer は 1600 文字以内を目安。");
+        sb.AppendLine();
+        sb.AppendLine("## explanation の要件");
+        sb.AppendLine("- 次の見出しをこの順序で含める: `何が変わったか`, `差分の見方`, `重要なポイント`, `影響と次に見るべき点`。");
+        sb.AppendLine("- `何が変わったか`: 変更の目的と利用者に見える差分を要約する。");
+        sb.AppendLine("- `差分の見方`: 追加・削除・移動・設定値・API 名など、差分のどこを見れば理解できるかを説明する。");
+        sb.AppendLine("- `重要なポイント`: 差分だけでは読み取りづらい意味、背景、仕様上の位置づけ、注意点を整理する。");
+        sb.AppendLine("- `影響と次に見るべき点`: 影響を受ける読者、確認すべき API/権限/バージョン/既存記述との関係を書く。");
+        sb.AppendLine("- 推測は断定せず、差分から確認できた事実と確認観点を分ける。");
         sb.AppendLine();
         sb.AppendLine("## 過去の注目例 (Few-shot)");
         var any = false;
@@ -212,7 +221,8 @@ public sealed partial class AdoptionSession
         return new DraftBundle(
             parsed.Twitter ?? string.Empty,
             parsed.Teams ?? string.Empty,
-            parsed.Customer ?? string.Empty);
+            parsed.Customer ?? string.Empty,
+            parsed.Explanation ?? string.Empty);
     }
 
     private static async Task PersistDraftsAsync(
@@ -227,6 +237,7 @@ public sealed partial class AdoptionSession
             new Draft { Sha = sha, Channel = "twitter", Body = bundle.TwitterJa, Posted = false, GeneratedAt = nowUtc },
             new Draft { Sha = sha, Channel = "teams", Body = bundle.TeamsJa, Posted = false, GeneratedAt = nowUtc },
             new Draft { Sha = sha, Channel = "customer", Body = bundle.CustomerJa, Posted = false, GeneratedAt = nowUtc },
+            new Draft { Sha = sha, Channel = "explanation", Body = bundle.ExplanationJa, Posted = false, GeneratedAt = nowUtc },
         };
         db.Drafts.AddRange(entries);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -237,6 +248,7 @@ public sealed partial class AdoptionSession
         public string? Twitter { get; set; }
         public string? Teams { get; set; }
         public string? Customer { get; set; }
+        public string? Explanation { get; set; }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information,

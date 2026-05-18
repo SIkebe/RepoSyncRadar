@@ -104,7 +104,7 @@ public sealed class Draft
 
     public string Sha { get; set; } = default!;
 
-    /// <summary>One of <c>twitter</c>, <c>teams</c>, <c>customer</c>.</summary>
+    /// <summary>One of <c>explanation</c>, <c>twitter</c>, <c>teams</c>, <c>customer</c>.</summary>
     public string Channel { get; set; } = default!;
 
     public string Body { get; set; } = default!;

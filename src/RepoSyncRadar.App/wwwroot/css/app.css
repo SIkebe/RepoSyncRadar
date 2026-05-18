@@ -1435,6 +1435,10 @@ html, body {
     line-height: 1.45;
 }
 
+.drafts-channel-large pre {
+    max-height: 22rem;
+}
+
 /* AskPalette — gives the Ctrl+K row a proper flex layout so the input, the
    実行 button, and the SQL-debug toggle don't visually collide with the
    AppHeader's Sync button above. */
