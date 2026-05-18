@@ -76,6 +76,11 @@ public sealed class TriageScoringProgressTracker
                 return;
             }
 
+            if (_total is not null)
+            {
+                return;
+            }
+
             var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var sha in shas)
             {
@@ -93,15 +98,20 @@ public sealed class TriageScoringProgressTracker
             var completed = _scoredShas.Count;
 
             _progress?.Report(_total == 0
-                ? "未読コミットはありません。スコアリング対象 0 / 0 件。"
+                ? "今回の未スコア未読コミットはありません。スコアリング対象 0 / 0 件。"
                 : string.Create(
                     CultureInfo.InvariantCulture,
-                    $"未読コミットのスコアリング対象: 全 {_total} 件 ({completed} / {_total})"));
+                    $"今回の未スコア未読コミットをスコアリング中: 全 {_total} 件 ({completed} / {_total})"));
         }
 
         public void ReportScoreSaved(string sha)
         {
             if (_disposed)
+            {
+                return;
+            }
+
+            if (_total is not null && !_positions.ContainsKey(sha))
             {
                 return;
             }
@@ -117,8 +127,8 @@ public sealed class TriageScoringProgressTracker
                 : "?";
             var shortSha = sha.Length <= 8 ? sha : sha[..8];
             var prefix = _total is int knownTotal && completed >= knownTotal
-                ? "未読コミットのスコアリング完了"
-                : "未読コミットをスコアリング中";
+                ? "今回の未スコア未読コミットのスコアリング完了"
+                : "今回の未スコア未読コミットをスコアリング中";
 
             _progress?.Report(string.Create(
                 CultureInfo.InvariantCulture,
