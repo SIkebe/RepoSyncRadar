@@ -106,12 +106,15 @@
             <MudDivider Class="my-2" />
 
             <MudPaper Elevation="0" Class="pa-2">
-                <CommitDetail Commit="_selectedCommit" />
                 @if (_selectedCommit is not null)
                 {
                     <ReviewActions Sha="@_selectedCommit.Sha"
                                    FilePaths="@_selectedCommit.Files.Select(static file => file.Path).ToArray()"
                                    Reviewed="HandleReviewCompleted" />
+                }
+                <CommitDetail Commit="_selectedCommit" />
+                @if (_selectedCommit is not null)
+                {
                     @if (CanShowDrafts(_selectedCommit))
                     {
                         <DraftsPanel Sha="@_selectedCommit.Sha" />

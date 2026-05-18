@@ -529,6 +529,9 @@ public sealed class WorkbenchTests
         {
             Assert.NotEmpty(cut.FindAll("[data-testid=\"review-actions\"]"));
             Assert.Empty(cut.FindAll("[data-testid=\"drafts-panel\"]"));
+            Assert.True(
+                cut.Markup.IndexOf("data-testid=\"review-actions\"", StringComparison.Ordinal)
+                < cut.Markup.IndexOf("data-testid=\"commit-detail\"", StringComparison.Ordinal));
         });
     }
 
