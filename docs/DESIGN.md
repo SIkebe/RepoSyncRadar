@@ -51,7 +51,7 @@
 
 - L1〜L5 のうち、L1 / L2 を自動化、L3 / L5 を補助、L4 を可視化する。
 - **「1 日 5〜10 分」** で 80% カバーできるワークフローを実現する。
-- 過去の判断(採用 / 見送り候補 / 確認不要 / 無視ディレクトリ / 重要度ブースト / 文体)をデータとして蓄積し、毎週ツールが賢くなる。
+- 過去の判断(注目 / 保留 / 見送り候補 / アーカイブ / 無視ディレクトリ / 重要度ブースト / 文体)をデータとして蓄積し、毎週ツールが賢くなる。
 - ファイルパス → 公開 URL の対応が常に画面上で見える。
 - 公式ドキュメントとレンダリング上区別がつかない見た目で差分を検証できる。
 
@@ -60,7 +60,7 @@
 - 自動投稿は行わない。最終判断と投稿は人間が行う。
 - 公式の changelog を置き換える機能ではない。あくまで個人運用の補助。
 - モバイル対応は現時点ではスコープ外(将来 MAUI Blazor で再利用可能)。
-- 多言語対応(日本語のみ。英訳は媒体別下書きの中で副次的に生成)。
+- 多言語対応(日本語のみ。英訳は共有文案の中で副次的に生成)。
 
 ---
 
@@ -73,16 +73,16 @@
 | ペルソナ | 立場 | 主張 |
 |---|---|---|
 | **Akira** (DevOps / 自動化) | ルールベース至上主義 | GitHub Actions + YAML 設定の決定論パイプラインで L1/L2 を全部潰す。watch / ignore / must-notify を分け、Issue ダイジェスト出力 |
-| **Lisa** (AI / LLM) | エージェント志向 | 3 段階 LLM(cheap → medium → expensive)。Stage 1 で全件スコアリング、Stage 2 で要約、Stage 3 で採用後のみ媒体別下書き。採否を JSONL で蓄積し few-shot 化 |
+| **Lisa** (AI / LLM) | エージェント志向 | 3 段階 LLM(cheap → medium → expensive)。Stage 1 で全件スコアリング、Stage 2 で要約、Stage 3 で注目後のみ共有文案。レビュー判断を JSONL で蓄積し few-shot 化 |
 | **Maya** (PM / 時短) | ワークフロー設計 | 朝 5 分トリアージのタイムボックス設計。Must read 5 件上限、Skim 15 件、Archive 無制限。KPI(紹介数 / 反応 / 見逃し率)で運用評価 |
-| **Hiro** (DevRel / マーケ) | 出力起点 | 3 媒体それぞれ要件が違う前提で、媒体別テンプレートを LLM プロンプトと一体化(YAML)。「Why I cared」を採用時に 1 行残して文体学習材料に |
+| **Hiro** (DevRel / マーケ) | 出力起点 | 3 媒体それぞれ要件が違う前提で、媒体別テンプレートを LLM プロンプトと一体化(YAML)。「Why I cared」を注目時に 1 行残して文体学習材料に |
 | **Sarah** (UX / プロダクティビティ) | 体験起点 | Tinder for commits のスワイプ UI / マルチデバイス(PWA / VS Code 拡張 / Teams bot)。状態を 1 つの SQLite に集約、Issue とも双方向同期 |
 
 ### 2.2 相互レビューで全員が合意した「最低限の柱」
 
 1. **データ取得は決定論的に** (GitHub Actions または cron + `gh` CLI)。
 2. **判定は LLM 主体だが、ルールで 1 次フィルタしてコストと暴走を抑える**。
-3. **学習ループ(採否のフィードバック)を初日から組み込む**。
+3. **学習ループ(レビュー判断のフィードバック)を初日から組み込む**。
 4. **UI は段階的に拡張、初期は Issue + Teams bot で十分**。
 5. **出力テンプレートは LLM プロンプトと同一資産として管理する**。
 
@@ -95,7 +95,7 @@
 
 ### 2.4 デスクトップアプリへの方針転換
 
-上記レビュー後、ユーザーから「差分の公式レンダリング表示 / ファイルパス→URL のマッピング表示 / 採否・無視ディレクトリ・既読未読のデータ蓄積」が必須要件と提示され、クライアントアプリ(Blazor Desktop / WPF)へ全面転換。さらに **GitHub Copilot SDK** を中核に据える方針が確定。
+上記レビュー後、ユーザーから「差分の公式レンダリング表示 / ファイルパス→URL のマッピング表示 / 注目・保留・見送り候補・アーカイブ・無視ディレクトリ・未確認のデータ蓄積」が必須要件と提示され、クライアントアプリ(Blazor Desktop / WPF)へ全面転換。さらに **GitHub Copilot SDK** を中核に据える方針が確定。
 
 ---
 
@@ -233,10 +233,10 @@ Copilot エージェントは「計画 → ツール選択 → 実行 → 観察
 | `radar_get_diff` | 指定 SHA の差分(全文 or 部分) | Octokit (`pullRequests.listFiles`) |
 | `radar_resolve_url` | リポジトリ内パス → 公開 URL 一覧 | pagelist API + frontmatter versions |
 | `radar_fetch_rendered` | `/api/article/body` で公式 HTML 取得 | HttpClient |
-| `radar_score_commit` | スコアと採用カテゴリを保存 | SQLite (`Scoring`) |
-| `radar_save_review` | 採用 / 見送り候補 / 確認不要 / Later / Seen の保存 | SQLite (`Review`) |
+| `radar_score_commit` | スコアと注目カテゴリを保存 | SQLite (`Scoring`) |
+| `radar_save_review` | 注目 / 保留 / 見送り候補 / アーカイブ / Seen の保存 | SQLite (`Review`) |
 | `radar_query` | 自然言語フィルタ用の SELECT 限定 SQL 実行 | EF Core + SqlGuard |
-| `radar_post_draft` | 媒体別下書きを保存 | SQLite (`Draft`) |
+| `radar_post_draft` | 媒体別の共有文案を保存 | SQLite (`Draft`) |
 | `radar_ignore_rule` | 無視ディレクトリ / パターンの追加 | SQLite (`IgnoreRule`) |
 | `radar_boost_rule` | 重要度ブーストルールの追加 | SQLite (`BoostRule`) |
 
@@ -276,9 +276,9 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 
 ### 7.2 `AdoptionSession`
 
-- ユーザーが採用したコミット 1 件に対し、3 媒体の下書きを生成。
+- ユーザーが注目したコミット 1 件に対し、3 媒体の下書きを生成。
 - モデル: `claude-sonnet-4.5` を選好(文体表現力)。
-- 入力: 採用済みコミット + 差分 + 解決済み URL + 過去の採用例 5 件(few-shot)。
+- 入力: 注目コミット + 差分 + 解決済み URL + 過去の注目例 5 件(few-shot)。
 - 出力: JSON で `{ twitter_ja, teams_ja, customer_ja }`。
 
 ### 7.3 `AskSession`
@@ -289,7 +289,7 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 
 ### 7.4 `MaintenanceSession`(任意 / 週次)
 
-- 振り返り: 採用 / 見送り候補 / 確認不要の傾向を集計し、無視ルール / ブーストルールの提案を生成。
+- 振り返り: 注目 / 保留 / 見送り候補 / アーカイブの傾向を集計し、無視ルール / ブーストルールの提案を生成。
 - ユーザーは生成された提案を一覧から有効化するだけ。
 
 ---
@@ -512,7 +512,7 @@ public sealed class CopilotToolLog
 │ ☑ release    │ │  → Local preview server (PR HEAD) — Phase 6        │ │
 │              │ └────────────────────────────────────────────────────┘ │
 │              │                                                        │
-│              │ [ Adopt ✓ ]  [ Archive ✗ ] [ Later ⏰ ] [ Ignore dir ] │
+│              │ [ 注目 ✓ ]  [ 保留 ⏰ ] [ アーカイブ ] [ Ignore dir ] │
 └──────────────┴────────────────────────────────────────────────────────┘
 ```
 
@@ -520,13 +520,13 @@ public sealed class CopilotToolLog
 
 | 状態 | UI | 内部 |
 |---|---|---|
-| 未読 | Sidebar 🔴 | `Review.Status = Unseen` |
-| 既読(レガシー) | Sidebar には出さず未読へ合算 | `Seen` |
-| 採用 | Drafts タブが自動で開く | `Adopted` + 下書き生成 jobs 投入 |
-| 後で | Later プレイリスト、翌朝に繰り越し | `Later` |
+| 未確認 | Sidebar 🔴 | `Review.Status = Unseen` |
+| 既読(レガシー) | Sidebar には出さず未確認へ合算 | `Seen` |
+| 注目 | 見逃さず追いたい候補 | `Adopted` |
+| 保留 | 保留キュー、翌朝に繰り越し | `Later` |
 | 見送り候補 | Triage / Ignore が低優先度と判断 | `Rejected` |
-| 確認不要 | ユーザーが手動で最終除外 | `Archived` + `Reason` 入力 |
-| 無視ディレクトリ | 右上「このディレクトリを無視」 | `IgnoreRule` 追加 + 関連未読を一括 `Rejected(reason="auto-ignored")` |
+| アーカイブ | アクティブな確認対象から外す | `Archived` + `Reason` 入力 |
+| 無視ディレクトリ | 右上「このディレクトリを無視」 | `IgnoreRule` 追加 + 関連未確認を一括 `Rejected(reason="auto-ignored")` |
 | 重要度ブースト | ファイル右クリックメニュー | `BoostRule` 追加、score に加算 |
 
 ### 11.3 Drafts パネル
@@ -713,8 +713,8 @@ RepoSyncRadar.sln
 | **0. 雛形** | WPF + BlazorWebView + EF Core SQLite + Octokit のスキャフォールド、DESIGN.md | `dotnet build` が通り、ウィンドウが起動して "Hello" 表示 |
 | **1. ドキュメント取得 / 表示** | Octokit で Repo sync PR コミット一覧、`PathToUrlResolver`、`/api/article/body` 連携、WebView2 右ペイン | 1 クリックで「コミット / URL / 公式の見た目」が並んで見える |
 | **2. Copilot SDK 統合** | `CopilotClient` 起動、最小ツール (`radar_list_commits` / `radar_get_diff`) 登録、Morning Triage セッション | スコアと要約が SQLite に入る |
-| **3. レビュー UI** | Adopt / Archive / Later / Ignore、Reason 入力、Sidebar フィルタ | 1 日 5 分運用が成立 |
-| **4. 媒体別下書き** | Adoption セッション + 3 媒体テンプレート + Regenerate | 採用 → 下書き → 編集 → クリップボードで完結 |
+| **3. レビュー UI** | 注目 / 保留 / アーカイブ / Ignore、Reason 入力、Sidebar フィルタ | 1 日 5 分運用が成立 |
+| **4. 共有文案** | Adoption セッション + 3 媒体テンプレート + Regenerate | 注目 → 文案 → 編集 → クリップボードで完結 |
 | **5. 自然言語フィルタ** | `radar_query` ツール + Ask Palette | 「先月の Copilot 関連未確認重要変更」のクエリが動く |
 | **6. ローカルプレビュー** | bare clone + `git worktree` + Next.js sidecar、Before/After 並列表示 | PR HEAD の見た目で比較可能 |
 | **7. 配布・運用** | Velopack 自動更新、署名、テレメトリ自分用 | 自分の PC で常駐運用 |
@@ -744,10 +744,10 @@ Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Ph
 
 - [ ] **モデル選定の自動化**: コスト / 品質 / レイテンシで動的に選ぶか、設定で固定か。
 - [ ] **多言語下書きの英訳併走**: Twitter 用に日本語と英語を並行生成するか。
-- [ ] **Teams bot との連携**: 採用 / 確認不要を Teams のチャットボタンから操作できるようにするか。
+- [ ] **Teams bot との連携**: 注目 / アーカイブを Teams のチャットボタンから操作できるようにするか。
 - [ ] **Copilot Extension への昇格**: アプリを Copilot Chat から `@reposync` で呼べるようにするか。
 - [ ] **MAUI Blazor 移植**: iPad / スマホで参照したくなった場合の Razor 共有率を見積もる。
-- [ ] **トレーニングデータの外部化**: 採用例 few-shot を別リポジトリに公開して他社事例を取り込めるか。
+- [ ] **トレーニングデータの外部化**: 注目例 few-shot を別リポジトリに公開して他社事例を取り込めるか。
 - [ ] **`docs.github.com` 以外の対応**: 同様のリポジトリ(`microsoft/azure-docs` 等)に拡張可能か。
 - [ ] **ベンチマーク**: 朝のトリアージ完了までの所要時間を KPI 化する。
 - [ ] **GHES リリースノートの優先扱い**: `data/release-notes/**` は常時 high boost。
@@ -769,8 +769,8 @@ Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Ph
 | 用語 | 意味 |
 |---|---|
 | **Repo sync PR** | GitHub 内部リポジトリと `github/docs` の同期 PR。日次で多数のコミットが入る |
-| **Adoption** | コミットを SNS / 社内 / 顧客向けに紹介すると決めること |
-| **Triage** | コミットを未読から採用候補 / 見送り候補へ振り分けること |
+| **Adoption** | 注目したコミットを SNS / 社内 / 顧客向けに紹介すると決めること |
+| **Triage** | コミットを未確認から注目候補 / 見送り候補へ振り分けること |
 | **Boost** | 重要度スコアに加算するルール |
 | **BYOK** | Bring Your Own Key。OpenAI / Anthropic / Azure AI Foundry を Copilot SDK 経由で使うこと |
 | **canonical URL** | docs.github.com の正規 URL(redirect 先) |

@@ -18,7 +18,7 @@ public class SidebarTests
     [Fact]
     public void Sidebar_Shows_Counts_From_Repository()
     {
-        // Arrange — repository returns Unseen=3 and Adopted=1.
+        // Arrange — repository returns 未確認=3 and 注目=1.
         var repo = Substitute.For<IRadarRepository>();
         repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(
@@ -75,10 +75,10 @@ public class SidebarTests
         var cut = ctx.Render<Sidebar>(
             parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
 
-        Assert.Contains("まだ確認していない", cut.Find("[data-testid=\"sidebar-description-Unseen\"]").TextContent);
-        Assert.Contains("共有", cut.Find("[data-testid=\"sidebar-description-Adopted\"]").TextContent);
+        Assert.Contains("まだ人が判断していない", cut.Find("[data-testid=\"sidebar-description-Unseen\"]").TextContent);
+        Assert.Contains("見逃さず", cut.Find("[data-testid=\"sidebar-description-Adopted\"]").TextContent);
         Assert.Contains("低優先度", cut.Find("[data-testid=\"sidebar-description-Rejected\"]").TextContent);
-        Assert.Contains("最終除外", cut.Find("[data-testid=\"sidebar-description-Archived\"]").TextContent);
+        Assert.Contains("アクティブ", cut.Find("[data-testid=\"sidebar-description-Archived\"]").TextContent);
         Assert.Contains("保留", cut.Find("[data-testid=\"sidebar-description-Later\"]").TextContent);
         Assert.DoesNotContain("title=", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("スキム済み", cut.Markup, StringComparison.Ordinal);

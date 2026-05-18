@@ -1,6 +1,6 @@
 @* Top-level Razor shell rendered inside the WPF BlazorWebView. Phase 1 wires the
     minimal review surface: Sidebar (status counters) + CommitList (filtered rows) +
-    CommitDetail (files + canonical URLs). Diff / WebView2 / adoption actions land in
+    CommitDetail (files + canonical URLs). Diff / WebView2 / review actions land in
     later steps. *@
 
 @inject IServiceProvider Services
@@ -66,22 +66,22 @@
                             class="bulk-review-button adopt"
                             data-testid="bulk-review-adopted"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Adopted)"
-                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Adopted)">採用済みへ</button>
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Adopted)">注目へ</button>
                         <button type="button"
                             class="bulk-review-button later"
                             data-testid="bulk-review-later"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Later)"
-                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Later)">あとで見るへ</button>
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Later)">保留へ</button>
                         <button type="button"
                             class="bulk-review-button archive"
                             data-testid="bulk-review-archived"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Archived)"
-                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Archived)">確認不要へ</button>
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Archived)">アーカイブへ</button>
                         <button type="button"
                             class="bulk-review-button unseen"
                             data-testid="bulk-review-unseen"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Unseen)"
-                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Unseen)">未読へ戻す</button>
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Unseen)">未確認へ戻す</button>
                         <button type="button"
                             class="bulk-review-button delete"
                             data-testid="bulk-delete-unseen"
@@ -382,11 +382,11 @@
     private static string BuildStatusDestinationLabel(ReviewStatus status)
         => status switch
         {
-            ReviewStatus.Unseen => "未読",
-            ReviewStatus.Adopted => "採用済み",
-            ReviewStatus.Later => "あとで見る",
+            ReviewStatus.Unseen => "未確認",
+            ReviewStatus.Adopted => "注目",
+            ReviewStatus.Later => "保留",
             ReviewStatus.Rejected => "見送り候補",
-            ReviewStatus.Archived => "確認不要",
+            ReviewStatus.Archived => "アーカイブ",
             _ => status.ToString(),
         };
 

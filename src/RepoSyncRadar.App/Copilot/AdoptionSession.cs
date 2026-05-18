@@ -12,9 +12,9 @@ namespace RepoSyncRadar.App.Copilot;
 
 /// <summary>
 /// Adoption session orchestrator (IMPLEMENTATION_PLAN.md §Step 17). For an already
-/// adopted commit:
+/// focused commit:
 /// <list type="number">
-///   <item><description>Loads the commit, its diff, and up to five previously adopted commits as few-shot context.</description></item>
+///   <item><description>Loads the commit, its diff, and up to five previously focused commits as few-shot context.</description></item>
 ///   <item><description>Sends an Adoption session prompt asking Copilot to return JSON with twitter/teams/customer drafts.</description></item>
 ///   <item><description>Persists the three drafts to the local <c>radar.db</c>.</description></item>
 /// </list>
@@ -57,7 +57,7 @@ public sealed partial class AdoptionSession
     }
 
     /// <summary>
-    /// Generates a three-channel <see cref="DraftBundle"/> for the adopted commit and
+    /// Generates a three-channel <see cref="DraftBundle"/> for the focused commit and
     /// persists it. Throws <see cref="InvalidOperationException"/> when the commit is
     /// not in <see cref="ReviewStatus.Adopted"/>.
     /// </summary>
@@ -76,8 +76,8 @@ public sealed partial class AdoptionSession
         if (commit.Review?.Status is not ReviewStatus.Adopted)
         {
             throw new InvalidOperationException(
-                $"Commit {sha} is not adopted (current status: {commit.Review?.Status.ToString() ?? "Unseen"}). " +
-                "Drafts can only be generated for adopted commits.");
+                $"Commit {sha} is not focused (current status: {commit.Review?.Status.ToString() ?? "Unseen"}). " +
+                "Drafts can only be generated for focused commits.");
         }
 
         var fewShot = await db.Commits
@@ -139,16 +139,16 @@ public sealed partial class AdoptionSession
         string diff)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("# Adoption — 媒体別下書き生成");
+        sb.AppendLine("# 注目コミット — 共有文案生成");
         sb.AppendLine();
-        sb.AppendLine("以下のコミットを採用しました。Twitter / Teams / 顧客向けの 3 つの日本語下書きを生成してください。");
+        sb.AppendLine("以下のコミットを注目対象にしました。Twitter / Teams / 顧客向けの 3 つの日本語下書きを生成してください。");
         sb.AppendLine();
         sb.AppendLine("## 入出力");
         sb.AppendLine("- 出力は **必ず JSON のみ**。説明文や Markdown コードブロックは禁止。");
         sb.AppendLine("- スキーマ: `{ \"twitter\": string, \"teams\": string, \"customer\": string }`");
         sb.AppendLine("- twitter は 140 文字以内、teams は 800 文字以内、customer は 1600 文字以内を目安。");
         sb.AppendLine();
-        sb.AppendLine("## 過去の採用例 (Few-shot)");
+        sb.AppendLine("## 過去の注目例 (Few-shot)");
         var any = false;
         foreach (var ex in fewShot)
         {
@@ -157,7 +157,7 @@ public sealed partial class AdoptionSession
         }
         if (!any)
         {
-            sb.AppendLine("- (まだ採用例がありません)");
+            sb.AppendLine("- (まだ注目例がありません)");
         }
         sb.AppendLine();
         sb.AppendLine("## 対象コミット");

@@ -11,7 +11,7 @@ using Xunit;
 namespace RepoSyncRadar.App.Tests.Copilot;
 
 /// <summary>
-/// Adoption session unit tests (IMPLEMENTATION_PLAN.md §Step 17.3). Verifies prompt
+/// Focused draft session unit tests (IMPLEMENTATION_PLAN.md §Step 17.3). Verifies prompt
 /// composition, persistence, validation, and diff truncation in isolation from the real
 /// Copilot SDK.
 /// </summary>
@@ -78,7 +78,7 @@ public sealed class AdoptionSessionTests
     {
         var ct = TestContext.Current.CancellationToken;
         await using var harness = await WriteHarness.CreateAsync(ct);
-        // Seed 7 prior adoptions so we can confirm only 5 are included (most recent first).
+        // Seed 7 prior focused commits so we can confirm only 5 are included (most recent first).
         for (var i = 1; i <= 7; i++)
         {
             await harness.InsertReviewedCommitAsync(

@@ -10,7 +10,7 @@ public enum SessionPurpose
     /// <summary>Morning Triage — scores newly synced commits and selects must-reads.</summary>
     Triage,
 
-    /// <summary>Adoption — drafts platform-specific posts for a chosen commit.</summary>
+    /// <summary>Adoption — drafts platform-specific posts for a focused commit.</summary>
     Adoption,
 
     /// <summary>Ask Palette — answers natural-language queries by calling <c>radar_query</c>.</summary>

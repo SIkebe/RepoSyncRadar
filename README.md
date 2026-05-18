@@ -9,7 +9,7 @@ A Windows desktop app that watches Repo sync PRs from [`github/docs`](https://gi
 
 - **C# / .NET 8+ / WPF + BlazorWebView** — fast startup as a native Windows app
 - Driven by the **GitHub Copilot SDK** ([`github/copilot-sdk`](https://github.com/github/copilot-sdk)) at its core
-- Stores Adopt / Reject / Later / Ignore / Boost data with **SQLite + EF Core**
+- Stores Focus / Hold / Rejected / Archive / Ignore / Boost data with **SQLite + EF Core**
 - Hits **`docs.github.com/api/*`** directly to surface the actual rendered look and the file-path → public-URL mapping
 - **No submodules.** The app is a standalone repository; no local clone is needed until Phase 6.
 
@@ -43,7 +43,7 @@ docs/
 | 0 | Scaffold + design document (the current state of this repository) |
 | 1 | Repo sync PR ingestion / commit display / official page embedding |
 | 2 | Copilot SDK integration / Morning Triage session |
-| 3 | Operational UI for Adopt / Reject / Later / Ignore |
+| 3 | Operational UI for Focus / Hold / Rejected / Archive / Ignore |
 | 4 | Channel-specific drafts (Twitter / Teams / external) |
 | 5 | Natural-language filtering (Ask Palette) |
 | 6 | Local preview (bare clone + worktree) |

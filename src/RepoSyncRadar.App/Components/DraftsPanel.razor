@@ -1,4 +1,4 @@
-@* Displays the three media-specific drafts (Twitter / Teams / Customer) for an adopted
+@* Displays the three media-specific drafts (Twitter / Teams / Customer) for a focused
    commit. Loads existing drafts on initialization; "Regenerate" re-invokes the Adoption
    session. Implemented per IMPLEMENTATION_PLAN.md §Step 17. *@
 
@@ -14,8 +14,8 @@
 <div class="drafts-panel action-panel" data-testid="drafts-panel">
     <header class="action-panel-header">
         <div>
-            <h3>共有下書き</h3>
-            <p>採用済み通知から生成した投稿文を確認・コピーします。</p>
+            <h3>共有文案</h3>
+            <p>注目した通知をもとに、媒体ごとの文案を確認・コピーします。</p>
         </div>
         @if (!string.IsNullOrEmpty(Sha) && !_busy)
         {
@@ -23,17 +23,17 @@
                     class="toolbar-button secondary"
                     data-testid="drafts-regenerate"
                     disabled="@_busy"
-                    @onclick="RegenerateAsync">下書きを再生成</button>
+                    @onclick="RegenerateAsync">文案を再生成</button>
         }
     </header>
 
     @if (string.IsNullOrEmpty(Sha))
     {
-        <p class="drafts-empty">採用済みコミットを選択してください。</p>
+        <p class="drafts-empty">注目コミットを選択してください。</p>
     }
     else if (_busy)
     {
-        <p class="drafts-busy" data-testid="drafts-busy">下書きを生成中…</p>
+        <p class="drafts-busy" data-testid="drafts-busy">文案を生成中…</p>
     }
     else
     {

@@ -15,7 +15,7 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportCommitList(["aaa1111111111111111111111111111111111111", "bbb2222222222222222222222222222222222222"]);
 
         var message = Assert.Single(progress.Messages);
-        Assert.Contains("今回の未スコア未読コミット", message, StringComparison.Ordinal);
+        Assert.Contains("今回の未スコア未確認コミット", message, StringComparison.Ordinal);
         Assert.Contains("全 2 件", message, StringComparison.Ordinal);
         Assert.Contains("0 / 2", message, StringComparison.Ordinal);
     }

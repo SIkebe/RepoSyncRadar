@@ -98,10 +98,10 @@ public sealed class TriageScoringProgressTracker
             var completed = _scoredShas.Count;
 
             _progress?.Report(_total == 0
-                ? "今回の未スコア未読コミットはありません。スコアリング対象 0 / 0 件。"
+                ? "今回の未スコア未確認コミットはありません。スコアリング対象 0 / 0 件。"
                 : string.Create(
                     CultureInfo.InvariantCulture,
-                    $"今回の未スコア未読コミットをスコアリング中: 全 {_total} 件 ({completed} / {_total})"));
+                    $"今回の未スコア未確認コミットをスコアリング中: 全 {_total} 件 ({completed} / {_total})"));
         }
 
         public void ReportScoreSaved(string sha)
@@ -127,8 +127,8 @@ public sealed class TriageScoringProgressTracker
                 : "?";
             var shortSha = sha.Length <= 8 ? sha : sha[..8];
             var prefix = _total is int knownTotal && completed >= knownTotal
-                ? "今回の未スコア未読コミットのスコアリング完了"
-                : "今回の未スコア未読コミットをスコアリング中";
+                ? "今回の未スコア未確認コミットのスコアリング完了"
+                : "今回の未スコア未確認コミットをスコアリング中";
 
             _progress?.Report(string.Create(
                 CultureInfo.InvariantCulture,

@@ -37,11 +37,11 @@
 @code {
     private static readonly SidebarEntry[] Entries =
     {
-        new(ReviewStatus.Unseen, "未読", "Triage 後、まだ確認していない候補"),
-        new(ReviewStatus.Adopted, "採用済み", "下書き作成や共有の対象にした候補"),
-        new(ReviewStatus.Later, "あとで見る", "判断を保留して後で見る候補"),
+        new(ReviewStatus.Unseen, "未確認", "Triage 後、まだ人が判断していない候補"),
+        new(ReviewStatus.Adopted, "注目", "見逃さず追いたい候補"),
+        new(ReviewStatus.Later, "保留", "判断をいったん保留している候補"),
         new(ReviewStatus.Rejected, "見送り候補", "Triage や無視ルールが低優先度と見なした候補"),
-        new(ReviewStatus.Archived, "確認不要", "手動で最終除外し、もう見直さない候補"),
+        new(ReviewStatus.Archived, "アーカイブ", "アクティブな確認対象から外した候補"),
     };
 
     private sealed record SidebarEntry(ReviewStatus Status, string Label, string Description)

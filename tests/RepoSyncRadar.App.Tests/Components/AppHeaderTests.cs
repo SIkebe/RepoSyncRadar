@@ -135,7 +135,7 @@ public sealed class AppHeaderTests
             .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                call.Arg<IProgress<string>?>()?.Report("未読コミットをスコアリング中: 2 / 5 件目 (abc12345)");
+                call.Arg<IProgress<string>?>()?.Report("未確認コミットをスコアリング中: 2 / 5 件目 (abc12345)");
                 return gate.Task;
             });
 

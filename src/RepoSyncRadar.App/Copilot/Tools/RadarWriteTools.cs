@@ -231,13 +231,13 @@ public sealed class RadarWriteTools
     private AIFunction CreateSaveReview()
     {
         return AIFunctionFactory.Create(
-            ([Description("Side-effecting: writes to radar.db. Args carry sha + Adopted/Rejected/Archived/Later + optional reason.")] SaveReviewArgs args,
+            ([Description("Side-effecting: writes to radar.db. Args carry sha + review status (注目=Adopted, 見送り候補=Rejected, アーカイブ=Archived, 保留=Later) + optional reason.")] SaveReviewArgs args,
              CancellationToken cancellationToken)
                 => SaveReviewAsync(args, cancellationToken),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_save_review",
-                Description = "Persists a review verdict (Adopted/Rejected/Archived/Later) for a commit. Side-effecting.",
+                Description = "Persists a review verdict (注目/見送り候補/アーカイブ/保留; internal Adopted/Rejected/Archived/Later) for a commit. Side-effecting.",
             });
     }
 

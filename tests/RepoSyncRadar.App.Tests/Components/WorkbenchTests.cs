@@ -369,7 +369,7 @@ public sealed class WorkbenchTests
         cut.WaitForAssertion(() =>
         {
             Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
-            Assert.Contains("2 件をあとで見るに移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("2 件を保留に移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
             Assert.DoesNotContain("checked", cut.Markup, StringComparison.Ordinal);
         });
         await repo.Received(1).SetReviewAsync(commits[0].Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
@@ -420,7 +420,7 @@ public sealed class WorkbenchTests
         {
             Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Archived\"]").ClassList);
             Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count);
-            Assert.Contains("2 件を確認不要に移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("2 件をアーカイブに移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
         });
         await repo.Received(1).SetReviewAsync(commits[0].Sha, ReviewStatus.Archived, null, Arg.Any<CancellationToken>());
         await repo.Received(1).SetReviewAsync(commits[1].Sha, ReviewStatus.Archived, null, Arg.Any<CancellationToken>());

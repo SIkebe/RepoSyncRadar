@@ -7,7 +7,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// <summary>
 /// Orchestrates the Morning Triage flow (DESIGN.md §6, IMPLEMENTATION_PLAN.md §Step 15):
 /// <list type="number">
-///   <item><description>Pulls the latest unseen commits via <see cref="ICommitIngestionService"/>.</description></item>
+///   <item><description>Pulls the latest unreviewed commits via <see cref="ICommitIngestionService"/>.</description></item>
 ///   <item><description>Opens a <see cref="SessionPurpose.MorningTriage"/> Copilot session.</description></item>
 ///   <item><description>Lets Copilot iterate over <c>radar_list_commits</c> → <c>radar_get_diff</c> → <c>radar_score_commit</c> until idle.</description></item>
 /// </list>
@@ -23,14 +23,14 @@ public sealed partial class MorningTriageSession
         最新の `github/docs` Repo sync PR 由来のコミットを処理してください。
 
         手順:
-        1. `radar_list_commits` を `status="Unseen"`, `limit=50` で呼び、まだスコアリングされていない未読コミット一覧を取得する。
+        1. `radar_list_commits` を `status="Unseen"`, `limit=50` で呼び、まだスコアリングされていない未確認コミット一覧を取得する。
         2. 各コミットについて必要に応じて `radar_get_diff` で差分を確認し、`radar_resolve_url` / `radar_fetch_rendered` で出典ページを確認する。
           3. 影響範囲・新規性・読者層を判断し、`radar_score_commit` でスコア・カテゴリ・読者・要約・理由・詳細分析を保存する。
               `DetailsJa` には次のラベルを含めて、各 1〜2 文で具体的に書く: `変更内容`, `根拠`, `影響`, `確認観点`。
               `根拠` は差分またはレンダリング済み本文で確認した事実に限定し、推測は `確認観点` に分ける。
-              読者が採用/共有判断をしやすいよう、単なる要約ではなく「なぜ今見るべきか」を残す。
-          4. スコア上位 5 件と判断に迷う候補は未読のまま残し、明らかに不要な候補だけ `radar_save_review` で `Rejected` として保存する。
-              `Rejected` は自動見送り候補を表す。`Archived` はユーザーが手動で最終除外するときだけ使うため、Triage では使わない。
+              読者が注目/共有判断をしやすいよう、単なる要約ではなく「なぜ今見るべきか」を残す。
+          4. スコア上位 5 件と判断に迷う候補は未確認のまま残し、明らかに不要な候補だけ `radar_save_review` で `Rejected` として保存する。
+              `Rejected` は自動見送り候補を表す。`Archived` はユーザーが手動でアーカイブするときだけ使うため、Triage では使わない。
         5. 既に確立されたユーザー設定 (Ignore / Boost) を尊重し、無視対象はスキップする。
         6. 全件を処理し終えたら短い完了報告を返す。
 
@@ -105,7 +105,7 @@ public sealed partial class MorningTriageSession
             {
                 LogSending(_logger, session.SessionId);
                 using var scoringScope = _scoringProgress.Begin(progress);
-                progress?.Report("Copilot が未読コミット一覧を取得し、スコアリングを開始しています…");
+                progress?.Report("Copilot が未確認コミット一覧を取得し、スコアリングを開始しています…");
                 _ = await session.SendAsync(TriagePrompt, TriageSendTimeout, cancellationToken).ConfigureAwait(false);
                 progress?.Report("Triage が完了しました。画面を更新しています…");
                 LogFinished(_logger, session.SessionId);
@@ -167,14 +167,14 @@ public sealed partial class MorningTriageSession
         {
             if (value.Total == 0)
             {
-                _progress?.Report("Repo sync PR に新規未読コミットはありません。");
+                _progress?.Report("Repo sync PR に新規未確認コミットはありません。");
                 return;
             }
 
             if (value.InsertedSha is { Length: > 0 } sha)
             {
                 _reviewBroadcaster?.Publish();
-                _progress?.Report($"未読コミットを取り込み中: 新規 {value.Inserted} / 取得 {value.Total} 件 ({ShortSha(sha)})");
+                _progress?.Report($"未確認コミットを取り込み中: 新規 {value.Inserted} / 取得 {value.Total} 件 ({ShortSha(sha)})");
             }
         }
 

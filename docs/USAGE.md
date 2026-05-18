@@ -123,12 +123,12 @@ dotnet run --project src/RepoSyncRadar.App
 ```
 ┌──────────────┬──────────────────────────────────────────────┐
 │ Sidebar      │ Workbench                                    │
-│  未読         │  ┌──────────────────────────────────────┐    │
-│  採用済み     │  │ Ask Palette  (Ctrl+Enter で実行)     │    │
-│  あとで見る   │  │ Commit List  (絞り込み済みの一覧)    │    │
+│  未確認       │  ┌──────────────────────────────────────┐    │
+│  注目         │  │ Ask Palette  (Ctrl+Enter で実行)     │    │
+│  保留         │  │ Commit List  (絞り込み済みの一覧)    │    │
 │  見送り候補   │  ├──────────────────────────────────────┤    │
-│  確認不要     │  │ Commit Detail                        │    │
-│              │  │   - Review Actions (Adopt/Archive/…) │    │
+│  アーカイブ   │  │ Commit Detail                        │    │
+│              │  │   - Review Actions (Focus/Archive/…) │    │
 │              │  │   - Drafts Panel  (3 媒体下書き)     │    │
 │              │  └──────────────────────────────────────┘    │
 └──────────────┴──────────────────────────────────────────────┘
@@ -152,39 +152,39 @@ dotnet run --project src/RepoSyncRadar.App
 1. `github/docs` の Repo sync PR を最大 `MaxPullRequests` 件取得
    - `GitHub:PullRequestCreatedAtOrAfter` を設定している場合は、その日時以降に作成された PR だけを対象にします
 2. 各 PR のコミットを SQLite に **冪等取り込み**(既知 SHA はスキップ)
-3. Copilot に「上位候補を未読に残し、明らかに不要なものは見送り候補へ送る」方針でスコアリング
+3. Copilot に「上位候補を未確認に残し、明らかに不要なものは見送り候補へ送る」方針でスコアリング
 4. `radar_score_commit` で `Scoring` テーブルに要約・理由・スコアを保存
 5. 見送り判定が明確なものは `radar_save_review` で `Reviews.Status = Rejected` として保存
 
-> 起動直後はサイドバーの **未読** に並びます。
+> 起動直後はサイドバーの **未確認** に並びます。
 
-### 4.2 レビュー(Adopt / Archive / Later / Ignore)
+### 4.2 レビュー(注目 / 保留 / 見送り候補 / アーカイブ / Ignore)
 
 Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Components/ReviewActions.razor) から処理します(Step 16):
 
 | アクション | 用途 | データ |
 |---|---|---|
-| **Adopt** | 採用、媒体別下書き候補 | `Reviews.Status = Adopted` |
-| **Archive** | もう確認不要なものとして最終除外する | `Reviews.Status = Archived`, `Reviews.Reason` に保存 |
-| **Later** | 後回し | `Reviews.Status = Later` |
+| **注目** | 見逃さず追いたい候補 | `Reviews.Status = Adopted` |
+| **保留** | 判断をいったん止めて残す | `Reviews.Status = Later` |
+| **アーカイブ** | アクティブな確認対象から外す | `Reviews.Status = Archived`, `Reviews.Reason` に保存 |
 | **Ignore Directory** | このパス配下を以降まとめて見送り候補にする | `IgnoreRules` 追加 + 既存も一括 `Rejected` |
 
-`Rejected` は Triage や無視ルールで自動分類された見送り候補、`Archived` はユーザーが手動で「もう見直さない」と決めた確認不要の状態です。
+`Rejected` は Triage や無視ルールで自動分類された見送り候補、`Archived` はユーザーが手動でアクティブな確認対象から外したアーカイブ状態です。
 `Ignore Directory` は `EF.Functions.Like` で `path/%` を一括処理するので、不要なディレクトリを 1 クリックで見送り候補へ送れます。
 
-### 4.3 媒体別下書き(Drafts Panel)
+### 4.3 共有文案(Drafts Panel)
 
-Adopt したコミットを選ぶと [`DraftsPanel`](../src/RepoSyncRadar.App/Components/DraftsPanel.razor) が表示されます(Step 17)。
+注目したコミットでは、必要に応じて [`DraftsPanel`](../src/RepoSyncRadar.App/Components/DraftsPanel.razor) から媒体別の共有文案を確認できます(Step 17)。
 
-- 既に下書きがあれば即表示。なければ **Regenerate** ボタンで生成。
-- [`AdoptionSession`](../src/RepoSyncRadar.App/Copilot/AdoptionSession.cs) が、差分(50KB 超は安全に切り詰め) + 過去 5 件の採用例(few-shot)を Copilot に渡し、Twitter / Teams / 顧客向けの 3 媒体を JSON で返させて `Drafts` テーブルに保存。
+- 既に文案があれば即表示。なければ **Regenerate** ボタンで生成。
+- [`AdoptionSession`](../src/RepoSyncRadar.App/Copilot/AdoptionSession.cs) が、差分(50KB 超は安全に切り詰め) + 過去 5 件の注目例(few-shot)を Copilot に渡し、Twitter / Teams / 顧客向けの 3 媒体を JSON で返させて `Drafts` テーブルに保存。
 - 各媒体には **コピーボタン**(WPF Dispatcher 経由で Clipboard へ)。
 
 ### 4.4 Ask Palette(自然言語フィルタ)
 
 Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPalette.razor)(Step 18):
 
-1. 「先週採用したコミットで `actions` ディレクトリのものは?」のように日本語で書く
+1. 「先週注目したコミットで `actions` ディレクトリのものは?」のように日本語で書く
 2. **実行** か **Ctrl+Enter** で送信
 3. [`AskSession`](../src/RepoSyncRadar.App/Copilot/AskSession.cs) が Copilot に SQL を作らせ、[`SqlGuard`](../src/RepoSyncRadar.Core/Services/SqlGuard.cs) で検査(SELECT のみ / 許可 9 テーブル / `LIMIT 100` 強制)
 4. 通過した SQL を読み取り専用 SQLite 接続で実行 → Markdown 表で表示

@@ -6,7 +6,7 @@ namespace RepoSyncRadar.Core.Data;
 /// Persistence facade for the local <c>radar.db</c> store. Used by the integration layer
 /// (<c>DocsGitHubClient</c>) to skip already-ingested commits, by the ingestion pipeline
 /// (<c>CommitIngestionService</c>) for the idempotent upsert flow, and by the review UI
-/// to record adoption decisions.
+/// to record review decisions.
 /// </summary>
 public interface IRadarRepository
 {

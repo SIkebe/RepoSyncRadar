@@ -3,7 +3,7 @@
 @using RepoSyncRadar.Core.Models
 
 @*
-    ReviewActions — Adopt / Archive / Later / Ignore Directory buttons for the selected
+    ReviewActions — Focus / Archive / Hold / Ignore Directory buttons for the selected
     commit. See IMPLEMENTATION_PLAN.md §Step 16. The component talks to IRadarRepository
     directly (not RadarWriteTools) so that users can act without requiring a Copilot
     session, and emits an IReviewBroadcaster event so the Sidebar updates immediately.
@@ -23,8 +23,8 @@
                 class="review-button adopt"
                 disabled="@_busy"
                 @onclick="AdoptAsync">
-            <span class="review-button-title">採用する</span>
-            <span class="review-button-subtitle">共有・下書きへ進める</span>
+            <span class="review-button-title">注目する</span>
+            <span class="review-button-subtitle">見逃さず追う</span>
         </button>
 
         <button type="button"
@@ -32,13 +32,13 @@
                 class="review-button later"
                 disabled="@_busy"
                 @onclick="LaterAsync">
-            <span class="review-button-title">あとで見る</span>
+            <span class="review-button-title">保留する</span>
             <span class="review-button-subtitle">判断を保留する</span>
         </button>
     </div>
 
     <div class="review-reject-box">
-        <label class="review-field-label" for="review-reject-reason">確認不要にする理由 <span>必須</span></label>
+        <label class="review-field-label" for="review-reject-reason">アーカイブする理由 <span>必須</span></label>
         <div class="review-reject-presets" data-testid="review-reject-reason-options">
             @foreach (var reason in RejectReasonPresets)
             {
@@ -62,7 +62,7 @@
                     data-testid="review-reject"
                     class="review-button reject"
                     disabled="@(_busy || string.IsNullOrWhiteSpace(_rejectReason))"
-                    @onclick="ArchiveAsync">確認不要にする</button>
+                    @onclick="ArchiveAsync">アーカイブする</button>
         </div>
     </div>
 

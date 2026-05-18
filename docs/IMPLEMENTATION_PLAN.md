@@ -24,8 +24,8 @@
 - [Step 13. 読み取り系 `radar_*` ツール](#step-13-読み取り系-radar_-ツール)
 - [Step 14. 書き込み系 `radar_*` ツール + 権限ダイアログ](#step-14-書き込み系-radar_-ツール--権限ダイアログ)
 - [Step 15. Morning Triage セッション](#step-15-morning-triage-セッション)
-- [Step 16. Review UI(Adopt / Archive / Later / Ignore)](#step-16-review-uiadopt--archive--later--ignore)
-- [Step 17. Adoption セッション + 媒体別下書き](#step-17-adoption-セッション--媒体別下書き)
+- [Step 16. Review UI(注目 / 保留 / 見送り候補 / アーカイブ / Ignore)](#step-16-review-ui注目--保留--見送り候補--アーカイブ--ignore)
+- [Step 17. Adoption セッション + 共有文案](#step-17-adoption-セッション--共有文案)
 - [Step 18. `radar_query` と Ask Palette](#step-18-radar_query-と-ask-palette)
 - [Step 19. ローカルプレビュー(bare clone + worktree)](#step-19-ローカルプレビューbare-clone--worktree)
 - [Step 19.5. ローカルプレビューの UI 配線](#step-195-ローカルプレビューの-ui-配線)
@@ -387,13 +387,13 @@ Copilot に渡す前にコミット本文 / diff を **untrusted データ** と
 
 ### 9.1 目的
 
-Phase 1 の最低 UI:「サイドバーで未読 / コミット一覧」「中央でコミット詳細(files + URL)」を出す。Diff の Monaco / WebView2 / 採否ボタンは別ステップ。
+Phase 1 の最低 UI:「サイドバーで未確認 / コミット一覧」「中央でコミット詳細(files + URL)」を出す。Diff の Monaco / WebView2 / レビュー判断ボタンは別ステップ。
 
 ### 9.2 スコープ
 
 - `RepoSyncRadar.App/Components/CommitList.razor` — `IRadarRepository.QueryCommitsAsync(filter)` で取得して表示
 - `RepoSyncRadar.App/Components/CommitDetail.razor` — files、frontmatter、resolved URL のリスト
-- `RepoSyncRadar.App/Components/Sidebar.razor` — Unseen / Adopted / Later / Rejected / Archived カウンタ(Seen は未読へ合算)
+- `RepoSyncRadar.App/Components/Sidebar.razor` — 未確認 / 注目 / 保留 / 見送り候補 / アーカイブのカウンタ(内部は Unseen / Adopted / Later / Rejected / Archived、Seen は未確認へ合算)
 - 状態管理は最小限。`CascadingValue` で `IServiceProvider` 配って各コンポーネントが自分で必要なサービスを取る
 
 ### 9.3 テスト
@@ -402,7 +402,7 @@ Phase 1 の最低 UI:「サイドバーで未読 / コミット一覧」「中�
 
 | テスト | 内容 |
 |---|---|
-| `Sidebar_Shows_Counts_From_Repository` | リポジトリスタブが `{Unseen=3, Adopted=1}` を返すと UI に反映 |
+| `Sidebar_Shows_Counts_From_Repository` | リポジトリスタブが `{Unseen=3, Adopted=1}` を返すと「未確認」「注目」の UI に反映 |
 | `CommitList_Renders_Rows` | 3 件で 3 行 |
 | `CommitList_Empty_State` | 0 件で空メッセージ |
 | `CommitDetail_Shows_Resolved_Urls` | `PathToUrlResolver` のスタブが返す URL がリンクとして並ぶ |
@@ -585,7 +585,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 | ツール | 機能 |
 |---|---|
 | `radar_score_commit` | `Scoring` を INSERT/UPDATE |
-| `radar_save_review` | `Review` を更新(Adopted/Rejected/Archived/Later) |
+| `radar_save_review` | `Review` を更新(注目 / 見送り候補 / アーカイブ / 保留。内部値は Adopted/Rejected/Archived/Later) |
 | `radar_post_draft` | `Draft` を INSERT(Posted=false) |
 | `radar_ignore_rule` | `IgnoreRule` を追加 |
 | `radar_boost_rule` | `BoostRule` を追加 |
@@ -628,7 +628,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 ### 15.1 目的
 
-「最新の Repo sync PR を取り込み、未読を全件スコアリング → サイドバーに反映」までを 1 メソッド `RunMorningTriageAsync` で完結させる。
+「最新の Repo sync PR を取り込み、未確認を全件スコアリング → サイドバーに反映」までを 1 メソッド `RunMorningTriageAsync` で完結させる。
 
 ### 15.2 スコープ
 
@@ -660,19 +660,19 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 ---
 
-## Step 16. Review UI(Adopt / Archive / Later / Ignore)
+## Step 16. Review UI(注目 / 保留 / 見送り候補 / アーカイブ / Ignore)
 
 ### 16.1 目的
 
-サイドバー / コミット詳細で Adopt / Archive / Later / Ignore Directory を行えるようにし、Sidebar カウンタが即時更新される。
+サイドバー / コミット詳細で 注目 / 保留 / アーカイブ / Ignore Directory を行えるようにし、Sidebar カウンタが即時更新される。
 
 ### 16.2 スコープ
 
 - `RepoSyncRadar.App/Components/ReviewActions.razor` — 4 ボタン + Reason 入力モーダル
 - `ReviewActions` の `OnReviewed` で `IRadarRepository.SetReviewAsync` を呼び、`IReviewBroadcaster`(`event` を持つだけのシングルトン)で他コンポーネントへ通知
-- Ignore Directory は `IgnoreRule` を追加し、関連未読を `Rejected(reason="auto-ignored")` に一括更新
+- Ignore Directory は `IgnoreRule` を追加し、関連未確認を `Rejected(reason="auto-ignored")` に一括更新
   - `Rejected` は Triage / Ignore による自動見送り候補
-  - `Archived` はユーザーが手動で最終除外した確認不要
+  - `Archived` はユーザーが手動でアクティブな確認対象から外したアーカイブ
 
 ### 16.3 テスト
 
@@ -680,29 +680,29 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 | テスト | 内容 |
 |---|---|
-| `Adopt_Click_Calls_Repository` | repository スタブが Adopted で呼ばれる |
+| `Adopt_Click_Calls_Repository` | 注目ボタンで repository スタブが Adopted で呼ばれる |
 | `Archive_Requires_Reason` | Reason 未入力で disabled |
-| `Later_Sets_Status_And_Closes` | Later 状態が立つ |
+| `Later_Sets_Status_And_Closes` | 保留ボタンで Later 状態が立つ |
 | `Ignore_Dir_Calls_Both_Apis` | `IgnoreRule.Add` と `bulk update Rejected` の両方 |
 | `Sidebar_Receives_Broadcast` | `IReviewBroadcaster` が発火するとサイドバー再レンダリング |
 
 ### 16.4 完了基準
 
 - 上記 5 件が緑
-- 手動: シードデータで Adopt → サイドバーの「採用済み」カウンタが +1
+- 手動: シードデータで注目へ移動 → サイドバーの「注目」カウンタが +1
 
 ---
 
-## Step 17. Adoption セッション + 媒体別下書き
+## Step 17. Adoption セッション + 共有文案
 
 ### 17.1 目的
 
-採用されたコミットに対して **Twitter / Teams / 顧客向け** の下書きを Adoption セッションで生成。`Drafts` テーブルに保存して UI に表示。
+注目したコミットに対して **Twitter / Teams / 顧客向け** の共有文案を Adoption セッションで生成。`Drafts` テーブルに保存して UI に表示。
 
 ### 17.2 スコープ
 
 - `RepoSyncRadar.App/Copilot/AdoptionSession.cs` が `ICopilotAgent.GenerateDraftsAsync` を実装
-- プロンプトに「過去 5 件の採用例(few-shot)」を含める
+- プロンプトに「過去 5 件の注目例(few-shot)」を含める
 - JSON Schema を `responseFormat` 相当で渡す(Copilot SDK の `Sampling`/`OutputSchema` を使う)
 - `Draft` 3 行(channel = twitter/teams/customer)を `radar_post_draft` 経由で保存
 - 出力 UI: `RepoSyncRadar.App/Components/DraftsPanel.razor`(Copy / Regenerate)
@@ -715,7 +715,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 |---|---|
 | `Generate_Returns_Three_Drafts` | フェイク Session が 3 媒体を含む JSON を返すと `DraftBundle` が埋まる |
 | `Generate_Persists_All_Three_Drafts` | DB に 3 行 |
-| `Generate_Includes_FewShot_Examples` | プロンプトに過去採用例の SHA が含まれる(5 件まで) |
+| `Generate_Includes_FewShot_Examples` | プロンプトに過去注目例の SHA が含まれる(5 件まで) |
 | `Generate_Rejects_Unadopted_Commit` | `ReviewStatus.Adopted` 以外は `InvalidOperationException` |
 | `Generate_Truncates_When_Diff_Too_Large` | 50 KB を超える diff は切り詰め + 注記 |
 
@@ -730,7 +730,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 ### 17.4 完了基準
 
 - 上記 8 件が緑
-- 手動: 実 SDK で 1 コミット採用 → 3 媒体下書き生成 → Clipboard コピー OK
+- 手動: 実 SDK で 1 コミットを注目へ移動 → 3 媒体下書き生成 → Clipboard コピー OK
 
 ---
 
@@ -1208,7 +1208,7 @@ Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画で�
   - 完了日 2026-05-13, テスト件数 5
 - [x] Step 16 — Review UI
   - 完了日 2026-05-13, テスト件数 5
-- [x] Step 17 — Adoption + 媒体別下書き
+- [x] Step 17 — Adoption + 共有文案
   - 完了日 2026-05-13, テスト件数 8
 - [x] Step 18 — Ask Palette / SqlGuard
   - 完了日 2026-05-13, テスト件数 12

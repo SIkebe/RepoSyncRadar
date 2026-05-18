@@ -18,7 +18,7 @@ public interface ICopilotAgent
         IProgress<string>? progress,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Generates the three media drafts for a single adopted commit.</summary>
+    /// <summary>Generates the three media drafts for a single focused commit.</summary>
     Task<DraftBundle> GenerateDraftsAsync(string commitSha, CancellationToken cancellationToken = default);
 
     /// <summary>

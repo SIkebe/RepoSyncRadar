@@ -91,10 +91,10 @@ public sealed class ReviewActionsTests
             .Add(c => c.Sha, "abc"));
 
         Assert.NotNull(cut.Find("[data-testid=\"review-primary-actions\"]"));
-        Assert.Contains("採用する", cut.Find("[data-testid=\"review-adopt\"]").TextContent);
-        Assert.Contains("あとで見る", cut.Find("[data-testid=\"review-later\"]").TextContent);
+        Assert.Contains("注目する", cut.Find("[data-testid=\"review-adopt\"]").TextContent);
+        Assert.Contains("保留する", cut.Find("[data-testid=\"review-later\"]").TextContent);
         Assert.Contains("既存情報のみ", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
-        Assert.Contains("確認不要にする", cut.Find("[data-testid=\"review-reject\"]").TextContent);
+        Assert.Contains("アーカイブする", cut.Find("[data-testid=\"review-reject\"]").TextContent);
         Assert.Contains("類似ディレクトリ", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
     }
 
