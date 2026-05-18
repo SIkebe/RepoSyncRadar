@@ -662,6 +662,27 @@ html, body {
     font-size: 0.78rem;
 }
 
+.preview-cleanup-control {
+    align-items: flex-end;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 12rem;
+}
+
+.preview-cleanup-progress {
+    margin: 0;
+    max-width: 100%;
+    width: min(100%, 34rem);
+}
+
+.preview-cleanup-status {
+    margin: 0;
+    max-width: 34rem;
+    text-align: right;
+}
+
 .radar-commit-detail .file-row .open-in-webview {
     align-self: flex-start;
     margin-top: 0.15rem;

@@ -106,12 +106,37 @@
                 <span class="files-heading-label">ファイル</span>
                 <span class="files-heading-count">@BuildPreviewableFileCountLabel()</span>
             </div>
-            <button type="button"
-                    data-testid="commit-detail-preview-cleanup-button"
-                    class="toolbar-button secondary preview-cleanup"
-                    title="キャッシュされた docs worktree をすべて削除します"
-                    disabled="@IsPreviewOperationBusy"
-                    @onclick="CleanupPreviewCacheAsync">キャッシュ削除</button>
+            <div class="preview-cleanup-control">
+                <button type="button"
+                        data-testid="commit-detail-preview-cleanup-button"
+                        class="toolbar-button secondary preview-cleanup"
+                        title="キャッシュされた docs worktree をすべて削除します"
+                        disabled="@IsPreviewOperationBusy"
+                        @onclick="CleanupPreviewCacheAsync">キャッシュ削除</button>
+                @if (_previewCleanupBusy)
+                {
+                    <div class="preview-progress preview-cleanup-progress" data-testid="commit-detail-preview-cleanup-progress">
+                        <div class="preview-progress-row">
+                            <span class="preview-spinner" aria-hidden="true"></span>
+                            <span class="preview-progress-text" data-testid="commit-detail-preview-cleanup-progress-text">
+                                @(_previewStatus ?? "キャッシュをクリーンアップ中…")
+                                <span class="preview-progress-elapsed" data-testid="commit-detail-preview-cleanup-progress-elapsed">
+                                    ・ @_previewElapsedSec 秒経過 / 上限 @_previewTimeoutSec 秒
+                                </span>
+                            </span>
+                            <button type="button"
+                                    data-testid="commit-detail-preview-cleanup-cancel-button"
+                                    class="preview-cancel"
+                                    disabled="@_previewCanceling"
+                                    @onclick="CancelPreviewAsync">@(_previewCanceling ? "中止中…" : "中止")</button>
+                        </div>
+                    </div>
+                }
+                else if (_previewStatusIsCleanup && !string.IsNullOrWhiteSpace(_previewStatus))
+                {
+                    <p class="preview-status preview-cleanup-status" data-testid="commit-detail-preview-cleanup-status">@_previewStatus</p>
+                }
+            </div>
         </div>
         <ul class="files">
             @foreach (var file in Commit.Files)
@@ -159,7 +184,7 @@
                 </li>
             }
         </ul>
-        @if (IsPreviewOperationBusy)
+        @if (_previewBusyPath is not null)
         {
             <div class="preview-progress" data-testid="commit-detail-preview-progress">
                 <div class="preview-progress-row">
@@ -190,7 +215,7 @@
                 }
             </div>
         }
-        else if (!string.IsNullOrWhiteSpace(_previewStatus))
+        else if (!_previewStatusIsCleanup && !string.IsNullOrWhiteSpace(_previewStatus))
         {
             <p class="preview-status" data-testid="commit-detail-preview-status">@_previewStatus</p>
         }
@@ -220,6 +245,7 @@
     private DocsVersion? _activeVersion;
     private IPreviewNavigator? _subscribedNavigator;
     private string? _previewStatus;
+    private bool _previewStatusIsCleanup;
     private bool _previewCanceling;
     private string _previewCancellationSubject = "プレビュー起動";
     private CancellationTokenSource? _previewCts;
@@ -610,6 +636,7 @@
             navigator.Publish(activeTarget);
             _activePreviewPath = file.Path;
             _previewStatus = null;
+            _previewStatusIsCleanup = false;
             return;
         }
 
@@ -618,10 +645,12 @@
             navigator.Publish(officialTarget);
             _activePreviewPath = file.Path;
             _previewStatus = null;
+            _previewStatusIsCleanup = false;
             return;
         }
 
         _previewStatus = "このファイルは公開ドキュメント URL に対応していません";
+        _previewStatusIsCleanup = false;
     }
 
     private void StartPreviewOperation(string? busyPath, string status, string cancellationSubject)
@@ -631,6 +660,7 @@
         _previewCanceling = false;
         _previewCancellationSubject = cancellationSubject;
         _previewStatus = status;
+        _previewStatusIsCleanup = _previewCleanupBusy;
         _previewStdoutTail = new List<string>();
         _previewStderrTail = new List<string>();
         _previewPid = null;

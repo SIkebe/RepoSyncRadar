@@ -457,8 +457,9 @@ public class CommitDetailTests
             coordinator.Received(1).CleanupCacheAsync(Arg.Any<CancellationToken>());
             Assert.Contains(
                 "3 件の worktree",
-                cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
+                cut.Find("[data-testid=\"commit-detail-preview-cleanup-status\"]").TextContent,
                 StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-preview-status\"]"));
         });
     }
 
@@ -493,21 +494,22 @@ public class CommitDetailTests
 
         cut.WaitForAssertion(() =>
         {
-            cut.Find("[data-testid=\"commit-detail-preview-progress\"]");
+            cut.Find("[data-testid=\"commit-detail-preview-cleanup-progress\"]");
             Assert.Contains(
                 "キャッシュをクリーンアップ中",
-                cut.Find("[data-testid=\"commit-detail-preview-progress-text\"]").TextContent,
+                cut.Find("[data-testid=\"commit-detail-preview-cleanup-progress-text\"]").TextContent,
                 StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-preview-progress\"]"));
         });
 
-        cut.Find("[data-testid=\"commit-detail-preview-cancel-button\"]").Click();
+        cut.Find("[data-testid=\"commit-detail-preview-cleanup-cancel-button\"]").Click();
 
         cut.WaitForAssertion(() =>
         {
             Assert.True(receivedToken.IsCancellationRequested);
             Assert.Contains(
                 "キャッシュ削除を中止",
-                cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
+                cut.Find("[data-testid=\"commit-detail-preview-cleanup-status\"]").TextContent,
                 StringComparison.Ordinal);
         });
     }
