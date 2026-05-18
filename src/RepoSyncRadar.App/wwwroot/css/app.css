@@ -274,6 +274,11 @@ html, body {
     font-weight: 700;
 }
 
+.bulk-review-hint {
+    color: #57606a;
+    font-size: 0.78rem;
+}
+
 .bulk-review-buttons {
     display: flex;
     flex-wrap: wrap;

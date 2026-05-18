@@ -364,6 +364,8 @@ public sealed class WorkbenchTests
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("2 件選択中", cut.Find("[data-testid=\"bulk-review-count\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("まとめて移動", cut.Find("[data-testid=\"bulk-review-hint\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("行をクリック", cut.Find("[data-testid=\"bulk-review-hint\"]").TextContent, StringComparison.Ordinal);
             Assert.Empty(cut.FindAll("[data-testid=\"bulk-review-rejected\"]"));
             Assert.DoesNotContain("見送り候補へ", cut.Markup, StringComparison.Ordinal);
         });
