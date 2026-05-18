@@ -568,6 +568,116 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
+    public async Task Bulk_Explain_Selected_Adopted_Commits_Renders_And_Copies_Result()
+    {
+        var commits = new List<Commit>
+        {
+            CloneWorkbenchCommit(MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "first adopted"), ReviewStatus.Adopted),
+            CloneWorkbenchCommit(MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "second adopted"), ReviewStatus.Adopted),
+            CloneWorkbenchCommit(MakeWorkbenchCommit("ccc3333ccc3333ccc3333ccc3333ccc3333ccc3", "third adopted"), ReviewStatus.Adopted),
+        };
+        var statuses = commits.ToDictionary(static commit => commit.Sha, _ => ReviewStatus.Adopted, StringComparer.Ordinal);
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(statuses.Values)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = commits
+                    .Where(commit => filter.Status is null || statuses[commit.Sha] == filter.Status)
+                    .ToArray();
+                return Task.FromResult(visible);
+            });
+        var agent = Substitute.For<ICopilotAgent>();
+        agent.GenerateBatchExplanationAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("## 全体像\n採用した変更のまとめ"));
+        var clipboard = Substitute.For<IClipboard>();
+        clipboard.SetTextAsync(Arg.Any<string>()).Returns(Task.CompletedTask);
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _, agent: agent, clipboard: clipboard);
+        var cut = ctx.Render<Workbench>();
+        cut.Find("[data-testid=\"sidebar-item-Adopted\"]").Click();
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"commit-row\"]").Count));
+
+        cut.FindAll("[data-testid=\"commit-select\"]")[0].Change(true);
+        cut.FindAll("[data-testid=\"commit-select\"]")[1].Change(true);
+        cut.WaitForAssertion(() => Assert.False(cut.Find("[data-testid=\"bulk-explain-adopted\"]").HasAttribute("disabled")));
+
+        cut.Find("[data-testid=\"bulk-explain-adopted\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("採用した変更のまとめ", cut.Find("[data-testid=\"batch-explanation-body\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("2 件の注目コミットをまとめました", cut.Find("[data-testid=\"batch-explanation-status\"]").TextContent, StringComparison.Ordinal);
+        });
+        await agent.Received(1).GenerateBatchExplanationAsync(
+            Arg.Is<IReadOnlyList<string>>(shas => shas.SequenceEqual(new[] { commits[0].Sha, commits[1].Sha })),
+            Arg.Any<CancellationToken>());
+
+        cut.Find("[data-testid=\"batch-explanation-copy\"]").Click();
+        await clipboard.Received(1).SetTextAsync("## 全体像\n採用した変更のまとめ");
+    }
+
+    [Fact]
+    public async Task Bulk_Explain_Selected_Adopted_Commits_Shows_Progress_And_Can_Cancel()
+    {
+        var commits = new List<Commit>
+        {
+            CloneWorkbenchCommit(MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "first adopted"), ReviewStatus.Adopted),
+            CloneWorkbenchCommit(MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "second adopted"), ReviewStatus.Adopted),
+        };
+        var statuses = commits.ToDictionary(static commit => commit.Sha, _ => ReviewStatus.Adopted, StringComparer.Ordinal);
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(statuses.Values)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = commits
+                    .Where(commit => filter.Status is null || statuses[commit.Sha] == filter.Status)
+                    .ToArray();
+                return Task.FromResult(visible);
+            });
+        CancellationToken capturedToken = default;
+        var agent = Substitute.For<ICopilotAgent>();
+        agent.GenerateBatchExplanationAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                capturedToken = call.Arg<CancellationToken>();
+                var pending = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                capturedToken.Register(() => pending.TrySetCanceled(capturedToken));
+                return pending.Task;
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _, agent: agent);
+        var cut = ctx.Render<Workbench>();
+        cut.Find("[data-testid=\"sidebar-item-Adopted\"]").Click();
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count));
+
+        cut.Find("[data-testid=\"commit-list-select-all\"]").Click();
+        cut.WaitForAssertion(() => Assert.False(cut.Find("[data-testid=\"bulk-explain-adopted\"]").HasAttribute("disabled")));
+        cut.Find("[data-testid=\"bulk-explain-adopted\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Copilot が注目コミットをまとめて解説中", cut.Find("[data-testid=\"batch-explanation-progress-text\"]").TextContent, StringComparison.Ordinal);
+            Assert.False(cut.Find("[data-testid=\"batch-explanation-cancel\"]").HasAttribute("disabled"));
+        });
+
+        cut.Find("[data-testid=\"batch-explanation-cancel\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(capturedToken.IsCancellationRequested);
+            Assert.Contains("まとめ解説の生成を中止しました", cut.Find("[data-testid=\"batch-explanation-status\"]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task Selecting_Unseen_Commit_Does_Not_Render_Drafts_Panel()
     {
         var target = new Commit
@@ -861,7 +971,9 @@ public sealed class WorkbenchTests
     private static Bunit.BunitContext CreateWorkbenchTestContext(
         IRadarRepository repo,
         out ReviewBroadcaster broadcaster,
-        IAppUserSettingsStore? settingsStore = null)
+        IAppUserSettingsStore? settingsStore = null,
+        ICopilotAgent? agent = null,
+        IClipboard? clipboard = null)
     {
         broadcaster = new ReviewBroadcaster();
         var auth = Substitute.For<IGitHubAuthSession>();
@@ -881,7 +993,8 @@ public sealed class WorkbenchTests
             .AddSingleton(repo)
             .AddSingleton<IReviewBroadcaster>(broadcaster)
             .AddSingleton(auth)
-            .AddSingleton(Substitute.For<ICopilotAgent>())
+            .AddSingleton(agent ?? Substitute.For<ICopilotAgent>())
+            .AddSingleton(clipboard ?? Substitute.For<IClipboard>())
             .AddSingleton(resolver)
             .AddSingleton<IOptions<DocsApiOptions>>(Options.Create(new DocsApiOptions
             {

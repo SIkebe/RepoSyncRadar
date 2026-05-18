@@ -326,6 +326,66 @@ html, body {
     color: #cf222e;
 }
 
+.bulk-review-button.explain {
+    background: #fff8c5;
+    border-color: #d4a72c;
+    color: #7d4e00;
+}
+
+.batch-explanation-panel {
+    background: #fff;
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+    padding: 0.7rem;
+}
+
+.batch-explanation-header {
+    align-items: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.batch-explanation-header h3 {
+    color: #24292f;
+    font-size: 0.92rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.batch-explanation-header p,
+.batch-explanation-status {
+    color: #57606a;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    margin: 0.15rem 0 0;
+}
+
+.batch-explanation-actions {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.batch-explanation-body {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    color: #24292f;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    margin: 0;
+    max-height: 24rem;
+    overflow: auto;
+    padding: 0.75rem;
+    white-space: pre-wrap;
+}
+
 .commit-row {
     display: grid;
     grid-template-columns: auto 8ch minmax(0, 1fr) auto auto;
@@ -1849,7 +1909,9 @@ html, body {
 .radar-theme-dark .commit-search-clear,
 .radar-theme-dark .commit-list-select-all,
 .radar-theme-dark .bulk-review-toolbar,
-.radar-theme-dark .bulk-review-button {
+.radar-theme-dark .bulk-review-button,
+.radar-theme-dark .batch-explanation-panel,
+.radar-theme-dark .batch-explanation-body {
     background: var(--radar-panel-alt-bg) !important;
     border-color: var(--radar-border) !important;
     color: var(--radar-fg) !important;
@@ -1859,6 +1921,7 @@ html, body {
 .radar-theme-dark .radar-commit-detail .file-row,
 .radar-theme-dark .drafts-channel,
 .radar-theme-dark .ask-palette-result,
+.radar-theme-dark .batch-explanation-progress,
 .radar-theme-dark .preview-progress {
     background: var(--radar-panel-bg) !important;
 }

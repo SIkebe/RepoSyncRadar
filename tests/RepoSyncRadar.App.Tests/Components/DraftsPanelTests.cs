@@ -128,4 +128,121 @@ public sealed class DraftsPanelTests
         });
         await agent.Received(1).GenerateDraftsAsync("sha1", Arg.Any<CancellationToken>());
     }
+
+    [Fact]
+    public async Task Regenerate_Shows_Friendly_Progress_While_Running()
+    {
+        var ct = Xunit.TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("sha1", ct);
+
+        var pending = new TaskCompletionSource<DraftBundle>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var ctx = new Bunit.BunitContext();
+        var clipboard = Substitute.For<IClipboard>();
+        var agent = Substitute.For<ICopilotAgent>();
+        agent.GenerateDraftsAsync("sha1", Arg.Any<CancellationToken>())
+            .Returns(pending.Task);
+
+        ctx.Services
+            .AddSingleton(harness.DbFactory)
+            .AddSingleton(clipboard)
+            .AddSingleton(agent);
+
+        var sp = ctx.Services.BuildServiceProvider();
+        var cut = ctx.Render<DraftsPanel>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "sha1"));
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=\"drafts-regenerate\"]"));
+        cut.Find("[data-testid=\"drafts-regenerate\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Copilot が差分解説と共有文案を作成中", cut.Find("[data-testid=\"drafts-progress-text\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("経過", cut.Find("[data-testid=\"drafts-progress-elapsed\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("完了すると", cut.Find("[data-testid=\"drafts-busy\"]").TextContent, StringComparison.Ordinal);
+            Assert.False(cut.Find("[data-testid=\"drafts-cancel\"]").HasAttribute("disabled"));
+        });
+
+        pending.SetResult(new DraftBundle("new-tw", "new-tm", "new-cu", "new-ex"));
+        cut.WaitForAssertion(() =>
+            Assert.Contains("new-ex", cut.Find("[data-testid=\"drafts-body-explanation\"]").TextContent, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Cancel_Stops_Regeneration_And_Shows_Status()
+    {
+        var ct = Xunit.TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("sha1", ct);
+
+        CancellationToken capturedToken = default;
+        using var ctx = new Bunit.BunitContext();
+        var clipboard = Substitute.For<IClipboard>();
+        var agent = Substitute.For<ICopilotAgent>();
+        agent.GenerateDraftsAsync("sha1", Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                capturedToken = call.Arg<CancellationToken>();
+                var pending = new TaskCompletionSource<DraftBundle>(TaskCreationOptions.RunContinuationsAsynchronously);
+                capturedToken.Register(() => pending.TrySetCanceled(capturedToken));
+                return pending.Task;
+            });
+
+        ctx.Services
+            .AddSingleton(harness.DbFactory)
+            .AddSingleton(clipboard)
+            .AddSingleton(agent);
+
+        var sp = ctx.Services.BuildServiceProvider();
+        var cut = ctx.Render<DraftsPanel>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "sha1"));
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=\"drafts-regenerate\"]"));
+        cut.Find("[data-testid=\"drafts-regenerate\"]").Click();
+        cut.WaitForAssertion(() => cut.Find("[data-testid=\"drafts-cancel\"]"));
+
+        cut.Find("[data-testid=\"drafts-cancel\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(capturedToken.IsCancellationRequested);
+            Assert.Contains("再生成を中止しました", cut.Find("[data-testid=\"drafts-status\"]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task Regenerate_Shows_Friendly_Message_For_Json_Parse_Failures()
+    {
+        var ct = Xunit.TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("sha1", ct);
+
+        using var ctx = new Bunit.BunitContext();
+        var clipboard = Substitute.For<IClipboard>();
+        var agent = Substitute.For<ICopilotAgent>();
+        agent.GenerateDraftsAsync("sha1", Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<DraftBundle>(new InvalidOperationException("Adoption session returned non-JSON output.")));
+
+        ctx.Services
+            .AddSingleton(harness.DbFactory)
+            .AddSingleton(clipboard)
+            .AddSingleton(agent);
+
+        var sp = ctx.Services.BuildServiceProvider();
+        var cut = ctx.Render<DraftsPanel>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "sha1"));
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=\"drafts-regenerate\"]"));
+        cut.Find("[data-testid=\"drafts-regenerate\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[data-testid=\"drafts-status\"]").TextContent;
+            Assert.Contains("Copilot の応答を文案として読み取れませんでした", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("non-JSON", status, StringComparison.OrdinalIgnoreCase);
+        });
+    }
 }

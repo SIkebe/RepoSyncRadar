@@ -48,7 +48,7 @@ internal sealed class SdkCopilotSession : ICopilotSession
         var options = new MessageOptions { Prompt = prompt };
         var assistant = await _session.SendAndWaitAsync(options, timeout, cancellationToken).ConfigureAwait(false);
         await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
-        return assistant?.ToString() ?? string.Empty;
+        return assistant?.Data?.Content ?? string.Empty;
     }
 
     private async Task RefreshUsageMetricsAsync(CancellationToken cancellationToken)

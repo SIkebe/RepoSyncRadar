@@ -147,6 +147,59 @@ public sealed class AdoptionSessionTests
     }
 
     [Fact]
+    public async Task Generate_Parses_Labeled_Text_When_Repair_Is_Not_Json()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("labeled", ReviewStatus.Adopted, cancellationToken: ct);
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff"));
+
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult("JSON ではなく通常文で返します。"),
+                Task.FromResult("""
+                ## 差分解説
+                labeled-ex
+
+                ## Twitter
+                labeled-tw
+
+                ## Teams
+                labeled-tm
+
+                ## 顧客向け
+                labeled-cu
+                """));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        var bundle = await sut.GenerateDraftsAsync("labeled", ct);
+
+        Assert.Equal("labeled-ex", bundle.ExplanationJa);
+        Assert.Equal("labeled-tw", bundle.TwitterJa);
+        Assert.Equal("labeled-tm", bundle.TeamsJa);
+        Assert.Equal("labeled-cu", bundle.CustomerJa);
+    }
+
+    [Fact]
+    public void ParsePlainTextBundle_Uses_Response_As_Explanation_When_No_Labels_Exist()
+    {
+        var parsed = AdoptionSession.TryParsePlainTextBundle("文案として読める本文です。", out var bundle);
+
+        Assert.True(parsed);
+        Assert.Equal("文案として読める本文です。", bundle.ExplanationJa);
+        Assert.Empty(bundle.TwitterJa);
+        Assert.Empty(bundle.TeamsJa);
+        Assert.Empty(bundle.CustomerJa);
+    }
+
+    [Fact]
     public async Task Generate_Includes_FewShot_Examples()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -222,5 +275,61 @@ public sealed class AdoptionSessionTests
         var markerBytes = System.Text.Encoding.UTF8.GetByteCount(AdoptionSession.TruncatedMarker);
         Assert.True(System.Text.Encoding.UTF8.GetByteCount(truncated) <=
                     AdoptionSession.MaxDiffBytes + markerBytes);
+    }
+
+    [Fact]
+    public async Task GenerateBatchExplanation_Sends_Selected_Adopted_Commits()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("batch-1", ReviewStatus.Adopted, message: "first focused change", cancellationToken: ct);
+        await harness.InsertReviewedCommitAsync("batch-2", ReviewStatus.Adopted, message: "second focused change", cancellationToken: ct);
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync("batch-1", Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff --git a/a b/a\n+one\n"));
+        github.GetUnifiedDiffAsync("batch-2", Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff --git a/b b/b\n+two\n"));
+
+        string? capturedPrompt = null;
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("## 全体像\nまとめ本文"));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        var explanation = await sut.GenerateBatchExplanationAsync(["batch-1", "batch-2"], ct);
+
+        Assert.Equal("## 全体像\nまとめ本文", explanation);
+        Assert.NotNull(capturedPrompt);
+        Assert.Contains("注目コミットまとめ解説生成", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("batch-1", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("first focused change", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("+one", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("batch-2", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("second focused change", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("+two", capturedPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateBatchExplanation_Rejects_Unadopted_Commits()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("batch-adopted", ReviewStatus.Adopted, cancellationToken: ct);
+        await harness.InsertReviewedCommitAsync("batch-later", ReviewStatus.Later, cancellationToken: ct);
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        var session = Substitute.For<ICopilotSession>();
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(Arg.Any<SessionPurpose>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.GenerateBatchExplanationAsync(["batch-adopted", "batch-later"], ct));
+        await session.DidNotReceive().SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

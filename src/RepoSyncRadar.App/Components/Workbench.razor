@@ -110,11 +110,70 @@
                             data-testid="bulk-delete-unseen"
                             disabled="@IsBulkDeleteDisabled()"
                             @onclick="DeleteSelectedUnseenCommitsAsync">削除して再スコアリングへ</button>
+                        @if (CanShowBatchExplanationButton())
+                        {
+                        <button type="button"
+                            class="bulk-review-button explain"
+                            data-testid="bulk-explain-adopted"
+                            disabled="@IsBatchExplanationDisabled()"
+                            @onclick="GenerateSelectedExplanationAsync">まとめて解説生成</button>
+                        }
                         </div>
                     }
                         @if (!string.IsNullOrWhiteSpace(_bulkReviewStatus))
                         {
                             <span class="bulk-review-status" data-testid="bulk-review-status">@_bulkReviewStatus</span>
+                        }
+                    </div>
+                }
+                @if (ShouldShowBatchExplanationPanel())
+                {
+                    <div class="batch-explanation-panel" data-testid="batch-explanation-panel">
+                        <header class="batch-explanation-header">
+                            <div>
+                                <h3>注目まとめ解説</h3>
+                                <p>選択した注目コミットを横断して Copilot が整理します。</p>
+                            </div>
+                            <div class="batch-explanation-actions">
+                                @if (_batchExplanationBusy)
+                                {
+                                    <button type="button"
+                                            class="toolbar-button secondary compact"
+                                            data-testid="batch-explanation-cancel"
+                                            disabled="@_batchExplanationCanceling"
+                                            @onclick="CancelBatchExplanationAsync">@(_batchExplanationCanceling ? "中止中…" : "中止")</button>
+                                }
+                                else
+                                {
+                                    <button type="button"
+                                            class="toolbar-button secondary compact"
+                                            data-testid="batch-explanation-copy"
+                                            disabled="@string.IsNullOrWhiteSpace(_batchExplanation)"
+                                            @onclick="CopyBatchExplanationAsync">コピー</button>
+                                }
+                            </div>
+                        </header>
+                        @if (_batchExplanationBusy)
+                        {
+                            <div class="preview-progress batch-explanation-progress" data-testid="batch-explanation-progress">
+                                <div class="preview-progress-row">
+                                    <span class="preview-spinner" aria-hidden="true"></span>
+                                    <span class="preview-progress-text" data-testid="batch-explanation-progress-text">
+                                        Copilot が注目コミットをまとめて解説中…
+                                        <span class="preview-progress-elapsed" data-testid="batch-explanation-progress-elapsed">
+                                            ・ 経過 @FormatElapsed(_batchExplanationElapsed)
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(_batchExplanation))
+                        {
+                            <pre class="batch-explanation-body" data-testid="batch-explanation-body">@_batchExplanation</pre>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_batchExplanationStatus))
+                        {
+                            <p class="batch-explanation-status" data-testid="batch-explanation-status">@_batchExplanationStatus</p>
                         }
                     </div>
                 }
@@ -164,6 +223,14 @@
     private bool _bulkReviewBusy;
     private string? _bulkReviewStatus;
     private bool _askPaletteExpanded;
+    private bool _batchExplanationBusy;
+    private bool _batchExplanationCanceling;
+    private string? _batchExplanation;
+    private string? _batchExplanationStatus;
+    private DateTimeOffset _batchExplanationStartedAt;
+    private TimeSpan _batchExplanationElapsed;
+    private CancellationTokenSource? _batchExplanationCts;
+    private Task? _batchExplanationTimerTask;
     private IReviewBroadcaster? _broadcaster;
     private IAppUserSettingsStore? _settingsStore;
     private DocsThemeMode _theme = AppUserSettings.Default.DefaultDocsTheme;
@@ -246,6 +313,9 @@
         {
             _settingsStore.SettingsChanged -= OnSettingsChanged;
         }
+        CancelBatchExplanationProgress();
+        _batchExplanationCts?.Dispose();
+        _batchExplanationCts = null;
     }
 
     internal static string BuildShellClass(DocsThemeMode theme)
@@ -261,6 +331,7 @@
         _selectedCommit = null;
         _selectedCommitShas.Clear();
         _bulkReviewStatus = null;
+        ClearBatchExplanation();
         _listRefreshVersion++;
         return Task.CompletedTask;
     }
@@ -296,6 +367,7 @@
         _selectedCommit = null;
         _selectedCommitShas.Clear();
         _bulkReviewStatus = null;
+        ClearBatchExplanation();
         _listRefreshVersion++;
     }
 
@@ -324,6 +396,10 @@
     private Task HandleCommitSelectionChanged(CommitSelectionChange change)
     {
         _bulkReviewStatus = null;
+        if (!_batchExplanationBusy)
+        {
+            ClearBatchExplanation();
+        }
         foreach (var sha in change.Shas)
         {
             if (change.Selected)
@@ -352,6 +428,20 @@
             || _selectedCommitShas.Count == 0
             || _selectedStatus != ReviewStatus.Unseen;
 
+    private bool CanShowBatchExplanationButton()
+        => _selectedStatus == ReviewStatus.Adopted;
+
+    private bool IsBatchExplanationDisabled()
+        => _batchExplanationBusy
+            || _bulkReviewBusy
+            || _selectedStatus != ReviewStatus.Adopted
+            || _selectedCommitShas.Count < 2;
+
+    private bool ShouldShowBatchExplanationPanel()
+        => _batchExplanationBusy
+            || !string.IsNullOrWhiteSpace(_batchExplanation)
+            || !string.IsNullOrWhiteSpace(_batchExplanationStatus);
+
     private async Task MoveSelectedCommitsAsync(ReviewStatus status)
     {
         if (IsBulkMoveDisabled(status))
@@ -372,6 +462,7 @@
             _selectedCommit = null;
             _selectedCommitShas.Clear();
             _filter = BuildCurrentFilter();
+            ClearBatchExplanation();
             _bulkReviewStatus = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
                 $"{shas.Length} 件を{BuildStatusDestinationLabel(status)}に移動しました");
@@ -404,6 +495,7 @@
             _selectedStatus = ReviewStatus.Unseen;
             _filter = BuildCurrentFilter();
             _listRefreshVersion++;
+            ClearBatchExplanation();
             _bulkReviewStatus = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
                 $"{deleted} 件をローカル DB から削除しました。次回 Triage で再取得できます");
@@ -429,12 +521,148 @@
     private static bool CanShowDrafts(Commit commit)
         => commit.Review?.Status == ReviewStatus.Adopted;
 
+    private async Task GenerateSelectedExplanationAsync()
+    {
+        if (IsBatchExplanationDisabled())
+        {
+            return;
+        }
+
+        var agent = Services.GetService<ICopilotAgent>();
+        if (agent is null)
+        {
+            _batchExplanationStatus = "ICopilotAgent が DI に登録されていません。";
+            return;
+        }
+
+        var shas = _selectedCommitShas.ToArray();
+        StartBatchExplanationProgress();
+        _batchExplanation = null;
+        _batchExplanationStatus = null;
+        StateHasChanged();
+        try
+        {
+            _batchExplanation = await agent.GenerateBatchExplanationAsync(shas, _batchExplanationCts!.Token);
+            _batchExplanationStatus = string.Create(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"{Math.Min(shas.Length, 10)} 件の注目コミットをまとめました。");
+        }
+        catch (OperationCanceledException)
+        {
+            _batchExplanationStatus = "まとめ解説の生成を中止しました。";
+        }
+        catch (Exception ex)
+        {
+            _batchExplanationStatus = $"まとめ解説の生成に失敗しました: {BuildFriendlyBatchErrorMessage(ex)}";
+        }
+        finally
+        {
+            await StopBatchExplanationProgressAsync();
+            StateHasChanged();
+        }
+    }
+
+    private void StartBatchExplanationProgress()
+    {
+        _batchExplanationBusy = true;
+        _batchExplanationCanceling = false;
+        _batchExplanationStartedAt = DateTimeOffset.UtcNow;
+        _batchExplanationElapsed = TimeSpan.Zero;
+        _batchExplanationCts = new CancellationTokenSource();
+        _batchExplanationTimerTask = UpdateBatchExplanationElapsedAsync(_batchExplanationCts.Token);
+    }
+
+    private async Task StopBatchExplanationProgressAsync()
+    {
+        CancelBatchExplanationProgress();
+        if (_batchExplanationTimerTask is not null)
+        {
+            try { await _batchExplanationTimerTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            _batchExplanationTimerTask = null;
+        }
+        _batchExplanationCts?.Dispose();
+        _batchExplanationCts = null;
+        _batchExplanationBusy = false;
+        _batchExplanationCanceling = false;
+    }
+
+    private void CancelBatchExplanationProgress()
+    {
+        try { _batchExplanationCts?.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
+    private async Task UpdateBatchExplanationElapsedAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                _batchExplanationElapsed = DateTimeOffset.UtcNow - _batchExplanationStartedAt;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private Task CancelBatchExplanationAsync()
+    {
+        if (!_batchExplanationBusy || _batchExplanationCts is null || _batchExplanationCanceling)
+        {
+            return Task.CompletedTask;
+        }
+
+        _batchExplanationCanceling = true;
+        try { _batchExplanationCts.Cancel(); } catch (ObjectDisposedException) { }
+        return Task.CompletedTask;
+    }
+
+    private async Task CopyBatchExplanationAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_batchExplanation))
+        {
+            return;
+        }
+        var clipboard = Services.GetService<IClipboard>();
+        if (clipboard is null)
+        {
+            _batchExplanationStatus = "クリップボードが利用できません。";
+            return;
+        }
+        await clipboard.SetTextAsync(_batchExplanation);
+        _batchExplanationStatus = "注目まとめ解説をコピーしました。";
+    }
+
+    private void ClearBatchExplanation()
+    {
+        if (_batchExplanationBusy)
+        {
+            return;
+        }
+        _batchExplanation = null;
+        _batchExplanationStatus = null;
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed)
+        => elapsed.TotalHours >= 1
+            ? $"{(int)elapsed.TotalHours}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}"
+            : $"{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+
+    private static string BuildFriendlyBatchErrorMessage(Exception ex)
+        => ex.Message.Contains("JSON", StringComparison.OrdinalIgnoreCase)
+            ? "Copilot の応答を解説として読み取れませんでした。もう一度生成してください。"
+            : ex.Message;
+
     private Task HandleReviewCompleted(ReviewStatus status)
     {
         _filter = BuildCurrentFilter();
         _selectedCommit = null;
         _selectedCommitShas.Clear();
         _bulkReviewStatus = $"1 件を{BuildStatusDestinationLabel(status)}に移動しました";
+        ClearBatchExplanation();
         _listRefreshVersion++;
         return Task.CompletedTask;
     }

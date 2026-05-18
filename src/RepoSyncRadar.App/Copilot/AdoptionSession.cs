@@ -24,9 +24,12 @@ namespace RepoSyncRadar.App.Copilot;
 public sealed partial class AdoptionSession
 {
     internal const int MaxDiffBytes = 50 * 1024;
+    internal const int MaxBatchCommits = 10;
+    internal const int MaxBatchDiffBytes = 12 * 1024;
     internal const int FewShotLimit = 5;
     internal const int MaxRepairSourceChars = 20 * 1024;
     internal const string TruncatedMarker = "\n…[truncated by RepoSyncRadar — original diff exceeded 50KB]\n";
+    internal const string BatchTruncatedMarker = "\n…[truncated by RepoSyncRadar — batch explanation keeps each diff under 12KB]\n";
 
     private static readonly JsonSerializerOptions DraftJsonOptions = new()
     {
@@ -108,22 +111,96 @@ public sealed partial class AdoptionSession
         return bundle;
     }
 
+    /// <summary>
+    /// Generates one consolidated explanation for several focused commits. The result is transient
+    /// UI text rather than rows in <c>Drafts</c>, because it describes a selected set, not one commit.
+    /// </summary>
+    public async Task<string> GenerateBatchExplanationAsync(
+        IReadOnlyList<string> commitShas,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(commitShas);
+
+        var shas = commitShas
+            .Where(static sha => !string.IsNullOrWhiteSpace(sha))
+            .Select(static sha => sha.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .Take(MaxBatchCommits)
+            .ToArray();
+        if (shas.Length < 2)
+        {
+            throw new InvalidOperationException("まとめ解説は 2 件以上の注目コミットを選択して生成してください。");
+        }
+
+        await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var commits = await db.Commits
+            .AsNoTracking()
+            .Include(c => c.Review)
+            .Include(c => c.Files)
+            .Include(c => c.Scoring)
+            .Where(c => shas.Contains(c.Sha))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var bySha = commits.ToDictionary(static commit => commit.Sha, StringComparer.Ordinal);
+
+        var missing = shas.Where(sha => !bySha.ContainsKey(sha)).ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidOperationException($"Commit not found: {string.Join(", ", missing)}.");
+        }
+
+        var notAdopted = commits
+            .Where(static commit => commit.Review?.Status is not ReviewStatus.Adopted)
+            .Select(static commit => commit.Sha)
+            .ToArray();
+        if (notAdopted.Length > 0)
+        {
+            throw new InvalidOperationException($"注目以外のコミットが含まれています: {string.Join(", ", notAdopted)}.");
+        }
+
+        var contexts = new List<BatchCommitContext>(shas.Length);
+        foreach (var sha in shas)
+        {
+            var commit = bySha[sha];
+            var rawDiff = await _github.GetUnifiedDiffAsync(sha, cancellationToken).ConfigureAwait(false) ?? string.Empty;
+            contexts.Add(new BatchCommitContext(commit, TruncateDiff(rawDiff, MaxBatchDiffBytes, BatchTruncatedMarker)));
+        }
+
+        var prompt = BuildBatchPrompt(contexts);
+        LogBatchPromptBuilt(_logger, shas.Length, prompt.Length);
+
+        var session = await _sessionFactory.CreateSessionAsync(SessionPurpose.Adoption, cancellationToken).ConfigureAwait(false);
+        await using (session.ConfigureAwait(false))
+        {
+            var raw = await session.SendAsync(prompt, cancellationToken).ConfigureAwait(false);
+            var explanation = StripOuterCodeFence(raw.Trim());
+            if (string.IsNullOrWhiteSpace(explanation))
+            {
+                throw new InvalidOperationException("Copilot から空のまとめ解説が返りました。もう一度生成してください。");
+            }
+            return explanation.Trim();
+        }
+    }
+
     internal static string TruncateDiff(string diff)
+        => TruncateDiff(diff, MaxDiffBytes, TruncatedMarker);
+
+    private static string TruncateDiff(string diff, int maxBytes, string marker)
     {
         if (string.IsNullOrEmpty(diff))
         {
             return string.Empty;
         }
         var byteCount = Encoding.UTF8.GetByteCount(diff);
-        if (byteCount <= MaxDiffBytes)
+        if (byteCount <= maxBytes)
         {
             return diff;
         }
 
         // Conservative cut on a character boundary; UTF-8 oversized => trim until under cap.
         var bytes = Encoding.UTF8.GetBytes(diff);
-        var slice = new byte[MaxDiffBytes];
-        Buffer.BlockCopy(bytes, 0, slice, 0, MaxDiffBytes);
+        var slice = new byte[maxBytes];
+        Buffer.BlockCopy(bytes, 0, slice, 0, maxBytes);
         var truncated = Encoding.UTF8.GetString(slice);
         // Trim any partial trailing char to keep the string valid.
         var lastValid = truncated.Length;
@@ -131,7 +208,7 @@ public sealed partial class AdoptionSession
         {
             lastValid--;
         }
-        return truncated[..lastValid] + TruncatedMarker;
+        return truncated[..lastValid] + marker;
     }
 
     internal static string BuildPrompt(
@@ -183,6 +260,52 @@ public sealed partial class AdoptionSession
         return sb.ToString();
     }
 
+    internal static string BuildBatchPrompt(IEnumerable<BatchCommitContext> commits)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# 注目コミットまとめ解説生成");
+        sb.AppendLine();
+        sb.AppendLine("以下の複数の注目コミットをまとめて読み、ユーザーが全体像と読む順番を短時間で掴める日本語解説を生成してください。");
+        sb.AppendLine();
+        sb.AppendLine("## 出力要件");
+        sb.AppendLine("- Markdown 本文だけを返す。前置き、コードブロック、JSON は不要。");
+        sb.AppendLine("- 次の見出しをこの順序で含める: `全体像`, `コミット別の要点`, `横断して見るべきポイント`, `次に確認する順番`。");
+        sb.AppendLine("- コミット別の要点では各コミットの短い SHA とメッセージを明記する。");
+        sb.AppendLine("- 差分から確認できる事実と、推測や確認観点を分ける。");
+        sb.AppendLine("- 社内共有でそのまま読める、落ち着いた日本語にする。");
+        sb.AppendLine();
+        sb.AppendLine("## 対象コミット");
+        var index = 1;
+        foreach (var item in commits)
+        {
+            var commit = item.Commit;
+            sb.Append(CultureInfo.InvariantCulture, $"### {index}. {ShortSha(commit.Sha)} — {commit.Message}").AppendLine();
+            sb.Append(CultureInfo.InvariantCulture, $"- SHA: `{commit.Sha}`").AppendLine();
+            sb.Append(CultureInfo.InvariantCulture, $"- 著者: {commit.Author}").AppendLine();
+            sb.Append(CultureInfo.InvariantCulture, $"- 日付: {commit.AuthoredAt:yyyy-MM-dd}").AppendLine();
+            sb.Append(CultureInfo.InvariantCulture, $"- 変更ファイル数: {commit.Files.Count}").AppendLine();
+            if (commit.Scoring is not null)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"- スコア: {commit.Scoring.Score:0.00}").AppendLine();
+                sb.Append(CultureInfo.InvariantCulture, $"- カテゴリ: {commit.Scoring.Category}").AppendLine();
+                if (!string.IsNullOrWhiteSpace(commit.Scoring.SummaryJa))
+                {
+                    sb.Append(CultureInfo.InvariantCulture, $"- Triage 要約: {commit.Scoring.SummaryJa}").AppendLine();
+                }
+            }
+            sb.AppendLine("- 差分:");
+            sb.AppendLine("```diff");
+            sb.AppendLine(item.Diff);
+            sb.AppendLine("```");
+            sb.AppendLine();
+            index++;
+        }
+        return sb.ToString();
+    }
+
+    private static string ShortSha(string sha)
+        => sha.Length <= 7 ? sha : sha[..7];
+
     private static async Task<DraftBundle> ParseOrRepairBundleAsync(
         ICopilotSession session,
         string raw,
@@ -195,7 +318,24 @@ public sealed partial class AdoptionSession
         catch (InvalidOperationException ex) when (IsJsonParseFailure(ex))
         {
             var repaired = await session.SendAsync(BuildRepairPrompt(raw), cancellationToken).ConfigureAwait(false);
-            return ParseBundle(repaired);
+            try
+            {
+                return ParseBundle(repaired);
+            }
+            catch (InvalidOperationException repairEx) when (IsJsonParseFailure(repairEx))
+            {
+                if (TryParsePlainTextBundle(repaired, out var repairedBundle))
+                {
+                    return repairedBundle;
+                }
+                if (TryParsePlainTextBundle(raw, out var rawBundle))
+                {
+                    return rawBundle;
+                }
+                throw new InvalidOperationException(
+                    "Copilot の応答を文案として読み取れませんでした。もう一度再生成してください。",
+                    repairEx);
+            }
         }
     }
 
@@ -221,6 +361,114 @@ public sealed partial class AdoptionSession
         sb.AppendLine("```");
         return sb.ToString();
     }
+
+    internal static bool TryParsePlainTextBundle(string response, out DraftBundle bundle)
+    {
+        var sections = ExtractPlainTextSections(response);
+        if (sections.Count == 0)
+        {
+            var fallback = StripOuterCodeFence(response.Trim());
+            if (string.IsNullOrWhiteSpace(fallback))
+            {
+                bundle = new DraftBundle(string.Empty, string.Empty, string.Empty, string.Empty);
+                return false;
+            }
+
+            bundle = new DraftBundle(
+                TwitterJa: string.Empty,
+                TeamsJa: string.Empty,
+                CustomerJa: string.Empty,
+                ExplanationJa: fallback.Trim());
+            return true;
+        }
+
+        bundle = new DraftBundle(
+            TwitterJa: ValueFor(sections, "twitter"),
+            TeamsJa: ValueFor(sections, "teams"),
+            CustomerJa: ValueFor(sections, "customer"),
+            ExplanationJa: ValueFor(sections, "explanation"));
+        return !string.IsNullOrWhiteSpace(bundle.TwitterJa)
+            || !string.IsNullOrWhiteSpace(bundle.TeamsJa)
+            || !string.IsNullOrWhiteSpace(bundle.CustomerJa)
+            || !string.IsNullOrWhiteSpace(bundle.ExplanationJa);
+    }
+
+    private static Dictionary<string, string> ExtractPlainTextSections(string response)
+    {
+        var sections = new Dictionary<string, string>(StringComparer.Ordinal);
+        var currentKey = string.Empty;
+        var current = new StringBuilder();
+
+        foreach (var rawLine in StripOuterCodeFence(response.Trim()).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            var line = rawLine.TrimEnd();
+            if (TryReadPlainTextSectionHeader(line, out var key, out var inlineValue))
+            {
+                StoreCurrentSection(sections, currentKey, current);
+                currentKey = key;
+                current.Clear();
+                if (!string.IsNullOrWhiteSpace(inlineValue))
+                {
+                    current.AppendLine(inlineValue.Trim());
+                }
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(currentKey))
+            {
+                current.AppendLine(line);
+            }
+        }
+
+        StoreCurrentSection(sections, currentKey, current);
+        return sections;
+    }
+
+    private static bool TryReadPlainTextSectionHeader(string line, out string key, out string inlineValue)
+    {
+        var normalized = line.Trim().TrimStart('-', '*', ' ', '#').Trim();
+        if (normalized.StartsWith("**", StringComparison.Ordinal) && normalized.Contains("**", StringComparison.Ordinal))
+        {
+            normalized = normalized.Trim('*').Trim();
+        }
+
+        var separator = normalized.IndexOfAny([':', '：']);
+        var label = separator >= 0 ? normalized[..separator].Trim() : normalized.Trim();
+        inlineValue = separator >= 0 ? normalized[(separator + 1)..].Trim() : string.Empty;
+
+        key = NormalizeSectionLabel(label);
+        return key.Length > 0;
+    }
+
+    private static string NormalizeSectionLabel(string label)
+    {
+        var normalized = label.Trim().Trim('`', '*', ' ', '　').ToLowerInvariant();
+        return normalized switch
+        {
+            "差分解説" or "解説" or "explanation" or "diff explanation" => "explanation",
+            "twitter" or "x" or "tweet" or "twitter向け" or "twitter 用" or "twitter用" => "twitter",
+            "teams" or "teams向け" or "teams 用" or "teams用" => "teams",
+            "顧客向け" or "顧客" or "customer" or "customer-facing" or "customer facing" => "customer",
+            _ => string.Empty,
+        };
+    }
+
+    private static void StoreCurrentSection(Dictionary<string, string> sections, string key, StringBuilder value)
+    {
+        if (string.IsNullOrEmpty(key))
+        {
+            return;
+        }
+
+        var text = value.ToString().Trim();
+        if (text.Length > 0)
+        {
+            sections[key] = text;
+        }
+    }
+
+    private static string ValueFor(Dictionary<string, string> sections, string key)
+        => sections.TryGetValue(key, out var value) ? value : string.Empty;
 
     internal static DraftBundle ParseBundle(string json)
     {
@@ -383,7 +631,13 @@ public sealed partial class AdoptionSession
         public string? Explanation { get; set; }
     }
 
+    internal sealed record BatchCommitContext(Commit Commit, string Diff);
+
     [LoggerMessage(EventId = 1, Level = LogLevel.Information,
         Message = "Adoption prompt built for {Sha} ({PromptLength} chars).")]
     private static partial void LogPromptBuilt(ILogger logger, string sha, int promptLength);
+
+    [LoggerMessage(EventId = 2, Level = LogLevel.Information,
+        Message = "Batch adoption prompt built for {CommitCount} commits ({PromptLength} chars).")]
+    private static partial void LogBatchPromptBuilt(ILogger logger, int commitCount, int promptLength);
 }

@@ -33,7 +33,23 @@
     }
     else if (_busy)
     {
-        <p class="drafts-busy" data-testid="drafts-busy">解説と文案を生成中…</p>
+        <div class="preview-progress drafts-progress" data-testid="drafts-progress">
+            <div class="preview-progress-row">
+                <span class="preview-spinner" aria-hidden="true"></span>
+                <span class="preview-progress-text" data-testid="drafts-progress-text">
+                    Copilot が差分解説と共有文案を作成中…
+                    <span class="preview-progress-elapsed" data-testid="drafts-progress-elapsed">
+                        ・ 経過 @FormatElapsed(_elapsed)
+                    </span>
+                </span>
+                <button type="button"
+                        class="preview-cancel"
+                        data-testid="drafts-cancel"
+                        disabled="@_canceling"
+                        @onclick="CancelAsync">@(_canceling ? "中止中…" : "中止")</button>
+            </div>
+            <p class="drafts-busy" data-testid="drafts-busy">完了すると差分解説、Twitter、Teams、顧客向けの各欄を更新します。</p>
+        </div>
     }
     else
     {
@@ -56,6 +72,11 @@
     private DraftBundle? _bundle;
     private string? _lastLoadedSha;
     private bool _busy;
+    private bool _canceling;
+    private DateTimeOffset _startedAt;
+    private TimeSpan _elapsed;
+    private CancellationTokenSource? _cts;
+    private Task? _timerTask;
     private string? _status;
     private IReviewBroadcaster? _broadcaster;
 
@@ -124,24 +145,97 @@
             _status = "ICopilotAgent が DI に登録されていません。";
             return;
         }
-        _busy = true;
+        StartProgress();
         _status = null;
         StateHasChanged();
         try
         {
-            _bundle = await agent.GenerateDraftsAsync(Sha);
+            _bundle = await agent.GenerateDraftsAsync(Sha, _cts!.Token);
             _broadcaster?.Publish();
+        }
+        catch (OperationCanceledException)
+        {
+            _status = "再生成を中止しました。";
         }
         catch (Exception ex)
         {
-            _status = $"再生成に失敗しました: {ex.Message}";
+            _status = $"再生成に失敗しました: {BuildFriendlyErrorMessage(ex)}";
         }
         finally
         {
-            _busy = false;
+            await StopProgressAsync();
             StateHasChanged();
         }
     }
+
+    private void StartProgress()
+    {
+        _busy = true;
+        _canceling = false;
+        _startedAt = DateTimeOffset.UtcNow;
+        _elapsed = TimeSpan.Zero;
+        _cts = new CancellationTokenSource();
+        _timerTask = UpdateElapsedAsync(_cts.Token);
+    }
+
+    private async Task StopProgressAsync()
+    {
+        CancelProgress();
+        if (_timerTask is not null)
+        {
+            try { await _timerTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            _timerTask = null;
+        }
+        _cts?.Dispose();
+        _cts = null;
+        _busy = false;
+        _canceling = false;
+    }
+
+    private void CancelProgress()
+    {
+        try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
+    private async Task UpdateElapsedAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                _elapsed = DateTimeOffset.UtcNow - _startedAt;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private Task CancelAsync()
+    {
+        if (!_busy || _cts is null || _canceling)
+        {
+            return Task.CompletedTask;
+        }
+
+        _canceling = true;
+        try { _cts.Cancel(); } catch (ObjectDisposedException) { }
+        return Task.CompletedTask;
+    }
+
+    private static string FormatElapsed(TimeSpan elapsed)
+        => elapsed.TotalHours >= 1
+            ? $"{(int)elapsed.TotalHours}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}"
+            : $"{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
+
+    private static string BuildFriendlyErrorMessage(Exception ex)
+        => ex.Message.Contains("non-JSON", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("JSON", StringComparison.OrdinalIgnoreCase)
+            ? "Copilot の応答を文案として読み取れませんでした。もう一度再生成してください。"
+            : ex.Message;
 
     private async Task CopyAsync(string? text, string channel)
     {
@@ -190,6 +284,8 @@
 
     public void Dispose()
     {
-        // No-op for now; placeholder for future subscriptions.
+        CancelProgress();
+        _cts?.Dispose();
+        _cts = null;
     }
 }
