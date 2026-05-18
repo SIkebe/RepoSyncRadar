@@ -206,10 +206,23 @@ public sealed class RadarRepository : IRadarRepository
             query = query.Where(c => c.Scoring == null);
         }
 
-        var shaQuery = NormalizeShaQuery(filter.ShaQuery);
-        if (shaQuery.Length > 0)
+        var searchQuery = NormalizeSearchQuery(filter.ShaQuery);
+        if (searchQuery.Length > 0)
         {
-            query = query.Where(c => c.Sha.Contains(shaQuery));
+            var searchPattern = $"%{searchQuery}%";
+            var prQuery = searchQuery.TrimStart('#');
+            var hasPrNumber = int.TryParse(
+                prQuery,
+                System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var prNumber);
+
+            query = hasPrNumber
+                ? query.Where(c => EF.Functions.Like(c.Sha, searchPattern)
+                    || EF.Functions.Like(c.Message, searchPattern)
+                    || c.PrNumber == prNumber)
+                : query.Where(c => EF.Functions.Like(c.Sha, searchPattern)
+                    || EF.Functions.Like(c.Message, searchPattern));
         }
 
         query = query.OrderByDescending(c => c.AuthoredAt);
@@ -223,7 +236,7 @@ public sealed class RadarRepository : IRadarRepository
         return commits;
     }
 
-    private static string NormalizeShaQuery(string? value)
+    private static string NormalizeSearchQuery(string? value)
         => string.IsNullOrWhiteSpace(value)
             ? string.Empty
             : value.Trim().ToLowerInvariant();

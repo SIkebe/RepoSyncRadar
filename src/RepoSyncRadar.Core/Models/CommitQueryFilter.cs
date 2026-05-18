@@ -21,8 +21,9 @@ public sealed record CommitQueryFilter
     public int? Limit { get; init; }
 
     /// <summary>
-    /// When supplied, only commits whose SHA contains this value are returned.
-    /// Short hashes are accepted; matching is performed after trimming and lower-casing.
+    /// When supplied, only commits whose SHA, PR number, or message contains this value are
+    /// returned. Short hashes are accepted; text matching is performed after trimming and
+    /// lower-casing.
     /// </summary>
     public string? ShaQuery { get; init; }
 

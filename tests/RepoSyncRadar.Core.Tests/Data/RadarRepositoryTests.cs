@@ -219,7 +219,7 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
-    public async Task QueryCommitsAsync_Filters_By_Sha_Query()
+    public async Task QueryCommitsAsync_Filters_By_Search_Query()
     {
         using var fixture = new SqliteFixture();
         var repository = fixture.CreateRepository();
@@ -229,9 +229,9 @@ public sealed class RadarRepositoryTests
         await repository.UpsertCommitsAsync(
             new[]
             {
-                MakeCommit("abc1234abc1234abc1234abc1234abc1234abc1", prNumber: 1, authoredAt: baseTime),
-                MakeCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", prNumber: 1, authoredAt: baseTime.AddDays(1)),
-                MakeCommit("abc9999abc9999abc9999abc9999abc9999abc9", prNumber: 1, authoredAt: baseTime.AddDays(2)),
+                MakeCommit("abc1234abc1234abc1234abc1234abc1234abc1", prNumber: 42, message: "docs: setup intro", authoredAt: baseTime),
+                MakeCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", prNumber: 77, message: "docs: workspace guide", authoredAt: baseTime.AddDays(1)),
+                MakeCommit("abc9999abc9999abc9999abc9999abc9999abc9", prNumber: 88, message: "docs: enterprise guide", authoredAt: baseTime.AddDays(2)),
             },
             ct);
         await repository.SetReviewAsync("abc9999abc9999abc9999abc9999abc9999abc9", ReviewStatus.Adopted, null, ct);
@@ -244,10 +244,20 @@ public sealed class RadarRepositoryTests
             new CommitQueryFilter { ShaQuery = "abc" },
             ct);
 
+        var prMatches = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { ShaQuery = "#77" },
+            ct);
+
+        var messageMatches = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { ShaQuery = "WORKSPACE" },
+            ct);
+
         Assert.Equal(["abc1234abc1234abc1234abc1234abc1234abc1"], unseenMatches.Select(c => c.Sha).ToArray());
         Assert.Equal(
             ["abc9999abc9999abc9999abc9999abc9999abc9", "abc1234abc1234abc1234abc1234abc1234abc1"],
             allMatches.Select(c => c.Sha).ToArray());
+        Assert.Equal(["bbb2222bbb2222bbb2222bbb2222bbb2222bbb2"], prMatches.Select(c => c.Sha).ToArray());
+        Assert.Equal(["bbb2222bbb2222bbb2222bbb2222bbb2222bbb2"], messageMatches.Select(c => c.Sha).ToArray());
     }
 
     [Fact]

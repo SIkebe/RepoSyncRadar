@@ -302,8 +302,7 @@ public sealed class WorkbenchTests
                 var filter = call.Arg<CommitQueryFilter>();
                 IReadOnlyList<Commit> visible = commits
                     .Where(commit => filter.Status is null or ReviewStatus.Unseen)
-                    .Where(commit => string.IsNullOrWhiteSpace(filter.ShaQuery)
-                        || commit.Sha.Contains(filter.ShaQuery, StringComparison.Ordinal))
+                    .Where(commit => CommitMatchesSearch(commit, filter.ShaQuery))
                     .ToArray();
                 return Task.FromResult(visible);
             });
@@ -323,6 +322,48 @@ public sealed class WorkbenchTests
         cut.Find("[data-testid=\"commit-hash-search-clear\"]").Click();
 
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count));
+    }
+
+    [Fact]
+    public async Task Commit_Search_Matches_Pr_Number_And_Message()
+    {
+        var first = MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "first docs");
+        first.PrNumber = 61001;
+        var second = MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "workspace rollout guide");
+        second.PrNumber = 61002;
+        var commits = new[] { first, second };
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(commits.Select(static _ => ReviewStatus.Unseen))));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = commits
+                    .Where(commit => filter.Status is null or ReviewStatus.Unseen)
+                    .Where(commit => CommitMatchesSearch(commit, filter.ShaQuery))
+                    .ToArray();
+                return Task.FromResult(visible);
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count));
+
+        cut.Find("[data-testid=\"commit-hash-search\"]").Input("61002");
+        cut.WaitForAssertion(() =>
+        {
+            var row = Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Equal(second.Sha, row.GetAttribute("data-sha"));
+        });
+
+        cut.Find("[data-testid=\"commit-hash-search\"]").Input("WORKSPACE");
+        cut.WaitForAssertion(() =>
+        {
+            var row = Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Equal(second.Sha, row.GetAttribute("data-sha"));
+        });
     }
 
     [Fact]
@@ -719,8 +760,13 @@ public sealed class WorkbenchTests
                     break;
 
                 case 1 when commits.Count > 0:
-                    var searchTarget = commits[random.Next(commits.Count)].Sha;
-                    searchQuery = random.Next(2) == 0 ? searchTarget[..7].ToUpperInvariant() : string.Empty;
+                    var searchTarget = commits[random.Next(commits.Count)];
+                    searchQuery = random.Next(3) switch
+                    {
+                        0 => searchTarget.Sha[..7].ToUpperInvariant(),
+                        1 => searchTarget.PrNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        _ => searchTarget.Message.Split(' ')[0].ToUpperInvariant(),
+                    };
                     selectedSha = null;
                     selectedShas.Clear();
                     cut.Find("[data-testid=\"commit-hash-search\"]").Input(searchQuery);
@@ -873,9 +919,23 @@ public sealed class WorkbenchTests
         var normalizedSearch = string.IsNullOrWhiteSpace(searchQuery) ? null : searchQuery.Trim().ToLowerInvariant();
         return commits
             .Where(commit => statuses.TryGetValue(commit.Sha, out var status) && (selectedStatus is null || status == selectedStatus))
-            .Where(commit => normalizedSearch is null || commit.Sha.Contains(normalizedSearch, StringComparison.Ordinal))
+            .Where(commit => CommitMatchesSearch(commit, normalizedSearch))
             .Select(static commit => commit.Sha)
             .ToArray();
+    }
+
+    private static bool CommitMatchesSearch(Commit commit, string? searchQuery)
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            return true;
+        }
+
+        var normalized = searchQuery.Trim().ToLowerInvariant();
+        var prQuery = normalized.TrimStart('#');
+        return commit.Sha.Contains(normalized, StringComparison.Ordinal)
+            || commit.Message.Contains(normalized, StringComparison.OrdinalIgnoreCase)
+            || commit.PrNumber.ToString(System.Globalization.CultureInfo.InvariantCulture) == prQuery;
     }
 
     private static ReviewStatus PickReviewStatus(Random random)

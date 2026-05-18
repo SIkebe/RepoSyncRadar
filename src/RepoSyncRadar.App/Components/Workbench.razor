@@ -39,14 +39,14 @@
 
             <MudPaper Elevation="0" Class="pa-2">
                 <div class="commit-search-toolbar" data-testid="commit-search-toolbar">
-                    <label class="commit-search-label" for="commit-hash-search">ハッシュ</label>
+                    <label class="commit-search-label" for="commit-hash-search">検索</label>
                     <input id="commit-hash-search"
                            class="commit-search-input"
                            data-testid="commit-hash-search"
                            type="search"
                            autocomplete="off"
                            spellcheck="false"
-                           placeholder="短縮 / 完全 SHA"
+                           placeholder="SHA / PR / タイトル"
                            value="@_commitHashQuery"
                            @oninput="HandleCommitHashSearchChanged" />
                     <button type="button"
@@ -280,10 +280,10 @@
         => new()
         {
             Status = _selectedStatus,
-            ShaQuery = NormalizeCommitHashQuery(_commitHashQuery),
+            ShaQuery = NormalizeCommitSearchQuery(_commitHashQuery),
         };
 
-    private static string? NormalizeCommitHashQuery(string? value)
+    private static string? NormalizeCommitSearchQuery(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
