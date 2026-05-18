@@ -80,6 +80,7 @@ internal static partial class MarkdownPreviewRenderer
         IReadOnlyList<DocsVersion>? affectedVersions = null,
         DocsVersion? selectedVersion = null,
         IReadOnlyList<DocsVersionImpactDetail>? versionImpacts = null,
+        IReadOnlyList<MarkdownFrontmatterChange>? frontmatterChanges = null,
         string? assetBasePath = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repoPath);
@@ -128,11 +129,12 @@ internal static partial class MarkdownPreviewRenderer
             var liquidBlocksRendered = RenderOfficialLiquidBlocks(liquidEvaluated);
             var liquidNeutralized = NeutralizeLiquid(liquidBlocksRendered);
             body = Markdown.ToHtml(liquidNeutralized, s_pipeline);
-                if (!HasVisibleBodyMarkup(body))
+            if (!HasVisibleBodyMarkup(body))
             {
-                body = frontmatterTitle is null && frontmatterIntro is null
+                var frontmatterDiffHtml = RenderFrontmatterDiff(frontmatterChanges);
+                body = frontmatterDiffHtml + (frontmatterTitle is null && frontmatterIntro is null
                     ? "<p class=\"rsr-empty\">空の Markdown ファイルです。</p>"
-                    : "<p class=\"rsr-empty\">このファイルは存在しますが、本文はありません。フロントマターのみ、または自動生成コメントのみの Markdown です。</p>";
+                    : "<p class=\"rsr-empty\">このファイルは存在しますが、本文はありません。フロントマターのみ、または自動生成コメントのみの Markdown です。</p>");
             }
             body = RewriteAutotitleLinks(body, trimmedRepoPath, effectiveLiquidContext, effectiveVersion);
             body = RewriteAssetReferences(body, trimmedRepoPath, assetBasePath);
@@ -211,6 +213,18 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-version-change p{margin:0;font-size:.78rem;}");
         html.AppendLine(".rsr-version-change-label{color:var(--rsr-muted);font-weight:700;margin-right:.35rem;}");
         html.AppendLine(".rsr-version-diff-more{color:var(--rsr-muted);font-size:.76rem;margin:8px 0 0;}");
+        html.AppendLine(".rsr-frontmatter-diff{border:1px solid var(--rsr-border);border-left:4px solid var(--rsr-link);border-radius:6px;background:var(--rsr-pre-bg);margin:0 0 1rem;padding:12px;}");
+        html.AppendLine(".rsr-frontmatter-diff h2{font-size:.95rem;margin:0 0 6px;}");
+        html.AppendLine(".rsr-frontmatter-diff-overview{color:var(--rsr-muted);font-size:.8rem;margin:0 0 10px;}");
+        html.AppendLine(".rsr-frontmatter-diff-list{display:grid;gap:8px;list-style:none;margin:0;padding:0;}");
+        html.AppendLine(".rsr-frontmatter-change{border:1px solid var(--rsr-border);border-radius:6px;background:var(--rsr-article-bg);padding:8px;}");
+        html.AppendLine(".rsr-frontmatter-change[data-change-kind='added']{border-left:3px solid #2da44e;}");
+        html.AppendLine(".rsr-frontmatter-change[data-change-kind='removed']{border-left:3px solid #cf222e;}");
+        html.AppendLine(".rsr-frontmatter-change[data-change-kind='updated']{border-left:3px solid #bf8700;}");
+        html.AppendLine(".rsr-frontmatter-change-kind{color:var(--rsr-muted);display:block;font-size:.72rem;font-weight:700;margin-bottom:4px;}");
+        html.AppendLine(".rsr-frontmatter-line{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:8px;margin:3px 0;font-size:.8rem;}");
+        html.AppendLine(".rsr-frontmatter-line-label{color:var(--rsr-muted);font-weight:700;}");
+        html.AppendLine(".rsr-frontmatter-line code{display:block;white-space:pre-wrap;overflow-wrap:anywhere;}");
         html.AppendLine("</style>");
         html.AppendLine("<script>");
         html.AppendLine("(() => { document.addEventListener('click', event => { const button = event.target?.closest?.('[data-rsr-version-slug]'); if (!button || button.getAttribute('aria-current') === 'true') return; const slug = button.getAttribute('data-rsr-version-slug'); if (!slug) return; window.chrome?.webview?.postMessage(`rsr-preview-version:${slug}`); }); })();");
@@ -954,6 +968,62 @@ internal static partial class MarkdownPreviewRenderer
             html.Append("</li>");
         }
         html.AppendLine("</ul></section>");
+    }
+
+    private static string RenderFrontmatterDiff(IReadOnlyList<MarkdownFrontmatterChange>? changes)
+    {
+        if (changes is null || changes.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var html = new StringBuilder();
+        html.Append("<section class=\"rsr-frontmatter-diff\" data-testid=\"rsr-frontmatter-diff\" aria-label=\"フロントマター差分\">");
+        html.Append("<h2>フロントマターの変更</h2>");
+        html.Append("<p class=\"rsr-frontmatter-diff-overview\">")
+            .Append(changes.Count.ToString(CultureInfo.InvariantCulture))
+            .Append(" 件のメタデータ差分があります。本文がないため、レビュー対象は主にこの YAML です。</p>");
+        html.Append("<ul class=\"rsr-frontmatter-diff-list\">");
+        foreach (var change in changes.Take(12))
+        {
+            AppendFrontmatterChange(html, change);
+        }
+        if (changes.Count > 12)
+        {
+            html.Append("<li class=\"rsr-version-diff-more\">")
+                .Append((changes.Count - 12).ToString(CultureInfo.InvariantCulture))
+                .Append(" 件の追加の差分があります</li>");
+        }
+        html.Append("</ul></section>");
+        return html.ToString();
+    }
+
+    private static void AppendFrontmatterChange(StringBuilder html, MarkdownFrontmatterChange change)
+    {
+        html.Append("<li class=\"rsr-frontmatter-change\" data-change-kind=\"")
+            .Append(WebUtility.HtmlEncode(BuildChangeKindSlug(change.Kind)))
+            .Append("\">");
+        html.Append("<span class=\"rsr-frontmatter-change-kind\">")
+            .Append(WebUtility.HtmlEncode(BuildChangeKindLabel(change.Kind)))
+            .Append("</span>");
+        if (!string.IsNullOrWhiteSpace(change.BeforeLine))
+        {
+            AppendFrontmatterLine(html, "変更前", change.BeforeLine);
+        }
+        if (!string.IsNullOrWhiteSpace(change.AfterLine))
+        {
+            AppendFrontmatterLine(html, "PR HEAD", change.AfterLine);
+        }
+        html.Append("</li>");
+    }
+
+    private static void AppendFrontmatterLine(StringBuilder html, string label, string line)
+    {
+        html.Append("<p class=\"rsr-frontmatter-line\"><span class=\"rsr-frontmatter-line-label\">")
+            .Append(WebUtility.HtmlEncode(label))
+            .Append("</span><code>")
+            .Append(WebUtility.HtmlEncode(line))
+            .Append("</code></p>");
     }
 
     private static List<VersionImpactGroup> BuildVersionImpactGroups(

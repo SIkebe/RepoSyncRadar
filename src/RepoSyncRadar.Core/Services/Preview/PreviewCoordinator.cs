@@ -427,6 +427,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             afterMarkdown,
             session.AfterLiquid);
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
+        var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
 
         var pages = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -439,6 +440,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 effectiveVersion,
                 affectedVersions,
                 versionImpacts: versionImpacts,
+                frontmatterChanges: frontmatterChanges,
                 assetBasePath: MarkdownBeforeAssetRoute),
             ["/markdown/after"] = MarkdownPreviewRenderer.RenderDocument(
                 filePath,
@@ -449,6 +451,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 effectiveVersion,
                 affectedVersions,
                 versionImpacts: versionImpacts,
+                frontmatterChanges: frontmatterChanges,
                 assetBasePath: MarkdownAfterAssetRoute),
         };
 
