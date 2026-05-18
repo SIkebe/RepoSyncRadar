@@ -63,26 +63,38 @@
                         <span class="bulk-review-count" data-testid="bulk-review-count">@_selectedCommitShas.Count 件選択中</span>
                         <span class="bulk-review-hint" data-testid="bulk-review-hint">チェックしたコミットをまとめて移動します。詳細は行をクリックします。</span>
                         <div class="bulk-review-buttons">
+                        @if (CanShowBulkMoveButton(ReviewStatus.Adopted))
+                        {
                         <button type="button"
                             class="bulk-review-button adopt"
                             data-testid="bulk-review-adopted"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Adopted)"
                             @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Adopted)">注目へ</button>
+                        }
+                        @if (CanShowBulkMoveButton(ReviewStatus.Later))
+                        {
                         <button type="button"
                             class="bulk-review-button later"
                             data-testid="bulk-review-later"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Later)"
                             @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Later)">保留へ</button>
+                        }
+                        @if (CanShowBulkMoveButton(ReviewStatus.Archived))
+                        {
                         <button type="button"
                             class="bulk-review-button archive"
                             data-testid="bulk-review-archived"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Archived)"
                             @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Archived)">アーカイブへ</button>
+                        }
+                        @if (CanShowBulkMoveButton(ReviewStatus.Unseen))
+                        {
                         <button type="button"
                             class="bulk-review-button unseen"
                             data-testid="bulk-review-unseen"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Unseen)"
                             @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Unseen)">未確認へ戻す</button>
+                        }
                         <button type="button"
                             class="bulk-review-button delete"
                             data-testid="bulk-delete-unseen"
@@ -308,6 +320,9 @@
             || _bulkReviewBusy
             || _selectedCommitShas.Count == 0
             || _selectedStatus == status;
+
+    private bool CanShowBulkMoveButton(ReviewStatus status)
+        => _selectedStatus != status;
 
     private bool IsBulkDeleteDisabled()
         => _bulkReviewBusy

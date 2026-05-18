@@ -368,6 +368,7 @@ public sealed class WorkbenchTests
             Assert.Contains("行をクリック", cut.Find("[data-testid=\"bulk-review-hint\"]").TextContent, StringComparison.Ordinal);
             Assert.Empty(cut.FindAll("[data-testid=\"bulk-review-rejected\"]"));
             Assert.DoesNotContain("見送り候補へ", cut.Markup, StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[data-testid=\"bulk-review-unseen\"]"));
         });
 
         cut.Find("[data-testid=\"bulk-review-later\"]").Click();
@@ -418,7 +419,11 @@ public sealed class WorkbenchTests
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count));
 
         cut.Find("[data-testid=\"commit-list-select-all\"]").Click();
-        cut.WaitForAssertion(() => Assert.False(cut.Find("[data-testid=\"bulk-review-archived\"]").HasAttribute("disabled")));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.False(cut.Find("[data-testid=\"bulk-review-archived\"]").HasAttribute("disabled"));
+            Assert.Empty(cut.FindAll("[data-testid=\"bulk-review-rejected\"]"));
+        });
 
         cut.Find("[data-testid=\"bulk-review-archived\"]").Click();
 
