@@ -20,21 +20,55 @@ public sealed partial class MorningTriageSession
     /// <summary>The prompt body appended to the SDK system message (kept in code so unit tests can grep for the marker).</summary>
     internal const string TriagePrompt = """
         # Morning Triage
-        最新の `github/docs` Repo sync PR 由来のコミットを処理してください。
 
-        手順:
-        1. `radar_list_commits` を `status="Unseen"`, `limit=50` で呼び、まだスコアリングされていない未確認コミット一覧を取得する。
-        2. 各コミットについて必要に応じて `radar_get_diff` で差分を確認し、`radar_resolve_url` / `radar_fetch_rendered` で出典ページを確認する。
-          3. 影響範囲・新規性・読者層を判断し、`radar_score_commit` でスコア・カテゴリ・読者・要約・理由・詳細分析を保存する。
-              `DetailsJa` には次のラベルを含めて、各 1〜2 文で具体的に書く: `変更内容`, `根拠`, `影響`, `確認観点`。
-              `根拠` は差分またはレンダリング済み本文で確認した事実に限定し、推測は `確認観点` に分ける。
-              読者が注目/共有判断をしやすいよう、単なる要約ではなく「なぜ今見るべきか」を残す。
-          4. スコア上位 5 件と判断に迷う候補は未確認のまま残し、明らかに不要な候補だけ `radar_save_review` で `Rejected` として保存する。
-              `Rejected` は自動見送り候補を表す。`Archived` はユーザーが手動でアーカイブするときだけ使うため、Triage では使わない。
-        5. 既に確立されたユーザー設定 (Ignore / Boost) を尊重し、無視対象はスキップする。
-        6. 全件を処理し終えたら短い完了報告を返す。
+            Goal:
+            最新の `github/docs` Repo sync PR 由来の未確認コミットを、ユーザーが朝のレビューで素早く「注目 / 保留 / 見送り候補」に判断できる状態へ整理する。
 
-        出力はすべて日本語で、必要なツール呼び出しを最後まで実行してください。
+            Success criteria:
+            - `radar_list_commits` を `status="Unseen"`, `limit=50` で呼び、まだスコアリングされていない未確認コミット一覧を取得する。
+            - 各コミットについて `radar_score_commit` でスコア・カテゴリ・読者・要約・理由・詳細分析を保存する。
+            - スコア上位 5 件と判断に迷う候補は未確認のまま残す。
+            - 明らかに不要な候補だけ `radar_save_review` で `Rejected` として保存する。
+            - `Rejected` は自動見送り候補を表す。`Archived` はユーザーが手動でアーカイブするときだけ使うため、Triage では使わない。
+            - 既に確立されたユーザー設定 (Ignore / Boost) を尊重し、無視対象はスキップする。
+
+            Evidence budget:
+            - まず `radar_get_diff` で差分を確認する。
+            - user-facing な変更、0.70 以上になりそうな変更、または差分だけで判断できない変更のみ `radar_resolve_url` / `radar_fetch_rendered` を使う。
+            - 根拠に書けるのは差分またはレンダリング済み本文で確認した事実だけ。
+            - 推測・未確認事項は `確認観点` に分ける。
+
+            Scoring rubric:
+            - 0.85-1.00: すぐ共有・確認すべき変更。新 API、破壊的変更、セキュリティ、非推奨、管理者/開発者の対応が必要な変更。
+            - 0.70-0.84: 重要な機能追加、公開プレビュー、設定・運用・統合に影響する変更。
+            - 0.45-0.69: 有用だが急ぎではない docs 追加、説明改善、対象者が限定的な変更。
+            - 0.00-0.44: typo、内部整理、リンク修正、翻訳/表記調整、重複や低シグナルな更新。
+
+            Category:
+            次のいずれかを優先して使う: `feature-update`, `breaking-change`, `security`, `deprecation`, `api-change`, `admin-change`, `docs-maintenance`, `low-signal`。
+
+            Audience:
+            次のタグから最大 4 個: `developer`, `admin`, `customer`, `support`, `partner`, `internal`, `devrel`。
+
+            Output requirements for `radar_score_commit`:
+            - `SummaryJa`: 1 文、60 文字以内。「何が変わったか」を具体的に書く。
+            - `WhyJa`: 1 文、80 文字以内。「なぜ見るべきか / 見送れるか」を判断向けに書く。
+            - `DetailsJa`: 次のラベルをこの順序で含める。各ラベルは 1 行、最大 90 文字程度。
+              - `変更内容`: 変更の実体。ファイル名だけでなく、機能/API/設定/読者影響を書く。
+              - `根拠`: 差分またはレンダリング済み本文で確認した事実。URL やパスは必要最小限で含める。
+              - `影響`: 影響を受ける読者と、レビュー/共有/対応が必要な理由。
+              - `確認観点`: ユーザーが次に見るべき具体的な確認点。未確認推測はここだけに書く。
+
+            Style:
+            - 出力はすべて日本語。
+            - 段落を長くしない。
+            - 同じ内容を `SummaryJa` / `WhyJa` / `DetailsJa` で繰り返さない。
+            - 「新しい」「重要」だけで済ませず、何が誰にどう効くかを書く。
+            - 不明な場合は断定せず、`確認観点` に回す。
+
+            Stop rules:
+            - 全件を処理したら短い完了報告だけ返す。
+            - ツール呼び出しに必要な最小限の説明以外は返さない。
         """;
 
     private readonly ICommitIngestionService _ingestion;

@@ -20,7 +20,7 @@ public sealed record ScoreCommitArgs(
     string SummaryJa,
     [property: Description("Short Japanese reason for the score and triage decision.")]
     string WhyJa,
-    [property: Description("Detailed Japanese analysis. Include impact, evidence from diff/rendered docs, affected readers, and recommended follow-up as concise labeled lines.")]
+    [property: Description("Compact Japanese analysis for UI display. Must contain exactly these labeled lines in order: 変更内容, 根拠, 影響, 確認観点. Each line should be concise, factual, and avoid repeating SummaryJa/WhyJa.")]
     string DetailsJa,
     [property: Description("Model identifier used by the Copilot session.")]
     string Model,

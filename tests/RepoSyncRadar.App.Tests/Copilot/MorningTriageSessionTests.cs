@@ -84,9 +84,19 @@ public sealed class MorningTriageSessionTests
         Assert.Contains("radar_save_review", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("DetailsJa", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("詳細分析", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("Goal:", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("Success criteria:", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("Evidence budget:", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("Scoring rubric:", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("Output requirements for `radar_score_commit`:", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("Stop rules:", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("変更内容", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("根拠", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("影響", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("確認観点", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("SummaryJa", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("WhyJa", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("最大 90 文字程度", capturedPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Skim", capturedPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("`Seen`", capturedPrompt, StringComparison.Ordinal);
     }
