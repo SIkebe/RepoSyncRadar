@@ -127,7 +127,8 @@ internal static partial class MarkdownPreviewRenderer
                 effectiveLiquidContext,
                 effectiveVersion);
             var liquidBlocksRendered = RenderOfficialLiquidBlocks(liquidEvaluated);
-            var liquidNeutralized = NeutralizeLiquid(liquidBlocksRendered);
+            var githubAlertsRendered = RenderGitHubAlertBlocks(liquidBlocksRendered);
+            var liquidNeutralized = NeutralizeLiquid(githubAlertsRendered);
             body = Markdown.ToHtml(liquidNeutralized, s_pipeline);
             if (!HasVisibleBodyMarkup(body))
             {
@@ -179,6 +180,9 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".ghd-alert{border:1px solid var(--rsr-border);border-left-width:4px;border-radius:6px;margin:0 0 1rem;padding:12px 14px;background:var(--rsr-article-bg);}");
         html.AppendLine(".ghd-alert>:last-child,.ghd-tool>:last-child{margin-bottom:0;}");
         html.AppendLine(".ghd-alert-accent{border-left-color:#0969da;}.ghd-alert-success{border-left-color:#1a7f37;}.ghd-alert-attention{border-left-color:#9a6700;}.ghd-alert-danger{border-left-color:#cf222e;}");
+        html.AppendLine(".ghd-markdown-alert{border:0;border-left:4px solid var(--rsr-alert-color);border-radius:0;margin:0 0 1rem;padding:8px 0 8px 14px;background:transparent;color:var(--rsr-fg);}");
+        html.AppendLine(".ghd-markdown-alert>:last-child{margin-bottom:0;}.ghd-markdown-alert-title{align-items:center;color:var(--rsr-alert-color);display:flex;font-weight:650;gap:6px;margin:0 0 8px;}");
+        html.AppendLine(".ghd-markdown-alert-note{--rsr-alert-color:#0969da;}.ghd-markdown-alert-tip{--rsr-alert-color:#1a7f37;}.ghd-markdown-alert-important{--rsr-alert-color:#8250df;}.ghd-markdown-alert-warning{--rsr-alert-color:#9a6700;}.ghd-markdown-alert-caution{--rsr-alert-color:#cf222e;}");
         html.AppendLine(".ghd-tool{border:1px solid var(--rsr-border);border-left:4px solid var(--rsr-link);border-radius:6px;margin:0 0 1rem;padding:12px 14px;background:var(--rsr-pre-bg);}");
         html.AppendLine(".copilot-prompt-long,.copilot-prompt-short{display:inline-flex;align-items:center;color:var(--rsr-link);margin-left:.25rem;text-decoration:none;}.copilot-prompt-short{display:none;}");
         html.AppendLine(".rsr-liquid{display:inline-block;background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border:1px solid var(--rsr-liquid-border);border-radius:3px;padding:0 .35em;margin:0 .15em;font-size:.82em;font-family:'Cascadia Mono',Consolas,monospace;}");
@@ -416,6 +420,132 @@ internal static partial class MarkdownPreviewRenderer
             }
         }
         return current;
+    }
+
+    private static string RenderGitHubAlertBlocks(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return content;
+        }
+
+        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        var lines = normalized.Split('\n');
+        var rendered = new StringBuilder(content.Length);
+        var inFence = false;
+
+        for (var lineIndex = 0; lineIndex < lines.Length; lineIndex++)
+        {
+            var line = lines[lineIndex];
+            if (IsFenceLine(line))
+            {
+                inFence = !inFence;
+                rendered.AppendLine(line);
+                continue;
+            }
+
+            if (inFence || !TryReadBlockquoteLine(line, out var quotedLine))
+            {
+                rendered.AppendLine(line);
+                continue;
+            }
+
+            var blockquoteLines = new List<string> { quotedLine };
+            while (lineIndex + 1 < lines.Length && TryReadBlockquoteLine(lines[lineIndex + 1], out var nextQuotedLine))
+            {
+                lineIndex++;
+                blockquoteLines.Add(nextQuotedLine);
+            }
+
+            if (TryRenderGitHubAlertBlock(blockquoteLines, out var alertHtml))
+            {
+                rendered.AppendLine(alertHtml);
+            }
+            else
+            {
+                foreach (var blockquoteLine in blockquoteLines)
+                {
+                    rendered.Append("> ").AppendLine(blockquoteLine);
+                }
+            }
+        }
+
+        return rendered.ToString();
+    }
+
+    private static bool TryRenderGitHubAlertBlock(List<string> blockquoteLines, out string alertHtml)
+    {
+        alertHtml = string.Empty;
+        if (blockquoteLines.Count == 0)
+        {
+            return false;
+        }
+
+        var marker = blockquoteLines[0].Trim();
+        if (!TryGetGitHubAlertKind(marker, out var kind, out var label))
+        {
+            return false;
+        }
+
+        var bodyMarkdown = string.Join('\n', blockquoteLines.Skip(1)).Trim('\n');
+        var bodyHtml = bodyMarkdown.Length == 0
+            ? string.Empty
+            : Markdown.ToHtml(RenderGitHubAlertBlocks(bodyMarkdown), s_pipeline).TrimEnd();
+        alertHtml = string.Create(
+            CultureInfo.InvariantCulture,
+            $"\n<div class=\"ghd-markdown-alert ghd-markdown-alert-{kind}\">\n<p class=\"ghd-markdown-alert-title\">{WebUtility.HtmlEncode(label)}</p>\n{bodyHtml}\n</div>\n");
+        return true;
+    }
+
+    private static bool TryGetGitHubAlertKind(string marker, out string kind, out string label)
+    {
+        kind = string.Empty;
+        label = string.Empty;
+        if (marker.Length < 4 || marker[0] != '[' || marker[1] != '!' || marker[^1] != ']')
+        {
+            return false;
+        }
+
+        var alertType = marker[2..^1].Trim();
+        (kind, label) = alertType.ToUpperInvariant() switch
+        {
+            "NOTE" => ("note", "Note"),
+            "TIP" => ("tip", "Tip"),
+            "IMPORTANT" => ("important", "Important"),
+            "WARNING" => ("warning", "Warning"),
+            "CAUTION" => ("caution", "Caution"),
+            _ => (string.Empty, string.Empty),
+        };
+        return kind.Length > 0;
+    }
+
+    private static bool TryReadBlockquoteLine(string line, out string quotedLine)
+    {
+        quotedLine = string.Empty;
+        var cursor = 0;
+        while (cursor < line.Length && (line[cursor] == ' ' || line[cursor] == '\t'))
+        {
+            cursor++;
+        }
+
+        if (cursor >= line.Length || line[cursor] != '>')
+        {
+            return false;
+        }
+
+        cursor++;
+        if (cursor < line.Length && line[cursor] == ' ')
+        {
+            cursor++;
+        }
+        quotedLine = cursor >= line.Length ? string.Empty : line[cursor..];
+        return true;
+    }
+
+    private static bool IsFenceLine(string line)
+    {
+        var trimmed = line.TrimStart();
+        return trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal);
     }
 
     private static string RenderSpotlightBlock(Match match)

@@ -581,6 +581,73 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Renders_GitHub_Alert_Blockquotes_As_Alert_Html()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            > [!NOTE]
+            > Useful information that users should know, even when skimming content.
+
+            > [!TIP]
+            > Helpful advice for doing things better or more easily.
+
+            > [!IMPORTANT]
+            > Key information users need to know to achieve their goal.
+
+            > [!WARNING]
+            > Urgent info that needs immediate user attention to avoid problems.
+
+            > [!CAUTION]
+            > Advises about risks or negative outcomes of certain actions.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-tip\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-important\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-warning\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-caution\"", html, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"ghd-markdown-alert-title\">Note</p>", html, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"ghd-markdown-alert-title\">Important</p>", html, StringComparison.Ordinal);
+        Assert.Contains("Useful information that users should know", html, StringComparison.Ordinal);
+        Assert.Contains("--rsr-alert-color:#8250df", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[!NOTE]", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[!CAUTION]", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Leaves_GitHub_Alert_Markers_In_Code_Fences_Untouched()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            ```markdown
+            > [!NOTE]
+            > This is an example, not an alert.
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("&gt; [!NOTE]", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<div class=\"ghd-markdown-alert ghd-markdown-alert-note\"", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Renders_Docs_Tool_Blocks_As_Official_Tool_Html()
     {
         var markdown = """
