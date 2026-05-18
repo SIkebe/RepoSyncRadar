@@ -44,12 +44,12 @@ public sealed class BlazorShellE2ETests
                 $"Sidebar item for status '{status}' should be visible");
         }
 
-        // The empty-state placeholders are part of the contract when the DB is
-        // empty; their absence would also indicate a broken render path. Wait for
-        // them — CommitList / CommitDetail run their own async reload separately
-        // from Sidebar, so the placeholders can land a moment after sidebar mounts.
-        await page.Locator("[data-testid='commit-list-empty']")
-            .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
+        // CommitList / CommitDetail run their own async reload separately from
+        // Sidebar. This mount test should verify that the list settles, not that
+        // the shared app host remains empty for the whole run: a concurrent or
+        // inherited Triage can legitimately populate the temp DB before this
+        // assertion observes it.
+        await WaitForCommitListSettledAsync(page);
         await page.Locator("[data-testid='commit-detail-empty']")
             .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
     }
@@ -143,5 +143,25 @@ public sealed class BlazorShellE2ETests
 
         await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
         return page;
+    }
+
+    private static async Task WaitForCommitListSettledAsync(IPage page)
+    {
+        await page.Locator("[data-testid='commit-list']")
+            .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
+        await page.WaitForFunctionAsync(
+            """
+            () => {
+                const root = document.querySelector('[data-testid="commit-list"]');
+                if (!root) {
+                    return false;
+                }
+                return !root.querySelector('[data-testid="commit-list-loading"]')
+                    && (root.querySelector('[data-testid="commit-list-empty"]')
+                        || root.querySelector('[data-testid="commit-row"]'));
+            }
+            """,
+            null,
+            new() { Timeout = 15000 });
     }
 }
