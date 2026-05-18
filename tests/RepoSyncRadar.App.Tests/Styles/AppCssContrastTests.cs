@@ -50,6 +50,16 @@ public sealed partial class AppCssContrastTests
         Assert.Contains("color: var(--radar-chip-fg)", badgeBlock, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AppHeader_Uses_Theme_Surface_Tokens()
+    {
+        var headerBlock = GetRuleBlock(ReadAppCss(), ".app-header");
+
+        Assert.Contains("background: var(--radar-panel-bg)", headerBlock, StringComparison.Ordinal);
+        Assert.Contains("border: 1px solid var(--radar-border-subtle)", headerBlock, StringComparison.Ordinal);
+        Assert.Contains("color: var(--radar-fg)", headerBlock, StringComparison.Ordinal);
+    }
+
     private static Dictionary<string, string> ReadDarkThemeVariables()
     {
         var darkThemeBlock = GetRuleBlock(ReadAppCss(), ".radar-shell.radar-theme-dark");

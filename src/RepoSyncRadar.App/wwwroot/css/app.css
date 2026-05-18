@@ -83,6 +83,12 @@ html, body {
     user-select: none;
 }
 
+.app-header {
+    background: var(--radar-panel-bg) !important;
+    border: 1px solid var(--radar-border-subtle);
+    color: var(--radar-fg) !important;
+}
+
 .radar-sidebar {
     display: flex;
     flex-direction: column;
@@ -163,6 +169,61 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+}
+
+.commit-search-toolbar {
+    align-items: center;
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    margin-bottom: 0.5rem;
+}
+
+.commit-search-label {
+    color: #57606a;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.commit-search-input {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 4px;
+    color: #24292f;
+    font: inherit;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 0.82rem;
+    min-height: 2rem;
+    min-width: 0;
+    padding: 0.22rem 0.55rem;
+}
+
+.commit-search-input:focus {
+    border-color: #0969da;
+    box-shadow: 0 0 0 2px rgba(9, 105, 218, 0.15);
+    outline: none;
+}
+
+.commit-search-clear {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 4px;
+    color: #57606a;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    min-height: 2rem;
+    padding: 0.22rem 0.6rem;
+}
+
+.commit-search-clear:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.commit-search-clear:hover:not(:disabled) {
+    background: #f6f8fa;
 }
 
 .commit-list-selection-toolbar {
@@ -248,6 +309,12 @@ html, body {
     color: #0550ae;
 }
 
+.bulk-review-button.archive {
+    background: #fff1f1;
+    border-color: #cf222e;
+    color: #a40e26;
+}
+
 .bulk-review-button.delete {
     background: #ffebe9;
     border-color: #ff8182;
@@ -299,10 +366,23 @@ html, body {
     white-space: nowrap;
 }
 
-.commit-row .author,
 .commit-row .authored {
     color: #777;
     font-size: 0.85rem;
+}
+
+.commit-row .score {
+    color: var(--radar-chip-fg, #0550ae);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.commit-row .score.unscored {
+    color: #777;
+    font-weight: 600;
 }
 
 .radar-commit-detail .commit-header {
@@ -338,6 +418,20 @@ html, body {
 .radar-commit-detail .commit-header .author {
     color: #57606a;
     font-size: 0.82rem;
+}
+
+.radar-commit-detail .commit-pr-link,
+.radar-commit-detail .commit-pr-external-link {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    line-height: 1.2;
+}
+
+.radar-commit-detail .commit-pr-external-link {
+    width: 1.8rem;
+    justify-content: center;
+    padding-inline: 0;
 }
 
 .radar-commit-detail .commit-header .message {
@@ -733,6 +827,21 @@ html, body {
     gap: 0.5rem;
 }
 
+.settings-subheader {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.settings-actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    justify-content: flex-end;
+}
+
 .settings-section h3 {
     font-size: 0.92rem;
 }
@@ -741,6 +850,162 @@ html, body {
     color: #a40e26;
     font-size: 0.82rem;
     margin: 0;
+}
+
+.local-settings-grid {
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+}
+
+.local-settings-group {
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    display: grid;
+    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    padding: 0.65rem;
+}
+
+.local-settings-group legend {
+    color: #24292f;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0 0.25rem;
+}
+
+.local-settings-field,
+.local-settings-check {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.local-settings-check {
+    align-items: center;
+    flex-direction: row;
+    min-height: 3.15rem;
+}
+
+.local-settings-field.wide {
+    grid-column: 1 / -1;
+}
+
+.local-settings-field span,
+.local-settings-check span {
+    color: #57606a;
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.local-settings-field input,
+.local-settings-field textarea {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    color: #24292f;
+    font: inherit;
+    font-size: 0.82rem;
+    min-width: 0;
+    padding: 0.42rem 0.5rem;
+    width: 100%;
+}
+
+.local-settings-field textarea {
+    min-height: 4.5rem;
+    resize: vertical;
+}
+
+.local-settings-field input:disabled,
+.local-settings-field textarea:disabled,
+.local-settings-check input:disabled {
+    cursor: default;
+    opacity: 0.62;
+}
+
+.third-party-notice-list {
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    max-height: 18rem;
+    overflow: auto;
+}
+
+.third-party-notice-row {
+    align-items: stretch;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 0.55rem 0.65rem;
+}
+
+.third-party-notice-row + .third-party-notice-row {
+    border-top: 1px solid #eaeef2;
+}
+
+.third-party-notice-main,
+.third-party-notice-meta {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.third-party-package {
+    color: #24292f;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 0.78rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.third-party-version,
+.third-party-license,
+.third-party-notice-meta a {
+    border: 1px solid #d0d7de;
+    border-radius: 999px;
+    color: #57606a;
+    font-size: 0.74rem;
+    line-height: 1;
+    padding: 0.18rem 0.38rem;
+    text-decoration: none;
+}
+
+.third-party-notice-meta a:hover {
+    background: #f6f8fa;
+    color: #0969da;
+}
+
+.third-party-notice-details {
+    color: #57606a;
+    font-size: 0.76rem;
+}
+
+.third-party-notice-details summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.third-party-notice-details pre {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    color: #24292f;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 0.72rem;
+    line-height: 1.45;
+    margin: 0.45rem 0 0;
+    max-height: 12rem;
+    overflow: auto;
+    padding: 0.55rem;
+    white-space: pre-wrap;
 }
 
 .toolbar-button.danger {
@@ -1331,6 +1596,7 @@ html, body {
 .radar-theme-dark .action-panel,
 .radar-theme-dark .radar-commit-detail .scoring,
 .radar-theme-dark .ignore-rule-row,
+.radar-theme-dark .third-party-notice-row,
 .radar-theme-dark .drafts-channel header {
     background: var(--radar-panel-bg) !important;
     color: var(--radar-fg) !important;
@@ -1343,6 +1609,8 @@ html, body {
 .radar-theme-dark .app-settings-panel,
 .radar-theme-dark .ignore-rule-list,
 .radar-theme-dark .ignore-rule-row + .ignore-rule-row,
+.radar-theme-dark .third-party-notice-list,
+.radar-theme-dark .third-party-notice-row + .third-party-notice-row,
 .radar-theme-dark .review-ignore-panel,
 .radar-theme-dark .radar-commit-detail .files-toolbar,
 .radar-theme-dark .drafts-channel,
@@ -1365,6 +1633,7 @@ html, body {
 .radar-theme-dark .action-panel-header h3,
 .radar-theme-dark .app-settings-header h2,
 .radar-theme-dark .settings-section h3,
+.radar-theme-dark .local-settings-group legend,
 .radar-theme-dark .review-field-label,
 .radar-theme-dark .drafts-channel h4,
 .radar-theme-dark .drafts-channel pre {
@@ -1374,8 +1643,8 @@ html, body {
 .radar-theme-dark .sidebar-item .description,
 .radar-theme-dark .sidebar-item .count,
 .radar-theme-dark .commit-row .sha,
-.radar-theme-dark .commit-row .author,
 .radar-theme-dark .commit-row .authored,
+.radar-theme-dark .commit-row .score.unscored,
 .radar-theme-dark .radar-placeholder,
 .radar-theme-dark .radar-commit-detail .commit-header .author,
 .radar-theme-dark .radar-commit-detail .commit-header .sha,
@@ -1390,6 +1659,8 @@ html, body {
 .radar-theme-dark .action-panel-header p,
 .radar-theme-dark .app-settings-header p,
 .radar-theme-dark .settings-muted,
+.radar-theme-dark .local-settings-field span,
+.radar-theme-dark .local-settings-check span,
 .radar-theme-dark .ignore-rule-meta,
 .radar-theme-dark .review-ignore-panel summary,
 .radar-theme-dark .review-suggestions-label,
@@ -1403,6 +1674,7 @@ html, body {
 .radar-theme-dark .preview-progress-text,
 .radar-theme-dark .preview-progress-elapsed,
 .radar-theme-dark .preview-progress-pid,
+.radar-theme-dark .commit-search-label,
 .radar-theme-dark .commit-list-selection-count,
 .radar-theme-dark .bulk-review-count,
 .radar-theme-dark .bulk-review-status {
@@ -1432,14 +1704,23 @@ html, body {
 .radar-theme-dark .review-reason-chip,
 .radar-theme-dark .settings-theme-options,
 .radar-theme-dark .settings-theme-option,
+.radar-theme-dark .local-settings-group,
+.radar-theme-dark .local-settings-field input,
+.radar-theme-dark .local-settings-field textarea,
 .radar-theme-dark .ignore-rule-row code,
+.radar-theme-dark .third-party-version,
+.radar-theme-dark .third-party-license,
+.radar-theme-dark .third-party-notice-meta a,
+.radar-theme-dark .third-party-notice-details pre,
 .radar-theme-dark .review-input-action input,
 .radar-theme-dark .review-suggestion-chip.already-ignored,
 .radar-theme-dark .ask-palette-input input[type="text"],
+.radar-theme-dark .commit-search-input,
 .radar-theme-dark .ask-palette-input button,
 .radar-theme-dark .ask-palette-result,
 .radar-theme-dark .preview-progress,
 .radar-theme-dark .preview-cancel,
+.radar-theme-dark .commit-search-clear,
 .radar-theme-dark .commit-list-select-all,
 .radar-theme-dark .bulk-review-toolbar,
 .radar-theme-dark .bulk-review-button {
@@ -1464,7 +1745,9 @@ html, body {
 }
 
 .radar-theme-dark .radar-commit-detail .score-value,
-.radar-theme-dark .review-suggestion-pattern {
+.radar-theme-dark .review-suggestion-pattern,
+.radar-theme-dark .third-party-package,
+.radar-theme-dark .third-party-notice-details pre {
     color: var(--radar-chip-fg) !important;
 }
 
@@ -1476,6 +1759,7 @@ html, body {
 }
 
 .radar-theme-dark .review-button.reject,
+.radar-theme-dark .bulk-review-button.archive,
 .radar-theme-dark .review-reason-chip.active,
 .radar-theme-dark .settings-error {
     background: var(--radar-danger-bg) !important;

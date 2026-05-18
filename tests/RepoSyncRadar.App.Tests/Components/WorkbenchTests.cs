@@ -96,7 +96,7 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
-    public async Task Rejecting_Selected_Commit_Returns_To_Unseen_Queue_And_Clears_Detail()
+    public async Task Archiving_Selected_Commit_Returns_To_Unseen_Queue_And_Clears_Detail()
     {
         var target = new Commit
         {
@@ -163,7 +163,7 @@ public sealed class WorkbenchTests
             Assert.NotNull(cut.Find("[data-testid=\"commit-detail-empty\"]"));
             Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Unseen\"]").ClassList);
         });
-        await repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Rejected, "対象外", Arg.Any<CancellationToken>());
+        await repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Archived, "対象外", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -283,6 +283,45 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
+    public async Task Commit_Hash_Search_Filters_Visible_Queue_And_Clear_Restores()
+    {
+        var first = MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "first docs");
+        var second = MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "second docs");
+        var commits = new[] { first, second };
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(commits.Select(static _ => ReviewStatus.Unseen))));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = commits
+                    .Where(commit => filter.Status is null or ReviewStatus.Unseen)
+                    .Where(commit => string.IsNullOrWhiteSpace(filter.ShaQuery)
+                        || commit.Sha.Contains(filter.ShaQuery, StringComparison.Ordinal))
+                    .ToArray();
+                return Task.FromResult(visible);
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count));
+
+        cut.Find("[data-testid=\"commit-hash-search\"]").Input("BBB2222");
+
+        cut.WaitForAssertion(() =>
+        {
+            var row = Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Equal(second.Sha, row.GetAttribute("data-sha"));
+        });
+
+        cut.Find("[data-testid=\"commit-hash-search-clear\"]").Click();
+
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count));
+    }
+
+    [Fact]
     public async Task Bulk_Move_Selected_Unseen_Commits_To_Later_Updates_Each_Review()
     {
         var commits = new List<Commit>
@@ -322,7 +361,7 @@ public sealed class WorkbenchTests
         {
             Assert.Contains("2 件選択中", cut.Find("[data-testid=\"bulk-review-count\"]").TextContent, StringComparison.Ordinal);
             Assert.Empty(cut.FindAll("[data-testid=\"bulk-review-rejected\"]"));
-            Assert.DoesNotContain("却下済みへ", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("見送り候補へ", cut.Markup, StringComparison.Ordinal);
         });
 
         cut.Find("[data-testid=\"bulk-review-later\"]").Click();
@@ -330,12 +369,61 @@ public sealed class WorkbenchTests
         cut.WaitForAssertion(() =>
         {
             Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
-            Assert.Contains("2 件をあとでに移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("2 件をあとで見るに移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
             Assert.DoesNotContain("checked", cut.Markup, StringComparison.Ordinal);
         });
         await repo.Received(1).SetReviewAsync(commits[0].Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
         await repo.Received(1).SetReviewAsync(commits[1].Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
         await repo.DidNotReceive().SetReviewAsync(commits[2].Sha, Arg.Any<ReviewStatus>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Bulk_Move_Selected_Auto_Rejected_Commits_To_Archived()
+    {
+        var commits = new List<Commit>
+        {
+            MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "first auto rejected"),
+            MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "second auto rejected"),
+        };
+        var statuses = commits.ToDictionary(static commit => commit.Sha, _ => ReviewStatus.Rejected, StringComparer.Ordinal);
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(statuses.Values)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = commits
+                    .Where(commit => filter.Status is null || statuses[commit.Sha] == filter.Status)
+                    .ToArray();
+                return Task.FromResult(visible);
+            });
+        repo.SetReviewAsync(Arg.Any<string>(), Arg.Any<ReviewStatus>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                statuses[call.ArgAt<string>(0)] = call.ArgAt<ReviewStatus>(1);
+                return Task.CompletedTask;
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
+        cut.Find("[data-testid=\"sidebar-item-Rejected\"]").Click();
+        cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count));
+
+        cut.Find("[data-testid=\"commit-list-select-all\"]").Click();
+        cut.WaitForAssertion(() => Assert.False(cut.Find("[data-testid=\"bulk-review-archived\"]").HasAttribute("disabled")));
+
+        cut.Find("[data-testid=\"bulk-review-archived\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Archived\"]").ClassList);
+            Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count);
+            Assert.Contains("2 件を確認不要に移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
+        });
+        await repo.Received(1).SetReviewAsync(commits[0].Sha, ReviewStatus.Archived, null, Arg.Any<CancellationToken>());
+        await repo.Received(1).SetReviewAsync(commits[1].Sha, ReviewStatus.Archived, null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -563,6 +651,7 @@ public sealed class WorkbenchTests
             [ReviewStatus.Seen] = currentStatus == ReviewStatus.Seen ? 1 : 0,
             [ReviewStatus.Adopted] = currentStatus == ReviewStatus.Adopted ? 1 : 0,
             [ReviewStatus.Rejected] = currentStatus == ReviewStatus.Rejected ? 1 : 0,
+            [ReviewStatus.Archived] = currentStatus == ReviewStatus.Archived ? 1 : 0,
             [ReviewStatus.Later] = currentStatus == ReviewStatus.Later ? 1 : 0,
         };
     }

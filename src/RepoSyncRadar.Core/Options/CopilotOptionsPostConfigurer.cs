@@ -26,7 +26,7 @@ internal sealed class CopilotOptionsPostConfigurer : IPostConfigureOptions<Copil
         }
     }
 
-    private static List<string> Normalize(IReadOnlyList<string>? source, bool lowercase)
+    internal static List<string> Normalize(IReadOnlyList<string>? source, bool lowercase)
     {
         if (source is null || source.Count == 0)
         {

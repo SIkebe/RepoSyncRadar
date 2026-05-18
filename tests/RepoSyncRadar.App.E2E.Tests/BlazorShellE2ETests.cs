@@ -9,7 +9,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// <list type="bullet">
 ///   <item>Blazor never mounts and the host HTML's "Loading…" text stays visible.</item>
 ///   <item>Sidebar buttons render inline instead of stacked because of missing CSS.</item>
-///   <item>The Inbox heading is clipped at the left edge because the aside has no
+///   <item>The queue heading is clipped at the left edge because the aside has no
 ///         horizontal padding.</item>
 /// </list>
 /// </summary>
@@ -18,7 +18,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 public sealed class BlazorShellE2ETests
 {
     private static readonly string[] StatusKeys =
-        ["Unseen", "Adopted", "Rejected", "Later"];
+        ["Unseen", "Adopted", "Later", "Rejected", "Archived"];
 
     private readonly AppHostFixture _fixture;
 
@@ -101,7 +101,7 @@ public sealed class BlazorShellE2ETests
         await page.Locator("[data-testid='sidebar']")
             .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
 
-        // The aside wraps the Inbox heading + sidebar. Without padding it sits
+        // The aside wraps the queue heading + sidebar. Without padding it sits
         // flush against x=0 and the leading character gets visually clipped.
         var paddingLeftPx = await page
             .Locator(".radar-sidebar-pane")

@@ -3,7 +3,7 @@
 @using RepoSyncRadar.Core.Models
 
 @*
-    ReviewActions — Adopt / Reject / Later / Ignore Directory buttons for the selected
+    ReviewActions — Adopt / Archive / Later / Ignore Directory buttons for the selected
     commit. See IMPLEMENTATION_PLAN.md §Step 16. The component talks to IRadarRepository
     directly (not RadarWriteTools) so that users can act without requiring a Copilot
     session, and emits an IReviewBroadcaster event so the Sidebar updates immediately.
@@ -38,7 +38,7 @@
     </div>
 
     <div class="review-reject-box">
-        <label class="review-field-label" for="review-reject-reason">却下理由 <span>必須</span></label>
+        <label class="review-field-label" for="review-reject-reason">確認不要にする理由 <span>必須</span></label>
         <div class="review-reject-presets" data-testid="review-reject-reason-options">
             @foreach (var reason in RejectReasonPresets)
             {
@@ -62,12 +62,12 @@
                     data-testid="review-reject"
                     class="review-button reject"
                     disabled="@(_busy || string.IsNullOrWhiteSpace(_rejectReason))"
-                    @onclick="RejectAsync">理由を付けて却下</button>
+                    @onclick="ArchiveAsync">確認不要にする</button>
         </div>
     </div>
 
     <details class="review-ignore-panel" data-testid="review-ignore-details" open="@(_suggestedIgnorePatterns.Count > 0)">
-        <summary>類似ディレクトリをまとめて却下</summary>
+        <summary>類似ディレクトリをまとめて自動見送り</summary>
         <div class="review-ignore-content">
             @if (_suggestedIgnorePatterns.Count > 0)
             {
@@ -210,10 +210,10 @@
     private async Task AdoptAsync()
         => await SetReviewAsync(ReviewStatus.Adopted, reason: null);
 
-    private async Task RejectAsync()
+    private async Task ArchiveAsync()
     {
         if (string.IsNullOrWhiteSpace(_rejectReason)) return;
-        await SetReviewAsync(ReviewStatus.Rejected, _rejectReason);
+        await SetReviewAsync(ReviewStatus.Archived, _rejectReason);
         _rejectReason = string.Empty;
     }
 

@@ -40,6 +40,15 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal("https://docs.github.com/en", result.AbsoluteUri);
     }
 
+    [Theory]
+    [InlineData("https://github.com/github/docs/pull/123", "GitHub PR")]
+    [InlineData("https://docs.github.com/en/copilot", "公式 docs.github.com")]
+    [InlineData("https://example.com/page", "example.com")]
+    public void BuildSinglePageHeaderLabel_Describes_Navigation_Target(string url, string expected)
+    {
+        Assert.Equal(expected, MainWindow.BuildSinglePageHeaderLabel(new Uri(url)));
+    }
+
     [Fact]
     public void BuildOfficialDocsUri_Maps_Content_Markdown_Path_To_Public_Docs_Url()
     {
@@ -414,6 +423,16 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Theory]
+    [InlineData(DocsThemeMode.Dark, Microsoft.Web.WebView2.Core.CoreWebView2PreferredColorScheme.Dark)]
+    [InlineData(DocsThemeMode.Light, Microsoft.Web.WebView2.Core.CoreWebView2PreferredColorScheme.Light)]
+    public void BuildPreferredColorScheme_Uses_Explicit_WebView2_Mode(
+        DocsThemeMode theme,
+        Microsoft.Web.WebView2.Core.CoreWebView2PreferredColorScheme expected)
+    {
+        Assert.Equal(expected, MainWindow.BuildPreferredColorScheme(theme));
+    }
+
+    [Theory]
     [InlineData(DocsThemeMode.Dark, "#0D1117", "#C9D1D9")]
     [InlineData(DocsThemeMode.Light, "#F6F8FA", "#24292F")]
     public void ResolveAppChromeThemePalette_Uses_Mode_Appropriate_Header_Colors(
@@ -425,6 +444,15 @@ public sealed class MainWindowPreviewComparisonTests
 
         Assert.Equal(expectedBackground, palette.HeaderBackground);
         Assert.Equal(expectedForeground, palette.HeaderForeground);
+    }
+
+    [Theory]
+    [InlineData("#0D1117", 0x0017110D)]
+    [InlineData("#F6F8FA", 0x00FAF8F6)]
+    [InlineData("#58A6FF", 0x00FFA658)]
+    public void ToColorRef_Converts_Hex_Color_To_Windows_Colorref(string hexColor, int expectedColorRef)
+    {
+        Assert.Equal(expectedColorRef, MainWindow.ToColorRef(hexColor));
     }
 
     [Theory]

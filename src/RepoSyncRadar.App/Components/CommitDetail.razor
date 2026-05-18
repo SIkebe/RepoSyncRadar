@@ -11,7 +11,7 @@
     CommitDetail — Phase 1 commit inspector. Shows the file list with +/- stats and any
     canonical docs.github.com URLs returned by IPathToUrlResolver. Also surfaces the
     LLM-produced Scoring (score / category / audience / summary / why / detailed analysis)
-    so the morning triage output is visible to the user. Diff rendering and Adopt/Reject
+    so the morning triage output is visible to the user. Diff rendering and Adopt/Archive
     actions live in sibling components.
 
     Each publishable file row carries a "WebView2 で開く" button. Clicking it starts
@@ -32,6 +32,21 @@
             <div class="commit-meta-row">
                 <span class="sha" data-testid="commit-detail-sha" title="@Commit.Sha">@ShortSha(Commit.Sha)</span>
                 <span class="author">@Commit.Author</span>
+                @if (Commit.PrNumber > 0)
+                {
+                    var pullRequestUrl = BuildPullRequestUrl(Commit);
+                    <button type="button"
+                        class="commit-pr-link toolbar-button compact secondary"
+                        data-testid="commit-detail-open-pr"
+                        title="右ペインで PR #@Commit.PrNumber を開きます"
+                        @onclick="() => OpenPullRequestInWebViewAsync(pullRequestUrl)">PR #@Commit.PrNumber</button>
+                    <a class="commit-pr-external-link toolbar-button compact secondary"
+                       data-testid="commit-detail-open-pr-external"
+                       href="@pullRequestUrl"
+                       target="_blank"
+                       rel="noopener"
+                       title="既定ブラウザーで PR #@Commit.PrNumber を開きます">↗</a>
+                }
             </div>
             <h3 class="message" data-testid="commit-detail-message">@Commit.Message</h3>
         </header>
@@ -440,6 +455,21 @@
     private async Task OpenInWebViewAsync(CommitFile file)
         => await OpenInWebViewAsync(file, version: null);
 
+    private Task OpenPullRequestInWebViewAsync(string url)
+    {
+        if (Services.GetService<IPreviewNavigator>() is not { } navigator
+            || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return Task.CompletedTask;
+        }
+
+        navigator.Publish(uri);
+        _activePreviewPath = null;
+        _activeVersion = null;
+        _previewStatus = $"PR #{Commit?.PrNumber.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty} を右ペインで開きました";
+        return Task.CompletedTask;
+    }
+
     private async Task OpenInWebViewAsync(CommitFile file, DocsVersion? version)
     {
         var navigator = Services.GetService<IPreviewNavigator>();
@@ -802,6 +832,16 @@
 
     private static string ShortSha(string sha)
         => sha.Length <= 7 ? sha : sha[..7];
+
+    private string BuildPullRequestUrl(Commit commit)
+    {
+        var options = Services.GetService<IOptions<GitHubOptions>>()?.Value ?? new GitHubOptions();
+        var owner = Uri.EscapeDataString(options.Owner.Trim());
+        var repo = Uri.EscapeDataString(options.Repo.Trim());
+        return string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"https://github.com/{owner}/{repo}/pull/{commit.PrNumber}");
+    }
 
     private readonly record struct PreviewFilePosition(int Ordinal, int Total);
 

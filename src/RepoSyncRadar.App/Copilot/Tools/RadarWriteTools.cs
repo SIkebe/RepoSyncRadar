@@ -231,13 +231,13 @@ public sealed class RadarWriteTools
     private AIFunction CreateSaveReview()
     {
         return AIFunctionFactory.Create(
-            ([Description("Side-effecting: writes to radar.db. Args carry sha + Adopted/Rejected/Later + optional reason.")] SaveReviewArgs args,
+            ([Description("Side-effecting: writes to radar.db. Args carry sha + Adopted/Rejected/Archived/Later + optional reason.")] SaveReviewArgs args,
              CancellationToken cancellationToken)
                 => SaveReviewAsync(args, cancellationToken),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_save_review",
-                Description = "Persists a review verdict (Adopted/Rejected/Later) for a commit. Side-effecting.",
+                Description = "Persists a review verdict (Adopted/Rejected/Archived/Later) for a commit. Side-effecting.",
             });
     }
 
@@ -276,7 +276,7 @@ public sealed class RadarWriteTools
             new AIFunctionFactoryOptions
             {
                 Name = "radar_ignore_rule",
-                Description = "Adds a glob-based rule that auto-archives matching commits. Side-effecting.",
+                Description = "Adds a glob-based rule that auto-marks matching commits as Rejected. Side-effecting.",
             });
     }
 

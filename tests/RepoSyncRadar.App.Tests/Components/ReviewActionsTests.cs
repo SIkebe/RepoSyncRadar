@@ -33,7 +33,7 @@ public sealed class ReviewActionsTests
     }
 
     [Fact]
-    public void Reject_Requires_Reason()
+    public void Archive_Requires_Reason()
     {
         var repo = Substitute.For<IRadarRepository>();
         var broadcaster = Substitute.For<IReviewBroadcaster>();
@@ -50,11 +50,11 @@ public sealed class ReviewActionsTests
         Assert.False(cut.Find("[data-testid=\"review-reject\"]").HasAttribute("disabled"));
 
         cut.Find("[data-testid=\"review-reject\"]").Click();
-        repo.Received(1).SetReviewAsync("abc", ReviewStatus.Rejected, "off-topic", Arg.Any<CancellationToken>());
+        repo.Received(1).SetReviewAsync("abc", ReviewStatus.Archived, "off-topic", Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public void Reject_Reason_Preset_Fills_Input_And_Can_Be_Submitted()
+    public void Archive_Reason_Preset_Fills_Input_And_Can_Be_Submitted()
     {
         var repo = Substitute.For<IRadarRepository>();
         var broadcaster = Substitute.For<IReviewBroadcaster>();
@@ -74,7 +74,7 @@ public sealed class ReviewActionsTests
 
         cut.Find("[data-testid=\"review-reject\"]").Click();
 
-        repo.Received(1).SetReviewAsync("abc", ReviewStatus.Rejected, "既存情報のみ", Arg.Any<CancellationToken>());
+        repo.Received(1).SetReviewAsync("abc", ReviewStatus.Archived, "既存情報のみ", Arg.Any<CancellationToken>());
         broadcaster.Received(1).Publish();
     }
 
@@ -94,7 +94,7 @@ public sealed class ReviewActionsTests
         Assert.Contains("採用する", cut.Find("[data-testid=\"review-adopt\"]").TextContent);
         Assert.Contains("あとで見る", cut.Find("[data-testid=\"review-later\"]").TextContent);
         Assert.Contains("既存情報のみ", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
-        Assert.Contains("理由を付けて却下", cut.Find("[data-testid=\"review-reject\"]").TextContent);
+        Assert.Contains("確認不要にする", cut.Find("[data-testid=\"review-reject\"]").TextContent);
         Assert.Contains("類似ディレクトリ", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
     }
 
@@ -320,8 +320,8 @@ public sealed class ReviewActionsTests
         var repo = Substitute.For<IRadarRepository>();
         var values = new Queue<IReadOnlyDictionary<ReviewStatus, int>>(
         [
-            new Dictionary<ReviewStatus, int> { [ReviewStatus.Unseen] = 3, [ReviewStatus.Seen] = 0, [ReviewStatus.Adopted] = 0, [ReviewStatus.Rejected] = 0, [ReviewStatus.Later] = 0 },
-            new Dictionary<ReviewStatus, int> { [ReviewStatus.Unseen] = 2, [ReviewStatus.Seen] = 0, [ReviewStatus.Adopted] = 0, [ReviewStatus.Rejected] = 0, [ReviewStatus.Later] = 0 },
+            new Dictionary<ReviewStatus, int> { [ReviewStatus.Unseen] = 3, [ReviewStatus.Seen] = 0, [ReviewStatus.Adopted] = 0, [ReviewStatus.Rejected] = 0, [ReviewStatus.Archived] = 0, [ReviewStatus.Later] = 0 },
+            new Dictionary<ReviewStatus, int> { [ReviewStatus.Unseen] = 2, [ReviewStatus.Seen] = 0, [ReviewStatus.Adopted] = 0, [ReviewStatus.Rejected] = 0, [ReviewStatus.Archived] = 0, [ReviewStatus.Later] = 0 },
         ]);
         repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
             .Returns(_ => Task.FromResult(values.Dequeue()));

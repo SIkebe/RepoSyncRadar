@@ -13,7 +13,7 @@
 *@
 
 <MudPaper Elevation="1"
-          Class="pa-3 mb-2"
+          Class="app-header pa-3 mb-2"
           data-testid="app-header">
     <header style="display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
         <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
@@ -50,7 +50,7 @@
                       data-state="NotConfigured"
                       style="color:#ef4444; font-weight:600;">⚠ OAuth Client Id 未設定</span>
                 <span data-testid="app-header-config-hint"
-                      style="font-size:0.85em; opacity:0.8;">appsettings.Local.json の Copilot.OAuthClientId を設定 (docs/USAGE.md)</span>
+                        style="font-size:0.85em; opacity:0.8;">設定画面または appsettings.local.json で Copilot.OAuthClientId を設定 (docs/USAGE.md)</span>
                 break;
         }
     </div>
@@ -96,7 +96,7 @@
             <header class="app-settings-header">
                 <div>
                     <h2>設定</h2>
-                    <p>既定テーマと無視リストを確認できます。</p>
+                    <p>既定テーマ、アプリ設定、ライセンス、無視リストを確認できます。</p>
                 </div>
                 <button type="button"
                         class="toolbar-button compact secondary"
@@ -130,6 +130,10 @@
                     <p class="settings-error" data-testid="settings-default-theme-error">@_settingsThemeError</p>
                 }
             </section>
+
+            <LocalAppSettingsEditor />
+
+            <ThirdPartyNoticesPanel />
 
             <section class="settings-section" data-testid="settings-ignore-rules">
                 <h3>無視リスト</h3>

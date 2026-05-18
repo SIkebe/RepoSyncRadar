@@ -1,0 +1,31 @@
+@using RepoSyncRadar.App.Settings
+
+<section class="settings-section third-party-notices" data-testid="settings-third-party-notices">
+    <header class="settings-subheader">
+        <div>
+            <h3>サードパーティ ライセンス</h3>
+            <p class="settings-muted">このアプリが直接参照している NuGet パッケージの著作権 notice とライセンス本文です。</p>
+        </div>
+    </header>
+
+    <div class="third-party-notice-list" data-testid="settings-third-party-notices-list">
+        @foreach (var notice in ThirdPartyNotices.All)
+        {
+            <article class="third-party-notice-row" data-testid="settings-third-party-notice">
+                <div class="third-party-notice-main">
+                    <span class="third-party-package" data-testid="settings-third-party-package">@notice.PackageId</span>
+                    <span class="third-party-version" data-testid="settings-third-party-version">@notice.Version</span>
+                </div>
+                <div class="third-party-notice-meta">
+                    <span class="third-party-license" data-testid="settings-third-party-license">@notice.License</span>
+                    <a href="@notice.ProjectUrl" target="_blank" rel="noopener noreferrer">Project</a>
+                    <a href="@notice.LicenseUrl" target="_blank" rel="noopener noreferrer">License source</a>
+                </div>
+                <details class="third-party-notice-details">
+                    <summary>ライセンス本文</summary>
+                    <pre data-testid="settings-third-party-license-text">@notice.LicenseText</pre>
+                </details>
+            </article>
+        }
+    </div>
+</section>

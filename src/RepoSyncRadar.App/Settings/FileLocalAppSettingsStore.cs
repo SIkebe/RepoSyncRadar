@@ -1,0 +1,654 @@
+using System.Globalization;
+using System.IO;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.Configuration;
+
+namespace RepoSyncRadar.App.Settings;
+
+public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposable
+{
+    internal const string LocalSettingsPathEnv = "REPOSYNCRADAR_LOCAL_APPSETTINGS_PATH";
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+    };
+
+    private readonly IConfiguration? _configuration;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    public FileLocalAppSettingsStore(string settingsPath, IConfiguration? configuration = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
+        SettingsPath = Path.GetFullPath(settingsPath);
+        _configuration = configuration;
+        Current = LoadFromDiskOrConfiguration();
+    }
+
+    public string SettingsPath { get; }
+
+    public LocalAppSettings Current { get; private set; }
+
+    public event Action<LocalAppSettings>? SettingsChanged;
+
+    public static FileLocalAppSettingsStore CreateDefault(IConfiguration configuration)
+        => new(ResolveDefaultSettingsPath(), configuration);
+
+    public static string ResolveDefaultSettingsPath()
+    {
+        var configuredPath = Environment.GetEnvironmentVariable(LocalSettingsPathEnv);
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return Path.GetFullPath(configuredPath);
+        }
+
+        var projectPath = TryResolveProjectLocalSettingsPath(AppContext.BaseDirectory);
+        if (!string.IsNullOrWhiteSpace(projectPath))
+        {
+            return projectPath;
+        }
+
+        var lowerPath = Path.Combine(AppContext.BaseDirectory, "appsettings.local.json");
+        if (File.Exists(lowerPath))
+        {
+            return lowerPath;
+        }
+
+        var legacyCasePath = Path.Combine(AppContext.BaseDirectory, "appsettings.Local.json");
+        return File.Exists(legacyCasePath) ? legacyCasePath : lowerPath;
+    }
+
+    public async Task<LocalAppSettings> LoadAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Current = LoadFromDiskOrConfiguration();
+            return Current.Clone();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task SaveAsync(LocalAppSettings settings, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var normalized = Normalize(settings);
+        Validate(normalized);
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var root = ReadRootOrNew(SettingsPath);
+            WriteSettings(root, normalized);
+
+            var directory = Path.GetDirectoryName(SettingsPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var json = root.ToJsonString(JsonOptions);
+            await File.WriteAllTextAsync(SettingsPath, json, cancellationToken).ConfigureAwait(false);
+            Current = normalized.Clone();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        SettingsChanged?.Invoke(Current.Clone());
+    }
+
+    public void Dispose()
+        => _gate.Dispose();
+
+    private static string? TryResolveProjectLocalSettingsPath(string baseDirectory)
+    {
+        var directory = new DirectoryInfo(baseDirectory);
+        while (directory is not null)
+        {
+            var projectFile = Path.Combine(directory.FullName, "RepoSyncRadar.App.csproj");
+            if (File.Exists(projectFile))
+            {
+                return Path.Combine(directory.FullName, "appsettings.local.json");
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
+    }
+
+    private LocalAppSettings LoadFromDiskOrConfiguration()
+    {
+        var fallback = _configuration is null
+            ? LocalAppSettings.Default.Clone()
+            : LoadFromConfiguration(_configuration);
+
+        try
+        {
+            if (!File.Exists(SettingsPath))
+            {
+                return fallback;
+            }
+
+            var root = JsonNode.Parse(File.ReadAllText(SettingsPath)) as JsonObject;
+            return root is null ? fallback : LoadFromJson(root, fallback);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return fallback;
+        }
+    }
+
+    private static LocalAppSettings LoadFromConfiguration(IConfiguration configuration)
+    {
+        var defaults = LocalAppSettings.Default;
+        return new LocalAppSettings
+        {
+            GitHub = new GitHubLocalAppSettings
+            {
+                Owner = GetString(configuration, "GitHub:Owner", defaults.GitHub.Owner),
+                Repo = GetString(configuration, "GitHub:Repo", defaults.GitHub.Repo),
+                PullRequestTitleFilter = GetString(configuration, "GitHub:PullRequestTitleFilter", defaults.GitHub.PullRequestTitleFilter),
+                MaxPullRequests = GetInt(configuration, "GitHub:MaxPullRequests", defaults.GitHub.MaxPullRequests),
+                PullRequestCreatedAtOrAfter = GetNullableString(configuration, "GitHub:PullRequestCreatedAtOrAfter"),
+            },
+            DocsApi = new DocsApiLocalAppSettings
+            {
+                BaseAddress = GetString(configuration, "DocsApi:BaseAddress", defaults.DocsApi.BaseAddress),
+                DefaultLanguage = GetString(configuration, "DocsApi:DefaultLanguage", defaults.DocsApi.DefaultLanguage),
+                ClientName = GetString(configuration, "DocsApi:ClientName", defaults.DocsApi.ClientName),
+                PageListCacheSeconds = GetInt(configuration, "DocsApi:PageListCacheSeconds", defaults.DocsApi.PageListCacheSeconds),
+            },
+            Copilot = new CopilotLocalAppSettings
+            {
+                DefaultModel = GetString(configuration, "Copilot:DefaultModel", defaults.Copilot.DefaultModel),
+                Streaming = GetBool(configuration, "Copilot:Streaming", defaults.Copilot.Streaming),
+                CaptureContent = GetBool(configuration, "Copilot:CaptureContent", defaults.Copilot.CaptureContent),
+                AllowedUrlHosts = GetStringList(configuration, "Copilot:AllowedUrlHosts", defaults.Copilot.AllowedUrlHosts),
+                OAuthClientId = GetNullableString(configuration, "Copilot:OAuthClientId"),
+                OAuthScopes = GetStringList(configuration, "Copilot:OAuthScopes", defaults.Copilot.OAuthScopes),
+            },
+            WebView = new WebViewLocalAppSettings
+            {
+                AllowedUrlHosts = GetStringList(configuration, "WebView:AllowedUrlHosts", defaults.WebView.AllowedUrlHosts),
+            },
+            DocsRepository = new DocsRepositoryLocalAppSettings
+            {
+                BareCloneDir = GetString(configuration, "DocsRepository:BareCloneDir", defaults.DocsRepository.BareCloneDir),
+                CloneUrl = GetString(configuration, "DocsRepository:CloneUrl", defaults.DocsRepository.CloneUrl),
+                WorktreeRoot = GetString(configuration, "DocsRepository:WorktreeRoot", defaults.DocsRepository.WorktreeRoot),
+                MaxWorktrees = GetInt(configuration, "DocsRepository:MaxWorktrees", defaults.DocsRepository.MaxWorktrees),
+                PreviewCommand = GetString(configuration, "DocsRepository:PreviewCommand", defaults.DocsRepository.PreviewCommand),
+                PreviewArguments = GetString(configuration, "DocsRepository:PreviewArguments", defaults.DocsRepository.PreviewArguments),
+                PreviewInstallArguments = GetString(configuration, "DocsRepository:PreviewInstallArguments", defaults.DocsRepository.PreviewInstallArguments),
+                PreviewEnvironment = GetDictionary(configuration, "DocsRepository:PreviewEnvironment", defaults.DocsRepository.PreviewEnvironment),
+                PreviewBasePort = GetInt(configuration, "DocsRepository:PreviewBasePort", defaults.DocsRepository.PreviewBasePort),
+                PreviewReadyTimeoutSeconds = GetInt(configuration, "DocsRepository:PreviewReadyTimeoutSeconds", defaults.DocsRepository.PreviewReadyTimeoutSeconds),
+            },
+            Logging = new LoggingLocalAppSettings
+            {
+                DefaultLogLevel = GetString(configuration, "Logging:LogLevel:Default", defaults.Logging.DefaultLogLevel),
+                MicrosoftLogLevel = GetString(configuration, "Logging:LogLevel:Microsoft", defaults.Logging.MicrosoftLogLevel),
+            },
+        };
+    }
+
+    private static LocalAppSettings LoadFromJson(JsonObject root, LocalAppSettings fallback)
+        => Normalize(new LocalAppSettings
+        {
+            GitHub = new GitHubLocalAppSettings
+            {
+                Owner = GetString(root, "GitHub", "Owner", fallback.GitHub.Owner),
+                Repo = GetString(root, "GitHub", "Repo", fallback.GitHub.Repo),
+                PullRequestTitleFilter = GetString(root, "GitHub", "PullRequestTitleFilter", fallback.GitHub.PullRequestTitleFilter),
+                MaxPullRequests = GetInt(root, "GitHub", "MaxPullRequests", fallback.GitHub.MaxPullRequests),
+                PullRequestCreatedAtOrAfter = GetNullableString(root, "GitHub", "PullRequestCreatedAtOrAfter", fallback.GitHub.PullRequestCreatedAtOrAfter),
+            },
+            DocsApi = new DocsApiLocalAppSettings
+            {
+                BaseAddress = GetString(root, "DocsApi", "BaseAddress", fallback.DocsApi.BaseAddress),
+                DefaultLanguage = GetString(root, "DocsApi", "DefaultLanguage", fallback.DocsApi.DefaultLanguage),
+                ClientName = GetString(root, "DocsApi", "ClientName", fallback.DocsApi.ClientName),
+                PageListCacheSeconds = GetInt(root, "DocsApi", "PageListCacheSeconds", fallback.DocsApi.PageListCacheSeconds),
+            },
+            Copilot = new CopilotLocalAppSettings
+            {
+                DefaultModel = GetString(root, "Copilot", "DefaultModel", fallback.Copilot.DefaultModel),
+                Streaming = GetBool(root, "Copilot", "Streaming", fallback.Copilot.Streaming),
+                CaptureContent = GetBool(root, "Copilot", "CaptureContent", fallback.Copilot.CaptureContent),
+                AllowedUrlHosts = GetStringList(root, "Copilot", "AllowedUrlHosts", fallback.Copilot.AllowedUrlHosts),
+                OAuthClientId = GetNullableString(root, "Copilot", "OAuthClientId", fallback.Copilot.OAuthClientId),
+                OAuthScopes = GetStringList(root, "Copilot", "OAuthScopes", fallback.Copilot.OAuthScopes),
+            },
+            WebView = new WebViewLocalAppSettings
+            {
+                AllowedUrlHosts = GetStringList(root, "WebView", "AllowedUrlHosts", fallback.WebView.AllowedUrlHosts),
+            },
+            DocsRepository = new DocsRepositoryLocalAppSettings
+            {
+                BareCloneDir = GetString(root, "DocsRepository", "BareCloneDir", fallback.DocsRepository.BareCloneDir),
+                CloneUrl = GetString(root, "DocsRepository", "CloneUrl", fallback.DocsRepository.CloneUrl),
+                WorktreeRoot = GetString(root, "DocsRepository", "WorktreeRoot", fallback.DocsRepository.WorktreeRoot),
+                MaxWorktrees = GetInt(root, "DocsRepository", "MaxWorktrees", fallback.DocsRepository.MaxWorktrees),
+                PreviewCommand = GetString(root, "DocsRepository", "PreviewCommand", fallback.DocsRepository.PreviewCommand),
+                PreviewArguments = GetString(root, "DocsRepository", "PreviewArguments", fallback.DocsRepository.PreviewArguments),
+                PreviewInstallArguments = GetString(root, "DocsRepository", "PreviewInstallArguments", fallback.DocsRepository.PreviewInstallArguments),
+                PreviewEnvironment = GetDictionary(root, "DocsRepository", "PreviewEnvironment", fallback.DocsRepository.PreviewEnvironment),
+                PreviewBasePort = GetInt(root, "DocsRepository", "PreviewBasePort", fallback.DocsRepository.PreviewBasePort),
+                PreviewReadyTimeoutSeconds = GetInt(root, "DocsRepository", "PreviewReadyTimeoutSeconds", fallback.DocsRepository.PreviewReadyTimeoutSeconds),
+            },
+            Logging = new LoggingLocalAppSettings
+            {
+                DefaultLogLevel = GetString(root, "Logging", "LogLevel", "Default", fallback.Logging.DefaultLogLevel),
+                MicrosoftLogLevel = GetString(root, "Logging", "LogLevel", "Microsoft", fallback.Logging.MicrosoftLogLevel),
+            },
+        });
+
+    private static void WriteSettings(JsonObject root, LocalAppSettings settings)
+    {
+        var github = GetOrReplaceObject(root, "GitHub");
+        github["Owner"] = settings.GitHub.Owner;
+        github["Repo"] = settings.GitHub.Repo;
+        github["PullRequestTitleFilter"] = settings.GitHub.PullRequestTitleFilter;
+        github["MaxPullRequests"] = settings.GitHub.MaxPullRequests;
+        github["PullRequestCreatedAtOrAfter"] = string.IsNullOrWhiteSpace(settings.GitHub.PullRequestCreatedAtOrAfter)
+            ? null
+            : settings.GitHub.PullRequestCreatedAtOrAfter;
+
+        var docsApi = GetOrReplaceObject(root, "DocsApi");
+        docsApi["BaseAddress"] = settings.DocsApi.BaseAddress;
+        docsApi["DefaultLanguage"] = settings.DocsApi.DefaultLanguage;
+        docsApi["ClientName"] = settings.DocsApi.ClientName;
+        docsApi["PageListCacheSeconds"] = settings.DocsApi.PageListCacheSeconds;
+
+        var copilot = GetOrReplaceObject(root, "Copilot");
+        copilot["DefaultModel"] = settings.Copilot.DefaultModel;
+        copilot["Streaming"] = settings.Copilot.Streaming;
+        copilot["CaptureContent"] = settings.Copilot.CaptureContent;
+        copilot["AllowedUrlHosts"] = ToJsonArray(settings.Copilot.AllowedUrlHosts);
+        copilot["OAuthClientId"] = string.IsNullOrWhiteSpace(settings.Copilot.OAuthClientId)
+            ? string.Empty
+            : settings.Copilot.OAuthClientId;
+        copilot["OAuthScopes"] = ToJsonArray(settings.Copilot.OAuthScopes);
+
+        var webView = GetOrReplaceObject(root, "WebView");
+        webView["AllowedUrlHosts"] = ToJsonArray(settings.WebView.AllowedUrlHosts);
+
+        var docsRepository = GetOrReplaceObject(root, "DocsRepository");
+        docsRepository["BareCloneDir"] = settings.DocsRepository.BareCloneDir;
+        docsRepository["CloneUrl"] = settings.DocsRepository.CloneUrl;
+        docsRepository["WorktreeRoot"] = settings.DocsRepository.WorktreeRoot;
+        docsRepository["MaxWorktrees"] = settings.DocsRepository.MaxWorktrees;
+        docsRepository["PreviewCommand"] = settings.DocsRepository.PreviewCommand;
+        docsRepository["PreviewArguments"] = settings.DocsRepository.PreviewArguments;
+        docsRepository["PreviewInstallArguments"] = settings.DocsRepository.PreviewInstallArguments;
+        docsRepository["PreviewEnvironment"] = ToJsonObject(settings.DocsRepository.PreviewEnvironment);
+        docsRepository["PreviewBasePort"] = settings.DocsRepository.PreviewBasePort;
+        docsRepository["PreviewReadyTimeoutSeconds"] = settings.DocsRepository.PreviewReadyTimeoutSeconds;
+
+        var logging = GetOrReplaceObject(root, "Logging");
+        var logLevel = GetOrReplaceObject(logging, "LogLevel");
+        logLevel["Default"] = settings.Logging.DefaultLogLevel;
+        logLevel["Microsoft"] = settings.Logging.MicrosoftLogLevel;
+    }
+
+    private static LocalAppSettings Normalize(LocalAppSettings settings)
+        => new()
+        {
+            GitHub = new GitHubLocalAppSettings
+            {
+                Owner = TrimOrEmpty(settings.GitHub.Owner),
+                Repo = TrimOrEmpty(settings.GitHub.Repo),
+                PullRequestTitleFilter = TrimOrEmpty(settings.GitHub.PullRequestTitleFilter),
+                MaxPullRequests = settings.GitHub.MaxPullRequests,
+                PullRequestCreatedAtOrAfter = NormalizeNullable(settings.GitHub.PullRequestCreatedAtOrAfter),
+            },
+            DocsApi = new DocsApiLocalAppSettings
+            {
+                BaseAddress = TrimOrEmpty(settings.DocsApi.BaseAddress),
+                DefaultLanguage = TrimOrEmpty(settings.DocsApi.DefaultLanguage),
+                ClientName = TrimOrEmpty(settings.DocsApi.ClientName),
+                PageListCacheSeconds = settings.DocsApi.PageListCacheSeconds,
+            },
+            Copilot = new CopilotLocalAppSettings
+            {
+                DefaultModel = TrimOrEmpty(settings.Copilot.DefaultModel),
+                Streaming = settings.Copilot.Streaming,
+                CaptureContent = settings.Copilot.CaptureContent,
+                AllowedUrlHosts = NormalizeHosts(settings.Copilot.AllowedUrlHosts),
+                OAuthClientId = NormalizeNullable(settings.Copilot.OAuthClientId),
+                OAuthScopes = NormalizeStringList(settings.Copilot.OAuthScopes),
+            },
+            WebView = new WebViewLocalAppSettings
+            {
+                AllowedUrlHosts = NormalizeHosts(settings.WebView.AllowedUrlHosts),
+            },
+            DocsRepository = new DocsRepositoryLocalAppSettings
+            {
+                BareCloneDir = TrimOrEmpty(settings.DocsRepository.BareCloneDir),
+                CloneUrl = TrimOrEmpty(settings.DocsRepository.CloneUrl),
+                WorktreeRoot = TrimOrEmpty(settings.DocsRepository.WorktreeRoot),
+                MaxWorktrees = settings.DocsRepository.MaxWorktrees,
+                PreviewCommand = TrimOrEmpty(settings.DocsRepository.PreviewCommand),
+                PreviewArguments = TrimOrEmpty(settings.DocsRepository.PreviewArguments),
+                PreviewInstallArguments = TrimOrEmpty(settings.DocsRepository.PreviewInstallArguments),
+                PreviewEnvironment = NormalizeDictionary(settings.DocsRepository.PreviewEnvironment),
+                PreviewBasePort = settings.DocsRepository.PreviewBasePort,
+                PreviewReadyTimeoutSeconds = settings.DocsRepository.PreviewReadyTimeoutSeconds,
+            },
+            Logging = new LoggingLocalAppSettings
+            {
+                DefaultLogLevel = TrimOrEmpty(settings.Logging.DefaultLogLevel),
+                MicrosoftLogLevel = TrimOrEmpty(settings.Logging.MicrosoftLogLevel),
+            },
+        };
+
+    private static void Validate(LocalAppSettings settings)
+    {
+        var errors = new List<string>();
+        Require(settings.GitHub.Owner, "GitHub.Owner", errors);
+        Require(settings.GitHub.Repo, "GitHub.Repo", errors);
+        Require(settings.GitHub.PullRequestTitleFilter, "GitHub.PullRequestTitleFilter", errors);
+        ValidateRange(settings.GitHub.MaxPullRequests, 1, 100, "GitHub.MaxPullRequests", errors);
+        if (!string.IsNullOrWhiteSpace(settings.GitHub.PullRequestCreatedAtOrAfter)
+            && !DateTimeOffset.TryParse(settings.GitHub.PullRequestCreatedAtOrAfter, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out _))
+        {
+            errors.Add("GitHub.PullRequestCreatedAtOrAfter は日時として解釈できる値にしてください。");
+        }
+
+        Require(settings.DocsApi.BaseAddress, "DocsApi.BaseAddress", errors);
+        if (!Uri.TryCreate(settings.DocsApi.BaseAddress, UriKind.Absolute, out var docsUri)
+            || !string.Equals(docsUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add("DocsApi.BaseAddress は https の絶対 URL にしてください。");
+        }
+        Require(settings.DocsApi.DefaultLanguage, "DocsApi.DefaultLanguage", errors);
+        Require(settings.DocsApi.ClientName, "DocsApi.ClientName", errors);
+        ValidateRange(settings.DocsApi.PageListCacheSeconds, 1, int.MaxValue, "DocsApi.PageListCacheSeconds", errors);
+
+        Require(settings.Copilot.DefaultModel, "Copilot.DefaultModel", errors);
+        if (settings.Copilot.AllowedUrlHosts.Count == 0)
+        {
+            errors.Add("Copilot.AllowedUrlHosts は 1 件以上指定してください。");
+        }
+        foreach (var host in settings.Copilot.AllowedUrlHosts)
+        {
+            if (Uri.CheckHostName(host) == UriHostNameType.Unknown)
+            {
+                errors.Add($"Copilot.AllowedUrlHosts の '{host}' はホスト名として解釈できません。");
+            }
+        }
+        if (settings.WebView.AllowedUrlHosts.Count == 0)
+        {
+            errors.Add("WebView.AllowedUrlHosts は 1 件以上指定してください。");
+        }
+        foreach (var host in settings.WebView.AllowedUrlHosts)
+        {
+            if (Uri.CheckHostName(host) == UriHostNameType.Unknown)
+            {
+                errors.Add($"WebView.AllowedUrlHosts の '{host}' はホスト名として解釈できません。");
+            }
+        }
+
+        ValidateRange(settings.DocsRepository.MaxWorktrees, 1, 50, "DocsRepository.MaxWorktrees", errors);
+        ValidateRange(settings.DocsRepository.PreviewBasePort, 1024, 65535, "DocsRepository.PreviewBasePort", errors);
+        ValidateRange(settings.DocsRepository.PreviewReadyTimeoutSeconds, 5, 1800, "DocsRepository.PreviewReadyTimeoutSeconds", errors);
+        foreach (var key in settings.DocsRepository.PreviewEnvironment.Keys)
+        {
+            Require(key, "DocsRepository.PreviewEnvironment key", errors);
+        }
+
+        Require(settings.Logging.DefaultLogLevel, "Logging.LogLevel.Default", errors);
+        Require(settings.Logging.MicrosoftLogLevel, "Logging.LogLevel.Microsoft", errors);
+
+        if (errors.Count > 0)
+        {
+            throw new LocalAppSettingsValidationException(errors);
+        }
+    }
+
+    private static JsonObject ReadRootOrNew(string settingsPath)
+    {
+        try
+        {
+            if (!File.Exists(settingsPath))
+            {
+                return new JsonObject();
+            }
+
+            return JsonNode.Parse(File.ReadAllText(settingsPath)) as JsonObject ?? new JsonObject();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return new JsonObject();
+        }
+    }
+
+    private static JsonObject GetOrReplaceObject(JsonObject parent, string propertyName)
+    {
+        if (parent[propertyName] is JsonObject existing)
+        {
+            return existing;
+        }
+
+        var created = new JsonObject();
+        parent[propertyName] = created;
+        return created;
+    }
+
+    private static JsonArray ToJsonArray(IEnumerable<string> values)
+    {
+        var array = new JsonArray();
+        foreach (var value in values)
+        {
+            array.Add(value);
+        }
+        return array;
+    }
+
+    private static JsonObject ToJsonObject(IReadOnlyDictionary<string, string> values)
+    {
+        var obj = new JsonObject();
+        foreach (var (key, value) in values.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+        {
+            obj[key] = value;
+        }
+        return obj;
+    }
+
+    private static string GetString(IConfiguration configuration, string key, string fallback)
+        => string.IsNullOrWhiteSpace(configuration[key]) ? fallback : configuration[key]!;
+
+    private static string? GetNullableString(IConfiguration configuration, string key)
+        => NormalizeNullable(configuration[key]);
+
+    private static int GetInt(IConfiguration configuration, string key, int fallback)
+        => int.TryParse(configuration[key], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : fallback;
+
+    private static bool GetBool(IConfiguration configuration, string key, bool fallback)
+        => bool.TryParse(configuration[key], out var value) ? value : fallback;
+
+    private static List<string> GetStringList(IConfiguration configuration, string key, IReadOnlyList<string> fallback)
+    {
+        var values = configuration.GetSection(key).GetChildren()
+            .Select(static child => child.Value)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value!.Trim())
+            .ToList();
+        return values.Count == 0 ? [.. fallback] : values;
+    }
+
+    private static Dictionary<string, string> GetDictionary(
+        IConfiguration configuration,
+        string key,
+        IReadOnlyDictionary<string, string> fallback)
+    {
+        var values = configuration.GetSection(key).GetChildren()
+            .Where(static child => !string.IsNullOrWhiteSpace(child.Key))
+            .ToDictionary(static child => child.Key, static child => child.Value ?? string.Empty, StringComparer.Ordinal);
+        return values.Count == 0 ? new Dictionary<string, string>(fallback, StringComparer.Ordinal) : values;
+    }
+
+    private static string GetString(JsonObject root, string sectionName, string propertyName, string fallback)
+        => root[sectionName] is JsonObject section && ReadString(section[propertyName]) is { Length: > 0 } value ? value : fallback;
+
+    private static string GetString(JsonObject root, string sectionName, string childSectionName, string propertyName, string fallback)
+        => root[sectionName] is JsonObject section
+            && section[childSectionName] is JsonObject childSection
+            && ReadString(childSection[propertyName]) is { Length: > 0 } value
+                ? value
+                : fallback;
+
+    private static string? GetNullableString(JsonObject root, string sectionName, string propertyName, string? fallback)
+        => root[sectionName] is JsonObject section && section.ContainsKey(propertyName)
+            ? NormalizeNullable(ReadString(section[propertyName]))
+            : fallback;
+
+    private static int GetInt(JsonObject root, string sectionName, string propertyName, int fallback)
+        => root[sectionName] is JsonObject section && ReadInt(section[propertyName]) is { } value ? value : fallback;
+
+    private static bool GetBool(JsonObject root, string sectionName, string propertyName, bool fallback)
+        => root[sectionName] is JsonObject section && ReadBool(section[propertyName]) is { } value ? value : fallback;
+
+    private static List<string> GetStringList(JsonObject root, string sectionName, string propertyName, IReadOnlyList<string> fallback)
+    {
+        if (root[sectionName] is not JsonObject section || section[propertyName] is not JsonArray array)
+        {
+            return [.. fallback];
+        }
+
+        var values = array
+            .Select(ReadString)
+            .Where(static value => !string.IsNullOrWhiteSpace(value))
+            .Select(static value => value!.Trim())
+            .ToList();
+        return values;
+    }
+
+    private static Dictionary<string, string> GetDictionary(
+        JsonObject root,
+        string sectionName,
+        string propertyName,
+        IReadOnlyDictionary<string, string> fallback)
+    {
+        if (root[sectionName] is not JsonObject section || section[propertyName] is not JsonObject obj)
+        {
+            return new Dictionary<string, string>(fallback, StringComparer.Ordinal);
+        }
+
+        var values = obj.ToDictionary(static pair => pair.Key, static pair => ReadString(pair.Value) ?? string.Empty, StringComparer.Ordinal);
+        return values;
+    }
+
+    private static string? ReadString(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (node is JsonValue value && value.TryGetValue<string>(out var stringValue))
+        {
+            return stringValue;
+        }
+
+        return node.ToJsonString();
+    }
+
+    private static int? ReadInt(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (node is JsonValue value)
+        {
+            if (value.TryGetValue<int>(out var intValue))
+            {
+                return intValue;
+            }
+            if (value.TryGetValue<string>(out var stringValue)
+                && int.TryParse(stringValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool? ReadBool(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        if (node is JsonValue value)
+        {
+            if (value.TryGetValue<bool>(out var boolValue))
+            {
+                return boolValue;
+            }
+            if (value.TryGetValue<string>(out var stringValue) && bool.TryParse(stringValue, out var parsed))
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    private static string TrimOrEmpty(string? value)
+        => value?.Trim() ?? string.Empty;
+
+    private static string? NormalizeNullable(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static List<string> NormalizeStringList(IEnumerable<string> values)
+        => values
+            .Select(static value => value.Trim())
+            .Where(static value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    private static List<string> NormalizeHosts(IEnumerable<string> values)
+        => NormalizeStringList(values.Select(NormalizeHost));
+
+    private static string NormalizeHost(string value)
+    {
+        var trimmed = value.Trim().TrimEnd('/');
+        return Uri.TryCreate(trimmed, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host)
+            ? uri.Host
+            : trimmed;
+    }
+
+    private static Dictionary<string, string> NormalizeDictionary(IReadOnlyDictionary<string, string> values)
+        => values
+            .Where(static pair => !string.IsNullOrWhiteSpace(pair.Key))
+            .ToDictionary(static pair => pair.Key.Trim(), static pair => pair.Value?.Trim() ?? string.Empty, StringComparer.Ordinal);
+
+    private static void Require(string value, string name, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            errors.Add($"{name} は必須です。");
+        }
+    }
+
+    private static void ValidateRange(int value, int min, int max, string name, List<string> errors)
+    {
+        if (value < min || value > max)
+        {
+            errors.Add(string.Create(CultureInfo.InvariantCulture, $"{name} は {min} から {max} の範囲で指定してください。"));
+        }
+    }
+}

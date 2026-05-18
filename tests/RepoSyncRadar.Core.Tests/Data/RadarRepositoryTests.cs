@@ -168,12 +168,12 @@ public sealed class RadarRepositoryTests
             ct);
         await repository.SetReviewAsync("sha-a", ReviewStatus.Seen, null, ct);
 
-        await repository.SetReviewAsync("sha-a", ReviewStatus.Rejected, "off-topic", ct);
+        await repository.SetReviewAsync("sha-a", ReviewStatus.Archived, "off-topic", ct);
 
         using var verify = fixture.CreateContext();
         Assert.Equal(1, verify.Reviews.Count(r => r.Sha == "sha-a"));
         var review = verify.Reviews.Single(r => r.Sha == "sha-a");
-        Assert.Equal(ReviewStatus.Rejected, review.Status);
+        Assert.Equal(ReviewStatus.Archived, review.Status);
         Assert.Equal("off-topic", review.Reason);
     }
 
@@ -216,6 +216,38 @@ public sealed class RadarRepositoryTests
         // No filter returns all four, newest first.
         var all = await repository.QueryCommitsAsync(new CommitQueryFilter(), ct);
         Assert.Equal(["sha-adopt-new", "sha-adopt-old", "sha-seen", "sha-unseen"], all.Select(c => c.Sha).ToArray());
+    }
+
+    [Fact]
+    public async Task QueryCommitsAsync_Filters_By_Sha_Query()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+        var baseTime = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await repository.UpsertCommitsAsync(
+            new[]
+            {
+                MakeCommit("abc1234abc1234abc1234abc1234abc1234abc1", prNumber: 1, authoredAt: baseTime),
+                MakeCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", prNumber: 1, authoredAt: baseTime.AddDays(1)),
+                MakeCommit("abc9999abc9999abc9999abc9999abc9999abc9", prNumber: 1, authoredAt: baseTime.AddDays(2)),
+            },
+            ct);
+        await repository.SetReviewAsync("abc9999abc9999abc9999abc9999abc9999abc9", ReviewStatus.Adopted, null, ct);
+
+        var unseenMatches = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { Status = ReviewStatus.Unseen, ShaQuery = "ABC1234" },
+            ct);
+
+        var allMatches = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { ShaQuery = "abc" },
+            ct);
+
+        Assert.Equal(["abc1234abc1234abc1234abc1234abc1234abc1"], unseenMatches.Select(c => c.Sha).ToArray());
+        Assert.Equal(
+            ["abc9999abc9999abc9999abc9999abc9999abc9", "abc1234abc1234abc1234abc1234abc1234abc1"],
+            allMatches.Select(c => c.Sha).ToArray());
     }
 
     [Fact]
@@ -385,12 +417,14 @@ public sealed class RadarRepositoryTests
                 MakeCommit("sha-3", prNumber: 1),
                 MakeCommit("sha-4", prNumber: 1),
                 MakeCommit("sha-5", prNumber: 1),
+                MakeCommit("sha-6", prNumber: 1),
             },
             ct);
         await repository.SetReviewAsync("sha-2", ReviewStatus.Adopted, null, ct);
         await repository.SetReviewAsync("sha-3", ReviewStatus.Rejected, null, ct);
         await repository.SetReviewAsync("sha-4", ReviewStatus.Later, null, ct);
         await repository.SetReviewAsync("sha-5", ReviewStatus.Seen, null, ct);
+        await repository.SetReviewAsync("sha-6", ReviewStatus.Archived, null, ct);
 
         var counts = await repository.GetReviewCountsAsync(ct);
 
@@ -399,6 +433,7 @@ public sealed class RadarRepositoryTests
         Assert.Equal(0, counts[ReviewStatus.Seen]);
         Assert.Equal(1, counts[ReviewStatus.Adopted]);
         Assert.Equal(1, counts[ReviewStatus.Rejected]);
+        Assert.Equal(1, counts[ReviewStatus.Archived]);
         Assert.Equal(1, counts[ReviewStatus.Later]);
     }
 

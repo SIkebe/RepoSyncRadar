@@ -71,7 +71,7 @@ public sealed class Scoring
 }
 
 /// <summary>
-/// User-driven review status for a commit. Drives sidebar grouping and learning signals.
+/// Review grouping status for a commit. Drives sidebar grouping and learning signals.
 /// </summary>
 public enum ReviewStatus
 {
@@ -79,6 +79,7 @@ public enum ReviewStatus
     Seen,
     Adopted,
     Rejected,
+    Archived,
     Later,
 }
 
@@ -88,7 +89,7 @@ public sealed class Review
 
     public ReviewStatus Status { get; set; } = ReviewStatus.Unseen;
 
-    /// <summary>Free-text reason captured when the user adopts or rejects a commit. Used as few-shot.</summary>
+    /// <summary>Free-text reason captured when the user adopts or manually archives a commit. Used as few-shot.</summary>
     public string? Reason { get; set; }
 
     public DateTime? ReviewedAt { get; set; }
@@ -132,7 +133,7 @@ public sealed class PathUrlMap
 }
 
 /// <summary>
-/// Glob-pattern rules that auto-archive matching commits.
+/// Glob-pattern rules that auto-mark matching commits as low-priority.
 /// </summary>
 public sealed class IgnoreRule
 {

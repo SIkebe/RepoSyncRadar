@@ -54,7 +54,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 
 ### 2.3 設定ファイルを書く
 
-[src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。OAuth App の Client ID など環境固有の値は、同フォルダに `appsettings.Local.json` を作って追記します(`.gitignore` 済み)。
+[src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。OAuth App の Client ID など環境固有の値は、同フォルダに `appsettings.local.json` を作って追記します(`.gitignore` 済み)。
 
 ```jsonc
 {
@@ -95,6 +95,8 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 >
 > **デバッグ override**: 環境変数 `COPILOT_GITHUB_TOKEN` を立てると OAuth フローを省略してその値を Copilot SDK / Octokit に渡します(`GH_TOKEN` / `GITHUB_TOKEN` のような汎用 PAT 変数は意図的に **読まない** — 他ツールのトークンの誤用を防ぐため)。
 
+起動後はヘッダー右側の **設定** から、`appsettings.local.json` の `GitHub` / `DocsApi` / `Copilot` / `DocsRepository` / `Logging` の値を表示・変更できます。保存した内容はローカル設定ファイルに書き戻され、次回起動時に確実に反映されます。同じ設定パネルで、直接参照している NuGet パッケージのサードパーティ ライセンスも確認できます。
+
 ### 2.4 起動
 
 ```powershell
@@ -121,13 +123,12 @@ dotnet run --project src/RepoSyncRadar.App
 ```
 ┌──────────────┬──────────────────────────────────────────────┐
 │ Sidebar      │ Workbench                                    │
-│  Inbox       │  ┌──────────────────────────────────────┐    │
-│  Adopted     │  │ Ask Palette  (Ctrl+Enter で実行)     │    │
-│  Rejected    │  ├──────────────────────────────────────┤    │
-│  Later       │  │ Commit List  (絞り込み済みの一覧)    │    │
-│  Ignored     │  ├──────────────────────────────────────┤    │
-│              │  │ Commit Detail                        │    │
-│              │  │   - Review Actions (Adopt/Reject/…)  │    │
+│  未読         │  ┌──────────────────────────────────────┐    │
+│  採用済み     │  │ Ask Palette  (Ctrl+Enter で実行)     │    │
+│  あとで見る   │  │ Commit List  (絞り込み済みの一覧)    │    │
+│  見送り候補   │  ├──────────────────────────────────────┤    │
+│  確認不要     │  │ Commit Detail                        │    │
+│              │  │   - Review Actions (Adopt/Archive/…) │    │
 │              │  │   - Drafts Panel  (3 媒体下書き)     │    │
 │              │  └──────────────────────────────────────┘    │
 └──────────────┴──────────────────────────────────────────────┘
@@ -151,24 +152,25 @@ dotnet run --project src/RepoSyncRadar.App
 1. `github/docs` の Repo sync PR を最大 `MaxPullRequests` 件取得
    - `GitHub:PullRequestCreatedAtOrAfter` を設定している場合は、その日時以降に作成された PR だけを対象にします
 2. 各 PR のコミットを SQLite に **冪等取り込み**(既知 SHA はスキップ)
-3. Copilot に「Must read 5 件 / Skim 15 件 / 残りは Archive」の方針でスコアリング
+3. Copilot に「上位候補を未読に残し、明らかに不要なものは見送り候補へ送る」方針でスコアリング
 4. `radar_score_commit` で `Scoring` テーブルに要約・理由・スコアを保存
-5. Skim / Archive 判定が明確なものは `radar_save_review` で `Reviews` テーブルに保存
+5. 見送り判定が明確なものは `radar_save_review` で `Reviews.Status = Rejected` として保存
 
-> 起動直後はサイドバーの **Inbox** に並びます。
+> 起動直後はサイドバーの **未読** に並びます。
 
-### 4.2 レビュー(Adopt / Reject / Later / Ignore)
+### 4.2 レビュー(Adopt / Archive / Later / Ignore)
 
 Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Components/ReviewActions.razor) から処理します(Step 16):
 
 | アクション | 用途 | データ |
 |---|---|---|
 | **Adopt** | 採用、媒体別下書き候補 | `Reviews.Status = Adopted` |
-| **Reject** | 紹介しない理由を 1 行残す | `Reviews.Message` に保存 |
+| **Archive** | もう確認不要なものとして最終除外する | `Reviews.Status = Archived`, `Reviews.Reason` に保存 |
 | **Later** | 後回し | `Reviews.Status = Later` |
-| **Ignore Directory** | このパス配下を以降全部除外 | `IgnoreRules` 追加 + 既存も一括 Reject |
+| **Ignore Directory** | このパス配下を以降まとめて見送り候補にする | `IgnoreRules` 追加 + 既存も一括 `Rejected` |
 
-`Ignore Directory` は `EF.Functions.Like` で `path/%` を一括処理するので、不要なディレクトリを 1 クリックで永続的に視界から外せます。
+`Rejected` は Triage や無視ルールで自動分類された見送り候補、`Archived` はユーザーが手動で「もう見直さない」と決めた確認不要の状態です。
+`Ignore Directory` は `EF.Functions.Like` で `path/%` を一括処理するので、不要なディレクトリを 1 クリックで見送り候補へ送れます。
 
 ### 4.3 媒体別下書き(Drafts Panel)
 

@@ -2,10 +2,8 @@ namespace RepoSyncRadar.Core.Services;
 
 /// <summary>
 /// Host-exact, HTTPS-only allow-list used by the WebView2 surface to drop subresource
-/// requests targeting hosts the operator did not explicitly approve. The list is built
-/// once from <see cref="Options.CopilotOptions.AllowedUrlHosts"/> (already lowercased
-/// and deduplicated by <see cref="Options.CopilotOptionsPostConfigurer"/>) so the
-/// check is a constant-time hash lookup.
+/// requests targeting hosts the operator did not explicitly approve. The check is a
+/// constant-time hash lookup.
 /// </summary>
 /// <remarks>
 /// <para>

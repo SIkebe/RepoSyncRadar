@@ -51,8 +51,10 @@
                            @onclick:stopPropagation="true"
                            @onchange="() => ToggleSelectionAsync(commit.Sha)" />
                     <span class="sha">@ShortSha(commit.Sha)</span>
-                    <span class="message">@FirstLine(commit.Message)</span>
-                    <span class="author">@commit.Author</span>
+                    <span class="message" title="@commit.Message">@FirstLine(commit.Message)</span>
+                    <span class="@BuildScoreClass(commit)"
+                          data-testid="commit-row-score"
+                          title="@BuildScoreTitle(commit)">@FormatScore(commit)</span>
                     <time class="authored" datetime="@commit.AuthoredAt.ToString("O")">
                         @commit.AuthoredAt.ToString("yyyy-MM-dd")
                     </time>
@@ -138,6 +140,20 @@
 
     private bool IsSelected(string sha)
         => SelectedShas.Contains(sha);
+
+    private static string BuildScoreClass(Commit commit)
+        => commit.Scoring is null ? "score unscored" : "score";
+
+    private static string BuildScoreTitle(Commit commit)
+        => commit.Scoring is { } scoring
+            ? $"スコア {FormatScore(scoring.Score)}"
+            : "未スコアリング";
+
+    private static string FormatScore(Commit commit)
+        => commit.Scoring is { } scoring ? FormatScore(scoring.Score) : "未採点";
+
+    private static string FormatScore(double score)
+        => score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
 
     private static string ShortSha(string sha)
         => string.IsNullOrEmpty(sha) ? string.Empty : sha[..Math.Min(7, sha.Length)];

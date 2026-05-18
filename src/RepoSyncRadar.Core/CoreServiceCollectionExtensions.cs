@@ -82,6 +82,12 @@ public static class CoreServiceCollectionExtensions
             .ValidateOnStart();
         services.AddSingleton<IPostConfigureOptions<CopilotOptions>, CopilotOptionsPostConfigurer>();
 
+        services.AddOptions<WebViewOptions>()
+            .BindConfiguration(WebViewOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<IPostConfigureOptions<WebViewOptions>, WebViewOptionsPostConfigurer>();
+
         services.AddOptions<DocsRepositoryOptions>()
             .BindConfiguration(DocsRepositoryOptions.SectionName)
             .ValidateDataAnnotations();

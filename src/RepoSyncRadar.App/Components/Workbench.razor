@@ -18,7 +18,7 @@
 <CascadingValue Value="Services" IsFixed="true">
     <div class="@BuildShellClass(_theme)" data-theme="@BuildThemeName(_theme)" data-testid="radar-shell">
         <aside class="radar-sidebar-pane">
-            <MudText Typo="Typo.h6" Class="mb-2">Inbox</MudText>
+            <MudText Typo="Typo.h6" Class="mb-2">キュー</MudText>
             <Sidebar Selected="_selectedStatus"
                      SelectedChanged="HandleStatusChanged" />
         </aside>
@@ -38,6 +38,23 @@
             </MudPaper>
 
             <MudPaper Elevation="0" Class="pa-2">
+                <div class="commit-search-toolbar" data-testid="commit-search-toolbar">
+                    <label class="commit-search-label" for="commit-hash-search">ハッシュ</label>
+                    <input id="commit-hash-search"
+                           class="commit-search-input"
+                           data-testid="commit-hash-search"
+                           type="search"
+                           autocomplete="off"
+                           spellcheck="false"
+                           placeholder="短縮 / 完全 SHA"
+                           value="@_commitHashQuery"
+                           @oninput="HandleCommitHashSearchChanged" />
+                    <button type="button"
+                            class="commit-search-clear"
+                            data-testid="commit-hash-search-clear"
+                            disabled="@string.IsNullOrWhiteSpace(_commitHashQuery)"
+                            @onclick="ClearCommitHashSearchAsync">クリア</button>
+                </div>
                 @if (_selectedCommitShas.Count > 0 || !string.IsNullOrWhiteSpace(_bulkReviewStatus))
                 {
                     <div class="bulk-review-toolbar" data-testid="bulk-review-toolbar">
@@ -54,7 +71,12 @@
                             class="bulk-review-button later"
                             data-testid="bulk-review-later"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Later)"
-                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Later)">あとでへ</button>
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Later)">あとで見るへ</button>
+                        <button type="button"
+                            class="bulk-review-button archive"
+                            data-testid="bulk-review-archived"
+                            disabled="@IsBulkMoveDisabled(ReviewStatus.Archived)"
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Archived)">確認不要へ</button>
                         <button type="button"
                             class="bulk-review-button unseen"
                             data-testid="bulk-review-unseen"
@@ -105,6 +127,7 @@
     private Commit? _selectedCommit;
     private readonly HashSet<string> _selectedCommitShas = new(StringComparer.Ordinal);
     private CommitQueryFilter _filter = new() { Status = ReviewStatus.Unseen };
+    private string _commitHashQuery = string.Empty;
     private int _listRefreshVersion;
     private bool _bulkReviewBusy;
     private string? _bulkReviewStatus;
@@ -168,7 +191,7 @@
             {
                 // Replace the Filter reference so CommitList's OnParametersSetAsync
                 // detects the change and re-queries IRadarRepository.
-                _filter = new CommitQueryFilter { Status = _selectedStatus };
+                _filter = BuildCurrentFilter();
                 _selectedCommitShas.Clear();
                 _listRefreshVersion++;
                 StateHasChanged();
@@ -201,12 +224,56 @@
     private Task HandleStatusChanged(ReviewStatus? status)
     {
         _selectedStatus = status;
-        _filter = new CommitQueryFilter { Status = status };
+        _filter = BuildCurrentFilter();
         _selectedCommit = null;
         _selectedCommitShas.Clear();
         _bulkReviewStatus = null;
         _listRefreshVersion++;
         return Task.CompletedTask;
+    }
+
+    private Task HandleCommitHashSearchChanged(ChangeEventArgs args)
+    {
+        _commitHashQuery = args.Value?.ToString() ?? string.Empty;
+        RefreshCommitListForCurrentFilter();
+        return Task.CompletedTask;
+    }
+
+    private Task ClearCommitHashSearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_commitHashQuery))
+        {
+            return Task.CompletedTask;
+        }
+
+        _commitHashQuery = string.Empty;
+        RefreshCommitListForCurrentFilter();
+        return Task.CompletedTask;
+    }
+
+    private void RefreshCommitListForCurrentFilter()
+    {
+        _filter = BuildCurrentFilter();
+        _selectedCommit = null;
+        _selectedCommitShas.Clear();
+        _bulkReviewStatus = null;
+        _listRefreshVersion++;
+    }
+
+    private CommitQueryFilter BuildCurrentFilter()
+        => new()
+        {
+            Status = _selectedStatus,
+            ShaQuery = NormalizeCommitHashQuery(_commitHashQuery),
+        };
+
+    private static string? NormalizeCommitHashQuery(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+        return value.Trim().ToLowerInvariant();
     }
 
     private Task HandleCommitSelected(Commit commit)
@@ -268,7 +335,7 @@
                 ReviewStatus.Unseen => ReviewStatus.Unseen,
                 _ => status,
             };
-            _filter = new CommitQueryFilter { Status = _selectedStatus };
+            _filter = BuildCurrentFilter();
             _bulkReviewStatus = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
                 $"{shas.Length} 件を{BuildStatusDestinationLabel(status)}に移動しました");
@@ -281,7 +348,7 @@
     }
 
     private static bool IsBulkMoveSupported(ReviewStatus status)
-        => status is ReviewStatus.Adopted or ReviewStatus.Later or ReviewStatus.Unseen;
+        => status is ReviewStatus.Adopted or ReviewStatus.Later or ReviewStatus.Archived or ReviewStatus.Unseen;
 
     private async Task DeleteSelectedUnseenCommitsAsync()
     {
@@ -299,7 +366,7 @@
             _selectedCommit = null;
             _selectedCommitShas.Clear();
             _selectedStatus = ReviewStatus.Unseen;
-            _filter = new CommitQueryFilter { Status = _selectedStatus };
+            _filter = BuildCurrentFilter();
             _listRefreshVersion++;
             _bulkReviewStatus = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
@@ -317,7 +384,9 @@
         {
             ReviewStatus.Unseen => "未読",
             ReviewStatus.Adopted => "採用済み",
-            ReviewStatus.Later => "あとで",
+            ReviewStatus.Later => "あとで見る",
+            ReviewStatus.Rejected => "見送り候補",
+            ReviewStatus.Archived => "確認不要",
             _ => status.ToString(),
         };
 
@@ -332,7 +401,7 @@
             ReviewStatus.Unseen => ReviewStatus.Unseen,
             _ => status,
         };
-        _filter = new CommitQueryFilter { Status = _selectedStatus };
+        _filter = BuildCurrentFilter();
         _selectedCommit = null;
         _selectedCommitShas.Clear();
         _listRefreshVersion++;

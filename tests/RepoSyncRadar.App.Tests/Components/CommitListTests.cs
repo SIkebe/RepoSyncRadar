@@ -33,6 +33,42 @@ public class CommitListTests
     }
 
     [Fact]
+    public void CommitList_Renders_Score_Instead_Of_Author()
+    {
+        var commit = MakeCommit("aaaaaaa1", "first", score: 0.83);
+
+        using var cut = RenderListWith([commit]);
+
+        var row = cut.Find("[data-testid=\"commit-row\"]");
+        var score = cut.Find("[data-testid=\"commit-row-score\"]");
+        Assert.Equal("0.83", score.TextContent);
+        Assert.DoesNotContain("octocat", row.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CommitList_Renders_Unscored_Label_When_Score_Is_Missing()
+    {
+        var commit = MakeCommit("aaaaaaa1", "first");
+
+        using var cut = RenderListWith([commit]);
+
+        Assert.Equal("未採点", cut.Find("[data-testid=\"commit-row-score\"]").TextContent);
+    }
+
+    [Fact]
+    public void CommitList_Message_Hover_Shows_Full_Message()
+    {
+        const string message = "docs: update Copilot article\n\nExpand details for enterprise setup.";
+        var commit = MakeCommit("aaaaaaa1", message);
+
+        using var cut = RenderListWith([commit]);
+
+        var messageCell = cut.Find(".commit-row .message");
+        Assert.Equal("docs: update Copilot article", messageCell.TextContent);
+        Assert.Equal(message, messageCell.GetAttribute("title"));
+    }
+
+    [Fact]
     public void CommitList_Empty_State()
     {
         using var cut = RenderListWith(new List<Commit>());
@@ -144,7 +180,7 @@ public class CommitListTests
                 .Add(c => c.SelectionChanged, change => onSelectionChanged?.Invoke(change)));
     }
 
-    private static Commit MakeCommit(string sha, string message)
+    private static Commit MakeCommit(string sha, string message, double? score = null)
         => new()
         {
             Sha = sha,
@@ -153,5 +189,15 @@ public class CommitListTests
             Author = "octocat",
             AuthoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
             FetchedAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+            Scoring = score is null
+                ? null
+                : new Scoring
+                {
+                    Sha = sha,
+                    Score = score.Value,
+                    Category = "feature-update",
+                    AudienceJson = "[]",
+                    ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+                },
         };
 }

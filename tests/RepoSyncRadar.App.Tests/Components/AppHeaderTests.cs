@@ -37,6 +37,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
+        Assert.Contains("app-header", cut.Find("[data-testid=\"app-header\"]").ClassList);
         Assert.Equal(
             "SignedIn",
             cut.Find("[data-testid=\"app-header-state\"]").GetAttribute("data-state"));
@@ -281,6 +282,7 @@ public sealed class AppHeaderTests
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"settings-third-party-notices\"]"));
             var patterns = cut.FindAll("[data-testid=\"settings-ignore-rule-pattern\"]")
                 .Select(static node => node.TextContent)
                 .ToArray();
@@ -506,6 +508,13 @@ public sealed class AppHeaderTests
         agent = Substitute.For<ICopilotAgent>();
         broadcaster = Substitute.For<IReviewBroadcaster>();
         var resolvedSettingsStore = settingsStore ?? Substitute.For<IAppUserSettingsStore>();
+        var localSettingsStore = Substitute.For<ILocalAppSettingsStore>();
+        localSettingsStore.SettingsPath.Returns(Path.Combine(Path.GetTempPath(), "appsettings.local.json"));
+        localSettingsStore.Current.Returns(LocalAppSettings.Default.Clone());
+        localSettingsStore.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(LocalAppSettings.Default.Clone()));
+        localSettingsStore.SaveAsync(Arg.Any<LocalAppSettings>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
         if (settingsStore is null)
         {
             resolvedSettingsStore.Current.Returns(AppUserSettings.Default);
@@ -520,6 +529,7 @@ public sealed class AppHeaderTests
             .AddSingleton(broadcaster)
             .AddSingleton(repo ?? Substitute.For<IRadarRepository>())
             .AddSingleton(resolvedSettingsStore)
+            .AddSingleton(localSettingsStore)
             .BuildServiceProvider();
     }
 }

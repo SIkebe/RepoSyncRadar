@@ -1,11 +1,13 @@
 using System.IO;
 using System.Globalization;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Microsoft.AspNetCore.Components.WebView;
@@ -79,6 +81,11 @@ internal readonly record struct PreviewFileNavigationState(
 /// </remarks>
 public partial class MainWindow : Window
 {
+    private const int DwmwaUseImmersiveDarkMode = 20;
+    private const int DwmwaBorderColor = 34;
+    private const int DwmwaCaptionColor = 35;
+    private const int DwmwaTextColor = 36;
+
     private static readonly Uri InitialDocsUri = new("https://docs.github.com/en");
 
     /// <summary>
@@ -124,6 +131,8 @@ public partial class MainWindow : Window
     private bool _previewFocusModeChangeScheduled;
     private DocsThemeMode _docsTheme = DocsThemeMode.Dark;
     private readonly DispatcherTimer _previewFocusLayoutShieldTimer;
+    private string? _docsThemeDocumentScriptId;
+    private string? _previewThemeDocumentScriptId;
     // §Step 19.9: DocsVersionSelector を code で SelectedItem を設定したときの
     // SelectionChanged をスキップするためのガード。ユーザー操作でだけ
     // navigator.RequestVersionChange を発火し、セレクション同期のループを防ぐ。
@@ -133,6 +142,7 @@ public partial class MainWindow : Window
     {
         ArgumentNullException.ThrowIfNull(services);
         InitializeComponent();
+        SourceInitialized += (_, _) => ApplyNativeWindowChromeTheme(_docsTheme);
         _previewFocusLayoutShieldTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = PreviewFocusLayoutShieldDuration,
@@ -145,11 +155,11 @@ public partial class MainWindow : Window
 
         UpdatePreviewFocusToggleButton();
         UpdateDocsThemeToggleButton();
-    ApplyAppChromeTheme(_docsTheme);
+        ApplyAppChromeTheme(_docsTheme);
         BlazorView.Services = services;
 
-        var copilotOptions = services.GetRequiredService<IOptions<CopilotOptions>>().Value;
-        _allowList = new UrlAllowList(copilotOptions.AllowedUrlHosts);
+        var webViewOptions = services.GetRequiredService<IOptions<WebViewOptions>>().Value;
+        _allowList = new UrlAllowList(webViewOptions.AllowedUrlHosts);
         _previewSession = services.GetRequiredService<PreviewSession>();
         _previewNavigator = services.GetRequiredService<IPreviewNavigator>();
         _previewNavigator.Requested += OnPreviewRequested;
@@ -170,10 +180,12 @@ public partial class MainWindow : Window
             if (DocsView.CoreWebView2 is not null)
             {
                 DocsView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
+                RemoveDocsThemeDocumentScript(DocsView);
             }
             if (PreviewView.CoreWebView2 is not null)
             {
                 PreviewView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
+                RemoveDocsThemeDocumentScript(PreviewView);
             }
             _previewFocusLayoutShieldTimer.Stop();
             _previewFocusLayoutShieldTimer.Tick -= OnPreviewFocusLayoutShieldTimerTick;
@@ -389,11 +401,15 @@ public partial class MainWindow : Window
         _docsTheme = theme;
         UpdateDocsThemeToggleButton();
         ApplyAppChromeTheme(theme);
+        ApplyWebViewThemePreference(DocsView, theme);
+        ApplyWebViewThemePreference(PreviewView, theme);
         if (!applyToViews)
         {
             return;
         }
 
+        _ = InstallDocsThemeDocumentScriptAsync(DocsView, theme);
+        _ = InstallDocsThemeDocumentScriptAsync(PreviewView, theme);
         _ = ApplyDocsThemeAsync(DocsView);
         _ = ApplyDocsThemeAsync(PreviewView);
     }
@@ -442,6 +458,22 @@ public partial class MainWindow : Window
         DocsThemeToggleButton.Foreground = iconForeground;
         OpenOfficialDocsButton.Foreground = iconForeground;
         PreviewFocusToggleButton.Foreground = iconForeground;
+        ApplyNativeWindowChromeTheme(theme);
+    }
+
+    private void ApplyNativeWindowChromeTheme(DocsThemeMode theme)
+    {
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var palette = ResolveAppChromeThemePalette(theme);
+        TrySetDwmWindowAttribute(handle, DwmwaUseImmersiveDarkMode, theme == DocsThemeMode.Dark ? 1 : 0);
+        TrySetDwmWindowAttribute(handle, DwmwaCaptionColor, ToColorRef(palette.HeaderBackground));
+        TrySetDwmWindowAttribute(handle, DwmwaTextColor, ToColorRef(palette.HeaderForeground));
+        TrySetDwmWindowAttribute(handle, DwmwaBorderColor, ToColorRef(palette.HeaderBorder));
     }
 
     private async Task ApplyDocsThemeAsync(WebView2CompositionControl view)
@@ -453,6 +485,7 @@ public partial class MainWindow : Window
                 return;
             }
 
+            ApplyWebViewThemePreference(view, _docsTheme);
             await view.ExecuteScriptAsync(BuildDocsThemeScript(_docsTheme));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -519,7 +552,7 @@ public partial class MainWindow : Window
         }
 
         // Filter every subresource (script, image, fetch, etc.) so requests to hosts
-        // outside CopilotOptions.AllowedUrlHosts are dropped before they reach the
+        // outside WebViewOptions.AllowedUrlHosts are dropped before they reach the
         // network. See DESIGN.md §9.3 (mode C) and the manual smoke entry in
         // IMPLEMENTATION_PLAN.md §Step 10.
         view.CoreWebView2.AddWebResourceRequestedFilter(
@@ -528,6 +561,73 @@ public partial class MainWindow : Window
         view.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
         view.CoreWebView2.Settings.IsWebMessageEnabled = true;
         view.CoreWebView2.WebMessageReceived += OnPreviewScrollMessageReceived;
+        ApplyWebViewThemePreference(view, _docsTheme);
+        _ = InstallDocsThemeDocumentScriptAsync(view, _docsTheme);
+        _ = ApplyDocsThemeAsync(view);
+    }
+
+    private async Task InstallDocsThemeDocumentScriptAsync(
+        WebView2CompositionControl view,
+        DocsThemeMode theme)
+    {
+        try
+        {
+            if (view.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            RemoveDocsThemeDocumentScript(view);
+            var scriptId = await view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                BuildDocsThemeScript(theme));
+            SetDocsThemeDocumentScriptId(view, scriptId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogDocsThemeApplyFailed(_logger, ex);
+        }
+    }
+
+    private void RemoveDocsThemeDocumentScript(WebView2CompositionControl view)
+    {
+        var scriptId = GetDocsThemeDocumentScriptId(view);
+        if (scriptId is null || view.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        view.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(scriptId);
+        SetDocsThemeDocumentScriptId(view, null);
+    }
+
+    private string? GetDocsThemeDocumentScriptId(WebView2CompositionControl view)
+        => ReferenceEquals(view, DocsView)
+            ? _docsThemeDocumentScriptId
+            : ReferenceEquals(view, PreviewView)
+                ? _previewThemeDocumentScriptId
+                : null;
+
+    private void SetDocsThemeDocumentScriptId(WebView2CompositionControl view, string? scriptId)
+    {
+        if (ReferenceEquals(view, DocsView))
+        {
+            _docsThemeDocumentScriptId = scriptId;
+            return;
+        }
+        if (ReferenceEquals(view, PreviewView))
+        {
+            _previewThemeDocumentScriptId = scriptId;
+        }
+    }
+
+    private static void ApplyWebViewThemePreference(WebView2CompositionControl view, DocsThemeMode theme)
+    {
+        if (view.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        view.CoreWebView2.Profile.PreferredColorScheme = BuildPreferredColorScheme(theme);
     }
 
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
@@ -620,7 +720,7 @@ public partial class MainWindow : Window
         }
 
         StopPreviewDiffTracking();
-        ShowOfficialOnlyMode();
+        ShowSinglePageMode(BuildSinglePageHeaderLabel(url));
         DocsView.Source = url;
     }
 
@@ -1031,8 +1131,11 @@ public partial class MainWindow : Window
     }
 
     private void ShowOfficialOnlyMode()
+        => ShowSinglePageMode("公式 docs.github.com");
+
+    private void ShowSinglePageMode(string label)
     {
-        OfficialDocsHeaderText.Text = "公式 docs.github.com";
+        OfficialDocsHeaderText.Text = label;
         PreviewDocsHeaderText.Text = "PR HEAD localhost";
         SetComparisonFilePath(null, null, null);
         HidePreviewPaneStatus(isBeforePane: true);
@@ -1046,6 +1149,14 @@ public partial class MainWindow : Window
         // §Step 19.9: 公式 docs 単独表示では Version ComboBox を隠す。
         DocsVersionSelector.Visibility = Visibility.Collapsed;
     }
+
+    internal static string BuildSinglePageHeaderLabel(Uri url)
+        => string.Equals(url.Host, "github.com", StringComparison.OrdinalIgnoreCase)
+            && url.AbsolutePath.Contains("/pull/", StringComparison.OrdinalIgnoreCase)
+                ? "GitHub PR"
+                : string.Equals(url.Host, "docs.github.com", StringComparison.OrdinalIgnoreCase)
+                    ? "公式 docs.github.com"
+                    : url.Host;
 
     internal static bool IsLocalPreviewUri(Uri url)
         => string.Equals(url.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
@@ -1231,12 +1342,41 @@ public partial class MainWindow : Window
                 IconHoverBackground: "#21262D",
                 IconPressedBackground: "#30363D");
 
+    internal static int ToColorRef(string value)
+    {
+        var color = (Color)ColorConverter.ConvertFromString(value)!;
+        return color.R | (color.G << 8) | (color.B << 16);
+    }
+
     private static SolidColorBrush BrushFromHex(string value)
     {
         var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value)!);
         brush.Freeze();
         return brush;
     }
+
+    private static void TrySetDwmWindowAttribute(IntPtr handle, int attribute, int value)
+    {
+        try
+        {
+            _ = DwmSetWindowAttribute(handle, attribute, ref value, sizeof(int));
+        }
+        catch (DllNotFoundException)
+        {
+        }
+        catch (EntryPointNotFoundException)
+        {
+        }
+    }
+
+#pragma warning disable SYSLIB1054
+    [DllImport("dwmapi.dll", ExactSpelling = true)]
+    private static extern int DwmSetWindowAttribute(
+        IntPtr hwnd,
+        int dwAttribute,
+        ref int pvAttribute,
+        int cbAttribute);
+#pragma warning restore SYSLIB1054
 
         internal static DocsThemeMode ToggleDocsTheme(DocsThemeMode current)
             => current == DocsThemeMode.Dark ? DocsThemeMode.Light : DocsThemeMode.Dark;
@@ -1249,6 +1389,11 @@ public partial class MainWindow : Window
             => current == DocsThemeMode.Dark
                 ? "ライトテーマに切り替え"
                 : "ダークテーマに切り替え";
+
+        internal static CoreWebView2PreferredColorScheme BuildPreferredColorScheme(DocsThemeMode theme)
+            => theme == DocsThemeMode.Light
+                ? CoreWebView2PreferredColorScheme.Light
+                : CoreWebView2PreferredColorScheme.Dark;
 
         internal static string BuildDocsThemeScript(DocsThemeMode theme)
         {

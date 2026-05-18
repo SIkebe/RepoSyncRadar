@@ -28,6 +28,7 @@ public class SidebarTests
                     [ReviewStatus.Seen] = 0,
                     [ReviewStatus.Adopted] = 1,
                     [ReviewStatus.Rejected] = 0,
+                    [ReviewStatus.Archived] = 2,
                     [ReviewStatus.Later] = 0,
                 }));
 
@@ -41,10 +42,11 @@ public class SidebarTests
         var cut = ctx.Render<Sidebar>(
             parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
 
-        // Assert — UI reflects the four user-facing buckets, with Seen folded out of the sidebar.
+        // Assert — UI reflects the five user-facing buckets, with Seen folded out of the sidebar.
         Assert.Equal("3", cut.Find("[data-testid=\"sidebar-count-Unseen\"]").TextContent);
         Assert.Equal("1", cut.Find("[data-testid=\"sidebar-count-Adopted\"]").TextContent);
         Assert.Equal("0", cut.Find("[data-testid=\"sidebar-count-Rejected\"]").TextContent);
+        Assert.Equal("2", cut.Find("[data-testid=\"sidebar-count-Archived\"]").TextContent);
         Assert.Equal("0", cut.Find("[data-testid=\"sidebar-count-Later\"]").TextContent);
         Assert.Empty(cut.FindAll("[data-testid=\"sidebar-item-Seen\"]"));
     }
@@ -61,6 +63,7 @@ public class SidebarTests
                     [ReviewStatus.Seen] = 0,
                     [ReviewStatus.Adopted] = 0,
                     [ReviewStatus.Rejected] = 0,
+                    [ReviewStatus.Archived] = 0,
                     [ReviewStatus.Later] = 0,
                 }));
 
@@ -74,7 +77,8 @@ public class SidebarTests
 
         Assert.Contains("まだ確認していない", cut.Find("[data-testid=\"sidebar-description-Unseen\"]").TextContent);
         Assert.Contains("共有", cut.Find("[data-testid=\"sidebar-description-Adopted\"]").TextContent);
-        Assert.Contains("今回は扱わない", cut.Find("[data-testid=\"sidebar-description-Rejected\"]").TextContent);
+        Assert.Contains("低優先度", cut.Find("[data-testid=\"sidebar-description-Rejected\"]").TextContent);
+        Assert.Contains("最終除外", cut.Find("[data-testid=\"sidebar-description-Archived\"]").TextContent);
         Assert.Contains("保留", cut.Find("[data-testid=\"sidebar-description-Later\"]").TextContent);
         Assert.DoesNotContain("title=", cut.Markup, StringComparison.Ordinal);
         Assert.DoesNotContain("スキム済み", cut.Markup, StringComparison.Ordinal);

@@ -154,7 +154,7 @@ public sealed class RadarTools
     private AIFunction CreateListCommits()
     {
         return AIFunctionFactory.Create(
-            ([Description("Optional review status filter: Unseen, Adopted, Rejected, or Later. Legacy Seen rows are included in Unseen.")] string? status,
+            ([Description("Optional review status filter: Unseen, Adopted, Later, Rejected, or Archived. Legacy Seen rows are included in Unseen.")] string? status,
              [Description("Maximum rows to return. Defaults to 50.")] int? limit,
              CancellationToken cancellationToken)
                 => ListCommitsAsync(status, limit, cancellationToken),

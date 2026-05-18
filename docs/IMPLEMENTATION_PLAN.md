@@ -24,7 +24,7 @@
 - [Step 13. 読み取り系 `radar_*` ツール](#step-13-読み取り系-radar_-ツール)
 - [Step 14. 書き込み系 `radar_*` ツール + 権限ダイアログ](#step-14-書き込み系-radar_-ツール--権限ダイアログ)
 - [Step 15. Morning Triage セッション](#step-15-morning-triage-セッション)
-- [Step 16. Review UI(Adopt / Reject / Later / Ignore)](#step-16-review-uiadopt--reject--later--ignore)
+- [Step 16. Review UI(Adopt / Archive / Later / Ignore)](#step-16-review-uiadopt--archive--later--ignore)
 - [Step 17. Adoption セッション + 媒体別下書き](#step-17-adoption-セッション--媒体別下書き)
 - [Step 18. `radar_query` と Ask Palette](#step-18-radar_query-と-ask-palette)
 - [Step 19. ローカルプレビュー(bare clone + worktree)](#step-19-ローカルプレビューbare-clone--worktree)
@@ -393,7 +393,7 @@ Phase 1 の最低 UI:「サイドバーで未読 / コミット一覧」「中�
 
 - `RepoSyncRadar.App/Components/CommitList.razor` — `IRadarRepository.QueryCommitsAsync(filter)` で取得して表示
 - `RepoSyncRadar.App/Components/CommitDetail.razor` — files、frontmatter、resolved URL のリスト
-- `RepoSyncRadar.App/Components/Sidebar.razor` — Unseen / Seen / Adopted / Rejected / Later カウンタ
+- `RepoSyncRadar.App/Components/Sidebar.razor` — Unseen / Adopted / Later / Rejected / Archived カウンタ(Seen は未読へ合算)
 - 状態管理は最小限。`CascadingValue` で `IServiceProvider` 配って各コンポーネントが自分で必要なサービスを取る
 
 ### 9.3 テスト
@@ -413,7 +413,7 @@ Phase 1 の最低 UI:「サイドバーで未読 / コミット一覧」「中�
 | テスト | 内容 |
 |---|---|
 | `QueryCommitsAsync_Filters_By_Status_And_Limit` | `Status` / `Limit` フィルタと AuthoredAt desc の並び、`Unseen` が Review 行なしのコミットを拾うこと |
-| `GetReviewCountsAsync_Counts_All_Buckets` | 5 ステータス全てを 0 埋めで返し、Review 行のないコミットが Unseen に積まれること |
+| `GetReviewCountsAsync_Counts_All_Buckets` | ユーザー向け 5 ステータスと legacy Seen を 0 埋めで返し、Review 行のないコミットが Unseen に積まれること |
 
 ### 9.4 完了基準
 
@@ -585,7 +585,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 | ツール | 機能 |
 |---|---|
 | `radar_score_commit` | `Scoring` を INSERT/UPDATE |
-| `radar_save_review` | `Review` を更新(Adopted/Rejected/Later) |
+| `radar_save_review` | `Review` を更新(Adopted/Rejected/Archived/Later) |
 | `radar_post_draft` | `Draft` を INSERT(Posted=false) |
 | `radar_ignore_rule` | `IgnoreRule` を追加 |
 | `radar_boost_rule` | `BoostRule` を追加 |
@@ -660,17 +660,19 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 ---
 
-## Step 16. Review UI(Adopt / Reject / Later / Ignore)
+## Step 16. Review UI(Adopt / Archive / Later / Ignore)
 
 ### 16.1 目的
 
-サイドバー / コミット詳細で Adopt / Reject / Later / Ignore Directory を行えるようにし、Sidebar カウンタが即時更新される。
+サイドバー / コミット詳細で Adopt / Archive / Later / Ignore Directory を行えるようにし、Sidebar カウンタが即時更新される。
 
 ### 16.2 スコープ
 
 - `RepoSyncRadar.App/Components/ReviewActions.razor` — 4 ボタン + Reason 入力モーダル
 - `ReviewActions` の `OnReviewed` で `IRadarRepository.SetReviewAsync` を呼び、`IReviewBroadcaster`(`event` を持つだけのシングルトン)で他コンポーネントへ通知
 - Ignore Directory は `IgnoreRule` を追加し、関連未読を `Rejected(reason="auto-ignored")` に一括更新
+  - `Rejected` は Triage / Ignore による自動見送り候補
+  - `Archived` はユーザーが手動で最終除外した確認不要
 
 ### 16.3 テスト
 
@@ -679,7 +681,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 | テスト | 内容 |
 |---|---|
 | `Adopt_Click_Calls_Repository` | repository スタブが Adopted で呼ばれる |
-| `Reject_Requires_Reason` | Reason 未入力で disabled |
+| `Archive_Requires_Reason` | Reason 未入力で disabled |
 | `Later_Sets_Status_And_Closes` | Later 状態が立つ |
 | `Ignore_Dir_Calls_Both_Apis` | `IgnoreRule.Add` と `bulk update Rejected` の両方 |
 | `Sidebar_Receives_Broadcast` | `IReviewBroadcaster` が発火するとサイドバー再レンダリング |

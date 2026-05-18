@@ -1,0 +1,335 @@
+@using Microsoft.Extensions.DependencyInjection
+@using RepoSyncRadar.App.Settings
+
+<section class="settings-section local-appsettings-section" data-testid="settings-local-appsettings">
+    <header class="settings-subheader">
+        <div>
+            <h3>アプリ設定</h3>
+            @if (!string.IsNullOrWhiteSpace(_settingsPath))
+            {
+                <p class="settings-muted" data-testid="settings-local-appsettings-path">@_settingsPath</p>
+            }
+        </div>
+        <div class="settings-actions">
+            <button type="button"
+                    class="toolbar-button compact secondary"
+                    data-testid="settings-local-appsettings-reload"
+                    disabled="@(_loading || _saving)"
+                    @onclick="LoadAsync">再読み込み</button>
+            <button type="button"
+                    class="toolbar-button compact primary"
+                    data-testid="settings-local-appsettings-save"
+                    disabled="@(_loading || _saving)"
+                    @onclick="SaveAsync">保存</button>
+        </div>
+    </header>
+
+    @if (_loading)
+    {
+        <p class="settings-muted" data-testid="settings-local-appsettings-loading">読み込み中…</p>
+    }
+    else if (_settings is { } settings)
+    {
+        <p class="settings-muted">保存後は次回起動で確実に反映されます。</p>
+
+        @if (!string.IsNullOrWhiteSpace(_status))
+        {
+            <p class="settings-muted" data-testid="settings-local-appsettings-status">@_status</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="settings-error" data-testid="settings-local-appsettings-error">@_error</p>
+        }
+
+        <div class="local-settings-grid">
+            <fieldset class="local-settings-group" data-testid="settings-local-github">
+                <legend>GitHub</legend>
+                <label class="local-settings-field">
+                    <span>Owner</span>
+                    <input data-testid="settings-github-owner" value="@settings.GitHub.Owner" disabled="@_saving" @oninput="e => settings.GitHub.Owner = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>Repo</span>
+                    <input data-testid="settings-github-repo" value="@settings.GitHub.Repo" disabled="@_saving" @oninput="e => settings.GitHub.Repo = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>PullRequestTitleFilter</span>
+                    <input data-testid="settings-github-pr-title-filter" value="@settings.GitHub.PullRequestTitleFilter" disabled="@_saving" @oninput="e => settings.GitHub.PullRequestTitleFilter = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>MaxPullRequests</span>
+                    <input type="number" min="1" max="100" data-testid="settings-github-max-prs" value="@settings.GitHub.MaxPullRequests" disabled="@_saving" @oninput="e => settings.GitHub.MaxPullRequests = IntValue(e)" />
+                </label>
+                <label class="local-settings-field wide">
+                    <span>PullRequestCreatedAtOrAfter</span>
+                    <input data-testid="settings-github-created-after" placeholder="2026-05-15T00:00:00Z" value="@settings.GitHub.PullRequestCreatedAtOrAfter" disabled="@_saving" @oninput="e => settings.GitHub.PullRequestCreatedAtOrAfter = NullableStringValue(e)" />
+                </label>
+            </fieldset>
+
+            <fieldset class="local-settings-group" data-testid="settings-local-docs-api">
+                <legend>DocsApi</legend>
+                <label class="local-settings-field wide">
+                    <span>BaseAddress</span>
+                    <input data-testid="settings-docsapi-base-address" value="@settings.DocsApi.BaseAddress" disabled="@_saving" @oninput="e => settings.DocsApi.BaseAddress = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>DefaultLanguage</span>
+                    <input data-testid="settings-docsapi-language" value="@settings.DocsApi.DefaultLanguage" disabled="@_saving" @oninput="e => settings.DocsApi.DefaultLanguage = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>ClientName</span>
+                    <input data-testid="settings-docsapi-client-name" value="@settings.DocsApi.ClientName" disabled="@_saving" @oninput="e => settings.DocsApi.ClientName = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>PageListCacheSeconds</span>
+                    <input type="number" min="1" data-testid="settings-docsapi-cache-seconds" value="@settings.DocsApi.PageListCacheSeconds" disabled="@_saving" @oninput="e => settings.DocsApi.PageListCacheSeconds = IntValue(e)" />
+                </label>
+            </fieldset>
+
+            <fieldset class="local-settings-group" data-testid="settings-local-copilot">
+                <legend>Copilot</legend>
+                <label class="local-settings-field">
+                    <span>DefaultModel</span>
+                    <input data-testid="settings-copilot-model" value="@settings.Copilot.DefaultModel" disabled="@_saving" @oninput="e => settings.Copilot.DefaultModel = StringValue(e)" />
+                </label>
+                <label class="local-settings-check">
+                    <input type="checkbox" data-testid="settings-copilot-streaming" checked="@settings.Copilot.Streaming" disabled="@_saving" @onchange="e => settings.Copilot.Streaming = BoolValue(e)" />
+                    <span>Streaming</span>
+                </label>
+                <label class="local-settings-check">
+                    <input type="checkbox" data-testid="settings-copilot-capture-content" checked="@settings.Copilot.CaptureContent" disabled="@_saving" @onchange="e => settings.Copilot.CaptureContent = BoolValue(e)" />
+                    <span>CaptureContent</span>
+                </label>
+                <label class="local-settings-field wide">
+                    <span>OAuthClientId</span>
+                    <input data-testid="settings-copilot-oauth-client-id" value="@settings.Copilot.OAuthClientId" disabled="@_saving" @oninput="e => settings.Copilot.OAuthClientId = NullableStringValue(e)" />
+                </label>
+                <label class="local-settings-field wide">
+                    <span>AllowedUrlHosts</span>
+                    <textarea rows="3" data-testid="settings-copilot-allowed-hosts" disabled="@_saving" @bind="_allowedHostsText" @bind:event="oninput"></textarea>
+                </label>
+                <label class="local-settings-field wide">
+                    <span>OAuthScopes</span>
+                    <textarea rows="2" data-testid="settings-copilot-oauth-scopes" disabled="@_saving" @bind="_oauthScopesText" @bind:event="oninput"></textarea>
+                </label>
+            </fieldset>
+
+            <fieldset class="local-settings-group" data-testid="settings-local-webview">
+                <legend>WebView</legend>
+                <label class="local-settings-field wide">
+                    <span>AllowedUrlHosts</span>
+                    <textarea rows="4" data-testid="settings-webview-allowed-hosts" disabled="@_saving" @bind="_webViewAllowedHostsText" @bind:event="oninput"></textarea>
+                </label>
+            </fieldset>
+
+            <fieldset class="local-settings-group" data-testid="settings-local-docs-repository">
+                <legend>DocsRepository</legend>
+                <label class="local-settings-field wide">
+                    <span>BareCloneDir</span>
+                    <input data-testid="settings-docsrepo-bare-clone-dir" value="@settings.DocsRepository.BareCloneDir" disabled="@_saving" @oninput="e => settings.DocsRepository.BareCloneDir = StringValue(e)" />
+                </label>
+                <label class="local-settings-field wide">
+                    <span>CloneUrl</span>
+                    <input data-testid="settings-docsrepo-clone-url" value="@settings.DocsRepository.CloneUrl" disabled="@_saving" @oninput="e => settings.DocsRepository.CloneUrl = StringValue(e)" />
+                </label>
+                <label class="local-settings-field wide">
+                    <span>WorktreeRoot</span>
+                    <input data-testid="settings-docsrepo-worktree-root" value="@settings.DocsRepository.WorktreeRoot" disabled="@_saving" @oninput="e => settings.DocsRepository.WorktreeRoot = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>MaxWorktrees</span>
+                    <input type="number" min="1" max="50" data-testid="settings-docsrepo-max-worktrees" value="@settings.DocsRepository.MaxWorktrees" disabled="@_saving" @oninput="e => settings.DocsRepository.MaxWorktrees = IntValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>PreviewCommand</span>
+                    <input data-testid="settings-docsrepo-preview-command" value="@settings.DocsRepository.PreviewCommand" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewCommand = StringValue(e)" />
+                </label>
+                <label class="local-settings-field wide">
+                    <span>PreviewArguments</span>
+                    <input data-testid="settings-docsrepo-preview-arguments" value="@settings.DocsRepository.PreviewArguments" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewArguments = StringValue(e)" />
+                </label>
+                <label class="local-settings-field wide">
+                    <span>PreviewInstallArguments</span>
+                    <input data-testid="settings-docsrepo-preview-install-arguments" value="@settings.DocsRepository.PreviewInstallArguments" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewInstallArguments = StringValue(e)" />
+                </label>
+                <label class="local-settings-field wide">
+                    <span>PreviewEnvironment</span>
+                    <textarea rows="3" data-testid="settings-docsrepo-preview-environment" disabled="@_saving" @bind="_previewEnvironmentText" @bind:event="oninput"></textarea>
+                </label>
+                <label class="local-settings-field">
+                    <span>PreviewBasePort</span>
+                    <input type="number" min="1024" max="65535" data-testid="settings-docsrepo-preview-base-port" value="@settings.DocsRepository.PreviewBasePort" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewBasePort = IntValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>PreviewReadyTimeoutSeconds</span>
+                    <input type="number" min="5" max="1800" data-testid="settings-docsrepo-preview-timeout" value="@settings.DocsRepository.PreviewReadyTimeoutSeconds" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewReadyTimeoutSeconds = IntValue(e)" />
+                </label>
+            </fieldset>
+
+            <fieldset class="local-settings-group" data-testid="settings-local-logging">
+                <legend>Logging</legend>
+                <label class="local-settings-field">
+                    <span>Default</span>
+                    <input data-testid="settings-logging-default" value="@settings.Logging.DefaultLogLevel" disabled="@_saving" @oninput="e => settings.Logging.DefaultLogLevel = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>Microsoft</span>
+                    <input data-testid="settings-logging-microsoft" value="@settings.Logging.MicrosoftLogLevel" disabled="@_saving" @oninput="e => settings.Logging.MicrosoftLogLevel = StringValue(e)" />
+                </label>
+            </fieldset>
+        </div>
+    }
+</section>
+
+@code {
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    private LocalAppSettings? _settings;
+    private string? _settingsPath;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _status;
+    private string? _error;
+    private string _allowedHostsText = string.Empty;
+    private string _webViewAllowedHostsText = string.Empty;
+    private string _oauthScopesText = string.Empty;
+    private string _previewEnvironmentText = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+        => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _status = null;
+        _error = null;
+        try
+        {
+            var store = Services.GetRequiredService<ILocalAppSettingsStore>();
+            _settingsPath = store.SettingsPath;
+            _settings = await store.LoadAsync(CancellationToken.None);
+            UpdateTextFields(_settings);
+        }
+        catch (Exception ex)
+        {
+            _settings = null;
+            _error = $"アプリ設定の読み込みに失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_settings is null || _saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        _status = null;
+        _error = null;
+        try
+        {
+            var next = _settings.Clone();
+            next.Copilot.AllowedUrlHosts = SplitLines(_allowedHostsText);
+            next.WebView.AllowedUrlHosts = SplitLines(_webViewAllowedHostsText);
+            next.Copilot.OAuthScopes = SplitLines(_oauthScopesText);
+            next.DocsRepository.PreviewEnvironment = ParseKeyValueLines(_previewEnvironmentText);
+
+            var store = Services.GetRequiredService<ILocalAppSettingsStore>();
+            await store.SaveAsync(next, CancellationToken.None);
+            _settings = store.Current.Clone();
+            UpdateTextFields(_settings);
+            _status = "appsettings.local.json を保存しました";
+        }
+        catch (LocalAppSettingsValidationException ex)
+        {
+            _error = string.Join(" ", ex.Errors);
+        }
+        catch (FormatException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _error = $"アプリ設定の保存に失敗しました: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void UpdateTextFields(LocalAppSettings settings)
+    {
+        _allowedHostsText = JoinLines(settings.Copilot.AllowedUrlHosts);
+        _webViewAllowedHostsText = JoinLines(settings.WebView.AllowedUrlHosts);
+        _oauthScopesText = JoinLines(settings.Copilot.OAuthScopes);
+        _previewEnvironmentText = string.Join(
+            Environment.NewLine,
+            settings.DocsRepository.PreviewEnvironment
+                .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
+                .Select(static pair => $"{pair.Key}={pair.Value}"));
+    }
+
+    private static string StringValue(ChangeEventArgs e)
+        => e.Value?.ToString() ?? string.Empty;
+
+    private static string? NullableStringValue(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static int IntValue(ChangeEventArgs e)
+        => int.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? value
+            : 0;
+
+    private static bool BoolValue(ChangeEventArgs e)
+        => e.Value is bool value && value;
+
+    private static string JoinLines(IEnumerable<string> values)
+        => string.Join(Environment.NewLine, values);
+
+    private static List<string> SplitLines(string value)
+        => value
+            .Split(["\r\n", "\n"], StringSplitOptions.None)
+            .Select(static line => line.Trim())
+            .Where(static line => line.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+    private static Dictionary<string, string> ParseKeyValueLines(string value)
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var rawLine in value.Split(["\r\n", "\n"], StringSplitOptions.None))
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            var separator = line.IndexOf('=', StringComparison.Ordinal);
+            if (separator <= 0)
+            {
+                throw new FormatException("PreviewEnvironment は KEY=VALUE 形式で指定してください。");
+            }
+
+            var key = line[..separator].Trim();
+            var settingValue = line[(separator + 1)..].Trim();
+            if (key.Length == 0)
+            {
+                throw new FormatException("PreviewEnvironment のキーは空にできません。");
+            }
+
+            result[key] = settingValue;
+        }
+
+        return result;
+    }
+}

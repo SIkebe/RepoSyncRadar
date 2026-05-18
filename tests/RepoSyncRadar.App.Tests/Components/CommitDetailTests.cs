@@ -84,6 +84,33 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void CommitDetail_Renders_Pull_Request_Actions()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        commit.PrNumber = 12345;
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var navigator = new PreviewNavigator();
+        Uri? captured = null;
+        navigator.Requested += (_, url) => captured = url;
+
+        using var cut = RenderDetailWith(commit, resolver, navigator, new PreviewSession());
+
+        var button = cut.Find("[data-testid=\"commit-detail-open-pr\"]");
+        Assert.Equal("PR #12345", button.TextContent);
+        button.Click();
+        Assert.NotNull(captured);
+        Assert.Equal("https://github.com/github/docs/pull/12345", captured!.AbsoluteUri);
+
+        var external = cut.Find("[data-testid=\"commit-detail-open-pr-external\"]");
+        Assert.Equal("https://github.com/github/docs/pull/12345", external.GetAttribute("href"));
+        Assert.Equal("_blank", external.GetAttribute("target"));
+        Assert.Equal("noopener", external.GetAttribute("rel"));
+    }
+
+    [Fact]
     public void CommitDetail_Shows_Scoring_When_Present()
     {
         var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
@@ -803,6 +830,12 @@ public class CommitDetailTests
             Options.Create(new DocsRepositoryOptions
             {
                 PreviewReadyTimeoutSeconds = previewReadyTimeoutSeconds,
+            }));
+        services.AddSingleton<IOptions<GitHubOptions>>(
+            Options.Create(new GitHubOptions
+            {
+                Owner = "github",
+                Repo = "docs",
             }));
         var sp = services.BuildServiceProvider();
 

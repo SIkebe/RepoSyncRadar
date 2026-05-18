@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Configuration;
 using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
@@ -30,6 +31,8 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<RadarWriteTools>();
         services.TryAddSingleton<IClipboard, WpfClipboard>();
         services.TryAddSingleton<IAppUserSettingsStore>(_ => FileAppUserSettingsStore.CreateDefault());
+        services.TryAddSingleton<ILocalAppSettingsStore>(sp =>
+            FileLocalAppSettingsStore.CreateDefault(sp.GetRequiredService<IConfiguration>()));
 
         // GitHub OAuth user-token auth (replaces env-var PAT chain). The HttpClient is
         // factoried so we get sensible socket lifetime + DI logging out of the box.

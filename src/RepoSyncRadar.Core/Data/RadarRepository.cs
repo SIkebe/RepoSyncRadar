@@ -206,6 +206,12 @@ public sealed class RadarRepository : IRadarRepository
             query = query.Where(c => c.Scoring == null);
         }
 
+        var shaQuery = NormalizeShaQuery(filter.ShaQuery);
+        if (shaQuery.Length > 0)
+        {
+            query = query.Where(c => c.Sha.Contains(shaQuery));
+        }
+
         query = query.OrderByDescending(c => c.AuthoredAt);
 
         if (filter.Limit is { } limit && limit >= 0)
@@ -216,6 +222,11 @@ public sealed class RadarRepository : IRadarRepository
         var commits = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
         return commits;
     }
+
+    private static string NormalizeShaQuery(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim().ToLowerInvariant();
 
     public async Task<IReadOnlyDictionary<ReviewStatus, int>> GetReviewCountsAsync(
         CancellationToken cancellationToken = default)
@@ -241,6 +252,7 @@ public sealed class RadarRepository : IRadarRepository
             [ReviewStatus.Seen] = 0,
             [ReviewStatus.Adopted] = 0,
             [ReviewStatus.Rejected] = 0,
+            [ReviewStatus.Archived] = 0,
             [ReviewStatus.Later] = 0,
         };
 
