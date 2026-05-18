@@ -102,6 +102,10 @@ internal static class DocsLiquidContextLoader
                 ? fullPath[rootWithSeparator.Length..]
                 : Path.GetRelativePath(root, fullPath);
             AddPageTitleAliases(result, repoPath, rawTitle);
+            foreach (var redirect in ExtractFrontmatterSequence(frontmatter, "redirect_from"))
+            {
+                AddRouteTitleAliases(result, redirect, rawTitle);
+            }
         }
 
         return result;
@@ -156,6 +160,58 @@ internal static class DocsLiquidContextLoader
         return null;
     }
 
+    private static IEnumerable<string> ExtractFrontmatterSequence(string frontmatter, string key)
+    {
+        if (string.IsNullOrEmpty(frontmatter))
+        {
+            yield break;
+        }
+
+        using var reader = new StringReader(frontmatter);
+        string? line;
+        var prefix = key + ":";
+        var inSequence = false;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (!inSequence)
+            {
+                if (line.Length == 0 || char.IsWhiteSpace(line[0]) || !line.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                var inlineValue = line[prefix.Length..].Trim();
+                if (inlineValue.Length > 0)
+                {
+                    yield return UnquoteYaml(inlineValue);
+                    yield break;
+                }
+                inSequence = true;
+                continue;
+            }
+
+            if (line.Length == 0)
+            {
+                continue;
+            }
+            if (!char.IsWhiteSpace(line[0]))
+            {
+                yield break;
+            }
+
+            var trimmed = line.TrimStart();
+            if (!trimmed.StartsWith('-'))
+            {
+                continue;
+            }
+
+            var rawValue = trimmed[1..].Trim();
+            if (rawValue.Length > 0)
+            {
+                yield return UnquoteYaml(rawValue);
+            }
+        }
+    }
+
     private static string UnquoteYaml(string value)
     {
         if (value.Length >= 2 &&
@@ -207,6 +263,58 @@ internal static class DocsLiquidContextLoader
         AddAlias(sink, route, rawTitle);
         AddAlias(sink, "/" + route, rawTitle);
         AddAlias(sink, "/en/" + route, rawTitle);
+    }
+
+    private static void AddRouteTitleAliases(
+        IDictionary<string, string> sink,
+        string route,
+        string rawTitle)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+        {
+            return;
+        }
+
+        var normalized = NormalizeRouteAlias(route);
+        if (normalized.Length == 0)
+        {
+            return;
+        }
+
+        AddAlias(sink, normalized, rawTitle);
+        AddAlias(sink, "/" + normalized, rawTitle);
+        AddAlias(sink, "/en/" + normalized, rawTitle);
+    }
+
+    private static string NormalizeRouteAlias(string route)
+    {
+        var trimmed = route.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri)
+            && string.Equals(uri.Host, "docs.github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = uri.AbsolutePath;
+        }
+
+        var suffixStart = trimmed.IndexOfAny(['?', '#']);
+        if (suffixStart >= 0)
+        {
+            trimmed = trimmed[..suffixStart];
+        }
+
+        var segments = trimmed.Replace('\\', '/').Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries).ToList();
+        if (segments.Count == 0)
+        {
+            return string.Empty;
+        }
+        if (string.Equals(segments[0], "en", StringComparison.OrdinalIgnoreCase))
+        {
+            segments.RemoveAt(0);
+        }
+        if (segments.Count > 0 && segments[0].Contains('@'))
+        {
+            segments.RemoveAt(0);
+        }
+        return string.Join('/', segments);
     }
 
     private static void AddAlias(IDictionary<string, string> sink, string key, string rawTitle)

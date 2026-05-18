@@ -419,6 +419,64 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.DoesNotContain(">AUTOTITLE</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Rewrites_Autotitle_From_Redirect_From_Alias()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-autotitle-redirect.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-markdown-autotitle-redirect");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+        var sourcePath = "content/code-security/concepts/security-at-scale/about-enabling-security-features-at-scale.md";
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, _) =>
+            {
+                var sourceRoot = Path.Combine(path, "content", "code-security", "concepts", "security-at-scale");
+                Directory.CreateDirectory(sourceRoot);
+                File.WriteAllText(
+                    Path.Combine(sourceRoot, "about-enabling-security-features-at-scale.md"),
+                    "---\ntitle: Source\n---\n\nFor information, see [AUTOTITLE](/code-security/securing-your-organization/enabling-security-features-in-your-organization/giving-org-access-private-registries).");
+
+                var targetRoot = Path.Combine(path, "content", "code-security", "how-tos", "secure-at-scale", "configure-organization-security", "manage-access");
+                Directory.CreateDirectory(targetRoot);
+                File.WriteAllText(
+                    Path.Combine(targetRoot, "giving-org-access-private-registries.md"),
+                    "---\ntitle: Giving private registries access at the organization level\nredirect_from:\n  - /code-security/securing-your-organization/enabling-security-features-in-your-organization/giving-org-access-private-registries\n---\n\nTarget page");
+            });
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", sourcePath, cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Contains(">Giving private registries access at the organization level</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.DoesNotContain(">AUTOTITLE</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
+    }
+
     // §Step 19.9 regression: docs version ドロップダウンで Free / Enterprise Cloud /
     // Enterprise Server を切り替えると、PreviewCoordinator は同じポートで /markdown/before
     // の内容を差し替える。URL に version 識別子が入っていないと WebView2 は
