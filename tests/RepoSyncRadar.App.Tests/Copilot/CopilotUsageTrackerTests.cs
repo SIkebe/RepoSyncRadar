@@ -244,6 +244,18 @@ public sealed class CopilotUsageTrackerTests
         Assert.Equal(CopilotUsageBillingSource.None, snapshot.BillingSource);
     }
 
+    [Theory]
+    [InlineData("gpt-5.3-codex")]
+    [InlineData("gpt-5-mini")]
+    [InlineData("gpt-5.5")]
+    [InlineData("gpt-5.4-mini")]
+    [InlineData("claude-sonnet-4.6")]
+    [InlineData("claude-haiku-4.5")]
+    public void CopilotModelPricing_Supports_Current_Fallback_Model_Ids(string model)
+    {
+        Assert.True(CopilotModelPricing.SupportsModel(model));
+    }
+
     [Fact]
     public void RecordSessionMetrics_Estimates_From_Current_Model_When_Sdk_Aiu_Is_Missing()
     {
