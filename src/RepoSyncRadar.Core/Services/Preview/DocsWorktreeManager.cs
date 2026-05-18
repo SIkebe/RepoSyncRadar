@@ -131,10 +131,18 @@ public sealed partial class DocsWorktreeManager
         await RestoreFromDiskAsync(cancellationToken).ConfigureAwait(false);
         if (_worktrees.TryGetValue(commitSha, out var existing))
         {
-            existing.LastUsed = ++_tick;
-            await ResetWorktreeAsync(existing.Path, cancellationToken).ConfigureAwait(false);
-            await EnsureNextWebpackOptOutAsync(existing.Path, cancellationToken).ConfigureAwait(false);
-            return existing.Path;
+            if (IsInitializingLockedWorktree(existing.Path))
+            {
+                _worktrees.Remove(commitSha);
+                await RemoveWorktreeAsync(existing.Path, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                existing.LastUsed = ++_tick;
+                await ResetWorktreeAsync(existing.Path, cancellationToken).ConfigureAwait(false);
+                await EnsureNextWebpackOptOutAsync(existing.Path, cancellationToken).ConfigureAwait(false);
+                return existing.Path;
+            }
         }
 
         var slug = commitSha.Length >= 12 ? commitSha[..12] : commitSha;
@@ -152,9 +160,19 @@ public sealed partial class DocsWorktreeManager
         }
 
         var args = string.Create(CultureInfo.InvariantCulture, $"worktree add {path} {commitSha}");
-        var result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        ProcessRunResult result;
+        try
+        {
+            result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            await CleanupInterruptedWorktreeAsync(path).ConfigureAwait(false);
+            throw;
+        }
         if (result.ExitCode != 0)
         {
+            await CleanupInterruptedWorktreeAsync(path).ConfigureAwait(false);
             throw new InvalidOperationException($"git worktree add failed (exit {result.ExitCode}): {result.StandardError}");
         }
         _worktrees[commitSha] = new WorktreeEntry(path, ++_tick);
@@ -172,16 +190,37 @@ public sealed partial class DocsWorktreeManager
                     oldest = kv;
                 }
             }
-            var removeArgs = string.Create(CultureInfo.InvariantCulture, $"worktree remove --force {oldest.Value.Path}");
-            await StopStaleServersBeforeRemovalAsync(oldest.Value.Path, cancellationToken).ConfigureAwait(false);
-            var removeResult = await _runner.RunAsync("git", removeArgs, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
-            if (removeResult.ExitCode != 0)
-            {
-                LogWorktreeRemoveFailed(_logger, oldest.Value.Path, removeResult.StandardError);
-            }
+            await RemoveWorktreeAsync(oldest.Value.Path, cancellationToken).ConfigureAwait(false);
             _worktrees.Remove(oldest.Key);
         }
         return path;
+    }
+
+    public async Task<bool> TryRepairExistingWorktreeAsync(string path, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        if (!IsEnabled || !Directory.Exists(path))
+        {
+            return false;
+        }
+
+        if (IsInitializingLockedWorktree(path))
+        {
+            await RemoveWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        try
+        {
+            await ResetWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
+            await EnsureNextWebpackOptOutAsync(path, cancellationToken).ConfigureAwait(false);
+            return Directory.Exists(path);
+        }
+        catch (InvalidOperationException)
+        {
+            await RemoveWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
+            return false;
+        }
     }
 
     private async Task<bool> TryRecoverExistingPathAsync(
@@ -189,6 +228,13 @@ public sealed partial class DocsWorktreeManager
         string commitSha,
         CancellationToken cancellationToken)
     {
+        if (IsInitializingLockedWorktree(path))
+        {
+            await RemoveWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
+            LogStaleWorktreeDeleted(_logger, path);
+            return false;
+        }
+
         var head = await _runner.RunAsync(
             "git",
             "rev-parse HEAD",
@@ -240,12 +286,79 @@ public sealed partial class DocsWorktreeManager
         }
     }
 
-    private static bool LooksLikeIndexLockFailure(string standardError) =>
-        standardError.Contains("index.lock", StringComparison.OrdinalIgnoreCase)
-        && standardError.Contains("File exists", StringComparison.OrdinalIgnoreCase);
-
-    private static bool TryDeleteStaleIndexLock(string worktreePath)
+    private async Task CleanupInterruptedWorktreeAsync(string path)
     {
+        try
+        {
+            await RemoveWorktreeAsync(path, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            LogInterruptedWorktreeCleanupFailed(_logger, path, ex.Message);
+        }
+    }
+
+    private async Task<bool> RemoveWorktreeAsync(string path, CancellationToken cancellationToken)
+    {
+        await StopStaleServersBeforeRemovalAsync(path, cancellationToken).ConfigureAwait(false);
+
+        await _runner.RunAsync(
+            "git",
+            string.Create(CultureInfo.InvariantCulture, $"worktree unlock {path}"),
+            _options.BareCloneDir,
+            cancellationToken).ConfigureAwait(false);
+
+        var removeResult = await _runner.RunAsync(
+            "git",
+            string.Create(CultureInfo.InvariantCulture, $"worktree remove --force --force {path}"),
+            _options.BareCloneDir,
+            cancellationToken).ConfigureAwait(false);
+        if (removeResult.ExitCode == 0)
+        {
+            return true;
+        }
+
+        LogWorktreeRemoveFailed(_logger, path, removeResult.StandardError);
+        if (Directory.Exists(path))
+        {
+            await DeleteDirectoryRobustAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+
+        await _runner.RunAsync(
+            "git",
+            "worktree prune",
+            _options.BareCloneDir,
+            cancellationToken).ConfigureAwait(false);
+        return Directory.Exists(path) is false;
+    }
+
+    private static bool IsInitializingLockedWorktree(string worktreePath)
+    {
+        if (!TryReadWorktreeGitDir(worktreePath, out var gitDir))
+        {
+            return false;
+        }
+
+        var lockedPath = Path.Combine(gitDir, "locked");
+        if (!File.Exists(lockedPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var text = File.ReadAllText(lockedPath).Trim();
+            return string.Equals(text, "initializing", StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryReadWorktreeGitDir(string worktreePath, out string gitDir)
+    {
+        gitDir = string.Empty;
         var gitFile = Path.Combine(worktreePath, ".git");
         if (!File.Exists(gitFile))
         {
@@ -271,10 +384,23 @@ public sealed partial class DocsWorktreeManager
             return false;
         }
 
-        var gitDir = line[prefix.Length..].Trim();
+        gitDir = line[prefix.Length..].Trim();
         if (!Path.IsPathRooted(gitDir))
         {
             gitDir = Path.GetFullPath(Path.Combine(worktreePath, gitDir));
+        }
+        return true;
+    }
+
+    private static bool LooksLikeIndexLockFailure(string standardError) =>
+        standardError.Contains("index.lock", StringComparison.OrdinalIgnoreCase)
+        && standardError.Contains("File exists", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryDeleteStaleIndexLock(string worktreePath)
+    {
+        if (!TryReadWorktreeGitDir(worktreePath, out var gitDir))
+        {
+            return false;
         }
 
         var lockPath = Path.Combine(gitDir, "index.lock");
@@ -464,16 +590,9 @@ public sealed partial class DocsWorktreeManager
         var removed = 0;
         foreach (var p in paths)
         {
-            var args = string.Create(CultureInfo.InvariantCulture, $"worktree remove --force {p}");
-            await StopStaleServersBeforeRemovalAsync(p, cancellationToken).ConfigureAwait(false);
-            var res = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
-            if (res.ExitCode == 0)
+            if (await RemoveWorktreeAsync(p, cancellationToken).ConfigureAwait(false))
             {
                 removed++;
-            }
-            else
-            {
-                LogWorktreeRemoveFailed(_logger, p, res.StandardError);
             }
         }
         _worktrees.Clear();
@@ -600,4 +719,8 @@ public sealed partial class DocsWorktreeManager
     [LoggerMessage(EventId = 8, Level = LogLevel.Information,
         Message = "Stopped {Count} stale preview server process(es) before removing worktree {Path}.")]
     private static partial void LogStalePreviewServersStopped(ILogger logger, string path, int count);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Warning,
+        Message = "Failed to clean interrupted preview worktree {Path}: {Message}")]
+    private static partial void LogInterruptedWorktreeCleanupFailed(ILogger logger, string path, string message);
 }

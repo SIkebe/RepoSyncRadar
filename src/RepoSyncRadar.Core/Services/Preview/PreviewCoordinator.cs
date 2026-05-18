@@ -506,7 +506,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         CancellationToken cancellationToken)
     {
         var key = new PreparedSessionKey(prNumber, sha);
-        if (TryGetValidPreparedSession(key, out var fast))
+        if (await TryGetValidPreparedSessionAsync(key, cancellationToken).ConfigureAwait(false) is { } fast)
         {
             return fast;
         }
@@ -517,7 +517,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             // Re-check after acquiring the lock — a concurrent prewarm may have
             // just finished and populated the cache.
-            if (TryGetValidPreparedSession(key, out var slow))
+            if (await TryGetValidPreparedSessionAsync(key, cancellationToken).ConfigureAwait(false) is { } slow)
             {
                 return slow;
             }
@@ -568,14 +568,17 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
     }
 
-    private bool TryGetValidPreparedSession(PreparedSessionKey key, out PreparedMarkdownSession session)
+    private async Task<PreparedMarkdownSession?> TryGetValidPreparedSessionAsync(
+        PreparedSessionKey key,
+        CancellationToken cancellationToken)
     {
         if (_preparedSessions.TryGetValue(key, out var cached)
             && Directory.Exists(cached.BeforeWorktreePath)
-            && Directory.Exists(cached.AfterWorktreePath))
+            && Directory.Exists(cached.AfterWorktreePath)
+            && await _worktree.TryRepairExistingWorktreeAsync(cached.BeforeWorktreePath, cancellationToken).ConfigureAwait(false)
+            && await _worktree.TryRepairExistingWorktreeAsync(cached.AfterWorktreePath, cancellationToken).ConfigureAwait(false))
         {
-            session = cached;
-            return true;
+            return cached;
         }
         // Worktree directory was pruned out from under us (e.g. CleanupCacheAsync
         // on another caller). Drop the stale entry so the next call rebuilds.
@@ -583,8 +586,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             _preparedSessions.TryRemove(key, out _);
         }
-        session = null!;
-        return false;
+        return null;
     }
 
     private async Task<DocsLiquidContext> LoadLiquidContextCachedAsync(

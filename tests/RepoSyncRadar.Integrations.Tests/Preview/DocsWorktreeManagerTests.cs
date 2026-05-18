@@ -278,6 +278,206 @@ public sealed class DocsWorktreeManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task CheckoutAsync_Recreates_Locked_Initializing_Worktree_Even_When_Head_Matches()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "cdcdcdcdcdcd0002";
+        var existingPath = Path.Combine(worktreeRoot, "cdcdcdcdcdcd");
+        var gitDir = Path.Combine(bare, "worktrees", "cdcdcdcdcdcd");
+        Directory.CreateDirectory(existingPath);
+        Directory.CreateDirectory(gitDir);
+        File.WriteAllText(Path.Combine(existingPath, ".git"), $"gitdir: {gitDir}\n");
+        File.WriteAllText(Path.Combine(gitDir, "locked"), "initializing\n");
+        var partialFile = Path.Combine(existingPath, "partial.txt");
+        File.WriteAllText(partialFile, "checkout was interrupted");
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(
+                0,
+                $"worktree {existingPath}\nHEAD {sha}\ndetached\nlocked initializing\n\n",
+                string.Empty)));
+        runner.RunAsync("git", "worktree unlock " + existingPath, bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "worktree remove --force --force " + existingPath, bare, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Directory.Delete(existingPath, recursive: true);
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+                bare,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Assert.False(File.Exists(partialFile));
+                Directory.CreateDirectory(existingPath);
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var path = await sut.CheckoutAsync(sha, ct);
+
+        Assert.Equal(existingPath, path);
+        await runner.Received(1).RunAsync("git", "worktree unlock " + existingPath, bare, Arg.Any<CancellationToken>());
+        await runner.Received(1).RunAsync("git", "worktree remove --force --force " + existingPath, bare, Arg.Any<CancellationToken>());
+        await runner.Received(1).RunAsync(
+            "git",
+            Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+            bare,
+            Arg.Any<CancellationToken>());
+        await runner.DidNotReceive().RunAsync("git", "reset --hard", existingPath, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckoutAsync_Cleans_Partial_Worktree_When_Add_Is_Canceled()
+    {
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "edededededed0003";
+        var expectedPath = Path.Combine(worktreeRoot, "edededededed");
+        var partialFile = Path.Combine(expectedPath, "partial.txt");
+        using var cts = new CancellationTokenSource();
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+                bare,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Directory.CreateDirectory(expectedPath);
+                File.WriteAllText(partialFile, "checkout interrupted");
+                cts.Cancel();
+                return Task.FromCanceled<ProcessRunResult>(cts.Token);
+            });
+        runner.RunAsync("git", "worktree unlock " + expectedPath, bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "worktree remove --force --force " + expectedPath, bare, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Directory.Delete(expectedPath, recursive: true);
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        await Assert.ThrowsAsync<TaskCanceledException>(() => sut.CheckoutAsync(sha, cts.Token));
+
+        Assert.False(Directory.Exists(expectedPath));
+        await runner.Received(1).RunAsync("git", "worktree unlock " + expectedPath, bare, Arg.Any<CancellationToken>());
+        await runner.Received(1).RunAsync("git", "worktree remove --force --force " + expectedPath, bare, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckoutAsync_Cleans_Partial_Worktree_When_Add_Fails()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "efefefefefef0004";
+        var expectedPath = Path.Combine(worktreeRoot, "efefefefefef");
+        var partialFile = Path.Combine(expectedPath, "partial.txt");
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+                bare,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Directory.CreateDirectory(expectedPath);
+                File.WriteAllText(partialFile, "checkout failed");
+                return Task.FromResult(new ProcessRunResult(128, string.Empty, "checkout failed"));
+            });
+        runner.RunAsync("git", "worktree unlock " + expectedPath, bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "worktree remove --force --force " + expectedPath, bare, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Directory.Delete(expectedPath, recursive: true);
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.CheckoutAsync(sha, ct));
+
+        Assert.Contains("worktree add failed", ex.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(expectedPath));
+        await runner.Received(1).RunAsync("git", "worktree unlock " + expectedPath, bare, Arg.Any<CancellationToken>());
+        await runner.Received(1).RunAsync("git", "worktree remove --force --force " + expectedPath, bare, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TryRepairExistingWorktreeAsync_Returns_True_After_Resetting_Healthy_Worktree()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        var path = Path.Combine(worktreeRoot, "aaaaaaaaaaaa");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(path);
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "reset --hard", path, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var repaired = await sut.TryRepairExistingWorktreeAsync(path, ct);
+
+        Assert.True(repaired);
+        await runner.Received(1).RunAsync("git", "reset --hard", path, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TryRepairExistingWorktreeAsync_Removes_Locked_Initializing_Worktree_And_Returns_False()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        var path = Path.Combine(worktreeRoot, "bbbbbbbbbbbb");
+        var gitDir = Path.Combine(bare, "worktrees", "bbbbbbbbbbbb");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(path);
+        Directory.CreateDirectory(gitDir);
+        File.WriteAllText(Path.Combine(path, ".git"), $"gitdir: {gitDir}\n");
+        File.WriteAllText(Path.Combine(gitDir, "locked"), "initializing\n");
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree unlock " + path, bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "worktree remove --force --force " + path, bare, Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Directory.Delete(path, recursive: true);
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var repaired = await sut.TryRepairExistingWorktreeAsync(path, ct);
+
+        Assert.False(repaired);
+        Assert.False(Directory.Exists(path));
+        await runner.Received(1).RunAsync("git", "worktree remove --force --force " + path, bare, Arg.Any<CancellationToken>());
+        await runner.DidNotReceive().RunAsync("git", "reset --hard", path, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task CheckoutAsync_Evicts_Worktree_From_Previous_Process_When_Over_Limit()
     {
         // After rehydration the on-disk worktrees count toward MaxWorktrees, so adding
