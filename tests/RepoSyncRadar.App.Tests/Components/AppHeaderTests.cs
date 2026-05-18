@@ -382,6 +382,45 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Header_Labels_Official_Pricing_Estimates_When_Sdk_Ai_Credits_Are_Missing()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var usageTracker = new CopilotUsageTracker();
+        usageTracker.Record(new CopilotUsageRecord(
+            new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            SessionPurpose.Ask.ToString(),
+            "gpt-5.5",
+            "api-1",
+            100,
+            10,
+            5,
+            20,
+            0,
+            null,
+            null,
+            []));
+
+        var sp = BuildServices(session, out _, out _, usageTracker: usageTracker);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        Assert.Contains("credits 推定", cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+
+        Assert.Contains("GitHub Docs pricing estimate", cut.Find("[data-testid=\"settings-copilot-usage-aiu\"]").TextContent, StringComparison.Ordinal);
+        Assert.Contains("GitHub Docs のモデル別価格表から概算", cut.Find("[data-testid=\"settings-copilot-usage-privacy\"]").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Settings_Renders_Beta4_Session_Usage_Metrics()
     {
         var session = Substitute.For<IGitHubAuthSession>();

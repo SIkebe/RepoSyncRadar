@@ -103,6 +103,8 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 
 起動後はヘッダー右側の **設定** から、`appsettings.local.json` の `GitHub` / `DocsApi` / `Copilot` / `DocsRepository` / `Logging` の値を表示・変更できます。保存した内容はローカル設定ファイルに書き戻され、次回起動時に確実に反映されます。同じ設定パネルで、直接参照している NuGet パッケージのサードパーティ ライセンスも確認できます。
 
+設定パネルの **Copilot 使用量** では、SDK の usage event / session metrics が返す AI Credits を優先して表示します。SDK が AI Credits を返さず、モデル名と token breakdown だけが得られる場合は、GitHub Docs の [Models and pricing for GitHub Copilot](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing) にある per 1M token 単価から概算します。公式価格表にないモデルは、誤った見積もりを避けるため `credits 未報告` のままにします。
+
 ### 2.4 起動
 
 ```powershell

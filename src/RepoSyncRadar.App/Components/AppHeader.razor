@@ -173,14 +173,14 @@
                     }
                     @if (_copilotUsage.TotalNanoAiu is { } totalNanoAiu)
                     {
-                        <p class="settings-muted" data-testid="settings-copilot-usage-aiu">SDK reported: @FormatNumber(totalNanoAiu) nano AIU</p>
+                        <p class="settings-muted" data-testid="settings-copilot-usage-aiu">@FormatBillingSource(_copilotUsage.BillingSource): @FormatNumber(totalNanoAiu) nano AIU</p>
                     }
                     <button type="button"
                             class="toolbar-button compact secondary"
                             data-testid="settings-copilot-usage-reset"
                             @onclick="ResetCopilotUsage">リセット</button>
                 }
-                <p class="settings-muted" data-testid="settings-copilot-usage-privacy">AI Credits と Cost は SDK の usage event と session metrics から集計します。プロンプト本文は保存しません。</p>
+                <p class="settings-muted" data-testid="settings-copilot-usage-privacy">AI Credits と Cost は SDK の usage event / session metrics を優先し、SDK が AI Credits を返さない場合は GitHub Docs のモデル別価格表から概算します。プロンプト本文は保存しません。</p>
             </section>
 
             <ThirdPartyNoticesPanel />
@@ -657,8 +657,23 @@
 
     private static string FormatAiCreditsOrTokens(CopilotUsageSnapshot usage)
         => usage.AiCredits() is { } aiCredits
-            ? $"{FormatAiCredits(aiCredits)} credits"
+            ? $"{FormatAiCredits(aiCredits)} credits{FormatHeaderBillingSuffix(usage.BillingSource)}"
             : $"credits 未報告 / {FormatTokens(usage.TotalTokens)} tokens";
+
+    private static string FormatHeaderBillingSuffix(CopilotUsageBillingSource source)
+        => source is CopilotUsageBillingSource.OfficialPricingTable or CopilotUsageBillingSource.Mixed
+            ? " 推定"
+            : string.Empty;
+
+    private static string FormatBillingSource(CopilotUsageBillingSource source)
+        => source switch
+        {
+            CopilotUsageBillingSource.SdkReported => "SDK reported",
+            CopilotUsageBillingSource.SdkTokenDetails => "SDK token detail estimate",
+            CopilotUsageBillingSource.OfficialPricingTable => "GitHub Docs pricing estimate",
+            CopilotUsageBillingSource.Mixed => "Mixed estimate",
+            _ => "AIU estimate",
+        };
 
     private static bool HasCopilotUsage(CopilotUsageSnapshot usage)
         => usage.TurnCount > 0 || usage.SessionMetrics.Count > 0;
