@@ -237,6 +237,20 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Renders_Download_Octicon_As_Primer_Svg()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            "Click {% octicon \"download\" aria-hidden=\"true\" %} Download CSV.",
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("class=\"octicon octicon-download\"", result, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"download icon\"", result, StringComparison.Ordinal);
+        Assert.Contains("role=\"img\"", result, StringComparison.Ordinal);
+        Assert.Contains("Download CSV.", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Renders_Octicon_Tags_Introduced_By_Reusable_Expansion()
     {
         var ctx = WithReusables(

@@ -528,6 +528,7 @@ public sealed class MarkdownPreviewRendererTests
             2. Select the **Apply to** {% octicon "triangle-down" aria-hidden="true" aria-label="triangle-down" %} dropdown menu.
             3. In the left sidebar, click {% octicon "codescan" aria-hidden="true" aria-label="codescan" %} **Code security**.
             4. Click {% octicon "organization" aria-hidden="true" aria-label="organization" %} **Organizations**, then {% octicon "kebab-horizontal" aria-label="More" %} **More**.
+            5. From the dialog, click {% octicon "download" aria-hidden="true" %} **Download CSV**.
             """;
 
         var html = MarkdownPreviewRenderer.RenderDocument(
@@ -542,8 +543,10 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("class=\"octicon octicon-codescan\"", html, StringComparison.Ordinal);
         Assert.Contains("class=\"octicon octicon-organization\"", html, StringComparison.Ordinal);
         Assert.Contains("class=\"octicon octicon-kebab-horizontal\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-download\"", html, StringComparison.Ordinal);
         Assert.Contains(".octicon{display:inline-block;vertical-align:text-bottom;fill:currentColor;overflow:visible;}", html, StringComparison.Ordinal);
         Assert.Contains("dropdown menu", html, StringComparison.Ordinal);
+        Assert.Contains("<strong>Download CSV</strong>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("{% octicon", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-liquid", html, StringComparison.Ordinal);
     }
