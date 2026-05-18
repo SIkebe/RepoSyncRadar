@@ -167,7 +167,7 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
-    public async Task Changing_Non_Unseen_Commit_To_Later_Selects_Later_Queue()
+    public async Task Changing_Non_Unseen_Commit_To_Later_Keeps_Current_Queue_And_Clears_Selection()
     {
         var target = new Commit
         {
@@ -227,10 +227,12 @@ public sealed class WorkbenchTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Later\"]").ClassList);
+            Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Rejected\"]").ClassList);
+            Assert.DoesNotContain("active", cut.Find("[data-testid=\"sidebar-item-Later\"]").ClassList);
             Assert.DoesNotContain("active", cut.Find("[data-testid=\"sidebar-item-Unseen\"]").ClassList);
-            Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-row\"]"));
             Assert.Empty(cut.FindAll("[data-testid=\"review-actions\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"commit-detail-empty\"]"));
         });
         await repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
     }
@@ -418,9 +420,11 @@ public sealed class WorkbenchTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Archived\"]").ClassList);
-            Assert.Equal(2, cut.FindAll("[data-testid=\"commit-row\"]").Count);
+            Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Rejected\"]").ClassList);
+            Assert.DoesNotContain("active", cut.Find("[data-testid=\"sidebar-item-Archived\"]").ClassList);
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-row\"]"));
             Assert.Contains("2 件をアーカイブに移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.NotNull(cut.Find("[data-testid=\"commit-detail-empty\"]"));
         });
         await repo.Received(1).SetReviewAsync(commits[0].Sha, ReviewStatus.Archived, null, Arg.Any<CancellationToken>());
         await repo.Received(1).SetReviewAsync(commits[1].Sha, ReviewStatus.Archived, null, Arg.Any<CancellationToken>());

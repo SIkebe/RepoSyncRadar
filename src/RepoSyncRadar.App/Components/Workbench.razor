@@ -329,12 +329,6 @@
 
             _selectedCommit = null;
             _selectedCommitShas.Clear();
-            _selectedStatus = _selectedStatus switch
-            {
-                null => null,
-                ReviewStatus.Unseen => ReviewStatus.Unseen,
-                _ => status,
-            };
             _filter = BuildCurrentFilter();
             _bulkReviewStatus = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
@@ -395,12 +389,6 @@
 
     private Task HandleReviewCompleted(ReviewStatus status)
     {
-        _selectedStatus = _selectedStatus switch
-        {
-            null => null,
-            ReviewStatus.Unseen => ReviewStatus.Unseen,
-            _ => status,
-        };
         _filter = BuildCurrentFilter();
         _selectedCommit = null;
         _selectedCommitShas.Clear();
