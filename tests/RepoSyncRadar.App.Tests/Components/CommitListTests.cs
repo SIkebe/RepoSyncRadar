@@ -78,6 +78,34 @@ public class CommitListTests
         Assert.False(string.IsNullOrWhiteSpace(empty.TextContent));
     }
 
+    [Theory]
+    [InlineData(ReviewStatus.Unseen, "未確認キューは空です。", "Triage")]
+    [InlineData(ReviewStatus.Adopted, "注目キューは空です。", "注目へ移動")]
+    [InlineData(ReviewStatus.Later, "保留キューは空です。", "保留した候補")]
+    [InlineData(ReviewStatus.Rejected, "見送り候補は空です。", "見送った候補")]
+    [InlineData(ReviewStatus.Archived, "アーカイブは空です。", "アクティブな確認対象")]
+    public void CommitList_Empty_State_Follows_Status_Context(
+        ReviewStatus status,
+        string expectedTitle,
+        string expectedHintFragment)
+    {
+        using var cut = RenderListWith(new List<Commit>(), filter: new CommitQueryFilter { Status = status });
+
+        Assert.Equal(expectedTitle, cut.Find("[data-testid=\"commit-list-empty-title\"]").TextContent);
+        Assert.Contains(expectedHintFragment, cut.Find("[data-testid=\"commit-list-empty\"]").TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CommitList_Empty_State_Prioritizes_Search_Context()
+    {
+        using var cut = RenderListWith(
+            new List<Commit>(),
+            filter: new CommitQueryFilter { Status = ReviewStatus.Adopted, ShaQuery = "abc123" });
+
+        Assert.Equal("検索条件に一致するコミットはありません。", cut.Find("[data-testid=\"commit-list-empty-title\"]").TextContent);
+        Assert.Contains("検索語を変える", cut.Find("[data-testid=\"commit-list-empty\"]").TextContent, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void CommitList_Requeries_When_RefreshToken_Changes()
     {
@@ -161,6 +189,7 @@ public class CommitListTests
 
     private static IRenderedComponent<CommitList> RenderListWith(
         List<Commit> commits,
+        CommitQueryFilter? filter = null,
         Action<Commit>? onCommitSelected = null,
         Action<CommitSelectionChange>? onSelectionChanged = null)
     {
@@ -176,6 +205,7 @@ public class CommitListTests
         return ctx.Render<CommitList>(
             parameters => parameters
                 .AddCascadingValue<IServiceProvider>(sp)
+                .Add(c => c.Filter, filter)
                 .Add(c => c.OnCommitSelected, selected => onCommitSelected?.Invoke(selected))
                 .Add(c => c.SelectionChanged, change => onSelectionChanged?.Invoke(change)));
     }

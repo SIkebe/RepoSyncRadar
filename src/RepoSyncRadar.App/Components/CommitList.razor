@@ -17,10 +17,9 @@
     else if (_commits.Count == 0)
     {
         <p class="empty" data-testid="commit-list-empty">
-            表示するコミットがありません。<br />
+            <span data-testid="commit-list-empty-title">@BuildEmptyTitle()</span><br />
             <small class="empty-hint">
-                上部の <strong>Triage</strong> ボタンを押すと github/docs の最新 Repo sync コミットを取得し、スコアリングします。
-                ボタンが無効の場合は、まず <strong>Sign in</strong> から GitHub にサインインしてください。
+                @BuildEmptyHint()
             </small>
         </p>
     }
@@ -154,6 +153,42 @@
 
     private static string FormatScore(double score)
         => score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
+    private string BuildEmptyTitle()
+    {
+        if (!string.IsNullOrWhiteSpace(Filter?.ShaQuery))
+        {
+            return "検索条件に一致するコミットはありません。";
+        }
+
+        return Filter?.Status switch
+        {
+            ReviewStatus.Unseen => "未確認キューは空です。",
+            ReviewStatus.Adopted => "注目キューは空です。",
+            ReviewStatus.Later => "保留キューは空です。",
+            ReviewStatus.Rejected => "見送り候補は空です。",
+            ReviewStatus.Archived => "アーカイブは空です。",
+            _ => "表示するコミットがありません。",
+        };
+    }
+
+    private string BuildEmptyHint()
+    {
+        if (!string.IsNullOrWhiteSpace(Filter?.ShaQuery))
+        {
+            return "検索語を変えるか、別のキューを選んでください。";
+        }
+
+        return Filter?.Status switch
+        {
+            ReviewStatus.Unseen => "新しい候補を取得するには、上部の Triage ボタンを押してください。",
+            ReviewStatus.Adopted => "追い続けたい候補を注目へ移動するとここに表示されます。",
+            ReviewStatus.Later => "判断を保留した候補がここに表示されます。",
+            ReviewStatus.Rejected => "低優先度として見送った候補がここに表示されます。",
+            ReviewStatus.Archived => "アクティブな確認対象から外した候補がここに表示されます。",
+            _ => "キューや検索条件を変えて確認してください。",
+        };
+    }
 
     private static string ShortSha(string sha)
         => string.IsNullOrEmpty(sha) ? string.Empty : sha[..Math.Min(7, sha.Length)];
