@@ -287,6 +287,10 @@ public class CommitDetailTests
                 "content/copilot/about-copilot.md",
                 cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
                 StringComparison.Ordinal);
+            Assert.Contains(
+                "content/copilot/about-copilot.md",
+                cut.Find("[data-testid=\"commit-detail-file\"][data-path=\"content/copilot/about-copilot.md\"] [data-testid=\"commit-detail-preview-status\"]").TextContent,
+                StringComparison.Ordinal);
         });
         _ = coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
             commit.PrNumber,
@@ -387,7 +391,7 @@ public class CommitDetailTests
 
         cut.WaitForAssertion(() =>
         {
-            cut.Find("[data-testid=\"commit-detail-preview-progress\"]");
+            cut.Find("[data-testid=\"commit-detail-file\"][data-path=\"content/copilot/about-copilot.md\"] [data-testid=\"commit-detail-preview-progress\"]");
             cut.Find("[data-testid=\"commit-detail-preview-cancel-button\"]");
             Assert.Contains("経過", cut.Find("[data-testid=\"commit-detail-preview-progress-elapsed\"]").TextContent, StringComparison.Ordinal);
         });
@@ -428,7 +432,7 @@ public class CommitDetailTests
         cut.WaitForAssertion(() =>
             Assert.Contains(
                 "プレビュー機能は無効",
-                cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent,
+                cut.Find("[data-testid=\"commit-detail-file\"][data-path=\"content/copilot/about-copilot.md\"] [data-testid=\"commit-detail-preview-status\"]").TextContent,
                 StringComparison.Ordinal));
     }
 

@@ -161,13 +161,50 @@
                           data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
                     @if (canOpenPreview)
                     {
-                        <button type="button"
-                                class="open-in-webview"
-                                data-testid="commit-detail-open-in-webview"
-                                data-path="@file.Path"
-                                disabled="@IsPreviewOperationBusy"
-                                title="@BuildPreviewTitle(file, previewTarget)"
-                                @onclick="() => OpenInWebViewAsync(file)">@BuildPreviewButtonLabel(file)</button>
+                        <div class="preview-file-action">
+                            <button type="button"
+                                    class="open-in-webview"
+                                    data-testid="commit-detail-open-in-webview"
+                                    data-path="@file.Path"
+                                    disabled="@IsPreviewOperationBusy"
+                                    title="@BuildPreviewTitle(file, previewTarget)"
+                                    @onclick="() => OpenInWebViewAsync(file)">@BuildPreviewButtonLabel(file)</button>
+                            @if (string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal))
+                            {
+                                <div class="preview-progress preview-file-progress" data-testid="commit-detail-preview-progress">
+                                    <div class="preview-progress-row">
+                                        <span class="preview-spinner" aria-hidden="true"></span>
+                                        <span class="preview-progress-text" data-testid="commit-detail-preview-progress-text">
+                                            @(_previewStatus ?? "起動中…")
+                                            <span class="preview-progress-elapsed" data-testid="commit-detail-preview-progress-elapsed">
+                                                ・ @_previewElapsedSec 秒経過 / 上限 @_previewTimeoutSec 秒
+                                                @if (_previewPid is { } pid)
+                                                {
+                                                    <span class="preview-progress-pid" data-testid="commit-detail-preview-progress-pid">・ PID @pid</span>
+                                                }
+                                            </span>
+                                        </span>
+                                        <button type="button"
+                                                data-testid="commit-detail-preview-cancel-button"
+                                                class="preview-cancel"
+                                                disabled="@_previewCanceling"
+                                                @onclick="CancelPreviewAsync">@(_previewCanceling ? "中止中…" : "中止")</button>
+                                    </div>
+                                    @if (_previewStdoutTail.Count > 0)
+                                    {
+                                        <pre class="preview-log-tail preview-log-stdout" data-testid="commit-detail-preview-stdout">@string.Join('\n', _previewStdoutTail)</pre>
+                                    }
+                                    @if (_previewStderrTail.Count > 0)
+                                    {
+                                        <pre class="preview-log-tail preview-log-stderr" data-testid="commit-detail-preview-stderr">@string.Join('\n', _previewStderrTail)</pre>
+                                    }
+                                </div>
+                            }
+                            else if (IsPreviewFeedbackFile(file))
+                            {
+                                <p class="preview-status preview-file-status" data-testid="commit-detail-preview-status">@_previewStatus</p>
+                            }
+                        </div>
                     }
                     @if (_urlsByPath.TryGetValue(file.Path, out var urls) && urls.Count > 0)
                     {
@@ -184,41 +221,6 @@
                 </li>
             }
         </ul>
-        @if (_previewBusyPath is not null)
-        {
-            <div class="preview-progress" data-testid="commit-detail-preview-progress">
-                <div class="preview-progress-row">
-                    <span class="preview-spinner" aria-hidden="true"></span>
-                    <span class="preview-progress-text" data-testid="commit-detail-preview-progress-text">
-                        @(_previewStatus ?? "起動中…")
-                        <span class="preview-progress-elapsed" data-testid="commit-detail-preview-progress-elapsed">
-                            ・ @_previewElapsedSec 秒経過 / 上限 @_previewTimeoutSec 秒
-                            @if (_previewPid is { } pid)
-                            {
-                                <span class="preview-progress-pid" data-testid="commit-detail-preview-progress-pid">・ PID @pid</span>
-                            }
-                        </span>
-                    </span>
-                    <button type="button"
-                            data-testid="commit-detail-preview-cancel-button"
-                            class="preview-cancel"
-                            disabled="@_previewCanceling"
-                            @onclick="CancelPreviewAsync">@(_previewCanceling ? "中止中…" : "中止")</button>
-                </div>
-                @if (_previewStdoutTail.Count > 0)
-                {
-                    <pre class="preview-log-tail preview-log-stdout" data-testid="commit-detail-preview-stdout">@string.Join('\n', _previewStdoutTail)</pre>
-                }
-                @if (_previewStderrTail.Count > 0)
-                {
-                    <pre class="preview-log-tail preview-log-stderr" data-testid="commit-detail-preview-stderr">@string.Join('\n', _previewStderrTail)</pre>
-                }
-            </div>
-        }
-        else if (!_previewStatusIsCleanup && !string.IsNullOrWhiteSpace(_previewStatus))
-        {
-            <p class="preview-status" data-testid="commit-detail-preview-status">@_previewStatus</p>
-        }
     }
 </section>
 
@@ -241,6 +243,7 @@
     private string? _previewBusyPath;
     private bool _previewCleanupBusy;
     private string? _activePreviewPath;
+    private string? _previewStatusPath;
     // §Step 19.9: 現在表示中の Markdown プレビューの docs version。
     private DocsVersion? _activeVersion;
     private IPreviewNavigator? _subscribedNavigator;
@@ -346,6 +349,7 @@
             _previewBusyPath = null;
             _previewCleanupBusy = false;
             _activePreviewPath = null;
+            _previewStatusPath = null;
             _previewStatus = null;
             _previewCanceling = false;
             CancelPredictivePrewarm();
@@ -357,6 +361,7 @@
             _activePreviewSha = Commit.Sha;
             _activePreviewPath = null;
             _activeVersion = null;
+            _previewStatusPath = null;
             StartPredictivePrewarm(Commit);
         }
 
@@ -441,6 +446,11 @@
 
     private bool IsActivePreviewFile(CommitFile file)
         => string.Equals(_activePreviewPath, file.Path, StringComparison.Ordinal);
+
+    private bool IsPreviewFeedbackFile(CommitFile file)
+        => !_previewStatusIsCleanup
+            && !string.IsNullOrWhiteSpace(_previewStatus)
+            && string.Equals(_previewStatusPath, file.Path, StringComparison.Ordinal);
 
     private PreviewFilePosition GetPreviewPosition(CommitFile file)
     {
@@ -651,11 +661,13 @@
 
         _previewStatus = "このファイルは公開ドキュメント URL に対応していません";
         _previewStatusIsCleanup = false;
+        _previewStatusPath = file.Path;
     }
 
     private void StartPreviewOperation(string? busyPath, string status, string cancellationSubject)
     {
         _previewBusyPath = busyPath;
+        _previewStatusPath = busyPath;
         _previewCleanupBusy = busyPath is null;
         _previewCanceling = false;
         _previewCancellationSubject = cancellationSubject;
