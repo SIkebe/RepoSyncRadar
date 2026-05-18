@@ -95,8 +95,9 @@ public sealed partial class AdoptionSession
 
         var rawDiff = await _github.GetUnifiedDiffAsync(sha, cancellationToken).ConfigureAwait(false) ?? string.Empty;
         var diff = TruncateDiff(rawDiff);
+        var officialDocUrls = await LoadOfficialDocUrlsAsync(db, commit, cancellationToken).ConfigureAwait(false);
 
-        var prompt = BuildPrompt(commit, fewShot.Select(x => (x.Sha, x.Message)), diff);
+        var prompt = BuildPrompt(commit, fewShot.Select(x => (x.Sha, x.Message)), diff, officialDocUrls);
         LogPromptBuilt(_logger, sha, prompt.Length);
 
         var session = await _sessionFactory.CreateSessionAsync(SessionPurpose.Adoption, cancellationToken).ConfigureAwait(false);
@@ -106,6 +107,7 @@ public sealed partial class AdoptionSession
             var raw = await session.SendAsync(prompt, cancellationToken).ConfigureAwait(false);
             bundle = await ParseOrRepairBundleAsync(session, raw, cancellationToken).ConfigureAwait(false);
         }
+        bundle = EnsureOfficialDocUrls(bundle, officialDocUrls);
 
         await PersistDraftsAsync(db, sha, bundle, cancellationToken).ConfigureAwait(false);
         return bundle;
@@ -214,7 +216,8 @@ public sealed partial class AdoptionSession
     internal static string BuildPrompt(
         Commit commit,
         IEnumerable<(string Sha, string Message)> fewShot,
-        string diff)
+        string diff,
+        IReadOnlyList<string>? officialDocUrls = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine("# 注目コミット — 差分解説と共有文案生成");
@@ -226,6 +229,7 @@ public sealed partial class AdoptionSession
         sb.AppendLine("- スキーマ: `{ \"explanation\": string, \"twitter\": string, \"teams\": string, \"customer\": string }`");
         sb.AppendLine("- explanation は 1200〜2000 文字程度。差分の細部を読まなくても変更点を理解できる密度にする。");
         sb.AppendLine("- twitter は 140 文字以内、teams は 800 文字以内、customer は 1600 文字以内を目安。");
+        sb.AppendLine("- twitter / teams / customer には、必ず下記の公式ドキュメント URL を 1 つ以上含める。");
         sb.AppendLine();
         sb.AppendLine("## explanation の要件");
         sb.AppendLine("- 次の見出しをこの順序で含める: `何が変わったか`, `差分の見方`, `重要なポイント`, `影響と次に見るべき点`。");
@@ -252,6 +256,15 @@ public sealed partial class AdoptionSession
         sb.Append(CultureInfo.InvariantCulture, $"- メッセージ: {commit.Message}").AppendLine();
         sb.Append(CultureInfo.InvariantCulture, $"- 著者: {commit.Author}").AppendLine();
         sb.Append(CultureInfo.InvariantCulture, $"- 変更ファイル数: {commit.Files.Count}").AppendLine();
+        sb.AppendLine();
+        sb.AppendLine("## 公式ドキュメント URL");
+        var urls = officialDocUrls is { Count: > 0 }
+            ? officialDocUrls
+            : BuildFallbackOfficialDocUrls(commit);
+        foreach (var url in urls)
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"- {url}").AppendLine();
+        }
         sb.AppendLine();
         sb.AppendLine("## 差分 (一部省略あり)");
         sb.AppendLine("```diff");
@@ -301,6 +314,112 @@ public sealed partial class AdoptionSession
             index++;
         }
         return sb.ToString();
+    }
+
+    private static DraftBundle EnsureOfficialDocUrls(DraftBundle bundle, IReadOnlyList<string> officialDocUrls)
+    {
+        var url = officialDocUrls.Count > 0 ? officialDocUrls[0] : string.Empty;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return bundle;
+        }
+
+        return new DraftBundle(
+            TwitterJa: EnsureOfficialDocUrl(bundle.TwitterJa, url),
+            TeamsJa: EnsureOfficialDocUrl(bundle.TeamsJa, url),
+            CustomerJa: EnsureOfficialDocUrl(bundle.CustomerJa, url),
+            ExplanationJa: bundle.ExplanationJa);
+    }
+
+    private static string EnsureOfficialDocUrl(string draft, string url)
+    {
+        if (string.IsNullOrWhiteSpace(draft))
+        {
+            return url;
+        }
+        if (draft.Contains("docs.github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return draft;
+        }
+        return draft.TrimEnd() + Environment.NewLine + url;
+    }
+
+    private static async Task<IReadOnlyList<string>> LoadOfficialDocUrlsAsync(
+        RadarDbContext db,
+        Commit commit,
+        CancellationToken cancellationToken)
+    {
+        var paths = commit.Files
+            .Select(static file => file.Path)
+            .Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (paths.Length == 0)
+        {
+            return [];
+        }
+
+        var mapped = await db.PathUrlMaps
+            .AsNoTracking()
+            .Where(map => paths.Contains(map.Path))
+            .OrderByDescending(map => map.Language == "ja")
+            .ThenByDescending(map => map.Version == "fpt")
+            .ThenBy(map => map.Path)
+            .Select(map => map.Url)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var urls = mapped
+            .Concat(BuildFallbackOfficialDocUrls(commit))
+            .Select(ToAbsoluteDocsUrl)
+            .Where(static url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToArray();
+        return urls;
+    }
+
+    private static string[] BuildFallbackOfficialDocUrls(Commit commit)
+        => commit.Files
+            .Select(static file => TryBuildFallbackOfficialDocUrl(file.Path))
+            .Where(static url => !string.IsNullOrWhiteSpace(url))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToArray();
+
+    private static string TryBuildFallbackOfficialDocUrl(string path)
+    {
+        const string contentPrefix = "content/";
+        const string markdownExtension = ".md";
+        if (!path.StartsWith(contentPrefix, StringComparison.Ordinal)
+            || !path.EndsWith(markdownExtension, StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        var slug = path[contentPrefix.Length..^markdownExtension.Length].Trim('/');
+        return slug.Length == 0 ? string.Empty : $"https://docs.github.com/en/{slug}";
+    }
+
+    private static string ToAbsoluteDocsUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = url.Trim();
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute))
+        {
+            return string.Equals(absolute.Host, "docs.github.com", StringComparison.OrdinalIgnoreCase)
+                ? absolute.AbsoluteUri
+                : string.Empty;
+        }
+        if (trimmed.StartsWith('/'))
+        {
+            return "https://docs.github.com" + trimmed;
+        }
+        return string.Empty;
     }
 
     private static string ShortSha(string sha)

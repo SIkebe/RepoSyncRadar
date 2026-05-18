@@ -247,6 +247,99 @@ public sealed class AdoptionSessionTests
     }
 
     [Fact]
+    public async Task Generate_Includes_Official_Doc_Urls_In_Prompt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("url-prompt", ReviewStatus.Adopted, cancellationToken: ct);
+        await using (var db = harness.CreateDb())
+        {
+            db.CommitFiles.Add(new CommitFile
+            {
+                Sha = "url-prompt",
+                Path = "content/copilot/about-copilot.md",
+                Status = "modified",
+                Additions = 1,
+                Deletions = 0,
+            });
+            db.PathUrlMaps.Add(new PathUrlMap
+            {
+                Path = "content/copilot/about-copilot.md",
+                Version = "fpt",
+                Language = "en",
+                Url = "/en/copilot/about-copilot",
+                ResolvedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff"));
+
+        string? capturedPrompt = null;
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"https://docs.github.com/en/copilot/about-copilot\",\"teams\":\"https://docs.github.com/en/copilot/about-copilot\",\"customer\":\"https://docs.github.com/en/copilot/about-copilot\"}"));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        await sut.GenerateDraftsAsync("url-prompt", ct);
+
+        Assert.NotNull(capturedPrompt);
+        Assert.Contains("## 公式ドキュメント URL", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("https://docs.github.com/en/copilot/about-copilot", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("twitter / teams / customer には", capturedPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Generate_Appends_Official_Doc_Url_When_Drafts_Omit_It()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("url-append", ReviewStatus.Adopted, cancellationToken: ct);
+        await using (var db = harness.CreateDb())
+        {
+            db.CommitFiles.Add(new CommitFile
+            {
+                Sha = "url-append",
+                Path = "content/actions/learn-github-actions.md",
+                Status = "modified",
+                Additions = 1,
+                Deletions = 0,
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff"));
+
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        var bundle = await sut.GenerateDraftsAsync("url-append", ct);
+
+        const string expectedUrl = "https://docs.github.com/en/actions/learn-github-actions";
+        Assert.Contains(expectedUrl, bundle.TwitterJa, StringComparison.Ordinal);
+        Assert.Contains(expectedUrl, bundle.TeamsJa, StringComparison.Ordinal);
+        Assert.Contains(expectedUrl, bundle.CustomerJa, StringComparison.Ordinal);
+
+        await using var verifyDb = harness.CreateDb();
+        var drafts = await verifyDb.Drafts.AsNoTracking().Where(d => d.Sha == "url-append").ToListAsync(ct);
+        Assert.Contains(drafts, d => d.Channel == "twitter" && d.Body.Contains(expectedUrl, StringComparison.Ordinal));
+        Assert.Contains(drafts, d => d.Channel == "teams" && d.Body.Contains(expectedUrl, StringComparison.Ordinal));
+        Assert.Contains(drafts, d => d.Channel == "customer" && d.Body.Contains(expectedUrl, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Generate_Rejects_Unadopted_Commit()
     {
         var ct = TestContext.Current.CancellationToken;
