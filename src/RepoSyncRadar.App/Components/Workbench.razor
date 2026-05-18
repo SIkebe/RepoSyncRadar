@@ -392,6 +392,7 @@
         _filter = BuildCurrentFilter();
         _selectedCommit = null;
         _selectedCommitShas.Clear();
+        _bulkReviewStatus = $"1 件を{BuildStatusDestinationLabel(status)}に移動しました";
         _listRefreshVersion++;
         return Task.CompletedTask;
     }

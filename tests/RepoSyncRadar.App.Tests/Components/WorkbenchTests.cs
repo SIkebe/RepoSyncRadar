@@ -162,6 +162,7 @@ public sealed class WorkbenchTests
             Assert.Empty(cut.FindAll("[data-testid=\"review-actions\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"commit-detail-empty\"]"));
             Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Unseen\"]").ClassList);
+            Assert.Contains("1 件をアーカイブに移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
         });
         await repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Archived, "対象外", Arg.Any<CancellationToken>());
     }
@@ -233,6 +234,7 @@ public sealed class WorkbenchTests
             Assert.Empty(cut.FindAll("[data-testid=\"commit-row\"]"));
             Assert.Empty(cut.FindAll("[data-testid=\"review-actions\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"commit-detail-empty\"]"));
+            Assert.Contains("1 件を保留に移動しました", cut.Find("[data-testid=\"bulk-review-status\"]").TextContent, StringComparison.Ordinal);
         });
         await repo.Received(1).SetReviewAsync(target.Sha, ReviewStatus.Later, null, Arg.Any<CancellationToken>());
     }
