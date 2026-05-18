@@ -132,6 +132,7 @@ public sealed partial class DocsWorktreeManager
         if (_worktrees.TryGetValue(commitSha, out var existing))
         {
             existing.LastUsed = ++_tick;
+            await ResetWorktreeAsync(existing.Path, cancellationToken).ConfigureAwait(false);
             await EnsureNextWebpackOptOutAsync(existing.Path, cancellationToken).ConfigureAwait(false);
             return existing.Path;
         }
@@ -144,6 +145,7 @@ public sealed partial class DocsWorktreeManager
             if (recovered)
             {
                 _worktrees[commitSha] = new WorktreeEntry(path, ++_tick);
+                await ResetWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
                 await EnsureNextWebpackOptOutAsync(path, cancellationToken).ConfigureAwait(false);
                 return path;
             }
@@ -212,6 +214,86 @@ public sealed partial class DocsWorktreeManager
         }
 
         return false;
+    }
+
+    private async Task ResetWorktreeAsync(string path, CancellationToken cancellationToken)
+    {
+        var result = await _runner.RunAsync(
+            "git",
+            "reset --hard",
+            path,
+            cancellationToken).ConfigureAwait(false);
+        if (result.ExitCode != 0
+            && LooksLikeIndexLockFailure(result.StandardError)
+            && TryDeleteStaleIndexLock(path))
+        {
+            result = await _runner.RunAsync(
+                "git",
+                "reset --hard",
+                path,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        if (result.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"git reset --hard failed (exit {result.ExitCode}): {result.StandardError}");
+        }
+    }
+
+    private static bool LooksLikeIndexLockFailure(string standardError) =>
+        standardError.Contains("index.lock", StringComparison.OrdinalIgnoreCase)
+        && standardError.Contains("File exists", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryDeleteStaleIndexLock(string worktreePath)
+    {
+        var gitFile = Path.Combine(worktreePath, ".git");
+        if (!File.Exists(gitFile))
+        {
+            return false;
+        }
+
+        string text;
+        try
+        {
+            text = File.ReadAllText(gitFile);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        const string prefix = "gitdir:";
+        var line = text.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(static value => value.Trim())
+            .FirstOrDefault(static value => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        if (line is null)
+        {
+            return false;
+        }
+
+        var gitDir = line[prefix.Length..].Trim();
+        if (!Path.IsPathRooted(gitDir))
+        {
+            gitDir = Path.GetFullPath(Path.Combine(worktreePath, gitDir));
+        }
+
+        var lockPath = Path.Combine(gitDir, "index.lock");
+        try
+        {
+            var lockInfo = new FileInfo(lockPath);
+            if (!lockInfo.Exists
+                || DateTime.UtcNow - lockInfo.LastWriteTimeUtc < TimeSpan.FromMinutes(5))
+            {
+                return false;
+            }
+
+            lockInfo.Delete();
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private static bool CommitMatches(string actualHead, string requestedSha)

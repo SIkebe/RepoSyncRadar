@@ -179,6 +179,8 @@ public sealed class DocsWorktreeManagerTests : IDisposable
                 0,
                 $"worktree {bare}\nbare\n\nworktree {existingPath}\nHEAD {existingSha}\ndetached\n\n",
                 string.Empty)));
+        runner.RunAsync("git", "reset --hard", existingPath, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
         var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
 
         var path = await sut.CheckoutAsync(existingSha, ct);
@@ -189,6 +191,89 @@ public sealed class DocsWorktreeManagerTests : IDisposable
             "git",
             Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
             Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+        await runner.Received(1).RunAsync(
+            "git",
+            "reset --hard",
+            existingPath,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckoutAsync_Resets_InMemory_Reused_Worktree_Before_Returning()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "abcdef0123456789";
+        var expectedPath = Path.Combine(worktreeRoot, "abcdef012345");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var first = await sut.CheckoutAsync(sha, ct);
+        var second = await sut.CheckoutAsync(sha, ct);
+
+        Assert.Equal(expectedPath, first);
+        Assert.Equal(first, second);
+        await runner.Received(1).RunAsync(
+            "git",
+            "reset --hard",
+            expectedPath,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CheckoutAsync_Removes_Stale_IndexLock_And_Retries_Reset()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var sha = "abababababab0001";
+        var expectedPath = Path.Combine(worktreeRoot, "abababababab");
+        var gitDir = Path.Combine(bare, "worktrees", "abababababab");
+        var lockPath = Path.Combine(gitDir, "index.lock");
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("worktree add", StringComparison.Ordinal)),
+                bare,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                Directory.CreateDirectory(expectedPath);
+                Directory.CreateDirectory(gitDir);
+                File.WriteAllText(Path.Combine(expectedPath, ".git"), $"gitdir: {gitDir}\n");
+                File.WriteAllText(lockPath, string.Empty);
+                File.SetLastWriteTimeUtc(lockPath, DateTime.UtcNow - TimeSpan.FromMinutes(10));
+                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        runner.RunAsync("git", "reset --hard", expectedPath, Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(new ProcessRunResult(
+                    128,
+                    string.Empty,
+                    $"fatal: Unable to create '{lockPath}': File exists.")),
+                Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        await sut.CheckoutAsync(sha, ct);
+        var path = await sut.CheckoutAsync(sha, ct);
+
+        Assert.Equal(expectedPath, path);
+        Assert.False(File.Exists(lockPath));
+        await runner.Received(2).RunAsync(
+            "git",
+            "reset --hard",
+            expectedPath,
             Arg.Any<CancellationToken>());
     }
 
@@ -284,6 +369,8 @@ public sealed class DocsWorktreeManagerTests : IDisposable
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
         runner.RunAsync("git", "rev-parse HEAD", existingPath, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, sha + "\n", string.Empty)));
+        runner.RunAsync("git", "reset --hard", existingPath, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
         var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
 
         var path = await sut.CheckoutAsync(sha, ct);
