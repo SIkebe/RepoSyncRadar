@@ -25,6 +25,7 @@ public sealed partial class AdoptionSession
 {
     internal const int MaxDiffBytes = 50 * 1024;
     internal const int FewShotLimit = 5;
+    internal const int MaxRepairSourceChars = 20 * 1024;
     internal const string TruncatedMarker = "\n…[truncated by RepoSyncRadar — original diff exceeded 50KB]\n";
 
     private static readonly JsonSerializerOptions DraftJsonOptions = new()
@@ -100,7 +101,7 @@ public sealed partial class AdoptionSession
         await using (session.ConfigureAwait(false))
         {
             var raw = await session.SendAsync(prompt, cancellationToken).ConfigureAwait(false);
-            bundle = ParseBundle(raw);
+            bundle = await ParseOrRepairBundleAsync(session, raw, cancellationToken).ConfigureAwait(false);
         }
 
         await PersistDraftsAsync(db, sha, bundle, cancellationToken).ConfigureAwait(false);
@@ -182,32 +183,57 @@ public sealed partial class AdoptionSession
         return sb.ToString();
     }
 
+    private static async Task<DraftBundle> ParseOrRepairBundleAsync(
+        ICopilotSession session,
+        string raw,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return ParseBundle(raw);
+        }
+        catch (InvalidOperationException ex) when (IsJsonParseFailure(ex))
+        {
+            var repaired = await session.SendAsync(BuildRepairPrompt(raw), cancellationToken).ConfigureAwait(false);
+            return ParseBundle(repaired);
+        }
+    }
+
+    private static bool IsJsonParseFailure(InvalidOperationException ex)
+        => ex.Message.Contains("non-JSON", StringComparison.Ordinal)
+            || ex.Message.Contains("null JSON", StringComparison.Ordinal);
+
+    internal static string BuildRepairPrompt(string raw)
+    {
+        var source = raw.Length > MaxRepairSourceChars
+            ? raw[..MaxRepairSourceChars] + "\n...[truncated by RepoSyncRadar for JSON repair]"
+            : raw;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("前回の応答はアプリで処理できる JSON ではありませんでした。");
+        sb.AppendLine("前回の内容から、次のスキーマに合う JSON object だけを返してください。");
+        sb.AppendLine("説明文、Markdown、コードブロック、前置き、後置きは禁止です。");
+        sb.AppendLine("スキーマ: { \"explanation\": string, \"twitter\": string, \"teams\": string, \"customer\": string }");
+        sb.AppendLine();
+        sb.AppendLine("前回の応答:");
+        sb.AppendLine("```text");
+        sb.AppendLine(source);
+        sb.AppendLine("```");
+        return sb.ToString();
+    }
+
     internal static DraftBundle ParseBundle(string json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
             throw new InvalidOperationException("Adoption session returned an empty response.");
         }
-        var trimmed = json.Trim();
-        // Strip markdown code fences if Copilot wrapped them.
-        if (trimmed.StartsWith("```", StringComparison.Ordinal))
-        {
-            var firstNewline = trimmed.IndexOf('\n');
-            if (firstNewline >= 0)
-            {
-                trimmed = trimmed[(firstNewline + 1)..];
-            }
-            if (trimmed.EndsWith("```", StringComparison.Ordinal))
-            {
-                trimmed = trimmed[..^3];
-            }
-            trimmed = trimmed.Trim();
-        }
+        var payload = ExtractJsonPayload(json);
 
         DraftJson? parsed;
         try
         {
-            parsed = JsonSerializer.Deserialize<DraftJson>(trimmed, DraftJsonOptions);
+            parsed = JsonSerializer.Deserialize<DraftJson>(payload, DraftJsonOptions);
         }
         catch (JsonException ex)
         {
@@ -223,6 +249,112 @@ public sealed partial class AdoptionSession
             parsed.Teams ?? string.Empty,
             parsed.Customer ?? string.Empty,
             parsed.Explanation ?? string.Empty);
+    }
+
+    private static string ExtractJsonPayload(string response)
+    {
+        var trimmed = StripOuterCodeFence(response.Trim());
+        return TryExtractFirstJsonObject(trimmed, out var payload)
+            ? payload
+            : trimmed;
+    }
+
+    private static string StripOuterCodeFence(string value)
+    {
+        if (!value.StartsWith("```", StringComparison.Ordinal))
+        {
+            return value;
+        }
+
+        var firstNewline = value.IndexOf('\n');
+        if (firstNewline < 0)
+        {
+            return value.Trim('`').Trim();
+        }
+
+        var fenced = value[(firstNewline + 1)..];
+        if (fenced.EndsWith("```", StringComparison.Ordinal))
+        {
+            fenced = fenced[..^3];
+        }
+        return fenced.Trim();
+    }
+
+    private static bool TryExtractFirstJsonObject(string value, out string payload)
+    {
+        for (var start = value.IndexOf('{'); start >= 0; start = value.IndexOf('{', start + 1))
+        {
+            if (TryFindJsonObjectEnd(value, start, out var end))
+            {
+                var candidate = value[start..(end + 1)];
+                try
+                {
+                    using var document = JsonDocument.Parse(candidate);
+                    if (document.RootElement.ValueKind == JsonValueKind.Object)
+                    {
+                        payload = candidate;
+                        return true;
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+            }
+        }
+
+        payload = string.Empty;
+        return false;
+    }
+
+    private static bool TryFindJsonObjectEnd(string value, int start, out int end)
+    {
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+
+        for (var i = start; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (inString)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                }
+                else if (c == '\\')
+                {
+                    escaped = true;
+                }
+                else if (c == '"')
+                {
+                    inString = false;
+                }
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inString = true;
+                continue;
+            }
+            if (c == '{')
+            {
+                depth++;
+                continue;
+            }
+            if (c == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    end = i;
+                    return true;
+                }
+            }
+        }
+
+        end = -1;
+        return false;
     }
 
     private static async Task PersistDraftsAsync(

@@ -76,6 +76,77 @@ public sealed class AdoptionSessionTests
     }
 
     [Fact]
+    public void ParseBundle_Accepts_Json_Wrapped_In_Assistant_Text()
+    {
+        var bundle = AdoptionSession.ParseBundle(
+            "以下の内容で生成しました。\n```json\n" +
+            "{\"explanation\":\"ex {braced}\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}" +
+            "\n```\n必要に応じて調整してください。");
+
+        Assert.Equal("tw", bundle.TwitterJa);
+        Assert.Equal("tm", bundle.TeamsJa);
+        Assert.Equal("cu", bundle.CustomerJa);
+        Assert.Equal("ex {braced}", bundle.ExplanationJa);
+    }
+
+    [Fact]
+    public async Task Generate_Persists_Drafts_When_Copilot_Wraps_Json()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("wrapped", ReviewStatus.Adopted, cancellationToken: ct);
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff"));
+
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("Here is the JSON:\n{\"explanation\":\"wrapped-ex\",\"twitter\":\"wrapped-tw\",\"teams\":\"wrapped-tm\",\"customer\":\"wrapped-cu\"}"));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        await sut.GenerateDraftsAsync("wrapped", ct);
+
+        await using var db = harness.CreateDb();
+        var drafts = await db.Drafts.AsNoTracking().Where(d => d.Sha == "wrapped").ToListAsync(ct);
+        Assert.Contains(drafts, d => d.Channel == "explanation" && d.Body == "wrapped-ex");
+        Assert.Contains(drafts, d => d.Channel == "twitter" && d.Body == "wrapped-tw");
+    }
+
+    [Fact]
+    public async Task Generate_Retries_Once_When_Response_Is_Not_Json()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("repair", ReviewStatus.Adopted, cancellationToken: ct);
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff"));
+
+        var calls = new List<string>();
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Do<string>(calls.Add), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult("差分解説: repair-ex\nTwitter: repair-tw\nTeams: repair-tm\n顧客向け: repair-cu"),
+                Task.FromResult("{\"explanation\":\"repair-ex\",\"twitter\":\"repair-tw\",\"teams\":\"repair-tm\",\"customer\":\"repair-cu\"}"));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        var bundle = await sut.GenerateDraftsAsync("repair", ct);
+
+        Assert.Equal("repair-tw", bundle.TwitterJa);
+        Assert.Equal("repair-ex", bundle.ExplanationJa);
+        Assert.Equal(2, calls.Count);
+        Assert.Contains("前回の応答はアプリで処理できる JSON ではありませんでした", calls[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Generate_Includes_FewShot_Examples()
     {
         var ct = TestContext.Current.CancellationToken;
