@@ -643,6 +643,9 @@ public sealed class WorkbenchTests
         cut.WaitForAssertion(() =>
         {
             Assert.NotEmpty(cut.FindAll("[data-testid=\"drafts-panel\"]"));
+            var link = cut.Find("[data-testid=\"drafts-jump-link\"]");
+            Assert.Equal("#drafts-panel", link.GetAttribute("href"));
+            Assert.Equal("drafts-panel", cut.Find("[data-testid=\"drafts-panel\"]").GetAttribute("id"));
         });
     }
 

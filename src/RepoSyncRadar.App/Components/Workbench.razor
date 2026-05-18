@@ -131,6 +131,12 @@
             <MudPaper Elevation="0" Class="pa-2">
                 @if (_selectedCommit is not null)
                 {
+                    @if (CanShowDrafts(_selectedCommit))
+                    {
+                        <div class="drafts-jump-row" data-testid="drafts-jump-row">
+                            <a class="drafts-jump-link" data-testid="drafts-jump-link" href="#drafts-panel">共有文案へ</a>
+                        </div>
+                    }
                     <ReviewActions Sha="@_selectedCommit.Sha"
                                    FilePaths="@_selectedCommit.Files.Select(static file => file.Path).ToArray()"
                                    Reviewed="HandleReviewCompleted" />

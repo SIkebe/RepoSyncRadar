@@ -778,6 +778,27 @@ html, body {
     line-height: 1.35;
 }
 
+.drafts-jump-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.45rem;
+}
+
+.drafts-jump-link {
+    background: #ddf4ff;
+    border: 1px solid #80ccff;
+    border-radius: 4px;
+    color: #0550ae;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.25rem 0.65rem;
+    text-decoration: none;
+}
+
+.drafts-jump-link:hover {
+    background: #b6e3ff;
+}
+
 .action-toolbar,
 .review-input-action {
     display: flex;
