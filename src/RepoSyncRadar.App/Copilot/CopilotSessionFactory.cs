@@ -35,6 +35,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     private readonly ToolAuditHook? _auditHook;
     private readonly RadarTools _radarTools;
     private readonly RadarWriteTools _radarWriteTools;
+    private readonly ICopilotUsageTracker? _usageTracker;
     private readonly ILogger<CopilotSessionFactory> _logger;
     private readonly SemaphoreSlim _clientGate = new(1, 1);
     private CopilotClient? _client;
@@ -48,6 +49,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         ILogger<CopilotSessionFactory> logger,
         RadarTools radarTools,
         RadarWriteTools radarWriteTools,
+        ICopilotUsageTracker? usageTracker = null,
         ToolAuditHook? auditHook = null)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -63,6 +65,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         _logger = logger;
         _radarTools = radarTools;
         _radarWriteTools = radarWriteTools;
+        _usageTracker = usageTracker;
         _auditHook = auditHook;
     }
 
@@ -102,7 +105,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             session = await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
         }
 
-        return new SdkCopilotSession(session);
+        return new SdkCopilotSession(session, purpose, _usageTracker);
     }
 
     internal static string? ResolveFallbackModel(string? configuredModel, IReadOnlyList<string> availableModelIds)

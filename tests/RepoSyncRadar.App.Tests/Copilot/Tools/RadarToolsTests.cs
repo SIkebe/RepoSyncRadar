@@ -67,7 +67,7 @@ public sealed class RadarToolsTests
 
         var message = Assert.Single(progress.Messages);
         Assert.Contains("全 2 件", message, StringComparison.Ordinal);
-        Assert.Contains("0 / 2", message, StringComparison.Ordinal);
+        Assert.Contains("保存済み 0 / 2 件", message, StringComparison.Ordinal);
     }
 
     [Fact]

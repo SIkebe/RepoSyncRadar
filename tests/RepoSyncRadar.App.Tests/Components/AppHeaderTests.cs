@@ -4,6 +4,7 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Settings;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
@@ -135,7 +136,7 @@ public sealed class AppHeaderTests
             .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                call.Arg<IProgress<string>?>()?.Report("未確認コミットをスコアリング中: 2 / 5 件目 (abc12345)");
+                call.Arg<IProgress<string>?>()?.Report("未確認コミットをスコアリング中: 保存済み 2 / 5 件 (abc12345)");
                 return gate.Task;
             });
 
@@ -149,8 +150,9 @@ public sealed class AppHeaderTests
         {
             var status = cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent;
             Assert.Contains("スコアリング", status, StringComparison.Ordinal);
+            Assert.Contains("保存済み", status, StringComparison.Ordinal);
             Assert.Contains("2 / 5", status, StringComparison.Ordinal);
-            Assert.Contains("件目", status, StringComparison.Ordinal);
+            Assert.Contains("Copilot 分析中", status, StringComparison.Ordinal);
             Assert.Contains("経過", status, StringComparison.Ordinal);
         });
 
@@ -290,6 +292,138 @@ public sealed class AppHeaderTests
             Assert.Contains("ignore-directory", cut.Find("[data-testid=\"settings-ignore-rule-reason\"]").TextContent);
         });
         repo.Received(1).GetIgnoreRulesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Settings_Renders_Copilot_Token_Usage_And_Reset()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var usageTracker = new CopilotUsageTracker();
+        usageTracker.Record(new CopilotUsageRecord(
+            new DateTimeOffset(2026, 5, 18, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            SessionPurpose.Triage.ToString(),
+            "gpt-5",
+            "api-1",
+            1200,
+            340,
+            60,
+            20,
+            10,
+            0.0042,
+            123_000_000,
+            []));
+
+        var sp = BuildServices(session, out _, out _, usageTracker: usageTracker);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        Assert.Contains("0.1230", cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent);
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+
+        var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
+        Assert.Contains("AI Credits0.1230", summary, StringComparison.Ordinal);
+        Assert.Contains("推定コスト0.004200", summary, StringComparison.Ordinal);
+        Assert.Contains("合計 tokens1,600", summary, StringComparison.Ordinal);
+        Assert.Contains("入力1,200", summary, StringComparison.Ordinal);
+        Assert.Contains("出力340", summary, StringComparison.Ordinal);
+        Assert.Contains("推論60", summary, StringComparison.Ordinal);
+        Assert.Contains("Triage", cut.Find("[data-testid=\"settings-copilot-usage-last\"]").TextContent);
+        Assert.Contains("123,000,000 nano AIU", cut.Find("[data-testid=\"settings-copilot-usage-aiu\"]").TextContent);
+
+        cut.Find("[data-testid=\"settings-copilot-usage-reset\"]").Click();
+
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-copilot-usage\"]"));
+        Assert.NotNull(cut.Find("[data-testid=\"settings-copilot-usage-empty\"]"));
+    }
+
+    [Fact]
+    public void Header_Makes_Missing_Ai_Credits_Explicit()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var usageTracker = new CopilotUsageTracker();
+        usageTracker.Record(new CopilotUsageRecord(
+            new DateTimeOffset(2026, 5, 18, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            SessionPurpose.Triage.ToString(),
+            "gpt-5",
+            "api-1",
+            1000,
+            200,
+            0,
+            0,
+            0,
+            null,
+            null,
+            []));
+
+        var sp = BuildServices(session, out _, out _, usageTracker: usageTracker);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        var usage = cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent;
+        Assert.Contains("credits 未報告", usage, StringComparison.Ordinal);
+        Assert.Contains("1,200 tokens", usage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Settings_Renders_Beta4_Session_Usage_Metrics()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var usageTracker = new CopilotUsageTracker();
+        usageTracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+            new DateTimeOffset(2026, 5, 18, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            SessionPurpose.Triage.ToString(),
+            "gpt-5",
+            1000,
+            220,
+            30,
+            40,
+            10,
+            250_000_000,
+            2.5,
+            3,
+            700,
+            180,
+            []));
+
+        var sp = BuildServices(session, out _, out _, usageTracker: usageTracker);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+
+        var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
+        Assert.Contains("AI Credits0.2500", summary, StringComparison.Ordinal);
+        Assert.Contains("推定コスト2.50", summary, StringComparison.Ordinal);
+        Assert.Contains("Premium Requests3", summary, StringComparison.Ordinal);
+        var metrics = cut.Find("[data-testid=\"settings-copilot-usage-session-metrics\"]").TextContent;
+        Assert.Contains("gpt-5", metrics, StringComparison.Ordinal);
+        Assert.Contains("requests 3", metrics, StringComparison.Ordinal);
+        Assert.Contains("last call 700 in, 180 out", metrics, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -503,7 +637,8 @@ public sealed class AppHeaderTests
         out ICopilotAgent agent,
         out IReviewBroadcaster broadcaster,
         IRadarRepository? repo = null,
-        IAppUserSettingsStore? settingsStore = null)
+        IAppUserSettingsStore? settingsStore = null,
+        ICopilotUsageTracker? usageTracker = null)
     {
         agent = Substitute.For<ICopilotAgent>();
         broadcaster = Substitute.For<IReviewBroadcaster>();
@@ -530,6 +665,7 @@ public sealed class AppHeaderTests
             .AddSingleton(repo ?? Substitute.For<IRadarRepository>())
             .AddSingleton(resolvedSettingsStore)
             .AddSingleton(localSettingsStore)
+            .AddSingleton(usageTracker ?? new CopilotUsageTracker())
             .BuildServiceProvider();
     }
 }

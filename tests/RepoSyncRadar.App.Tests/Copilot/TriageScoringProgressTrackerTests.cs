@@ -17,7 +17,7 @@ public sealed class TriageScoringProgressTrackerTests
         var message = Assert.Single(progress.Messages);
         Assert.Contains("今回の未スコア未確認コミット", message, StringComparison.Ordinal);
         Assert.Contains("全 2 件", message, StringComparison.Ordinal);
-        Assert.Contains("0 / 2", message, StringComparison.Ordinal);
+        Assert.Contains("保存済み 0 / 2 件", message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -31,9 +31,9 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportScoreSaved("aaa1111111111111111111111111111111111111");
         tracker.ReportScoreSaved("bbb2222222222222222222222222222222222222");
 
-        Assert.Contains(progress.Messages, message => message.Contains("1 / 2 件目", StringComparison.Ordinal)
+        Assert.Contains(progress.Messages, message => message.Contains("保存済み 1 / 2 件", StringComparison.Ordinal)
             && message.Contains("aaa11111", StringComparison.Ordinal));
-        Assert.Contains(progress.Messages, message => message.Contains("2 / 2 件目", StringComparison.Ordinal)
+        Assert.Contains(progress.Messages, message => message.Contains("保存済み 2 / 2 件", StringComparison.Ordinal)
             && message.Contains("bbb22222", StringComparison.Ordinal));
     }
 
@@ -48,7 +48,7 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportScoreSaved("aaa1111111111111111111111111111111111111");
         tracker.ReportScoreSaved("aaa1111111111111111111111111111111111111");
 
-        Assert.Single(progress.Messages, message => message.Contains("1 / 1 件目", StringComparison.Ordinal));
+        Assert.Single(progress.Messages, message => message.Contains("保存済み 1 / 1 件", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportScoreSaved("aaa1111111111111111111111111111111111111");
 
         Assert.DoesNotContain(progress.Messages, message => message.Contains("全 1 件", StringComparison.Ordinal));
-        Assert.Contains(progress.Messages, message => message.Contains("1 / 2 件目", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("保存済み 1 / 2 件", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportCommitList(["aaa1111111111111111111111111111111111111"]);
         tracker.ReportScoreSaved("bbb2222222222222222222222222222222222222");
 
-        Assert.Contains(progress.Messages, message => message.Contains("1 / 1 件目", StringComparison.Ordinal)
+        Assert.Contains(progress.Messages, message => message.Contains("保存済み 1 / 1 件", StringComparison.Ordinal)
             && message.Contains("bbb22222", StringComparison.Ordinal));
     }
 

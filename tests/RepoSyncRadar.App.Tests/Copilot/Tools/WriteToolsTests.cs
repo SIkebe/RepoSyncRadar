@@ -125,7 +125,7 @@ public sealed class WriteToolsTests
             PromptHash: "deadbee"), ct);
 
         Assert.Null(result.Error);
-        Assert.Contains(progress.Messages, message => message.Contains("1 / 2 件目", StringComparison.Ordinal)
+            Assert.Contains(progress.Messages, message => message.Contains("保存済み 1 / 2 件", StringComparison.Ordinal)
             && message.Contains("aaa11111", StringComparison.Ordinal));
     }
 

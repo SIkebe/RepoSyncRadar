@@ -9,11 +9,29 @@ namespace RepoSyncRadar.App.Copilot;
 internal sealed class SdkCopilotSession : ICopilotSession
 {
     private readonly CopilotSession _session;
+    private readonly SessionPurpose _purpose;
+    private readonly ICopilotUsageTracker? _usageTracker;
+    private readonly IDisposable? _usageSubscription;
 
-    public SdkCopilotSession(CopilotSession session)
+    public SdkCopilotSession(
+        CopilotSession session,
+        SessionPurpose purpose,
+        ICopilotUsageTracker? usageTracker)
     {
         ArgumentNullException.ThrowIfNull(session);
         _session = session;
+        _purpose = purpose;
+        _usageTracker = usageTracker;
+        if (usageTracker is not null)
+        {
+            _usageSubscription = session.On(evt =>
+            {
+                if (evt is AssistantUsageEvent usage)
+                {
+                    usageTracker.Record(CopilotUsageTracker.FromAssistantUsage(usage, purpose, session.SessionId));
+                }
+            });
+        }
     }
 
     public string SessionId => _session.SessionId;
@@ -29,11 +47,33 @@ internal sealed class SdkCopilotSession : ICopilotSession
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
         var options = new MessageOptions { Prompt = prompt };
         var assistant = await _session.SendAndWaitAsync(options, timeout, cancellationToken).ConfigureAwait(false);
+        await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
         return assistant?.ToString() ?? string.Empty;
+    }
+
+    private async Task RefreshUsageMetricsAsync(CancellationToken cancellationToken)
+    {
+        if (_usageTracker is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var metrics = await _session.Rpc.Usage.GetMetricsAsync(cancellationToken).ConfigureAwait(false);
+            _usageTracker.RecordSessionMetrics(CopilotUsageTracker.FromSessionMetrics(metrics, _purpose, _session.SessionId));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+        }
     }
 
     public Task AbortAsync(CancellationToken cancellationToken = default)
         => _session.AbortAsync(cancellationToken);
 
-    public ValueTask DisposeAsync() => _session.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        _usageSubscription?.Dispose();
+        await _session.DisposeAsync().ConfigureAwait(false);
+    }
 }

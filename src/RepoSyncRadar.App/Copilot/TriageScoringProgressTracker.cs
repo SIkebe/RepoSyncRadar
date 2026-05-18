@@ -101,7 +101,7 @@ public sealed class TriageScoringProgressTracker
                 ? "今回の未スコア未確認コミットはありません。スコアリング対象 0 / 0 件。"
                 : string.Create(
                     CultureInfo.InvariantCulture,
-                    $"今回の未スコア未確認コミットをスコアリング中: 全 {_total} 件 ({completed} / {_total})"));
+                    $"今回の未スコア未確認コミットをスコアリング中: 全 {_total} 件 / 保存済み {completed} / {_total} 件"));
         }
 
         public void ReportScoreSaved(string sha)
@@ -129,7 +129,7 @@ public sealed class TriageScoringProgressTracker
 
             _progress?.Report(string.Create(
                 CultureInfo.InvariantCulture,
-                $"{prefix}: {completed} / {totalText} 件目 ({shortSha})"));
+                $"{prefix}: 保存済み {completed} / {totalText} 件 ({shortSha})"));
         }
 
         public void Dispose()

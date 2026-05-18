@@ -192,8 +192,8 @@ public sealed class MorningTriageSessionTests
         await triage.RunAsync(progress, ct);
 
         Assert.Contains(progress.Messages, message => message.Contains("全 2 件", StringComparison.Ordinal));
-        Assert.Contains(progress.Messages, message => message.Contains("1 / 2 件目", StringComparison.Ordinal));
-        Assert.Contains(progress.Messages, message => message.Contains("2 / 2 件目", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("保存済み 1 / 2 件", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("保存済み 2 / 2 件", StringComparison.Ordinal));
     }
 
     [Fact]

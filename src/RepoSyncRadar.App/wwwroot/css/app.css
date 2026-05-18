@@ -918,6 +918,32 @@ html, body {
     margin: 0;
 }
 
+.settings-usage-grid {
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+}
+
+.settings-usage-grid div {
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.5rem 0.6rem;
+}
+
+.settings-usage-grid span {
+    color: #57606a;
+    font-size: 0.74rem;
+}
+
+.settings-usage-grid strong {
+    color: #24292f;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
 .local-settings-grid {
     display: grid;
     gap: 0.6rem;
@@ -1771,8 +1797,13 @@ html, body {
 .radar-theme-dark .commit-search-label,
 .radar-theme-dark .commit-list-selection-count,
 .radar-theme-dark .bulk-review-count,
-.radar-theme-dark .bulk-review-status {
+.radar-theme-dark .bulk-review-status,
+.radar-theme-dark .settings-usage-grid span {
     color: var(--radar-muted-fg) !important;
+}
+
+.radar-theme-dark .settings-usage-grid strong {
+    color: var(--radar-fg) !important;
 }
 
 .radar-theme-dark .sidebar-item:hover,
@@ -1798,6 +1829,7 @@ html, body {
 .radar-theme-dark .review-reason-chip,
 .radar-theme-dark .settings-theme-options,
 .radar-theme-dark .settings-theme-option,
+.radar-theme-dark .settings-usage-grid div,
 .radar-theme-dark .local-settings-group,
 .radar-theme-dark .local-settings-field input,
 .radar-theme-dark .local-settings-field textarea,
