@@ -416,8 +416,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
-        progress?.Report($"{filePath} を Markdown としてレンダリング中…");
+        progress?.Report($"{filePath} の変更前 Markdown を読み込み中…");
         var beforeMarkdown = await ReadWorktreeFileOrNullAsync(session.BeforeWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
+        progress?.Report($"{filePath} の PR HEAD Markdown を読み込み中…");
         var afterMarkdown = await ReadWorktreeFileOrNullAsync(session.AfterWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
 
         progress?.Report("公式版 (fpt/ghec/ghes) で差分の出る版を解析中…");
@@ -427,39 +428,46 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             afterMarkdown,
             session.AfterLiquid);
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
+        progress?.Report("フロントマターの変更点を解析中…");
         var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
+
+        progress?.Report("変更前 Markdown を HTML に変換中…");
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            filePath,
+            beforeMarkdown,
+            session.BeforeSha,
+            "変更前",
+            session.BeforeLiquid,
+            effectiveVersion,
+            affectedVersions,
+            versionImpacts: versionImpacts,
+            frontmatterChanges: frontmatterChanges,
+            assetBasePath: MarkdownBeforeAssetRoute);
+
+        progress?.Report("PR HEAD Markdown を HTML に変換中…");
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            filePath,
+            afterMarkdown,
+            sha,
+            "PR HEAD",
+            session.AfterLiquid,
+            effectiveVersion,
+            affectedVersions,
+            versionImpacts: versionImpacts,
+            frontmatterChanges: frontmatterChanges,
+            assetBasePath: MarkdownAfterAssetRoute);
 
         var pages = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["/markdown/before"] = MarkdownPreviewRenderer.RenderDocument(
-                filePath,
-                beforeMarkdown,
-                session.BeforeSha,
-                "変更前",
-                session.BeforeLiquid,
-                effectiveVersion,
-                affectedVersions,
-                versionImpacts: versionImpacts,
-                frontmatterChanges: frontmatterChanges,
-                assetBasePath: MarkdownBeforeAssetRoute),
-            ["/markdown/after"] = MarkdownPreviewRenderer.RenderDocument(
-                filePath,
-                afterMarkdown,
-                sha,
-                "PR HEAD",
-                session.AfterLiquid,
-                effectiveVersion,
-                affectedVersions,
-                versionImpacts: versionImpacts,
-                frontmatterChanges: frontmatterChanges,
-                assetBasePath: MarkdownAfterAssetRoute),
+            ["/markdown/before"] = beforeHtml,
+            ["/markdown/after"] = afterHtml,
         };
 
-            var assetRoots = new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                [MarkdownBeforeAssetRoute] = session.BeforeWorktreePath,
-                [MarkdownAfterAssetRoute] = session.AfterWorktreePath,
-            };
+        var assetRoots = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [MarkdownBeforeAssetRoute] = session.BeforeWorktreePath,
+            [MarkdownAfterAssetRoute] = session.AfterWorktreePath,
+        };
 
         var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
         progress?.Report($"Markdown 比較プレビューを起動中… (ポート {port.ToString(CultureInfo.InvariantCulture)})");
@@ -509,19 +517,26 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         CancellationToken cancellationToken)
     {
         var key = new PreparedSessionKey(prNumber, sha);
-        if (await TryGetValidPreparedSessionAsync(key, cancellationToken).ConfigureAwait(false) is { } fast)
+        progress?.Report("Markdown 比較キャッシュを確認中…");
+        if (await TryGetValidPreparedSessionAsync(key, progress, cancellationToken).ConfigureAwait(false) is { } fast)
         {
+            progress?.Report("準備済みの Markdown 比較キャッシュを再利用します");
             return fast;
         }
 
         var gate = _preparedSessionLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
+        if (gate.CurrentCount == 0)
+        {
+            progress?.Report("同じ PR の Markdown 比較準備が完了するのを待機中…");
+        }
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             // Re-check after acquiring the lock — a concurrent prewarm may have
             // just finished and populated the cache.
-            if (await TryGetValidPreparedSessionAsync(key, cancellationToken).ConfigureAwait(false) is { } slow)
+            if (await TryGetValidPreparedSessionAsync(key, progress, cancellationToken).ConfigureAwait(false) is { } slow)
             {
+                progress?.Report("直前に完了した Markdown 比較キャッシュを再利用します");
                 return slow;
             }
 
@@ -552,8 +567,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 return null;
             }
 
-            progress?.Report("Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
+            progress?.Report("変更前 worktree の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
             var beforeLiquid = await LoadLiquidContextCachedAsync(beforeWorktreePath, cancellationToken).ConfigureAwait(false);
+            progress?.Report("PR HEAD worktree の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
             var afterLiquid = await LoadLiquidContextCachedAsync(afterWorktreePath, cancellationToken).ConfigureAwait(false);
 
             var session = new PreparedMarkdownSession(
@@ -573,13 +589,14 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
     private async Task<PreparedMarkdownSession?> TryGetValidPreparedSessionAsync(
         PreparedSessionKey key,
+        IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
         if (_preparedSessions.TryGetValue(key, out var cached)
             && Directory.Exists(cached.BeforeWorktreePath)
             && Directory.Exists(cached.AfterWorktreePath)
-            && await _worktree.TryRepairExistingWorktreeAsync(cached.BeforeWorktreePath, cancellationToken).ConfigureAwait(false)
-            && await _worktree.TryRepairExistingWorktreeAsync(cached.AfterWorktreePath, cancellationToken).ConfigureAwait(false))
+            && await TryRepairPreparedWorktreeAsync("変更前", cached.BeforeWorktreePath, progress, cancellationToken).ConfigureAwait(false)
+            && await TryRepairPreparedWorktreeAsync("PR HEAD", cached.AfterWorktreePath, progress, cancellationToken).ConfigureAwait(false))
         {
             return cached;
         }
@@ -590,6 +607,16 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             _preparedSessions.TryRemove(key, out _);
         }
         return null;
+    }
+
+    private async Task<bool> TryRepairPreparedWorktreeAsync(
+        string label,
+        string worktreePath,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        progress?.Report($"キャッシュ済み {label} worktree の状態を検証中…");
+        return await _worktree.TryRepairExistingWorktreeAsync(worktreePath, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<DocsLiquidContext> LoadLiquidContextCachedAsync(

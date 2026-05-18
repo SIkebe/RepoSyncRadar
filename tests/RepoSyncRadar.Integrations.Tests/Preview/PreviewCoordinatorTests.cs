@@ -255,6 +255,48 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Reports_Detailed_Preparation_Progress()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-progress.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-markdown-progress");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, _) => File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), "# Changelog\n\nEntry"));
+        var progress = new ListProgress();
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", "CHANGELOG.md", progress, cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Contains(progress.Items, m => m.Contains("Markdown 比較キャッシュ", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("git fetch", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("親コミット", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("変更前 worktree", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("PR HEAD worktree", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("変更前 Markdown", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("PR HEAD Markdown", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("フロントマター", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("HTML に変換", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("Markdown 比較プレビューを起動中", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task PrepareMarkdownComparisonPreviewAsync_Distinguishes_Added_Metadata_Only_File_From_Missing_File()
     {
         var ct = TestContext.Current.CancellationToken;
