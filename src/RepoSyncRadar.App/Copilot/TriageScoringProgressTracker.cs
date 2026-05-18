@@ -111,22 +111,19 @@ public sealed class TriageScoringProgressTracker
                 return;
             }
 
-            if (_total is not null && !_positions.ContainsKey(sha))
-            {
-                return;
-            }
-
             if (!_scoredShas.Add(sha))
             {
                 return;
             }
 
-            var completed = _scoredShas.Count;
+            var completed = _total is int knownTotal
+                ? Math.Min(_scoredShas.Count, knownTotal)
+                : _scoredShas.Count;
             var totalText = _total is int total
                 ? total.ToString(CultureInfo.InvariantCulture)
                 : "?";
             var shortSha = sha.Length <= 8 ? sha : sha[..8];
-            var prefix = _total is int knownTotal && completed >= knownTotal
+            var prefix = _total is int targetTotal && completed >= targetTotal
                 ? "今回の未スコア未確認コミットのスコアリング完了"
                 : "今回の未スコア未確認コミットをスコアリング中";
 

@@ -70,7 +70,7 @@ public sealed class TriageScoringProgressTrackerTests
     }
 
     [Fact]
-    public void ReportScoreSaved_Ignores_Sha_Outside_Known_Target_List()
+    public void ReportScoreSaved_Counts_Sha_Outside_Known_Target_List()
     {
         var tracker = new TriageScoringProgressTracker();
         var progress = new CapturingProgress();
@@ -79,7 +79,8 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportCommitList(["aaa1111111111111111111111111111111111111"]);
         tracker.ReportScoreSaved("bbb2222222222222222222222222222222222222");
 
-        Assert.DoesNotContain(progress.Messages, message => message.Contains("1 / 1 件目", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("1 / 1 件目", StringComparison.Ordinal)
+            && message.Contains("bbb22222", StringComparison.Ordinal));
     }
 
     [Fact]
