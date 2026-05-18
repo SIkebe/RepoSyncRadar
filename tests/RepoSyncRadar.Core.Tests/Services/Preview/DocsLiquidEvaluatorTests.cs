@@ -251,6 +251,20 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Renders_Copilot_Octicon_As_Primer_Svg()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            "Click {% octicon \"copilot\" aria-hidden=\"true\" aria-label=\"copilot\" %} Copilot, then click Policies.",
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("class=\"octicon octicon-copilot\"", result, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"copilot\"", result, StringComparison.Ordinal);
+        Assert.Contains("role=\"img\"", result, StringComparison.Ordinal);
+        Assert.Contains("Copilot, then click Policies.", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Renders_Octicon_Tags_Introduced_By_Reusable_Expansion()
     {
         var ctx = WithReusables(

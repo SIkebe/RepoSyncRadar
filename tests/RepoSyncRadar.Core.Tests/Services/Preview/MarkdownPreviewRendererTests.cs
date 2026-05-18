@@ -552,6 +552,30 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Renders_Docs_Copilot_Octicon_Tags_As_Inline_Svg()
+    {
+        var markdown = """
+            ---
+            title: Configure Copilot policies
+            ---
+
+            4. In the sidebar, under "Code, planning, and automation", click {% octicon "copilot" aria-hidden="true" aria-label="copilot" %} **Copilot**, then click **Policies**.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/configure-copilot-policies.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("class=\"octicon octicon-copilot\"", html, StringComparison.Ordinal);
+        Assert.Contains("<strong>Copilot</strong>", html, StringComparison.Ordinal);
+        Assert.Contains("<strong>Policies</strong>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon \"copilot\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-liquid", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Renders_Docs_Spotlight_Blocks_As_Official_Alert_Html()
     {
         var markdown = """
