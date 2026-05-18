@@ -103,7 +103,7 @@ public sealed class PreviewE2ETests
         // is disabled, and the UI maps that to the "{n} 件の worktree を削除しました"
         // string. We assert the leading "0 件" substring so we are not coupled to
         // future tweaks of the status wording.
-        var status = page.Locator("[data-testid='commit-detail-preview-status']");
+        var status = page.Locator("[data-testid='commit-detail-preview-cleanup-status']");
         await status.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await Assertions.Expect(status).ToContainTextAsync(
             "0 件の worktree",
