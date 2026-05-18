@@ -149,26 +149,26 @@
                 else
                 {
                     <div class="settings-usage-grid" data-testid="settings-copilot-usage-summary">
-                        <div><span>AI Credits</span><strong>@FormatNullableAiCredits(_copilotUsage.AiCredits())</strong></div>
-                        <div><span>推定コスト</span><strong>@FormatNullableCost(_copilotUsage.Cost)</strong></div>
+                        <div><span>AI Credits</span><strong>@FormatNullableAiCreditsWithUnit(_copilotUsage.AiCredits())</strong></div>
+                        <div><span>Premium Request cost</span><strong>@FormatNullablePremiumRequestCost(_copilotUsage.Cost)</strong></div>
                         <div><span>Premium Requests</span><strong>@FormatPremiumRequests(_copilotUsage)</strong></div>
-                        <div><span>合計 tokens</span><strong>@FormatTokens(_copilotUsage.TotalTokens)</strong></div>
-                        <div><span>入力</span><strong>@FormatTokens(_copilotUsage.InputTokens)</strong></div>
-                        <div><span>出力</span><strong>@FormatTokens(_copilotUsage.OutputTokens)</strong></div>
-                        <div><span>推論</span><strong>@FormatTokens(_copilotUsage.ReasoningTokens)</strong></div>
-                        <div><span>キャッシュ読込</span><strong>@FormatTokens(_copilotUsage.CacheReadTokens)</strong></div>
-                        <div><span>キャッシュ書込</span><strong>@FormatTokens(_copilotUsage.CacheWriteTokens)</strong></div>
+                        <div><span>合計</span><strong>@FormatTokensWithUnit(_copilotUsage.TotalTokens)</strong></div>
+                        <div><span>入力</span><strong>@FormatTokensWithUnit(_copilotUsage.InputTokens)</strong></div>
+                        <div><span>出力</span><strong>@FormatTokensWithUnit(_copilotUsage.OutputTokens)</strong></div>
+                        <div><span>推論</span><strong>@FormatTokensWithUnit(_copilotUsage.ReasoningTokens)</strong></div>
+                        <div><span>キャッシュ読込</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheReadTokens)</strong></div>
+                        <div><span>キャッシュ書込</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheWriteTokens)</strong></div>
                     </div>
                     @if (_copilotUsage.LastTurn is { } lastTurn)
                     {
                         <p class="settings-muted" data-testid="settings-copilot-usage-last">
-                            直近: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? "model unknown") / @FormatNullableAiCredits(lastTurn.AiCredits()) / @FormatTokens(lastTurn.TotalTokens()) tokens
+                            直近: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? "model unknown") / @FormatNullableAiCreditsWithUnit(lastTurn.AiCredits()) / @FormatTokensWithUnit(lastTurn.TotalTokens())
                         </p>
                     }
                     @if (_copilotUsage.SessionMetrics.FirstOrDefault() is { } sessionMetrics)
                     {
                         <p class="settings-muted" data-testid="settings-copilot-usage-session-metrics">
-                            セッション metrics: @(sessionMetrics.CurrentModel ?? "model unknown") / requests @FormatNumber(sessionMetrics.TotalUserRequests) / last call @FormatTokens(sessionMetrics.LastCallInputTokens) in, @FormatTokens(sessionMetrics.LastCallOutputTokens) out
+                            セッション metrics: @(sessionMetrics.CurrentModel ?? "model unknown") / @FormatNumber(sessionMetrics.TotalUserRequests) requests / last call @FormatTokensWithUnit(sessionMetrics.LastCallInputTokens) in, @FormatTokensWithUnit(sessionMetrics.LastCallOutputTokens) out
                         </p>
                     }
                     @if (_copilotUsage.TotalNanoAiu is { } totalNanoAiu)
@@ -180,7 +180,7 @@
                             data-testid="settings-copilot-usage-reset"
                             @onclick="ResetCopilotUsage">リセット</button>
                 }
-                <p class="settings-muted" data-testid="settings-copilot-usage-privacy">AI Credits と Cost は SDK の usage event / session metrics を優先し、SDK が AI Credits を返さない場合は GitHub Docs のモデル別価格表から概算します。プロンプト本文は保存しません。</p>
+                <p class="settings-muted" data-testid="settings-copilot-usage-privacy">AI Credits と Premium Request cost は SDK の usage event / session metrics を優先し、SDK が AI Credits を返さない場合は GitHub Docs のモデル別価格表から概算します。プロンプト本文は保存しません。</p>
             </section>
 
             <ThirdPartyNoticesPanel />
@@ -652,6 +652,9 @@
     private static string FormatTokens(double tokens)
         => FormatNumber(Math.Round(tokens));
 
+    private static string FormatTokensWithUnit(double tokens)
+        => $"{FormatTokens(tokens)} tokens";
+
     private static string FormatNumber(double value)
         => value.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
 
@@ -681,11 +684,14 @@
     private static string FormatPremiumRequests(CopilotUsageSnapshot usage)
     {
         var requests = usage.SessionMetrics.Sum(static metrics => metrics.TotalUserRequests);
-        return requests > 0 ? FormatNumber(requests) : "未報告";
+        return requests > 0 ? $"{FormatNumber(requests)} requests" : "未報告";
     }
 
     private static string FormatNullableAiCredits(double? aiCredits)
         => aiCredits is { } value ? FormatAiCredits(value) : "未報告";
+
+    private static string FormatNullableAiCreditsWithUnit(double? aiCredits)
+        => aiCredits is { } value ? $"{FormatAiCredits(value)} credits" : "未報告";
 
     private static string FormatAiCredits(double aiCredits)
         => aiCredits switch
@@ -697,6 +703,9 @@
 
     private static string FormatNullableCost(double? cost)
         => cost is { } value ? FormatCost(value) : "未報告";
+
+    private static string FormatNullablePremiumRequestCost(double? cost)
+        => cost is { } value ? $"{FormatCost(value)} PR" : "未報告";
 
     private static string FormatCost(double cost)
         => cost switch

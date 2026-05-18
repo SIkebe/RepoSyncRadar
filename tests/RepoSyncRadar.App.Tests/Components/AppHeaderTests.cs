@@ -330,13 +330,16 @@ public sealed class AppHeaderTests
         cut.Find("[data-testid=\"app-header-settings\"]").Click();
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
-        Assert.Contains("AI Credits0.1230", summary, StringComparison.Ordinal);
-        Assert.Contains("推定コスト0.004200", summary, StringComparison.Ordinal);
-        Assert.Contains("合計 tokens1,600", summary, StringComparison.Ordinal);
-        Assert.Contains("入力1,200", summary, StringComparison.Ordinal);
-        Assert.Contains("出力340", summary, StringComparison.Ordinal);
-        Assert.Contains("推論60", summary, StringComparison.Ordinal);
-        Assert.Contains("Triage", cut.Find("[data-testid=\"settings-copilot-usage-last\"]").TextContent);
+        Assert.Contains("AI Credits0.1230 credits", summary, StringComparison.Ordinal);
+        Assert.Contains("Premium Request cost0.004200 PR", summary, StringComparison.Ordinal);
+        Assert.Contains("合計1,600 tokens", summary, StringComparison.Ordinal);
+        Assert.Contains("入力1,200 tokens", summary, StringComparison.Ordinal);
+        Assert.Contains("出力340 tokens", summary, StringComparison.Ordinal);
+        Assert.Contains("推論60 tokens", summary, StringComparison.Ordinal);
+        var lastUsage = cut.Find("[data-testid=\"settings-copilot-usage-last\"]").TextContent;
+        Assert.Contains("Triage", lastUsage, StringComparison.Ordinal);
+        Assert.Contains("0.1230 credits", lastUsage, StringComparison.Ordinal);
+        Assert.Contains("1,600 tokens", lastUsage, StringComparison.Ordinal);
         Assert.Contains("123,000,000 nano AIU", cut.Find("[data-testid=\"settings-copilot-usage-aiu\"]").TextContent);
 
         cut.Find("[data-testid=\"settings-copilot-usage-reset\"]").Click();
@@ -456,13 +459,13 @@ public sealed class AppHeaderTests
         cut.Find("[data-testid=\"app-header-settings\"]").Click();
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
-        Assert.Contains("AI Credits0.2500", summary, StringComparison.Ordinal);
-        Assert.Contains("推定コスト2.50", summary, StringComparison.Ordinal);
-        Assert.Contains("Premium Requests3", summary, StringComparison.Ordinal);
+        Assert.Contains("AI Credits0.2500 credits", summary, StringComparison.Ordinal);
+        Assert.Contains("Premium Request cost2.50 PR", summary, StringComparison.Ordinal);
+        Assert.Contains("Premium Requests3 requests", summary, StringComparison.Ordinal);
         var metrics = cut.Find("[data-testid=\"settings-copilot-usage-session-metrics\"]").TextContent;
         Assert.Contains("gpt-5", metrics, StringComparison.Ordinal);
-        Assert.Contains("requests 3", metrics, StringComparison.Ordinal);
-        Assert.Contains("last call 700 in, 180 out", metrics, StringComparison.Ordinal);
+        Assert.Contains("3 requests", metrics, StringComparison.Ordinal);
+        Assert.Contains("last call 700 tokens in, 180 tokens out", metrics, StringComparison.Ordinal);
     }
 
     [Fact]
