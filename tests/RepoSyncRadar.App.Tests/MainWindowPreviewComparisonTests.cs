@@ -316,6 +316,36 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Marks_All_After_Blocks_When_Before_File_Is_Missing()
+    {
+        var afterBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "New page title"),
+            new PreviewDiffBlock(1, "Added guidance"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(Array.Empty<PreviewDiffBlock>(), afterBlocks);
+
+        Assert.Empty(plan.BeforeChangedIndexes);
+        Assert.Equal([0, 1], plan.AfterChangedIndexes);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Marks_All_Before_Blocks_When_After_File_Is_Missing()
+    {
+        var beforeBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "Removed page title"),
+            new PreviewDiffBlock(1, "Removed guidance"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, Array.Empty<PreviewDiffBlock>());
+
+        Assert.Equal([0, 1], plan.BeforeChangedIndexes);
+        Assert.Empty(plan.AfterChangedIndexes);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildPlan_Marks_Replaced_Block_On_Both_Panes()
     {
         var beforeBlocks = new[]

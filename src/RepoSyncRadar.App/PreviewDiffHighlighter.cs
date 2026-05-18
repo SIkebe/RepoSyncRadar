@@ -100,6 +100,13 @@ internal static class PreviewDiffHighlighter
         ArgumentNullException.ThrowIfNull(beforeBlocks);
         ArgumentNullException.ThrowIfNull(afterBlocks);
 
+        if (beforeBlocks.Count == 0 || afterBlocks.Count == 0)
+        {
+            return new PreviewDiffPlan(
+                beforeBlocks.Select(static block => block.Index).ToArray(),
+                afterBlocks.Select(static block => block.Index).ToArray());
+        }
+
         var beforeTexts = beforeBlocks.Select(block => NormalizeText(block.Text)).ToArray();
         var afterTexts = afterBlocks.Select(block => NormalizeText(block.Text)).ToArray();
         var lengths = new int[beforeTexts.Length + 1, afterTexts.Length + 1];

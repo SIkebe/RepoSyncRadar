@@ -614,8 +614,8 @@ public partial class MainWindow : Window
                 comparisonRequest.FileOrdinal,
                 comparisonRequest.FileCount);
             ShowInitialComparisonLoadingStatus(comparisonRequest);
-            DocsView.Source = comparisonRequest.BeforeUrl;
-            PreviewView.Source = url;
+            NavigatePreviewPane(DocsView, comparisonRequest.BeforeUrl);
+            NavigatePreviewPane(PreviewView, url);
             return;
         }
 
@@ -636,8 +636,22 @@ public partial class MainWindow : Window
             request.FileCount);
         ShowInitialComparisonLoadingStatus(request);
         UpdateDocsVersionSelector(request);
-        DocsView.Source = request.BeforeUrl;
-        PreviewView.Source = request.AfterUrl;
+        NavigatePreviewPane(DocsView, request.BeforeUrl);
+        NavigatePreviewPane(PreviewView, request.AfterUrl);
+    }
+
+    private static void NavigatePreviewPane(WebView2CompositionControl view, Uri url)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(url);
+
+        if (view.CoreWebView2 is { } core)
+        {
+            core.Navigate(url.AbsoluteUri);
+            return;
+        }
+
+        view.Source = url;
     }
 
     /// <summary>
