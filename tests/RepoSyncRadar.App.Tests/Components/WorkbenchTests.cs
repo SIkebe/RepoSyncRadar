@@ -614,6 +614,164 @@ public sealed class WorkbenchTests
         });
     }
 
+    [Theory]
+    [InlineData(173)]
+    [InlineData(941)]
+    [InlineData(20260518)]
+    public async Task Workbench_Monkey_Status_Search_And_Move_Operations_Keep_UI_State_Consistent(int seed)
+    {
+        var random = new Random(seed);
+        var commits = Enumerable.Range(0, 10)
+            .Select(index => MakeWorkbenchCommit(
+                $"{index + 1:x7}{index + 1:x7}{index + 1:x7}{index + 1:x7}{index + 1:x7}{index + 1:x5}",
+                $"monkey commit {index + 1}"))
+            .ToList();
+        var initialStatuses = new[]
+        {
+            ReviewStatus.Unseen,
+            ReviewStatus.Unseen,
+            ReviewStatus.Adopted,
+            ReviewStatus.Later,
+            ReviewStatus.Rejected,
+            ReviewStatus.Rejected,
+            ReviewStatus.Archived,
+            ReviewStatus.Unseen,
+            ReviewStatus.Later,
+            ReviewStatus.Adopted,
+        };
+        var statuses = commits
+            .Select((commit, index) => new { commit.Sha, Status = initialStatuses[index] })
+            .ToDictionary(static item => item.Sha, static item => item.Status, StringComparer.Ordinal);
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(statuses.Values)));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> visible = VisibleShas(commits, statuses, filter.Status, filter.ShaQuery)
+                    .Select(sha => CloneWorkbenchCommit(commits.Single(commit => commit.Sha == sha), statuses[sha]))
+                    .ToArray();
+                return Task.FromResult(visible);
+            });
+        repo.SetReviewAsync(Arg.Any<string>(), Arg.Any<ReviewStatus>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var sha = call.ArgAt<string>(0);
+                if (statuses.ContainsKey(sha))
+                {
+                    statuses[sha] = call.ArgAt<ReviewStatus>(1);
+                }
+                return Task.CompletedTask;
+            });
+        repo.DeleteUnseenCommitsAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var requestedShas = call.Arg<IEnumerable<string>>().ToArray();
+                var deleted = 0;
+                foreach (var sha in requestedShas)
+                {
+                    if (statuses.TryGetValue(sha, out var status) && status == ReviewStatus.Unseen)
+                    {
+                        statuses.Remove(sha);
+                        commits.RemoveAll(commit => commit.Sha == sha);
+                        deleted++;
+                    }
+                }
+                return Task.FromResult(deleted);
+            });
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out var broadcaster);
+        var cut = ctx.Render<Workbench>();
+
+        var selectedStatus = ReviewStatus.Unseen;
+        var selectedSha = (string?)null;
+        var selectedShas = new HashSet<string>(StringComparer.Ordinal);
+        var searchQuery = string.Empty;
+
+        cut.WaitForAssertion(() => AssertWorkbenchState(cut, commits, statuses, selectedStatus, searchQuery, selectedSha, selectedShas));
+
+        for (var step = 0; step < 45; step++)
+        {
+            var visible = VisibleShas(commits, statuses, selectedStatus, searchQuery).ToArray();
+            switch (random.Next(8))
+            {
+                case 0:
+                    selectedStatus = PickReviewStatus(random);
+                    selectedSha = null;
+                    selectedShas.Clear();
+                    cut.Find($"[data-testid=\"sidebar-item-{selectedStatus}\"]").Click();
+                    break;
+
+                case 1 when commits.Count > 0:
+                    var searchTarget = commits[random.Next(commits.Count)].Sha;
+                    searchQuery = random.Next(2) == 0 ? searchTarget[..7].ToUpperInvariant() : string.Empty;
+                    selectedSha = null;
+                    selectedShas.Clear();
+                    cut.Find("[data-testid=\"commit-hash-search\"]").Input(searchQuery);
+                    break;
+
+                case 2 when visible.Length > 0:
+                    selectedSha = visible[random.Next(visible.Length)];
+                    cut.Find($"[data-testid=\"commit-row\"][data-sha=\"{selectedSha}\"]").Click();
+                    break;
+
+                case 3 when visible.Length > 0:
+                    var checkboxSha = visible[random.Next(visible.Length)];
+                    if (!selectedShas.Add(checkboxSha))
+                    {
+                        selectedShas.Remove(checkboxSha);
+                    }
+                    cut.Find($"[data-testid=\"commit-select\"][data-sha=\"{checkboxSha}\"]").Change(selectedShas.Contains(checkboxSha));
+                    break;
+
+                case 4 when selectedSha is not null:
+                    var singleTargetStatus = PickManualReviewStatus(random);
+                    statuses[selectedSha] = singleTargetStatus;
+                    ClickSingleReviewAction(cut, singleTargetStatus);
+                    selectedSha = null;
+                    selectedShas.Clear();
+                    break;
+
+                case 5 when selectedShas.Count > 0:
+                    var bulkTargetStatus = PickBulkMoveStatus(random, selectedStatus);
+                    foreach (var sha in selectedShas)
+                    {
+                        if (statuses.ContainsKey(sha))
+                        {
+                            statuses[sha] = bulkTargetStatus;
+                        }
+                    }
+                    cut.Find($"[data-testid=\"bulk-review-{bulkTargetStatus.ToString().ToLowerInvariant()}\"]").Click();
+                    selectedSha = null;
+                    selectedShas.Clear();
+                    break;
+
+                case 6 when selectedStatus == ReviewStatus.Unseen && selectedShas.Count > 0:
+                    var deletedShas = selectedShas.Where(sha => statuses.TryGetValue(sha, out var status) && status == ReviewStatus.Unseen).ToArray();
+                    cut.Find("[data-testid=\"bulk-delete-unseen\"]").Click();
+                    foreach (var sha in deletedShas)
+                    {
+                        statuses.Remove(sha);
+                        commits.RemoveAll(commit => commit.Sha == sha);
+                    }
+                    selectedSha = null;
+                    selectedShas.Clear();
+                    break;
+
+                default:
+                    broadcaster.Publish();
+                    selectedShas.Clear();
+                    break;
+            }
+
+            cut.WaitForAssertion(() => AssertWorkbenchState(cut, commits, statuses, selectedStatus, searchQuery, selectedSha, selectedShas));
+        }
+    }
+
     private static Bunit.BunitContext CreateWorkbenchTestContext(
         IRadarRepository repo,
         out ReviewBroadcaster broadcaster,
@@ -681,4 +839,126 @@ public sealed class WorkbenchTests
             AuthoredAt = new DateTime(2026, 5, 15, 4, 0, 0, DateTimeKind.Utc),
             FetchedAt = new DateTime(2026, 5, 15, 4, 0, 0, DateTimeKind.Utc),
         };
+
+    private static Commit CloneWorkbenchCommit(Commit source, ReviewStatus status)
+        => new()
+        {
+            Sha = source.Sha,
+            PrNumber = source.PrNumber,
+            Message = source.Message,
+            Author = source.Author,
+            AuthoredAt = source.AuthoredAt,
+            FetchedAt = source.FetchedAt,
+            Review = new Review { Sha = source.Sha, Status = status },
+        };
+
+    private static string[] VisibleShas(
+        IEnumerable<Commit> commits,
+        IReadOnlyDictionary<string, ReviewStatus> statuses,
+        ReviewStatus? selectedStatus,
+        string? searchQuery)
+    {
+        var normalizedSearch = string.IsNullOrWhiteSpace(searchQuery) ? null : searchQuery.Trim().ToLowerInvariant();
+        return commits
+            .Where(commit => statuses.TryGetValue(commit.Sha, out var status) && (selectedStatus is null || status == selectedStatus))
+            .Where(commit => normalizedSearch is null || commit.Sha.Contains(normalizedSearch, StringComparison.Ordinal))
+            .Select(static commit => commit.Sha)
+            .ToArray();
+    }
+
+    private static ReviewStatus PickReviewStatus(Random random)
+    {
+        var statuses = new[]
+        {
+            ReviewStatus.Unseen,
+            ReviewStatus.Adopted,
+            ReviewStatus.Later,
+            ReviewStatus.Rejected,
+            ReviewStatus.Archived,
+        };
+        return statuses[random.Next(statuses.Length)];
+    }
+
+    private static ReviewStatus PickManualReviewStatus(Random random)
+    {
+        var statuses = new[]
+        {
+            ReviewStatus.Adopted,
+            ReviewStatus.Later,
+            ReviewStatus.Archived,
+        };
+        return statuses[random.Next(statuses.Length)];
+    }
+
+    private static ReviewStatus PickBulkMoveStatus(Random random, ReviewStatus currentStatus)
+    {
+        var statuses = new[]
+        {
+            ReviewStatus.Unseen,
+            ReviewStatus.Adopted,
+            ReviewStatus.Later,
+            ReviewStatus.Archived,
+        };
+        var candidates = statuses.Where(status => status != currentStatus).ToArray();
+        return candidates[random.Next(candidates.Length)];
+    }
+
+    private static void ClickSingleReviewAction(IRenderedComponent<Workbench> cut, ReviewStatus status)
+    {
+        switch (status)
+        {
+            case ReviewStatus.Adopted:
+                cut.Find("[data-testid=\"review-adopt\"]").Click();
+                break;
+            case ReviewStatus.Later:
+                cut.Find("[data-testid=\"review-later\"]").Click();
+                break;
+            case ReviewStatus.Archived:
+                cut.Find("[data-testid=\"review-reject-reason\"]").Input("monkey archive");
+                cut.Find("[data-testid=\"review-reject\"]").Click();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(status), status, "Unsupported manual review status.");
+        }
+    }
+
+    private static void AssertWorkbenchState(
+        IRenderedComponent<Workbench> cut,
+        IReadOnlyList<Commit> commits,
+        IReadOnlyDictionary<string, ReviewStatus> statuses,
+        ReviewStatus selectedStatus,
+        string searchQuery,
+        string? selectedSha,
+        HashSet<string> selectedShas)
+    {
+        Assert.Contains("active", cut.Find($"[data-testid=\"sidebar-item-{selectedStatus}\"]").ClassList);
+
+        var expectedRows = VisibleShas(commits, statuses, selectedStatus, searchQuery).ToArray();
+        var actualRows = cut.FindAll("[data-testid=\"commit-row\"]")
+            .Select(row => row.GetAttribute("data-sha"))
+            .ToArray();
+        Assert.Equal(expectedRows, actualRows);
+
+        var activeRows = cut.FindAll("[data-testid=\"commit-row\"]")
+            .Count(row => row.ClassList.Contains("active"));
+        Assert.True(activeRows <= 1, $"Expected at most one active commit row, found {activeRows}.");
+
+        if (selectedSha is null || !expectedRows.Contains(selectedSha, StringComparer.Ordinal))
+        {
+            Assert.NotNull(cut.Find("[data-testid=\"commit-detail-empty\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"review-actions\"]"));
+        }
+        else
+        {
+            Assert.NotEmpty(cut.FindAll("[data-testid=\"review-actions\"]"));
+        }
+
+        if (selectedShas.Count > 0)
+        {
+            Assert.Contains(
+                $"{selectedShas.Count} 件選択中",
+                cut.Find("[data-testid=\"bulk-review-count\"]").TextContent,
+                StringComparison.Ordinal);
+        }
+    }
 }
