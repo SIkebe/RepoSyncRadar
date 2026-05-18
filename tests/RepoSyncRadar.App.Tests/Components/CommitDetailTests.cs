@@ -80,7 +80,26 @@ public class CommitDetailTests
         var sha = cut.Find("[data-testid=\"commit-detail-sha\"]");
         Assert.Equal("feedfac", sha.TextContent);
         Assert.Equal(commit.Sha, sha.GetAttribute("title"));
-        Assert.Equal("Repo sync", cut.Find("h3[data-testid=\"commit-detail-message\"]").TextContent);
+        Assert.Equal("Repo sync", cut.Find("[data-testid=\"commit-detail-message\"]").TextContent);
+    }
+
+    [Fact]
+    public void CommitDetail_Shows_Only_Useful_Commit_Message_Line()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        commit.Message = "Update authentication documentation for token formats\n\nCo-authored-by: Copilot <copilot@users.noreply.github.com>\nSigned-off-by: octocat <octocat@example.com>";
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        var message = cut.Find("[data-testid=\"commit-detail-message\"]");
+        Assert.Equal("p", message.TagName.ToLowerInvariant());
+        Assert.Equal("Update authentication documentation for token formats", message.TextContent);
+        Assert.DoesNotContain("Co-authored-by", message.TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Signed-off-by", message.TextContent, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

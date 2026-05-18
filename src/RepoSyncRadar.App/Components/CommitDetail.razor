@@ -48,7 +48,7 @@
                        title="既定ブラウザーで PR #@Commit.PrNumber を開きます">↗</a>
                 }
             </div>
-            <h3 class="message" data-testid="commit-detail-message">@Commit.Message</h3>
+            <p class="message" data-testid="commit-detail-message" title="@DisplayCommitMessage(Commit.Message)">@DisplayCommitMessage(Commit.Message)</p>
         </header>
         @if (Commit.Scoring is { } scoring)
         {
@@ -874,6 +874,31 @@
 
     private static string ShortSha(string sha)
         => sha.Length <= 7 ? sha : sha[..7];
+
+    private static string DisplayCommitMessage(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return string.Empty;
+        }
+
+        foreach (var rawLine in message.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0 || IsCommitMessageTrailer(line))
+            {
+                continue;
+            }
+            return line;
+        }
+        return string.Empty;
+    }
+
+    private static bool IsCommitMessageTrailer(string line)
+        => line.StartsWith("Co-authored-by:", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("Signed-off-by:", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("Reviewed-by:", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("Acked-by:", StringComparison.OrdinalIgnoreCase);
 
     private string BuildPullRequestUrl(Commit commit)
     {

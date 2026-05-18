@@ -502,9 +502,9 @@ html, body {
 .radar-commit-detail .commit-header .message {
     margin: 0;
     color: #24292f;
-    font-size: 1rem;
-    font-weight: 700;
-    line-height: 1.35;
+    font-size: 0.92rem;
+    font-weight: 600;
+    line-height: 1.4;
     overflow-wrap: anywhere;
 }
 
