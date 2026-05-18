@@ -255,6 +255,70 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Distinguishes_Added_Metadata_Only_File_From_Missing_File()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-added-metadata.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-added-metadata");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+        const string filePath = "content/rest/copilot/copilot-cloud-agent-management.md";
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, sha) =>
+            {
+                if (!string.Equals(sha, "headsha", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var fullPath = Path.Combine(path, "content", "rest", "copilot", "copilot-cloud-agent-management.md");
+                Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+                File.WriteAllText(fullPath, """
+                    ---
+                    title: REST API endpoints for Copilot cloud agent repository management
+                    shortTitle: Cloud agent repository management
+                    ---
+
+                    <!-- Content after this section is automatically generated -->
+                    """);
+            });
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", filePath, cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Contains("この時点にはファイルがありません", capturedPages["/markdown/before"], StringComparison.Ordinal);
+        Assert.Contains("REST API endpoints for Copilot cloud agent repository management", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains("このファイルは存在しますが、本文はありません", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.DoesNotContain("この時点にはファイルがありません", capturedPages["/markdown/after"], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PrepareMarkdownComparisonPreviewAsync_Rewrites_Autotitle_From_Worktree_Page_Titles()
     {
         var ct = TestContext.Current.CancellationToken;
