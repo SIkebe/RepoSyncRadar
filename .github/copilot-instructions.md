@@ -37,6 +37,7 @@ Use these repository instructions first. Search only when the instructions are i
 - `Microsoft.NET.Sdk.Razor` does not implicitly include `System.IO` or `System.Net.Http`; add explicit `using` directives when using `File`, `Path`, `Directory`, `IOException`, `HttpClient`, or `HttpResponseMessage`.
 - Do not add `System.Security.Cryptography.ProtectedData` as a package; it is already available in the target framework. Use `[SupportedOSPlatform("windows")]` where DPAPI requires it.
 - Avoid `using var _ = ...`; `_` is a real variable in that context and can conflict with later discard assignments.
+- Before finishing C# edits, check language-server diagnostics or run a focused build so IDE naming rules such as IDE1006 are caught before handoff.
 
 ## Copilot SDK And Auth
 
@@ -58,6 +59,7 @@ Use these repository instructions first. Search only when the instructions are i
 - Commit detail should show the useful first commit message line only. Do not surface `Co-authored-by`, `Signed-off-by`, `Reviewed-by`, or `Acked-by` trailers as prominent UI text.
 - Copilot usage UI must label units explicitly: AI Credits as `credits`, Premium Request cost as `PR`, request counts as `requests`, and token counts as `tokens`.
 - When SDK AI Credits are absent, usage estimates may fall back to the GitHub Docs model pricing table. Unknown models should remain unreported rather than guessed.
+- For Copilot fallback models, prefer currently supported non-retiring models. Check GitHub Changelog plus the supported-models docs before hardcoding model IDs; avoid `GPT-4.1`, `GPT-5`, `GPT-5.2`, and `GPT-5.2-Codex` as preferred fallbacks because they are retired or scheduled for retirement.
 
 ## Preview And WebView
 

@@ -20,14 +20,25 @@ namespace RepoSyncRadar.App.Copilot;
 /// </summary>
 public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 {
-    internal const string DefaultFallbackModel = "gpt-5";
+    internal const string DefaultFallbackModel = "gpt-5-mini";
 
-    private static readonly string[] PreferredFallbackModels =
+    private static readonly string[] _preferredFallbackModels =
     [
+        "gpt-5.3-codex",
         DefaultFallbackModel,
-        "claude-sonnet-4.5",
-        "gpt-4.1",
+        "gpt-5.5",
+        "gpt-5.4-mini",
+        "claude-sonnet-4.6",
+        "claude-haiku-4.5",
     ];
+
+    private static readonly HashSet<string> _retiringFallbackModels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "gpt-4.1",
+        "gpt-5",
+        "gpt-5.2",
+        "gpt-5.2-codex",
+    };
 
     private readonly IOptions<CopilotOptions> _options;
     private readonly RadarPermissionPolicy _permissionPolicy;
@@ -119,13 +130,21 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         }
 
         var available = new HashSet<string>(availableModelIds, StringComparer.OrdinalIgnoreCase);
-        foreach (var fallback in PreferredFallbackModels)
+        foreach (var fallback in _preferredFallbackModels)
         {
             if (!string.Equals(fallback, requested, StringComparison.OrdinalIgnoreCase)
                 && available.Contains(fallback))
             {
                 return fallback;
             }
+        }
+
+        var nonRetiringFallback = availableModelIds.FirstOrDefault(id =>
+            !string.Equals(id, requested, StringComparison.OrdinalIgnoreCase)
+            && !_retiringFallbackModels.Contains(id));
+        if (nonRetiringFallback is not null)
+        {
+            return nonRetiringFallback;
         }
 
         return availableModelIds.FirstOrDefault(id =>

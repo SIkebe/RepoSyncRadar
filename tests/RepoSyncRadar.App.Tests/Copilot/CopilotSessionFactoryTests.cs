@@ -8,13 +8,33 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class CopilotSessionFactoryTests
 {
     [Fact]
-    public void ResolveFallbackModel_When_Configured_Model_Fails_Prefers_Gpt5()
+    public void ResolveFallbackModel_When_Configured_Model_Fails_Prefers_Current_Base_Model()
+    {
+        var fallback = CopilotSessionFactory.ResolveFallbackModel(
+            "gpt-4.1",
+            ["gpt-4.1", "gpt-5-mini", "gpt-5.3-codex", "claude-sonnet-4.6"]);
+
+        Assert.Equal("gpt-5.3-codex", fallback);
+    }
+
+    [Fact]
+    public void ResolveFallbackModel_When_Base_Model_Is_Missing_Prefers_Broadly_Available_Gpt5Mini()
+    {
+        var fallback = CopilotSessionFactory.ResolveFallbackModel(
+            "gpt-4.1",
+            ["gpt-4.1", "gpt-5-mini", "claude-haiku-4.5"]);
+
+        Assert.Equal("gpt-5-mini", fallback);
+    }
+
+    [Fact]
+    public void ResolveFallbackModel_Avoids_Retiring_Models_When_Alternatives_Exist()
     {
         var fallback = CopilotSessionFactory.ResolveFallbackModel(
             "gpt-5.5",
-            ["gpt-4.1", "gpt-5", "claude-sonnet-4.5"]);
+            ["gpt-4.1", "gpt-5.2", "custom-current"]);
 
-        Assert.Equal("gpt-5", fallback);
+        Assert.Equal("custom-current", fallback);
     }
 
     [Fact]
@@ -32,13 +52,13 @@ public sealed class CopilotSessionFactoryTests
     {
         var fallback = CopilotSessionFactory.ResolveFallbackModel("gpt-5.5", []);
 
-        Assert.Equal("gpt-5", fallback);
+        Assert.Equal("gpt-5-mini", fallback);
     }
 
     [Fact]
     public void ResolveFallbackModel_When_No_Alternative_Remains_Returns_Null()
     {
-        var fallback = CopilotSessionFactory.ResolveFallbackModel("gpt-5", ["gpt-5"]);
+        var fallback = CopilotSessionFactory.ResolveFallbackModel("gpt-5-mini", ["gpt-5-mini"]);
 
         Assert.Null(fallback);
     }
