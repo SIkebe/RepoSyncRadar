@@ -170,6 +170,10 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultModel = GetString(configuration, "Copilot:DefaultModel", defaults.Copilot.DefaultModel),
                 Streaming = GetBool(configuration, "Copilot:Streaming", defaults.Copilot.Streaming),
+                LogLevel = GetString(configuration, "Copilot:LogLevel", defaults.Copilot.LogLevel),
+                SessionIdleTimeoutSeconds = GetNullableInt(configuration, "Copilot:SessionIdleTimeoutSeconds"),
+                CopilotHome = GetNullableString(configuration, "Copilot:CopilotHome"),
+                TelemetryFilePath = GetNullableString(configuration, "Copilot:TelemetryFilePath"),
                 CaptureContent = GetBool(configuration, "Copilot:CaptureContent", defaults.Copilot.CaptureContent),
                 AllowedUrlHosts = GetStringList(configuration, "Copilot:AllowedUrlHosts", defaults.Copilot.AllowedUrlHosts),
                 OAuthClientId = GetNullableString(configuration, "Copilot:OAuthClientId"),
@@ -222,6 +226,10 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultModel = GetString(root, "Copilot", "DefaultModel", fallback.Copilot.DefaultModel),
                 Streaming = GetBool(root, "Copilot", "Streaming", fallback.Copilot.Streaming),
+                LogLevel = GetString(root, "Copilot", "LogLevel", fallback.Copilot.LogLevel),
+                SessionIdleTimeoutSeconds = GetNullableInt(root, "Copilot", "SessionIdleTimeoutSeconds", fallback.Copilot.SessionIdleTimeoutSeconds),
+                CopilotHome = GetNullableString(root, "Copilot", "CopilotHome", fallback.Copilot.CopilotHome),
+                TelemetryFilePath = GetNullableString(root, "Copilot", "TelemetryFilePath", fallback.Copilot.TelemetryFilePath),
                 CaptureContent = GetBool(root, "Copilot", "CaptureContent", fallback.Copilot.CaptureContent),
                 AllowedUrlHosts = GetStringList(root, "Copilot", "AllowedUrlHosts", fallback.Copilot.AllowedUrlHosts),
                 OAuthClientId = GetNullableString(root, "Copilot", "OAuthClientId", fallback.Copilot.OAuthClientId),
@@ -271,6 +279,14 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         var copilot = GetOrReplaceObject(root, "Copilot");
         copilot["DefaultModel"] = settings.Copilot.DefaultModel;
         copilot["Streaming"] = settings.Copilot.Streaming;
+        copilot["LogLevel"] = settings.Copilot.LogLevel;
+        copilot["SessionIdleTimeoutSeconds"] = settings.Copilot.SessionIdleTimeoutSeconds;
+        copilot["CopilotHome"] = string.IsNullOrWhiteSpace(settings.Copilot.CopilotHome)
+            ? null
+            : settings.Copilot.CopilotHome;
+        copilot["TelemetryFilePath"] = string.IsNullOrWhiteSpace(settings.Copilot.TelemetryFilePath)
+            ? null
+            : settings.Copilot.TelemetryFilePath;
         copilot["CaptureContent"] = settings.Copilot.CaptureContent;
         copilot["AllowedUrlHosts"] = ToJsonArray(settings.Copilot.AllowedUrlHosts);
         copilot["OAuthClientId"] = string.IsNullOrWhiteSpace(settings.Copilot.OAuthClientId)
@@ -321,6 +337,12 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultModel = TrimOrEmpty(settings.Copilot.DefaultModel),
                 Streaming = settings.Copilot.Streaming,
+                LogLevel = string.IsNullOrWhiteSpace(settings.Copilot.LogLevel)
+                    ? "info"
+                    : settings.Copilot.LogLevel.Trim().ToLowerInvariant(),
+                SessionIdleTimeoutSeconds = settings.Copilot.SessionIdleTimeoutSeconds,
+                CopilotHome = NormalizeNullable(settings.Copilot.CopilotHome),
+                TelemetryFilePath = NormalizeNullable(settings.Copilot.TelemetryFilePath),
                 CaptureContent = settings.Copilot.CaptureContent,
                 AllowedUrlHosts = NormalizeHosts(settings.Copilot.AllowedUrlHosts),
                 OAuthClientId = NormalizeNullable(settings.Copilot.OAuthClientId),
@@ -374,6 +396,11 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         ValidateRange(settings.DocsApi.PageListCacheSeconds, 1, int.MaxValue, "DocsApi.PageListCacheSeconds", errors);
 
         Require(settings.Copilot.DefaultModel, "Copilot.DefaultModel", errors);
+        Require(settings.Copilot.LogLevel, "Copilot.LogLevel", errors);
+        if (settings.Copilot.SessionIdleTimeoutSeconds is { } idleTimeout)
+        {
+            ValidateRange(idleTimeout, 0, int.MaxValue, "Copilot.SessionIdleTimeoutSeconds", errors);
+        }
         if (settings.Copilot.AllowedUrlHosts.Count == 0)
         {
             errors.Add("Copilot.AllowedUrlHosts は 1 件以上指定してください。");
@@ -472,6 +499,9 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
     private static int GetInt(IConfiguration configuration, string key, int fallback)
         => int.TryParse(configuration[key], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : fallback;
 
+    private static int? GetNullableInt(IConfiguration configuration, string key)
+        => int.TryParse(configuration[key], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : null;
+
     private static bool GetBool(IConfiguration configuration, string key, bool fallback)
         => bool.TryParse(configuration[key], out var value) ? value : fallback;
 
@@ -513,6 +543,11 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
 
     private static int GetInt(JsonObject root, string sectionName, string propertyName, int fallback)
         => root[sectionName] is JsonObject section && ReadInt(section[propertyName]) is { } value ? value : fallback;
+
+    private static int? GetNullableInt(JsonObject root, string sectionName, string propertyName, int? fallback)
+        => root[sectionName] is JsonObject section && section.ContainsKey(propertyName)
+            ? ReadInt(section[propertyName])
+            : fallback;
 
     private static bool GetBool(JsonObject root, string sectionName, string propertyName, bool fallback)
         => root[sectionName] is JsonObject section && ReadBool(section[propertyName]) is { } value ? value : fallback;

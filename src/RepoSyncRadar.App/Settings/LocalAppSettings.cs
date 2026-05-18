@@ -77,6 +77,14 @@ public sealed class CopilotLocalAppSettings
 
     public bool Streaming { get; set; } = true;
 
+    public string LogLevel { get; set; } = "info";
+
+    public int? SessionIdleTimeoutSeconds { get; set; }
+
+    public string? CopilotHome { get; set; }
+
+    public string? TelemetryFilePath { get; set; }
+
     public bool CaptureContent { get; set; }
 
     public List<string> AllowedUrlHosts { get; set; } =
@@ -94,6 +102,10 @@ public sealed class CopilotLocalAppSettings
         {
             DefaultModel = DefaultModel,
             Streaming = Streaming,
+            LogLevel = LogLevel,
+            SessionIdleTimeoutSeconds = SessionIdleTimeoutSeconds,
+            CopilotHome = CopilotHome,
+            TelemetryFilePath = TelemetryFilePath,
             CaptureContent = CaptureContent,
             AllowedUrlHosts = [.. AllowedUrlHosts],
             OAuthClientId = OAuthClientId,

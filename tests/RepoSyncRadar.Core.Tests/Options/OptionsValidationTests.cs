@@ -141,6 +141,23 @@ public class OptionsValidationTests
     }
 
     [Fact]
+    public void Bind_CopilotSdkOptions_AreTrimmedAndNormalized()
+    {
+        var json = ValidJson.Replace(
+            "\"Streaming\": true,",
+            "\"Streaming\": true,\n    \"LogLevel\": \" Debug \",\n    \"SessionIdleTimeoutSeconds\": 90,\n    \"CopilotHome\": \" C:/data/copilot \",\n    \"TelemetryFilePath\": \" C:/logs/copilot.jsonl \",",
+            StringComparison.Ordinal);
+        using var sp = BuildServiceProvider(json);
+
+        var copilot = sp.GetRequiredService<IOptions<CopilotOptions>>().Value;
+
+        Assert.Equal("debug", copilot.LogLevel);
+        Assert.Equal(90, copilot.SessionIdleTimeoutSeconds);
+        Assert.Equal("C:/data/copilot", copilot.CopilotHome);
+        Assert.Equal("C:/logs/copilot.jsonl", copilot.TelemetryFilePath);
+    }
+
+    [Fact]
     public void Bind_CopilotDefaultModelEmpty_ThrowsOptionsValidationException()
     {
         var json = ValidJson.Replace("\"DefaultModel\": \"gpt-5\"", "\"DefaultModel\": \"\"", StringComparison.Ordinal);

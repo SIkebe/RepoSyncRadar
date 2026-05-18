@@ -221,22 +221,9 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
                 return _client;
             }
 
-            var clientOptions = new CopilotClientOptions
-            {
-                AutoStart = true,
-                // Force the SDK to use the token we hand it instead of falling back to
-                // whatever the bundled CLI / gh CLI happens to be signed in as.
-                UseLoggedInUser = false,
-            };
-
             var copilot = _options.Value;
-            if (!string.IsNullOrWhiteSpace(copilot.CliPath))
-            {
-                clientOptions.CliPath = copilot.CliPath;
-            }
-
             var token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-            clientOptions.GitHubToken = token;
+            var clientOptions = BuildClientOptions(copilot, _logger, token);
             LogForwardingToken(_logger);
 
             _client = new CopilotClient(clientOptions);
@@ -246,6 +233,54 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         {
             _clientGate.Release();
         }
+    }
+
+    internal static CopilotClientOptions BuildClientOptions(
+        CopilotOptions copilot,
+        ILogger logger,
+        string token)
+    {
+        ArgumentNullException.ThrowIfNull(copilot);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        var clientOptions = new CopilotClientOptions
+        {
+            AutoStart = true,
+            Logger = logger,
+            LogLevel = string.IsNullOrWhiteSpace(copilot.LogLevel) ? "info" : copilot.LogLevel.Trim(),
+            GitHubToken = token,
+            // Force the SDK to use the token we hand it instead of falling back to
+            // whatever the bundled CLI / gh CLI happens to be signed in as.
+            UseLoggedInUser = false,
+        };
+
+        if (!string.IsNullOrWhiteSpace(copilot.CliPath))
+        {
+            clientOptions.CliPath = copilot.CliPath.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(copilot.CopilotHome))
+        {
+            clientOptions.CopilotHome = copilot.CopilotHome.Trim();
+        }
+
+        if (copilot.SessionIdleTimeoutSeconds is > 0)
+        {
+            clientOptions.SessionIdleTimeoutSeconds = copilot.SessionIdleTimeoutSeconds;
+        }
+
+        if (!string.IsNullOrWhiteSpace(copilot.TelemetryFilePath))
+        {
+            clientOptions.Telemetry = new TelemetryConfig
+            {
+                ExporterType = "file",
+                FilePath = copilot.TelemetryFilePath.Trim(),
+                SourceName = "RepoSyncRadar",
+                CaptureContent = copilot.CaptureContent,
+            };
+        }
+
+        return clientOptions;
     }
 
     public async ValueTask DisposeAsync()

@@ -16,6 +16,13 @@ internal sealed class CopilotOptionsPostConfigurer : IPostConfigureOptions<Copil
         options.AllowedUrlHosts = Normalize(options.AllowedUrlHosts, lowercase: true);
         options.OAuthScopes = Normalize(options.OAuthScopes, lowercase: true);
 
+        options.LogLevel = string.IsNullOrWhiteSpace(options.LogLevel)
+            ? "info"
+            : options.LogLevel.Trim().ToLowerInvariant();
+
+        options.CopilotHome = NormalizeNullable(options.CopilotHome);
+        options.TelemetryFilePath = NormalizeNullable(options.TelemetryFilePath);
+
         if (!string.IsNullOrWhiteSpace(options.OAuthClientId))
         {
             options.OAuthClientId = options.OAuthClientId.Trim();
@@ -25,6 +32,9 @@ internal sealed class CopilotOptionsPostConfigurer : IPostConfigureOptions<Copil
             options.OAuthClientId = null;
         }
     }
+
+    private static string? NormalizeNullable(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     internal static List<string> Normalize(IReadOnlyList<string>? source, bool lowercase)
     {

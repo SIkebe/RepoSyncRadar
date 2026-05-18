@@ -82,6 +82,11 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.GitHub.Repo = "docs";
         settings.GitHub.PullRequestCreatedAtOrAfter = "2026-05-15T00:00:00Z";
         settings.Copilot.DefaultModel = "gpt-5.5";
+        settings.Copilot.LogLevel = " Debug ";
+        settings.Copilot.SessionIdleTimeoutSeconds = 120;
+        settings.Copilot.CopilotHome = " C:\\Users\\me\\.reposyncradar-copilot ";
+        settings.Copilot.TelemetryFilePath = " C:\\logs\\copilot.jsonl ";
+        settings.Copilot.CaptureContent = true;
         settings.Copilot.AllowedUrlHosts = ["https://docs.github.com", "api.github.com"];
         settings.WebView.AllowedUrlHosts = ["https://github.com", "github.githubassets.com"];
         settings.DocsRepository.BareCloneDir = "C:\\github\\.cache\\docs.git";
@@ -105,6 +110,11 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("keep", root.GetProperty("GitHub").GetProperty("Unknown").GetString());
         Assert.Equal("github", root.GetProperty("GitHub").GetProperty("Owner").GetString());
         Assert.Equal("gpt-5.5", root.GetProperty("Copilot").GetProperty("DefaultModel").GetString());
+        Assert.Equal("debug", root.GetProperty("Copilot").GetProperty("LogLevel").GetString());
+        Assert.Equal(120, root.GetProperty("Copilot").GetProperty("SessionIdleTimeoutSeconds").GetInt32());
+        Assert.Equal("C:\\Users\\me\\.reposyncradar-copilot", root.GetProperty("Copilot").GetProperty("CopilotHome").GetString());
+        Assert.Equal("C:\\logs\\copilot.jsonl", root.GetProperty("Copilot").GetProperty("TelemetryFilePath").GetString());
+        Assert.True(root.GetProperty("Copilot").GetProperty("CaptureContent").GetBoolean());
         Assert.Equal("docs.github.com", root.GetProperty("Copilot").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("github.com", root.GetProperty("WebView").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("600000", root.GetProperty("DocsRepository").GetProperty("PreviewEnvironment").GetProperty("REQUEST_TIMEOUT").GetString());

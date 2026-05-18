@@ -96,6 +96,22 @@
                     <input type="checkbox" data-testid="settings-copilot-streaming" checked="@settings.Copilot.Streaming" disabled="@_saving" @onchange="e => settings.Copilot.Streaming = BoolValue(e)" />
                     <span>Streaming</span>
                 </label>
+                <label class="local-settings-field">
+                    <span>LogLevel</span>
+                    <input data-testid="settings-copilot-log-level" value="@settings.Copilot.LogLevel" disabled="@_saving" @oninput="e => settings.Copilot.LogLevel = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>SessionIdleTimeoutSeconds</span>
+                    <input type="number" min="0" data-testid="settings-copilot-idle-timeout" value="@settings.Copilot.SessionIdleTimeoutSeconds" disabled="@_saving" @oninput="e => settings.Copilot.SessionIdleTimeoutSeconds = NullableIntValue(e)" />
+                </label>
+                <label class="local-settings-field wide">
+                    <span>CopilotHome</span>
+                    <input data-testid="settings-copilot-home" value="@settings.Copilot.CopilotHome" disabled="@_saving" @oninput="e => settings.Copilot.CopilotHome = NullableStringValue(e)" />
+                </label>
+                <label class="local-settings-field wide">
+                    <span>TelemetryFilePath</span>
+                    <input data-testid="settings-copilot-telemetry-file" value="@settings.Copilot.TelemetryFilePath" disabled="@_saving" @oninput="e => settings.Copilot.TelemetryFilePath = NullableStringValue(e)" />
+                </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-copilot-capture-content" checked="@settings.Copilot.CaptureContent" disabled="@_saving" @onchange="e => settings.Copilot.CaptureContent = BoolValue(e)" />
                     <span>CaptureContent</span>
@@ -288,6 +304,11 @@
         => int.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value)
             ? value
             : 0;
+
+    private static int? NullableIntValue(ChangeEventArgs e)
+        => int.TryParse(e.Value?.ToString(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? value
+            : null;
 
     private static bool BoolValue(ChangeEventArgs e)
         => e.Value is bool value && value;
