@@ -1417,6 +1417,30 @@ html, body {
 /* AskPalette — gives the Ctrl+K row a proper flex layout so the input, the
    実行 button, and the SQL-debug toggle don't visually collide with the
    AppHeader's Sync button above. */
+.ask-palette-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ask-palette-toggle {
+    align-self: flex-start;
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 4px;
+    color: #24292f;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    min-height: 1.8rem;
+    padding: 0.25rem 0.7rem;
+}
+
+.ask-palette-toggle:hover {
+    background: #eaeef2;
+}
+
 .ask-palette {
     display: flex;
     flex-direction: column;

@@ -33,8 +33,18 @@
         <main class="radar-workbench">
             <AppHeader />
 
-            <MudPaper Elevation="0" Class="pa-2">
-                <AskPalette />
+            <MudPaper Elevation="0" Class="pa-2 ask-palette-shell" data-testid="ask-palette-shell">
+                <button type="button"
+                        class="ask-palette-toggle"
+                        data-testid="ask-palette-toggle"
+                        aria-expanded="@_askPaletteExpanded.ToString().ToLowerInvariant()"
+                        @onclick="ToggleAskPaletteAsync">
+                    Ask
+                </button>
+                @if (_askPaletteExpanded)
+                {
+                    <AskPalette />
+                }
             </MudPaper>
 
             <MudPaper Elevation="0" Class="pa-2">
@@ -147,6 +157,7 @@
     private int _listRefreshVersion;
     private bool _bulkReviewBusy;
     private string? _bulkReviewStatus;
+    private bool _askPaletteExpanded;
     private IReviewBroadcaster? _broadcaster;
     private IAppUserSettingsStore? _settingsStore;
     private DocsThemeMode _theme = AppUserSettings.Default.DefaultDocsTheme;
@@ -264,6 +275,12 @@
 
         _commitHashQuery = string.Empty;
         RefreshCommitListForCurrentFilter();
+        return Task.CompletedTask;
+    }
+
+    private Task ToggleAskPaletteAsync()
+    {
+        _askPaletteExpanded = !_askPaletteExpanded;
         return Task.CompletedTask;
     }
 
