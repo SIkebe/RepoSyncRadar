@@ -284,7 +284,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", "CHANGELOG.md", progress, cancellationToken: ct);
 
         Assert.NotNull(link);
-        Assert.Contains(progress.Items, m => m.Contains("Markdown 比較キャッシュ", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("準備済みデータ", StringComparison.Ordinal));
         Assert.Contains(progress.Items, m => m.Contains("git fetch", StringComparison.Ordinal));
         Assert.Contains(progress.Items, m => m.Contains("親コミット", StringComparison.Ordinal));
         Assert.Contains(progress.Items, m => m.Contains("変更前 worktree", StringComparison.Ordinal));

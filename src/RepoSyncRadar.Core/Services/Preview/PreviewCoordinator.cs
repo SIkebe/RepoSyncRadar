@@ -517,17 +517,17 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         CancellationToken cancellationToken)
     {
         var key = new PreparedSessionKey(prNumber, sha);
-        progress?.Report("Markdown 比較キャッシュを確認中…");
+        progress?.Report("このファイルの比較に使う準備済みデータを確認中…");
         if (await TryGetValidPreparedSessionAsync(key, progress, cancellationToken).ConfigureAwait(false) is { } fast)
         {
-            progress?.Report("準備済みの Markdown 比較キャッシュを再利用します");
+            progress?.Report("このファイルの比較に使う準備済みデータを再利用します");
             return fast;
         }
 
         var gate = _preparedSessionLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
         if (gate.CurrentCount == 0)
         {
-            progress?.Report("同じ PR の Markdown 比較準備が完了するのを待機中…");
+            progress?.Report("このファイルの比較に必要な PR データを準備中です…");
         }
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -536,7 +536,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             // just finished and populated the cache.
             if (await TryGetValidPreparedSessionAsync(key, progress, cancellationToken).ConfigureAwait(false) is { } slow)
             {
-                progress?.Report("直前に完了した Markdown 比較キャッシュを再利用します");
+                progress?.Report("このファイルの比較に使う準備済みデータを再利用します");
                 return slow;
             }
 
