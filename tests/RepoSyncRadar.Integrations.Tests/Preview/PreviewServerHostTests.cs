@@ -92,16 +92,12 @@ public sealed class PreviewServerHostTests : IDisposable
         probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
             Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
         var sut = BuildSut(runner, probe, command: "npm", arguments: "run dev -- --port {port}");
-        var messages = new List<string>();
-        var progress = new Progress<string>(messages.Add);
+        var progress = new CapturingProgress();
 
         await sut.StartAsync(_wt, 4500, progress, ct);
 
-        // Progress<string> dispatches asynchronously via SynchronizationContext.Post —
-        // give the captured continuation a chance to run on the current scheduler.
-        await Task.Yield();
-        Assert.Contains(messages, m => m.Contains("Next.js", StringComparison.Ordinal));
-        Assert.DoesNotContain(messages, m => m.Contains("node_modules", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, m => m.Contains("Next.js", StringComparison.Ordinal));
+        Assert.DoesNotContain(progress.Messages, m => m.Contains("node_modules", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -133,14 +129,12 @@ public sealed class PreviewServerHostTests : IDisposable
                 Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(installHandle);
 
             var sut = BuildSut(runner, probe, command: "npm", arguments: "run dev -- --port {port}");
-            var messages = new List<string>();
-            var progress = new Progress<string>(messages.Add);
+            var progress = new CapturingProgress();
 
             await sut.StartAsync(cold, 4500, progress, ct);
 
-            await Task.Yield();
-            Assert.Contains(messages, m => m.Contains("node_modules", StringComparison.Ordinal));
-            Assert.Contains(messages, m => m.Contains("Next.js", StringComparison.Ordinal));
+            Assert.Contains(progress.Messages, m => m.Contains("node_modules", StringComparison.Ordinal));
+            Assert.Contains(progress.Messages, m => m.Contains("Next.js", StringComparison.Ordinal));
         }
         finally
         {
@@ -162,5 +156,12 @@ public sealed class PreviewServerHostTests : IDisposable
             PreviewEnvironment = new Dictionary<string, string>(),
         });
         return new PreviewServerHost(runner, probe, options, NullLogger<PreviewServerHost>.Instance);
+    }
+
+    private sealed class CapturingProgress : IProgress<string>
+    {
+        public List<string> Messages { get; } = [];
+
+        public void Report(string value) => Messages.Add(value);
     }
 }

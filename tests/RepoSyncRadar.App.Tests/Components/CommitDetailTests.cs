@@ -560,6 +560,8 @@ public class CommitDetailTests
                 Arg.Is<DocsVersion?>(version => version == null),
                 Arg.Any<CancellationToken>());
         });
+        cut.WaitForAssertion(() =>
+            Assert.Contains("bar.md", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal));
 
         navigator.RequestVersionChange(ghec);
 
@@ -610,10 +612,11 @@ public class CommitDetailTests
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<DocsVersion?>(),
                 Arg.Any<CancellationToken>()));
+        cut.WaitForAssertion(() =>
+            Assert.Contains("bar.md", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal));
 
         navigator.RequestVersionChange(fpt);
 
-        Thread.Sleep(200);
         coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
             Arg.Any<int>(),
             Arg.Any<string>(),
@@ -694,7 +697,6 @@ public class CommitDetailTests
 
         navigator.RequestFileNavigation((PreviewFileNavigationDirection)42);
 
-        Thread.Sleep(200);
         Assert.Equal(3, requested.Count);
     }
 
