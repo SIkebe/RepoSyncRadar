@@ -69,6 +69,7 @@ RepoSyncRadar を「コードの集合」ではなく「実際に使うアプリ
    - Copilot usage / AI Credits 表示の分かりやすさ
    - WebView2 / preview の navigation、loading、リンク、テーマ
 4. ブラウザ/CDP/Playwright 操作が使える場合は、スクリーンショットや DOM state で確認する。使えない場合は terminal output、E2E tests、component tests、コード上の state transition で代替する。
+   - 徹底監査で BlazorWebView / docs WebView の内部状態も見る場合は、`REPOSYNCRADAR_BLAZOR_CDP_PORT` と `REPOSYNCRADAR_DOCS_CDP_PORT` を明示して起動し、`http://127.0.0.1:<port>/json/list` で target を確認する。DOM state の記録は UI 状態や `data-testid` に絞り、Copilot prompt/response 本文やトークンなどの機密値を保存しない。
 
 ### 4. 観察メモを finding に変換する
 
