@@ -65,11 +65,13 @@ public static class DocsVersionImpactAnalyzer
             return Array.Empty<DocsVersionImpactDetail>();
         }
 
+        var beforeRenderable = StripFrontmatter(beforeMarkdown);
+        var afterRenderable = StripFrontmatter(afterMarkdown);
         var affected = new List<DocsVersionImpactDetail>(DocsVersionCatalog.All.Count);
         foreach (var version in DocsVersionCatalog.All)
         {
-            var beforeRendered = DocsLiquidEvaluator.Evaluate(beforeMarkdown, beforeContext, version);
-            var afterRendered = DocsLiquidEvaluator.Evaluate(afterMarkdown, afterContext, version);
+            var beforeRendered = DocsLiquidEvaluator.Evaluate(beforeRenderable, beforeContext, version);
+            var afterRendered = DocsLiquidEvaluator.Evaluate(afterRenderable, afterContext, version);
             if (!string.Equals(NormalizeForComparison(beforeRendered), NormalizeForComparison(afterRendered), StringComparison.Ordinal))
             {
                 var changes = BuildChangeSnippets(beforeRendered, afterRendered);
@@ -80,6 +82,50 @@ public static class DocsVersionImpactAnalyzer
             }
         }
         return affected;
+    }
+
+    private static string? StripFrontmatter(string? markdown)
+    {
+        if (string.IsNullOrEmpty(markdown) || !markdown.StartsWith("---", StringComparison.Ordinal))
+        {
+            return markdown;
+        }
+
+        var span = markdown.AsSpan();
+        var openLineEnd = span.IndexOf('\n');
+        if (openLineEnd < 0)
+        {
+            return markdown;
+        }
+
+        var openLine = span[..openLineEnd].TrimEnd('\r');
+        if (!openLine.SequenceEqual("---"))
+        {
+            return markdown;
+        }
+
+        var rest = span[(openLineEnd + 1)..];
+        var cursor = 0;
+        while (cursor < rest.Length)
+        {
+            var remainder = rest[cursor..];
+            var lineEnd = remainder.IndexOf('\n');
+            var lineLength = lineEnd < 0 ? remainder.Length : lineEnd;
+            var line = remainder[..lineLength].TrimEnd('\r');
+            if (line.SequenceEqual("---"))
+            {
+                var bodyStart = cursor + lineLength + (lineEnd < 0 ? 0 : 1);
+                return bodyStart >= rest.Length ? string.Empty : rest[bodyStart..].ToString();
+            }
+
+            cursor += lineLength + (lineEnd < 0 ? 0 : 1);
+            if (lineEnd < 0)
+            {
+                break;
+            }
+        }
+
+        return markdown;
     }
 
     /// <summary>

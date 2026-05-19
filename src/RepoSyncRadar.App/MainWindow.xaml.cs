@@ -1320,10 +1320,12 @@ public partial class MainWindow : Window
             {
                 OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
                     request.BeforeLabel,
-                    plan.BeforeChangedIndexes.Count);
+                    plan.BeforeChangedIndexes.Count,
+                    request.SourceChangeCount);
                 PreviewDocsHeaderText.Text = BuildDiffHeaderLabel(
                     request.AfterLabel,
-                    plan.AfterChangedIndexes.Count);
+                    plan.AfterChangedIndexes.Count,
+                    request.SourceChangeCount);
                 HidePreviewPaneStatus(isBeforePane: true);
                 HidePreviewPaneStatus(isBeforePane: false);
             }
@@ -1396,12 +1398,19 @@ public partial class MainWindow : Window
         return new Uri($"https://docs.github.com{pathAndQuery}");
     }
 
-    internal static string BuildDiffHeaderLabel(string label, int changedBlockCount)
-        => changedBlockCount <= 0
-            ? $"{label}・差分なし"
+    internal static string BuildDiffHeaderLabel(string label, int changedBlockCount, int sourceChangeCount = 0)
+    {
+        var text = changedBlockCount <= 0
+            ? $"{label}・本文差分なし"
             : string.Create(
                 CultureInfo.InvariantCulture,
-                $"{label}・差分 {changedBlockCount}");
+                $"{label}・本文差分 {changedBlockCount}");
+        return sourceChangeCount <= 0
+            ? text
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"{text}・ソース差分 {sourceChangeCount}");
+    }
 
     private void ShowInitialComparisonLoadingStatus(PreviewComparisonRequest request)
     {

@@ -653,7 +653,8 @@
                         previewPosition.Ordinal,
                         previewPosition.Total,
                         CurrentVersion: link.CurrentVersion,
-                        AffectedVersions: link.AffectedVersions));
+                        AffectedVersions: link.AffectedVersions,
+                        SourceChangeCount: link.SourceChangeCount));
                     _activePreviewPath = file.Path;
                     _activeVersion = link.CurrentVersion;
                     _previewStatus = $"{file.Path} を Markdown として変更前 / PR HEAD で比較表示しました";

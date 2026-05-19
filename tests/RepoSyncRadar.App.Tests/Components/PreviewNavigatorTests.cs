@@ -114,5 +114,6 @@ public sealed class PreviewNavigatorTests
 
         Assert.Null(sut.CurrentVersion);
         Assert.Null(sut.AffectedVersions);
+        Assert.Equal(0, sut.SourceChangeCount);
     }
 }

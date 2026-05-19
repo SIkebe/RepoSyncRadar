@@ -79,7 +79,8 @@ public sealed record PreviewComparisonRequest(
     int? FileOrdinal = null,
     int? FileCount = null,
     DocsVersion? CurrentVersion = null,
-    IReadOnlyList<DocsVersion>? AffectedVersions = null);
+    IReadOnlyList<DocsVersion>? AffectedVersions = null,
+    int SourceChangeCount = 0);
 
 /// <inheritdoc cref="IPreviewNavigator" />
 public sealed class PreviewNavigator : IPreviewNavigator

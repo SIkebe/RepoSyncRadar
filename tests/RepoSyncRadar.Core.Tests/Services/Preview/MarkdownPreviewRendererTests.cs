@@ -189,6 +189,42 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Document_With_Body_Can_Show_Readable_Frontmatter_Diff()
+    {
+        var before = """
+            ---
+            title: Preparing your organization for usage-based billing
+            permissions: Enterprise owners, organization owners, and billing managers
+            ---
+
+            Same rendered body.
+            """;
+        var after = """
+            ---
+            title: Preparing your organization for usage-based billing
+            permissions: Enterprise owners and billing managers can download the usage report for enterprises.
+            Organization owners can download the usage report for standalone organizations.
+            ---
+
+            Same rendered body.
+            """;
+        var changes = MarkdownFrontmatterDiffAnalyzer.Analyze(before, after);
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/manage-and-track-spending/prepare-for-usage-based-billing.md",
+            after,
+            "ef79d33",
+            "PR HEAD",
+            frontmatterChanges: changes);
+
+        Assert.Contains("data-testid=\"rsr-frontmatter-diff\"", html, StringComparison.Ordinal);
+        Assert.Contains("permissions: Enterprise owners, organization owners, and billing managers", html, StringComparison.Ordinal);
+        Assert.Contains("permissions: Enterprise owners and billing managers can download the usage report for enterprises.", html, StringComparison.Ordinal);
+        Assert.Contains("Organization owners can download the usage report for standalone organizations.", html, StringComparison.Ordinal);
+        Assert.Contains("Same rendered body.", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Frontmatter_Diff_Analyzer_Reports_Added_File_Frontmatter()
     {
         var after = """

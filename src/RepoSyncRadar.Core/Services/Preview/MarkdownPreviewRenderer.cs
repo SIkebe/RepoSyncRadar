@@ -133,10 +133,9 @@ internal static partial class MarkdownPreviewRenderer
             body = Markdown.ToHtml(liquidNeutralized, s_pipeline);
             if (!HasVisibleBodyMarkup(body))
             {
-                var frontmatterDiffHtml = RenderFrontmatterDiff(frontmatterChanges);
-                body = frontmatterDiffHtml + (frontmatterTitle is null && frontmatterIntro is null
+                body = frontmatterTitle is null && frontmatterIntro is null
                     ? "<p class=\"rsr-empty\">空の Markdown ファイルです。</p>"
-                    : "<p class=\"rsr-empty\">このファイルは存在しますが、本文はありません。フロントマターのみ、または自動生成コメントのみの Markdown です。</p>");
+                    : "<p class=\"rsr-empty\">このファイルは存在しますが、本文はありません。フロントマターのみ、または自動生成コメントのみの Markdown です。</p>";
             }
             body = RewriteAutotitleLinks(body, trimmedRepoPath, effectiveLiquidContext, effectiveVersion);
             body = RewriteAssetReferences(body, trimmedRepoPath, assetBasePath);
@@ -270,6 +269,10 @@ internal static partial class MarkdownPreviewRenderer
             html.Append("<p class=\"rsr-intro\">")
             .Append(introHtml)
                 .AppendLine("</p>");
+        }
+        if (markdown is not null)
+        {
+            html.Append(RenderFrontmatterDiff(frontmatterChanges));
         }
         html.AppendLine(body);
         html.AppendLine("</article>");

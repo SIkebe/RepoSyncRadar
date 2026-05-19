@@ -354,8 +354,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", filePath, cancellationToken: ct);
 
         Assert.NotNull(link);
+        Assert.Equal(2, link!.SourceChangeCount);
         Assert.Contains("この時点にはファイルがありません", capturedPages["/markdown/before"], StringComparison.Ordinal);
         Assert.Contains("REST API endpoints for Copilot cloud agent repository management", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains("data-testid=\"rsr-frontmatter-diff\"", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.Contains("このファイルは存在しますが、本文はありません", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.DoesNotContain("この時点にはファイルがありません", capturedPages["/markdown/after"], StringComparison.Ordinal);
     }

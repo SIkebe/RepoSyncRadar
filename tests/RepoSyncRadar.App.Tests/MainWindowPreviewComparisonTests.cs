@@ -210,8 +210,11 @@ public sealed class MainWindowPreviewComparisonTests
     [Fact]
     public void BuildDiffHeaderLabel_Shows_Changed_Block_Count()
     {
-        Assert.Equal("PR HEAD localhost・差分 3", MainWindow.BuildDiffHeaderLabel("PR HEAD localhost", 3));
-        Assert.Equal("変更前 localhost・差分なし", MainWindow.BuildDiffHeaderLabel("変更前 localhost", 0));
+        Assert.Equal("PR HEAD localhost・本文差分 3", MainWindow.BuildDiffHeaderLabel("PR HEAD localhost", 3));
+        Assert.Equal("変更前 localhost・本文差分なし", MainWindow.BuildDiffHeaderLabel("変更前 localhost", 0));
+        Assert.Equal(
+            "PR HEAD Markdown・本文差分なし・ソース差分 1",
+            MainWindow.BuildDiffHeaderLabel("PR HEAD Markdown", 0, 1));
     }
 
     [Fact]

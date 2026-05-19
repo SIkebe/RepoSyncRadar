@@ -39,6 +39,36 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Returns_Empty_When_Only_NonRendered_Frontmatter_Changes()
+    {
+        var before = """
+            ---
+            title: Preparing your organization for usage-based billing
+            permissions: Enterprise owners, organization owners, and billing managers
+            ---
+
+            Same rendered body.
+            """;
+        var after = """
+            ---
+            title: Preparing your organization for usage-based billing
+            permissions: Enterprise owners and billing managers can download the usage report for enterprises.
+            Organization owners can download the usage report for standalone organizations.
+            ---
+
+            Same rendered body.
+            """;
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
     public void Flags_Only_Fpt_When_Change_Lives_Inside_Ifversion_Fpt_Block()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(

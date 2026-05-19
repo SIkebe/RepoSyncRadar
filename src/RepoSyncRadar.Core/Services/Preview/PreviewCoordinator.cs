@@ -142,6 +142,11 @@ public sealed record PreviewComparisonLink(
     /// Markdown プレビュー以外では <c>null</c>。
     /// </summary>
     public IReadOnlyList<DocsVersion>? AffectedVersions { get; init; }
+
+    /// <summary>
+    /// Frontmatter / Liquid 条件など、補足表示するソース差分の件数。
+    /// </summary>
+    public int SourceChangeCount { get; init; }
 }
 
 /// <inheritdoc cref="IPreviewCoordinator" />
@@ -436,6 +441,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             afterMarkdown,
             session.BeforeWorktreePath,
             session.AfterWorktreePath);
+        var sourceChangeCount = frontmatterChanges.Count
+            + sourceDiff.IfversionChanges.Count
+            + sourceDiff.RelatedFileChanges.Sum(static file => file.Changes.Count);
 
         progress?.Report("変更前 Markdown を HTML に変換中…");
         var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
@@ -504,6 +512,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             CurrentVersion = effectiveVersion,
             AffectedVersions = affectedVersions,
+            SourceChangeCount = sourceChangeCount,
         };
     }
 
