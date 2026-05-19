@@ -60,6 +60,33 @@ public sealed partial class AppCssContrastTests
         Assert.Contains("color: var(--radar-fg)", headerBlock, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void SettingsPanel_Prevents_HeaderActions_And_LongPath_Overflow()
+    {
+        var css = ReadAppCss();
+
+        var buttonBlock = GetExactRuleBlock(css, ".toolbar-button");
+        Assert.Contains("white-space: nowrap", buttonBlock, StringComparison.Ordinal);
+
+        var headerContentBlock = GetRuleBlock(css, ".app-settings-header > div,") +
+            GetRuleBlock(css, ".settings-subheader > div");
+        Assert.Contains("min-width: 0", headerContentBlock, StringComparison.Ordinal);
+
+        var settingsActionsBlock = GetRuleBlock(css, ".app-settings-header > .toolbar-button,") +
+            GetRuleBlock(css, ".settings-actions");
+        Assert.Contains("flex: 0 0 auto", settingsActionsBlock, StringComparison.Ordinal);
+
+        var pathBlock = GetRuleBlock(css, ".settings-muted[data-testid=\"settings-local-appsettings-path\"]");
+        Assert.Contains("overflow-wrap: anywhere", pathBlock, StringComparison.Ordinal);
+
+        var workbenchBlock = GetRuleBlock(css, ".radar-workbench");
+        Assert.Contains("overflow-x: hidden", workbenchBlock, StringComparison.Ordinal);
+
+        var settingsFieldLabelBlock = GetRuleBlock(css, ".local-settings-field span,") +
+            GetRuleBlock(css, ".local-settings-check span");
+        Assert.Contains("overflow-wrap: anywhere", settingsFieldLabelBlock, StringComparison.Ordinal);
+    }
+
     private static Dictionary<string, string> ReadDarkThemeVariables()
     {
         var darkThemeBlock = GetRuleBlock(ReadAppCss(), ".radar-shell.radar-theme-dark");
@@ -76,6 +103,16 @@ public sealed partial class AppCssContrastTests
         var match = Regex.Match(
             css,
             $"{Regex.Escape(selector)}[^{{]*\\{{(?<block>[^}}]*)\\}}",
+            RegexOptions.Singleline);
+        Assert.True(match.Success, $"CSS rule for '{selector}' was not found.");
+        return match.Groups["block"].Value;
+    }
+
+    private static string GetExactRuleBlock(string css, string selector)
+    {
+        var match = Regex.Match(
+            css,
+            $"{Regex.Escape(selector)}\\s*\\{{(?<block>[^}}]*)\\}}",
             RegexOptions.Singleline);
         Assert.True(match.Success, $"CSS rule for '{selector}' was not found.");
         return match.Groups["block"].Value;

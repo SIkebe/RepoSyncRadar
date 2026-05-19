@@ -150,6 +150,7 @@ html, body {
 
 .radar-workbench {
     padding: 0.75rem 1rem;
+    overflow-x: hidden;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -883,6 +884,7 @@ html, body {
     padding: 0.4rem 0.8rem;
     font-size: 0.85rem;
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .toolbar-button.compact {
@@ -930,6 +932,16 @@ html, body {
     justify-content: space-between;
 }
 
+.app-settings-header > div,
+.settings-subheader > div {
+    min-width: 0;
+}
+
+.app-settings-header > .toolbar-button,
+.settings-actions {
+    flex: 0 0 auto;
+}
+
 .app-settings-header h2,
 .settings-section h3 {
     color: #24292f;
@@ -946,6 +958,10 @@ html, body {
     color: #57606a;
     font-size: 0.82rem;
     margin: 0.15rem 0 0;
+}
+
+.settings-muted[data-testid="settings-local-appsettings-path"] {
+    overflow-wrap: anywhere;
 }
 
 .settings-section {
@@ -1051,6 +1067,7 @@ html, body {
     color: #57606a;
     font-size: 0.76rem;
     font-weight: 600;
+    overflow-wrap: anywhere;
 }
 
 .local-settings-field input,
