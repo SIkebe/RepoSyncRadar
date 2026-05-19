@@ -40,7 +40,7 @@ public sealed class CopilotAgent : ICopilotAgent
         return _adoption.GenerateDraftsAsync(commitSha, cancellationToken);
     }
 
-    public Task<string> GenerateBatchExplanationAsync(
+    public Task<int> GenerateBatchExplanationAsync(
         IReadOnlyList<string> commitShas,
         CancellationToken cancellationToken = default)
     {

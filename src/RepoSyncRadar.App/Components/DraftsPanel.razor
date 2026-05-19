@@ -99,6 +99,25 @@
     protected override void OnInitialized()
     {
         _broadcaster = Services.GetService<IReviewBroadcaster>();
+        if (_broadcaster is not null)
+        {
+            _broadcaster.Reviewed += OnReviewed;
+        }
+    }
+
+    private async void OnReviewed(object? sender, EventArgs e)
+    {
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadAsync();
+                StateHasChanged();
+            });
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     private async Task LoadAsync()
@@ -284,6 +303,10 @@
 
     public void Dispose()
     {
+        if (_broadcaster is not null)
+        {
+            _broadcaster.Reviewed -= OnReviewed;
+        }
         CancelProgress();
         _cts?.Dispose();
         _cts = null;

@@ -21,8 +21,8 @@ public interface ICopilotAgent
     /// <summary>Generates the media drafts and detailed diff explanation for a single focused commit.</summary>
     Task<DraftBundle> GenerateDraftsAsync(string commitSha, CancellationToken cancellationToken = default);
 
-    /// <summary>Generates one combined Japanese explanation for multiple focused commits.</summary>
-    Task<string> GenerateBatchExplanationAsync(
+    /// <summary>Generates per-commit Japanese explanations and sharing drafts for multiple focused commits.</summary>
+    Task<int> GenerateBatchExplanationAsync(
         IReadOnlyList<string> commitShas,
         CancellationToken cancellationToken = default);
 

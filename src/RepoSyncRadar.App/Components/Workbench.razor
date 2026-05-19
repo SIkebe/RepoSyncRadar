@@ -116,7 +116,7 @@
                             class="bulk-review-button explain"
                             data-testid="bulk-explain-adopted"
                             disabled="@IsBatchExplanationDisabled()"
-                            @onclick="GenerateSelectedExplanationAsync">まとめて解説生成</button>
+                            @onclick="GenerateSelectedExplanationAsync">個別に解説生成</button>
                         }
                         </div>
                     }
@@ -131,8 +131,8 @@
                     <div class="batch-explanation-panel" data-testid="batch-explanation-panel">
                         <header class="batch-explanation-header">
                             <div>
-                                <h3>注目まとめ解説</h3>
-                                <p>選択した注目コミットを横断して Copilot が整理します。</p>
+                                <h3>注目コミットの個別解説</h3>
+                                <p>選択した注目コミットごとに差分解説と共有文案を生成します。</p>
                             </div>
                             <div class="batch-explanation-actions">
                                 @if (_batchExplanationBusy)
@@ -143,14 +143,6 @@
                                             disabled="@_batchExplanationCanceling"
                                             @onclick="CancelBatchExplanationAsync">@(_batchExplanationCanceling ? "中止中…" : "中止")</button>
                                 }
-                                else
-                                {
-                                    <button type="button"
-                                            class="toolbar-button secondary compact"
-                                            data-testid="batch-explanation-copy"
-                                            disabled="@string.IsNullOrWhiteSpace(_batchExplanation)"
-                                            @onclick="CopyBatchExplanationAsync">コピー</button>
-                                }
                             </div>
                         </header>
                         @if (_batchExplanationBusy)
@@ -159,17 +151,13 @@
                                 <div class="preview-progress-row">
                                     <span class="preview-spinner" aria-hidden="true"></span>
                                     <span class="preview-progress-text" data-testid="batch-explanation-progress-text">
-                                        Copilot が注目コミットをまとめて解説中…
+                                        Copilot が注目コミットの解説を個別生成中…
                                         <span class="preview-progress-elapsed" data-testid="batch-explanation-progress-elapsed">
                                             ・ 経過 @FormatElapsed(_batchExplanationElapsed)
                                         </span>
                                     </span>
                                 </div>
                             </div>
-                        }
-                        else if (!string.IsNullOrWhiteSpace(_batchExplanation))
-                        {
-                            <pre class="batch-explanation-body" data-testid="batch-explanation-body">@_batchExplanation</pre>
                         }
                         @if (!string.IsNullOrWhiteSpace(_batchExplanationStatus))
                         {
@@ -225,7 +213,6 @@
     private bool _askPaletteExpanded;
     private bool _batchExplanationBusy;
     private bool _batchExplanationCanceling;
-    private string? _batchExplanation;
     private string? _batchExplanationStatus;
     private DateTimeOffset _batchExplanationStartedAt;
     private TimeSpan _batchExplanationElapsed;
@@ -439,7 +426,6 @@
 
     private bool ShouldShowBatchExplanationPanel()
         => _batchExplanationBusy
-            || !string.IsNullOrWhiteSpace(_batchExplanation)
             || !string.IsNullOrWhiteSpace(_batchExplanationStatus);
 
     private async Task MoveSelectedCommitsAsync(ReviewStatus status)
@@ -537,23 +523,23 @@
 
         var shas = _selectedCommitShas.ToArray();
         StartBatchExplanationProgress();
-        _batchExplanation = null;
         _batchExplanationStatus = null;
         StateHasChanged();
         try
         {
-            _batchExplanation = await agent.GenerateBatchExplanationAsync(shas, _batchExplanationCts!.Token);
+            var generated = await agent.GenerateBatchExplanationAsync(shas, _batchExplanationCts!.Token);
             _batchExplanationStatus = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
-                $"{Math.Min(shas.Length, 10)} 件の注目コミットをまとめました。");
+                $"{generated} 件の注目コミットの個別解説を生成しました。コミットを開くと差分解説欄で確認できます。");
+            Services.GetService<IReviewBroadcaster>()?.Publish();
         }
         catch (OperationCanceledException)
         {
-            _batchExplanationStatus = "まとめ解説の生成を中止しました。";
+            _batchExplanationStatus = "個別解説の生成を中止しました。";
         }
         catch (Exception ex)
         {
-            _batchExplanationStatus = $"まとめ解説の生成に失敗しました: {BuildFriendlyBatchErrorMessage(ex)}";
+            _batchExplanationStatus = $"個別解説の生成に失敗しました: {BuildFriendlyBatchErrorMessage(ex)}";
         }
         finally
         {
@@ -620,29 +606,12 @@
         return Task.CompletedTask;
     }
 
-    private async Task CopyBatchExplanationAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_batchExplanation))
-        {
-            return;
-        }
-        var clipboard = Services.GetService<IClipboard>();
-        if (clipboard is null)
-        {
-            _batchExplanationStatus = "クリップボードが利用できません。";
-            return;
-        }
-        await clipboard.SetTextAsync(_batchExplanation);
-        _batchExplanationStatus = "注目まとめ解説をコピーしました。";
-    }
-
     private void ClearBatchExplanation()
     {
         if (_batchExplanationBusy)
         {
             return;
         }
-        _batchExplanation = null;
         _batchExplanationStatus = null;
     }
 

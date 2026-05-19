@@ -25,11 +25,9 @@ public sealed partial class AdoptionSession
 {
     internal const int MaxDiffBytes = 50 * 1024;
     internal const int MaxBatchCommits = 10;
-    internal const int MaxBatchDiffBytes = 12 * 1024;
     internal const int FewShotLimit = 5;
     internal const int MaxRepairSourceChars = 20 * 1024;
     internal const string TruncatedMarker = "\n…[truncated by RepoSyncRadar — original diff exceeded 50KB]\n";
-    internal const string BatchTruncatedMarker = "\n…[truncated by RepoSyncRadar — batch explanation keeps each diff under 12KB]\n";
 
     private static readonly JsonSerializerOptions DraftJsonOptions = new()
     {
@@ -114,10 +112,9 @@ public sealed partial class AdoptionSession
     }
 
     /// <summary>
-    /// Generates one consolidated explanation for several focused commits. The result is transient
-    /// UI text rather than rows in <c>Drafts</c>, because it describes a selected set, not one commit.
+    /// Generates individual explanations and sharing drafts for several focused commits.
     /// </summary>
-    public async Task<string> GenerateBatchExplanationAsync(
+    public async Task<int> GenerateBatchExplanationAsync(
         IReadOnlyList<string> commitShas,
         CancellationToken cancellationToken = default)
     {
@@ -131,7 +128,7 @@ public sealed partial class AdoptionSession
             .ToArray();
         if (shas.Length < 2)
         {
-            throw new InvalidOperationException("まとめ解説は 2 件以上の注目コミットを選択して生成してください。");
+            throw new InvalidOperationException("個別解説は 2 件以上の注目コミットを選択して生成してください。");
         }
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -160,28 +157,12 @@ public sealed partial class AdoptionSession
             throw new InvalidOperationException($"注目以外のコミットが含まれています: {string.Join(", ", notAdopted)}.");
         }
 
-        var contexts = new List<BatchCommitContext>(shas.Length);
         foreach (var sha in shas)
         {
-            var commit = bySha[sha];
-            var rawDiff = await _github.GetUnifiedDiffAsync(sha, cancellationToken).ConfigureAwait(false) ?? string.Empty;
-            contexts.Add(new BatchCommitContext(commit, TruncateDiff(rawDiff, MaxBatchDiffBytes, BatchTruncatedMarker)));
+            await GenerateDraftsAsync(sha, cancellationToken).ConfigureAwait(false);
         }
 
-        var prompt = BuildBatchPrompt(contexts);
-        LogBatchPromptBuilt(_logger, shas.Length, prompt.Length);
-
-        var session = await _sessionFactory.CreateSessionAsync(SessionPurpose.Adoption, cancellationToken).ConfigureAwait(false);
-        await using (session.ConfigureAwait(false))
-        {
-            var raw = await session.SendAsync(prompt, cancellationToken).ConfigureAwait(false);
-            var explanation = StripOuterCodeFence(raw.Trim());
-            if (string.IsNullOrWhiteSpace(explanation))
-            {
-                throw new InvalidOperationException("Copilot から空のまとめ解説が返りました。もう一度生成してください。");
-            }
-            return explanation.Trim();
-        }
+        return shas.Length;
     }
 
     internal static string TruncateDiff(string diff)
@@ -270,49 +251,6 @@ public sealed partial class AdoptionSession
         sb.AppendLine("```diff");
         sb.AppendLine(diff);
         sb.AppendLine("```");
-        return sb.ToString();
-    }
-
-    internal static string BuildBatchPrompt(IEnumerable<BatchCommitContext> commits)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("# 注目コミットまとめ解説生成");
-        sb.AppendLine();
-        sb.AppendLine("以下の複数の注目コミットをまとめて読み、ユーザーが全体像と読む順番を短時間で掴める日本語解説を生成してください。");
-        sb.AppendLine();
-        sb.AppendLine("## 出力要件");
-        sb.AppendLine("- Markdown 本文だけを返す。前置き、コードブロック、JSON は不要。");
-        sb.AppendLine("- 次の見出しをこの順序で含める: `全体像`, `コミット別の要点`, `横断して見るべきポイント`, `次に確認する順番`。");
-        sb.AppendLine("- コミット別の要点では各コミットの短い SHA とメッセージを明記する。");
-        sb.AppendLine("- 差分から確認できる事実と、推測や確認観点を分ける。");
-        sb.AppendLine("- 社内共有でそのまま読める、落ち着いた日本語にする。");
-        sb.AppendLine();
-        sb.AppendLine("## 対象コミット");
-        var index = 1;
-        foreach (var item in commits)
-        {
-            var commit = item.Commit;
-            sb.Append(CultureInfo.InvariantCulture, $"### {index}. {ShortSha(commit.Sha)} — {commit.Message}").AppendLine();
-            sb.Append(CultureInfo.InvariantCulture, $"- SHA: `{commit.Sha}`").AppendLine();
-            sb.Append(CultureInfo.InvariantCulture, $"- 著者: {commit.Author}").AppendLine();
-            sb.Append(CultureInfo.InvariantCulture, $"- 日付: {commit.AuthoredAt:yyyy-MM-dd}").AppendLine();
-            sb.Append(CultureInfo.InvariantCulture, $"- 変更ファイル数: {commit.Files.Count}").AppendLine();
-            if (commit.Scoring is not null)
-            {
-                sb.Append(CultureInfo.InvariantCulture, $"- スコア: {commit.Scoring.Score:0.00}").AppendLine();
-                sb.Append(CultureInfo.InvariantCulture, $"- カテゴリ: {commit.Scoring.Category}").AppendLine();
-                if (!string.IsNullOrWhiteSpace(commit.Scoring.SummaryJa))
-                {
-                    sb.Append(CultureInfo.InvariantCulture, $"- Triage 要約: {commit.Scoring.SummaryJa}").AppendLine();
-                }
-            }
-            sb.AppendLine("- 差分:");
-            sb.AppendLine("```diff");
-            sb.AppendLine(item.Diff);
-            sb.AppendLine("```");
-            sb.AppendLine();
-            index++;
-        }
         return sb.ToString();
     }
 
@@ -421,9 +359,6 @@ public sealed partial class AdoptionSession
         }
         return string.Empty;
     }
-
-    private static string ShortSha(string sha)
-        => sha.Length <= 7 ? sha : sha[..7];
 
     private static async Task<DraftBundle> ParseOrRepairBundleAsync(
         ICopilotSession session,
@@ -731,6 +666,13 @@ public sealed partial class AdoptionSession
         CancellationToken cancellationToken)
     {
         var nowUtc = DateTime.UtcNow;
+        var channels = new[] { "twitter", "teams", "customer", "explanation" };
+        var existing = await db.Drafts
+            .Where(d => d.Sha == sha && channels.Contains(d.Channel))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        db.Drafts.RemoveRange(existing);
+
         var entries = new[]
         {
             new Draft { Sha = sha, Channel = "twitter", Body = bundle.TwitterJa, Posted = false, GeneratedAt = nowUtc },
@@ -750,13 +692,7 @@ public sealed partial class AdoptionSession
         public string? Explanation { get; set; }
     }
 
-    internal sealed record BatchCommitContext(Commit Commit, string Diff);
-
     [LoggerMessage(EventId = 1, Level = LogLevel.Information,
         Message = "Adoption prompt built for {Sha} ({PromptLength} chars).")]
     private static partial void LogPromptBuilt(ILogger logger, string sha, int promptLength);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information,
-        Message = "Batch adoption prompt built for {CommitCount} commits ({PromptLength} chars).")]
-    private static partial void LogBatchPromptBuilt(ILogger logger, int commitCount, int promptLength);
 }

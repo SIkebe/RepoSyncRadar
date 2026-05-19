@@ -371,7 +371,7 @@ public sealed class AdoptionSessionTests
     }
 
     [Fact]
-    public async Task GenerateBatchExplanation_Sends_Selected_Adopted_Commits()
+    public async Task GenerateBatchExplanation_Generates_Drafts_For_Each_Selected_Adopted_Commit()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var harness = await WriteHarness.CreateAsync(ct);
@@ -384,26 +384,34 @@ public sealed class AdoptionSessionTests
         github.GetUnifiedDiffAsync("batch-2", Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("diff --git a/b b/b\n+two\n"));
 
-        string? capturedPrompt = null;
+        var capturedPrompts = new List<string>();
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("## 全体像\nまとめ本文"));
+        session.SendAsync(Arg.Do<string>(capturedPrompts.Add), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
 
         var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
-        var explanation = await sut.GenerateBatchExplanationAsync(["batch-1", "batch-2"], ct);
+        var generated = await sut.GenerateBatchExplanationAsync(["batch-1", "batch-2"], ct);
 
-        Assert.Equal("## 全体像\nまとめ本文", explanation);
-        Assert.NotNull(capturedPrompt);
-        Assert.Contains("注目コミットまとめ解説生成", capturedPrompt, StringComparison.Ordinal);
-        Assert.Contains("batch-1", capturedPrompt, StringComparison.Ordinal);
-        Assert.Contains("first focused change", capturedPrompt, StringComparison.Ordinal);
-        Assert.Contains("+one", capturedPrompt, StringComparison.Ordinal);
-        Assert.Contains("batch-2", capturedPrompt, StringComparison.Ordinal);
-        Assert.Contains("second focused change", capturedPrompt, StringComparison.Ordinal);
-        Assert.Contains("+two", capturedPrompt, StringComparison.Ordinal);
+        Assert.Equal(2, generated);
+        Assert.Equal(2, capturedPrompts.Count);
+        Assert.Contains("batch-1", capturedPrompts[0], StringComparison.Ordinal);
+        Assert.Contains("first focused change", capturedPrompts[0], StringComparison.Ordinal);
+        Assert.Contains("+one", capturedPrompts[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("+two", capturedPrompts[0], StringComparison.Ordinal);
+        Assert.Contains("batch-2", capturedPrompts[1], StringComparison.Ordinal);
+        Assert.Contains("second focused change", capturedPrompts[1], StringComparison.Ordinal);
+        Assert.Contains("+two", capturedPrompts[1], StringComparison.Ordinal);
+
+        await using var verifyDb = harness.CreateDb();
+        var drafts = await verifyDb.Drafts.AsNoTracking()
+            .Where(d => d.Sha == "batch-1" || d.Sha == "batch-2")
+            .ToListAsync(ct);
+        Assert.Equal(8, drafts.Count);
+        Assert.Contains(drafts, d => d.Sha == "batch-1" && d.Channel == "explanation" && d.Body == "ex");
+        Assert.Contains(drafts, d => d.Sha == "batch-2" && d.Channel == "explanation" && d.Body == "ex");
     }
 
     [Fact]

@@ -568,7 +568,7 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
-    public async Task Bulk_Explain_Selected_Adopted_Commits_Renders_And_Copies_Result()
+    public async Task Bulk_Explain_Selected_Adopted_Commits_Generates_Individual_Drafts()
     {
         var commits = new List<Commit>
         {
@@ -577,6 +577,9 @@ public sealed class WorkbenchTests
             CloneWorkbenchCommit(MakeWorkbenchCommit("ccc3333ccc3333ccc3333ccc3333ccc3333ccc3", "third adopted"), ReviewStatus.Adopted),
         };
         var statuses = commits.ToDictionary(static commit => commit.Sha, _ => ReviewStatus.Adopted, StringComparer.Ordinal);
+        var broadcaster = new ReviewBroadcaster();
+        var published = false;
+        broadcaster.Reviewed += (_, _) => published = true;
 
         var repo = Substitute.For<IRadarRepository>();
         repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
@@ -592,11 +595,9 @@ public sealed class WorkbenchTests
             });
         var agent = Substitute.For<ICopilotAgent>();
         agent.GenerateBatchExplanationAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("## 全体像\n採用した変更のまとめ"));
-        var clipboard = Substitute.For<IClipboard>();
-        clipboard.SetTextAsync(Arg.Any<string>()).Returns(Task.CompletedTask);
+            .Returns(Task.FromResult(2));
 
-        await using var ctx = CreateWorkbenchTestContext(repo, out _, agent: agent, clipboard: clipboard);
+        await using var ctx = CreateWorkbenchTestContext(repo, out _, agent: agent, existingBroadcaster: broadcaster);
         var cut = ctx.Render<Workbench>();
         cut.Find("[data-testid=\"sidebar-item-Adopted\"]").Click();
         cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"commit-row\"]").Count));
@@ -609,15 +610,12 @@ public sealed class WorkbenchTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("採用した変更のまとめ", cut.Find("[data-testid=\"batch-explanation-body\"]").TextContent, StringComparison.Ordinal);
-            Assert.Contains("2 件の注目コミットをまとめました", cut.Find("[data-testid=\"batch-explanation-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("2 件の注目コミットの個別解説を生成しました", cut.Find("[data-testid=\"batch-explanation-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.True(published);
         });
         await agent.Received(1).GenerateBatchExplanationAsync(
             Arg.Is<IReadOnlyList<string>>(shas => shas.SequenceEqual(new[] { commits[0].Sha, commits[1].Sha })),
             Arg.Any<CancellationToken>());
-
-        cut.Find("[data-testid=\"batch-explanation-copy\"]").Click();
-        await clipboard.Received(1).SetTextAsync("## 全体像\n採用した変更のまとめ");
     }
 
     [Fact]
@@ -648,7 +646,7 @@ public sealed class WorkbenchTests
             .Returns(call =>
             {
                 capturedToken = call.Arg<CancellationToken>();
-                var pending = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var pending = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
                 capturedToken.Register(() => pending.TrySetCanceled(capturedToken));
                 return pending.Task;
             });
@@ -664,7 +662,7 @@ public sealed class WorkbenchTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Contains("Copilot が注目コミットをまとめて解説中", cut.Find("[data-testid=\"batch-explanation-progress-text\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("Copilot が注目コミットの解説を個別生成中", cut.Find("[data-testid=\"batch-explanation-progress-text\"]").TextContent, StringComparison.Ordinal);
             Assert.False(cut.Find("[data-testid=\"batch-explanation-cancel\"]").HasAttribute("disabled"));
         });
 
@@ -673,7 +671,7 @@ public sealed class WorkbenchTests
         cut.WaitForAssertion(() =>
         {
             Assert.True(capturedToken.IsCancellationRequested);
-            Assert.Contains("まとめ解説の生成を中止しました", cut.Find("[data-testid=\"batch-explanation-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("個別解説の生成を中止しました", cut.Find("[data-testid=\"batch-explanation-status\"]").TextContent, StringComparison.Ordinal);
         });
     }
 
@@ -973,9 +971,10 @@ public sealed class WorkbenchTests
         out ReviewBroadcaster broadcaster,
         IAppUserSettingsStore? settingsStore = null,
         ICopilotAgent? agent = null,
-        IClipboard? clipboard = null)
+        IClipboard? clipboard = null,
+        ReviewBroadcaster? existingBroadcaster = null)
     {
-        broadcaster = new ReviewBroadcaster();
+        broadcaster = existingBroadcaster ?? new ReviewBroadcaster();
         var auth = Substitute.For<IGitHubAuthSession>();
         auth.GetStateAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(GitHubAuthState.SignedIn));
         auth.GetCurrentLoginAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("octocat"));
