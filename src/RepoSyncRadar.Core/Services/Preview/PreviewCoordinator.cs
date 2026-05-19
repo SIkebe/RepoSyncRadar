@@ -430,6 +430,12 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
         progress?.Report("フロントマターの変更点を解析中…");
         var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
+        progress?.Report("Liquid 条件と関連 data ファイルの差分を解析中…");
+        var sourceDiff = MarkdownSourceDiffAnalyzer.Analyze(
+            beforeMarkdown,
+            afterMarkdown,
+            session.BeforeWorktreePath,
+            session.AfterWorktreePath);
 
         progress?.Report("変更前 Markdown を HTML に変換中…");
         var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
@@ -442,6 +448,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             affectedVersions,
             versionImpacts: versionImpacts,
             frontmatterChanges: frontmatterChanges,
+            sourceDiff: sourceDiff,
             assetBasePath: MarkdownBeforeAssetRoute);
 
         progress?.Report("PR HEAD Markdown を HTML に変換中…");
@@ -455,6 +462,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             affectedVersions,
             versionImpacts: versionImpacts,
             frontmatterChanges: frontmatterChanges,
+            sourceDiff: sourceDiff,
             assetBasePath: MarkdownAfterAssetRoute);
 
         var pages = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -471,7 +479,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
         var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
         progress?.Report($"Markdown 比較プレビューを起動中… (ポート {port.ToString(CultureInfo.InvariantCulture)})");
-            await _contentServer.StartAsync(port, pages, assetRoots, cancellationToken).ConfigureAwait(false);
+        await _contentServer.StartAsync(port, pages, assetRoots, cancellationToken).ConfigureAwait(false);
         _session.Activate(port);
 
         // §Step 19.9/19.10: バージョン切替でもファイル切替でも同じポートで

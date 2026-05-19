@@ -982,6 +982,35 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Equal(1, CountOccurrences(html, "Shared updated note"));
     }
 
+    [Fact]
+    public void Source_Diff_Summary_Renders_Ifversion_And_Related_Feature_Changes()
+    {
+        var sourceDiff = new MarkdownSourceDiffSummary(
+            [new MarkdownIfversionChange(DocsVersionChangeKind.Removed, "disable-ghas-button", null, "### Disable access\nUsers without a license cannot enable Advanced Security.")],
+            [new MarkdownRelatedSourceFileChange(
+                "data/features/disable-ghas-button.yml",
+                [new MarkdownSourceLineChange(DocsVersionChangeKind.Updated, "  ghes: '>= 3.21'", "  ghes: '>= 3.22'")])]);
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/billing/how-tos/products/manage-ghas-licenses.md",
+            "# Managing volume licenses",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [],
+            sourceDiff: sourceDiff);
+
+        Assert.Contains("data-testid=\"rsr-source-diff\"", html, StringComparison.Ordinal);
+        Assert.Contains("レンダリングに出ないソース差分", html, StringComparison.Ordinal);
+        Assert.Contains("{% ifversion disable-ghas-button %}", html, StringComparison.Ordinal);
+        Assert.Contains("対象本文", html, StringComparison.Ordinal);
+        Assert.Contains("### Disable access", html, StringComparison.Ordinal);
+        Assert.Contains("Users without a license cannot enable Advanced Security.", html, StringComparison.Ordinal);
+        Assert.Contains("data/features/disable-ghas-button.yml", html, StringComparison.Ordinal);
+        Assert.Contains("&gt;= 3.21", html, StringComparison.Ordinal);
+        Assert.Contains("&gt;= 3.22", html, StringComparison.Ordinal);
+        Assert.Contains("本文レンダリング差分はありません", html, StringComparison.Ordinal);
+    }
+
     private static int CountOccurrences(string value, string search)
     {
         var count = 0;

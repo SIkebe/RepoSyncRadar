@@ -81,6 +81,7 @@ internal static partial class MarkdownPreviewRenderer
         DocsVersion? selectedVersion = null,
         IReadOnlyList<DocsVersionImpactDetail>? versionImpacts = null,
         IReadOnlyList<MarkdownFrontmatterChange>? frontmatterChanges = null,
+        MarkdownSourceDiffSummary? sourceDiff = null,
         string? assetBasePath = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repoPath);
@@ -197,6 +198,19 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-version-badge--current{background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);font-weight:600;}");
         html.AppendLine(".rsr-version-badge--current:hover{color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);cursor:default;}");
         html.AppendLine(".rsr-version-empty{color:var(--rsr-muted);font-style:italic;}");
+        html.AppendLine(".rsr-source-diff{margin:14px 0 0;border:1px solid var(--rsr-border);border-left:4px solid #bf8700;border-radius:6px;background:var(--rsr-pre-bg);padding:12px;}");
+        html.AppendLine(".rsr-source-diff h2{font-size:.92rem;margin:0 0 6px;}");
+        html.AppendLine(".rsr-source-diff-overview{color:var(--rsr-muted);font-size:.78rem;margin:0 0 10px;}");
+        html.AppendLine(".rsr-source-diff-list{display:grid;gap:8px;list-style:none;margin:0;padding:0;}");
+        html.AppendLine(".rsr-source-change{border:1px solid var(--rsr-border);border-radius:6px;background:var(--rsr-article-bg);padding:8px;}");
+        html.AppendLine(".rsr-source-change[data-change-kind='added']{border-left:3px solid #2da44e;}");
+        html.AppendLine(".rsr-source-change[data-change-kind='removed']{border-left:3px solid #cf222e;}");
+        html.AppendLine(".rsr-source-change[data-change-kind='updated']{border-left:3px solid #bf8700;}");
+        html.AppendLine(".rsr-source-change-kind{color:var(--rsr-muted);display:block;font-size:.72rem;font-weight:700;margin-bottom:4px;}");
+        html.AppendLine(".rsr-source-line{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:8px;margin:3px 0;font-size:.8rem;}");
+        html.AppendLine(".rsr-source-line-label{color:var(--rsr-muted);font-weight:700;}");
+        html.AppendLine(".rsr-source-line code{display:block;white-space:pre-wrap;overflow-wrap:anywhere;}");
+        html.AppendLine(".rsr-source-file{color:var(--rsr-muted);font-family:'Cascadia Mono',Consolas,monospace;font-size:.76rem;margin:8px 0 4px;}");
         html.AppendLine(".rsr-version-diff-summary{margin:14px 0 0;border:1px solid var(--rsr-border);border-radius:6px;background:var(--rsr-pre-bg);padding:12px;}");
         html.AppendLine(".rsr-version-diff-summary h2{font-size:.92rem;margin:0 0 6px;}");
         html.AppendLine(".rsr-version-diff-overview{color:var(--rsr-muted);font-size:.78rem;margin:0 0 10px;}");
@@ -249,6 +263,7 @@ internal static partial class MarkdownPreviewRenderer
         }
         AppendVersionBadgeMarkup(html, selectedVersion ?? effectiveVersion, affectedVersions);
         AppendVersionDiffSummary(html, selectedVersion ?? effectiveVersion, versionImpacts);
+        AppendSourceDiffSummary(html, sourceDiff);
         html.AppendLine("</header>");
         if (!string.IsNullOrWhiteSpace(introHtml))
         {
@@ -997,7 +1012,7 @@ internal static partial class MarkdownPreviewRenderer
 
         if (affectedVersions.Count == 0)
         {
-            html.Append("<span class=\"rsr-version-empty\">この PR ではどの版にも差分はありません。</span>");
+            html.Append("<span class=\"rsr-version-empty\">本文レンダリング差分はありません。</span>");
         }
         else
         {
@@ -1098,6 +1113,105 @@ internal static partial class MarkdownPreviewRenderer
             html.Append("</li>");
         }
         html.AppendLine("</ul></section>");
+    }
+
+    private static void AppendSourceDiffSummary(
+        StringBuilder html,
+        MarkdownSourceDiffSummary? sourceDiff)
+    {
+        if (sourceDiff is null || !sourceDiff.HasChanges)
+        {
+            return;
+        }
+
+        var totalChanges = sourceDiff.IfversionChanges.Count
+            + sourceDiff.RelatedFileChanges.Sum(static file => file.Changes.Count);
+        html.Append("<section class=\"rsr-source-diff\" data-testid=\"rsr-source-diff\" aria-label=\"ソース差分\">");
+        html.Append("<h2>レンダリングに出ないソース差分</h2>");
+        html.Append("<p class=\"rsr-source-diff-overview\">")
+            .Append(totalChanges.ToString(CultureInfo.InvariantCulture))
+            .Append(" 件の Liquid 条件または関連 data ファイル差分があります。本文が同じに見える場合は、この条件変更を確認してください。</p>");
+        html.Append("<ul class=\"rsr-source-diff-list\">");
+
+        foreach (var change in sourceDiff.IfversionChanges.Take(8))
+        {
+            AppendIfversionSourceChange(html, change);
+        }
+
+        foreach (var fileChange in sourceDiff.RelatedFileChanges.Take(4))
+        {
+            html.Append("<li class=\"rsr-source-change\" data-change-kind=\"updated\">");
+            html.Append("<span class=\"rsr-source-change-kind\">関連 feature 定義</span>");
+            html.Append("<p class=\"rsr-source-file\">")
+                .Append(WebUtility.HtmlEncode(fileChange.Path))
+                .Append("</p>");
+            foreach (var lineChange in fileChange.Changes.Take(6))
+            {
+                AppendSourceLineChange(html, lineChange);
+            }
+            if (fileChange.Changes.Count > 6)
+            {
+                html.Append("<p class=\"rsr-version-diff-more\">")
+                    .Append((fileChange.Changes.Count - 6).ToString(CultureInfo.InvariantCulture))
+                    .Append(" 件の追加差分があります</p>");
+            }
+            html.Append("</li>");
+        }
+
+        if (sourceDiff.IfversionChanges.Count > 8 || sourceDiff.RelatedFileChanges.Count > 4)
+        {
+            html.Append("<li class=\"rsr-version-diff-more\">一部のソース差分のみ表示しています。</li>");
+        }
+        html.Append("</ul></section>");
+    }
+
+    private static void AppendIfversionSourceChange(StringBuilder html, MarkdownIfversionChange change)
+    {
+        html.Append("<li class=\"rsr-source-change\" data-change-kind=\"")
+            .Append(WebUtility.HtmlEncode(BuildChangeKindSlug(change.Kind)))
+            .Append("\">");
+        html.Append("<span class=\"rsr-source-change-kind\">")
+            .Append(WebUtility.HtmlEncode($"ifversion {BuildChangeKindLabel(change.Kind)}"))
+            .Append("</span>");
+        if (!string.IsNullOrWhiteSpace(change.BeforeExpression))
+        {
+            AppendSourceLine(html, "変更前", "{% ifversion " + change.BeforeExpression + " %}");
+        }
+        if (!string.IsNullOrWhiteSpace(change.BeforePreview))
+        {
+            AppendSourceLine(html, "対象本文", change.BeforePreview);
+        }
+        if (!string.IsNullOrWhiteSpace(change.AfterExpression))
+        {
+            AppendSourceLine(html, "PR HEAD", "{% ifversion " + change.AfterExpression + " %}");
+        }
+        if (!string.IsNullOrWhiteSpace(change.AfterPreview)
+            && !string.Equals(change.BeforePreview, change.AfterPreview, StringComparison.Ordinal))
+        {
+            AppendSourceLine(html, "対象本文", change.AfterPreview);
+        }
+        html.Append("</li>");
+    }
+
+    private static void AppendSourceLineChange(StringBuilder html, MarkdownSourceLineChange change)
+    {
+        if (!string.IsNullOrWhiteSpace(change.BeforeLine))
+        {
+            AppendSourceLine(html, "変更前", change.BeforeLine);
+        }
+        if (!string.IsNullOrWhiteSpace(change.AfterLine))
+        {
+            AppendSourceLine(html, "PR HEAD", change.AfterLine);
+        }
+    }
+
+    private static void AppendSourceLine(StringBuilder html, string label, string line)
+    {
+        html.Append("<p class=\"rsr-source-line\"><span class=\"rsr-source-line-label\">")
+            .Append(WebUtility.HtmlEncode(label))
+            .Append("</span><code>")
+            .Append(WebUtility.HtmlEncode(line))
+            .Append("</code></p>");
     }
 
     private static string RenderFrontmatterDiff(IReadOnlyList<MarkdownFrontmatterChange>? changes)

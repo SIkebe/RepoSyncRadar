@@ -103,7 +103,7 @@ public class CommitDetailTests
     }
 
     [Fact]
-    public void CommitDetail_Renders_Pull_Request_Actions()
+    public void CommitDetail_Renders_Pull_Request_Actions_To_Commit_Diff()
     {
         var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
         commit.PrNumber = 12345;
@@ -121,10 +121,10 @@ public class CommitDetailTests
         Assert.Equal("PR #12345", button.TextContent);
         button.Click();
         Assert.NotNull(captured);
-        Assert.Equal("https://github.com/github/docs/pull/12345", captured!.AbsoluteUri);
+        Assert.Equal("https://github.com/github/docs/commit/feedfacefeedfacefeedfacefeedfacefeedface", captured!.AbsoluteUri);
 
         var external = cut.Find("[data-testid=\"commit-detail-open-pr-external\"]");
-        Assert.Equal("https://github.com/github/docs/pull/12345", external.GetAttribute("href"));
+        Assert.Equal("https://github.com/github/docs/commit/feedfacefeedfacefeedfacefeedfacefeedface", external.GetAttribute("href"));
         Assert.Equal("_blank", external.GetAttribute("target"));
         Assert.Equal("noopener", external.GetAttribute("rel"));
     }
@@ -421,6 +421,104 @@ public class CommitDetailTests
         {
             Assert.True(receivedToken.IsCancellationRequested);
             Assert.Contains("中止", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task OpenInWebView_Does_Not_Publish_Stale_Preview_When_Commit_Changes()
+    {
+        var first = MakeCommitWithSha("1111111111111111111111111111111111111111", ("content/copilot/about-copilot.md", 1, 0));
+        var second = MakeCommitWithSha("2222222222222222222222222222222222222222", ("content/copilot/other.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var pending = new TaskCompletionSource<PreviewComparisonLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinatorReturned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(async _ =>
+            {
+                var link = await pending.Task.ConfigureAwait(false);
+                coordinatorReturned.TrySetResult();
+                return link;
+            });
+        var navigator = new PreviewNavigator();
+        var publishCount = 0;
+        navigator.ComparisonRequested += (_, _) => publishCount++;
+
+        using var cut = RenderDetailWith(first, resolver, navigator, new PreviewSession(), coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+        cut.WaitForAssertion(() =>
+            cut.Find("[data-testid=\"commit-detail-preview-progress\"]"));
+
+        cut.Render(parameters => parameters.Add(p => p.Commit, second));
+        pending.SetResult(MakeComparisonLinkFor(first, "content/copilot/about-copilot.md"));
+
+        cut.WaitForAssertion(() => Assert.True(coordinatorReturned.Task.IsCompleted));
+        await Task.Delay(50, Xunit.TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, publishCount);
+    }
+
+    [Fact]
+    public void OpenInWebView_Cancels_Previous_Commit_Preview_When_New_Preview_Starts()
+    {
+        var first = MakeCommitWithSha("1111111111111111111111111111111111111111", ("content/copilot/about-copilot.md", 1, 0));
+        var second = MakeCommitWithSha("2222222222222222222222222222222222222222", ("content/copilot/other.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        var firstPending = new TaskCompletionSource<PreviewComparisonLink?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        CancellationToken firstToken = default;
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                Arg.Any<int>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var sha = call.ArgAt<string>(1);
+                if (string.Equals(sha, first.Sha, StringComparison.Ordinal))
+                {
+                    firstToken = call.ArgAt<CancellationToken>(5);
+                    firstToken.Register(() =>
+                        firstPending.TrySetException(new OperationCanceledException(firstToken)));
+                    return firstPending.Task;
+                }
+
+                return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLinkFor(second, "content/copilot/other.md"));
+            });
+        var navigator = new PreviewNavigator();
+        PreviewComparisonRequest? captured = null;
+        navigator.ComparisonRequested += (_, request) => captured = request;
+
+        using var cut = RenderDetailWith(first, resolver, navigator, new PreviewSession(), coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+        cut.WaitForAssertion(() => Assert.True(firstToken.CanBeCanceled));
+
+        cut.Render(parameters => parameters.Add(p => p.Commit, second));
+        var secondButton = cut.Find("[data-testid=\"commit-detail-open-in-webview\"]");
+        Assert.False(secondButton.HasAttribute("disabled"));
+        secondButton.Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.True(firstToken.IsCancellationRequested);
+            Assert.Equal("content/copilot/other.md", captured?.FilePath);
+            Assert.Contains("2222222", captured?.AfterLabel, StringComparison.Ordinal);
         });
     }
 
@@ -884,10 +982,13 @@ public class CommitDetailTests
             commit.Sha);
 
     private static Commit MakeCommit(params (string Path, int Additions, int Deletions)[] files)
+        => MakeCommitWithSha("feedfacefeedfacefeedfacefeedfacefeedface", files);
+
+    private static Commit MakeCommitWithSha(string sha, params (string Path, int Additions, int Deletions)[] files)
     {
         var commit = new Commit
         {
-            Sha = "feedfacefeedfacefeedfacefeedfacefeedface",
+            Sha = sha,
             PrNumber = 1,
             Message = "Repo sync",
             Author = "octocat",

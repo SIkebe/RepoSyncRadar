@@ -34,18 +34,18 @@
                 <span class="author">@Commit.Author</span>
                 @if (Commit.PrNumber > 0)
                 {
-                    var pullRequestUrl = BuildPullRequestUrl(Commit);
+                    var commitDiffUrl = BuildCommitDiffUrl(Commit);
                     <button type="button"
                         class="commit-pr-link toolbar-button compact secondary"
                         data-testid="commit-detail-open-pr"
-                        title="右ペインで PR #@Commit.PrNumber を開きます"
-                        @onclick="() => OpenPullRequestInWebViewAsync(pullRequestUrl)">PR #@Commit.PrNumber</button>
+                        title="右ペインで PR #@Commit.PrNumber のコミット差分を開きます"
+                        @onclick="() => OpenCommitDiffInWebViewAsync(commitDiffUrl)">PR #@Commit.PrNumber</button>
                     <a class="commit-pr-external-link toolbar-button compact secondary"
                        data-testid="commit-detail-open-pr-external"
-                       href="@pullRequestUrl"
+                       href="@commitDiffUrl"
                        target="_blank"
                        rel="noopener"
-                       title="既定ブラウザーで PR #@Commit.PrNumber を開きます">↗</a>
+                       title="既定ブラウザーで PR #@Commit.PrNumber のコミット差分を開きます">↗</a>
                 }
             </div>
             <p class="message" data-testid="commit-detail-message" title="@DisplayCommitMessage(Commit.Message)">@DisplayCommitMessage(Commit.Message)</p>
@@ -169,7 +169,7 @@
                                     disabled="@IsPreviewOperationBusy"
                                     title="@BuildPreviewTitle(file, previewTarget)"
                                     @onclick="() => OpenInWebViewAsync(file)">@BuildPreviewButtonLabel(file)</button>
-                            @if (string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal))
+                            @if (IsPreviewBusyFile(file))
                             {
                                 <div class="preview-progress preview-file-progress" data-testid="commit-detail-preview-progress">
                                     <div class="preview-progress-row">
@@ -241,27 +241,42 @@
     private string? _resolvedForSha;
     private string? _activePreviewSha;
     private string? _previewBusyPath;
+    private string? _previewBusySha;
     private bool _previewCleanupBusy;
     private string? _activePreviewPath;
     private string? _previewStatusPath;
+    private string? _previewStatusSha;
     // §Step 19.9: 現在表示中の Markdown プレビューの docs version。
     private DocsVersion? _activeVersion;
     private IPreviewNavigator? _subscribedNavigator;
     private string? _previewStatus;
     private bool _previewStatusIsCleanup;
     private bool _previewCanceling;
-    private string _previewCancellationSubject = "プレビュー起動";
-    private CancellationTokenSource? _previewCts;
     private DateTimeOffset _previewStartedAt;
     private int _previewElapsedSec;
     private int _previewTimeoutSec = 600;
     private List<string> _previewStdoutTail = new();
     private List<string> _previewStderrTail = new();
     private int? _previewPid;
-    private Task? _previewPollTask;
+    private long _previewOperationSerial;
+    private PreviewOperation? _previewOperation;
     private CancellationTokenSource? _predictivePrewarmCts;
 
-    private bool IsPreviewOperationBusy => _previewBusyPath is not null || _previewCleanupBusy;
+    private bool IsPreviewOperationBusy => _previewCleanupBusy || IsPreviewBusyForCurrentCommit;
+
+    private bool IsPreviewBusyForCurrentCommit
+        => Commit is not null
+            && _previewBusyPath is not null
+            && string.Equals(_previewBusySha, Commit.Sha, StringComparison.Ordinal);
+
+    private sealed record PreviewOperation(
+        long Id,
+        string? Sha,
+        CancellationTokenSource Cancellation,
+        string CancellationSubject)
+    {
+        public Task? PollTask { get; set; }
+    }
 
     protected override void OnInitialized()
     {
@@ -282,9 +297,9 @@
             _subscribedNavigator.FileNavigationRequested -= OnFileNavigationRequested;
             _subscribedNavigator = null;
         }
-        try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
-        _previewCts?.Dispose();
-        _previewCts = null;
+        try { _previewOperation?.Cancellation.Cancel(); } catch (ObjectDisposedException) { }
+        _previewOperation?.Cancellation.Dispose();
+        _previewOperation = null;
         CancelPredictivePrewarm();
     }
 
@@ -346,12 +361,9 @@
             _urlsByPath.Clear();
             _resolvedForSha = null;
             _activePreviewSha = null;
-            _previewBusyPath = null;
-            _previewCleanupBusy = false;
+            CancelCurrentPreviewOperation();
+            ClearPreviewOperationState();
             _activePreviewPath = null;
-            _previewStatusPath = null;
-            _previewStatus = null;
-            _previewCanceling = false;
             CancelPredictivePrewarm();
             return;
         }
@@ -361,7 +373,6 @@
             _activePreviewSha = Commit.Sha;
             _activePreviewPath = null;
             _activeVersion = null;
-            _previewStatusPath = null;
             StartPredictivePrewarm(Commit);
         }
 
@@ -424,7 +435,7 @@
     }
 
     private string BuildPreviewButtonLabel(CommitFile file)
-        => string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal)
+        => IsPreviewBusyFile(file)
             ? "起動中…"
             : IsActivePreviewFile(file)
                 ? "表示中"
@@ -437,7 +448,7 @@
         {
             classes.Add("preview-active");
         }
-        if (string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal))
+        if (IsPreviewBusyFile(file))
         {
             classes.Add("preview-busy");
         }
@@ -447,9 +458,16 @@
     private bool IsActivePreviewFile(CommitFile file)
         => string.Equals(_activePreviewPath, file.Path, StringComparison.Ordinal);
 
+    private bool IsPreviewBusyFile(CommitFile file)
+        => Commit is not null
+            && string.Equals(_previewBusySha, Commit.Sha, StringComparison.Ordinal)
+            && string.Equals(_previewBusyPath, file.Path, StringComparison.Ordinal);
+
     private bool IsPreviewFeedbackFile(CommitFile file)
         => !_previewStatusIsCleanup
             && !string.IsNullOrWhiteSpace(_previewStatus)
+            && Commit is not null
+            && string.Equals(_previewStatusSha, Commit.Sha, StringComparison.Ordinal)
             && string.Equals(_previewStatusPath, file.Path, StringComparison.Ordinal);
 
     private PreviewFilePosition GetPreviewPosition(CommitFile file)
@@ -491,7 +509,7 @@
     private async Task OpenInWebViewAsync(CommitFile file)
         => await OpenInWebViewAsync(file, version: null);
 
-    private Task OpenPullRequestInWebViewAsync(string url)
+    private Task OpenCommitDiffInWebViewAsync(string url)
     {
         if (Services.GetService<IPreviewNavigator>() is not { } navigator
             || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
@@ -502,7 +520,7 @@
         navigator.Publish(uri);
         _activePreviewPath = null;
         _activeVersion = null;
-        _previewStatus = $"PR #{Commit?.PrNumber.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty} を右ペインで開きました";
+        _previewStatus = $"PR #{Commit?.PrNumber.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty} のコミット差分を右ペインで開きました";
         return Task.CompletedTask;
     }
 
@@ -514,16 +532,18 @@
             return;
         }
 
-        if (Commit is not null && IsPreviewMappable(file) && !IsMarkdownPreviewable(file)
+        var commit = Commit;
+
+        if (commit is not null && IsPreviewMappable(file) && !IsMarkdownPreviewable(file)
             && Services.GetService<IPreviewCoordinator>() is { } coordinator)
         {
             // Step 19.7: Markdown ファイルは下の Markdig 経路に流す。ここに来るのは
             // content/ 配下で .md/.markdown 以外の公開対象 (現状は事実上存在しない)
             // のみで、将来 YAML データファイル等を公開した場合の保険として残す。
-            StartPreviewOperation(file.Path, $"{file.Path} のローカルプレビューを準備中…", "プレビュー起動");
-            var token = _previewCts!.Token;
+            var operation = StartPreviewOperation(commit.Sha, file.Path, $"{file.Path} のローカルプレビューを準備中…", "プレビュー起動");
+            var token = operation.Cancellation.Token;
             var host = Services.GetService<PreviewServerHost>();
-            _previewPollTask = Task.Run(
+            operation.PollTask = Task.Run(
                 () => PollPreviewProgressAsync(host, includePreviewServerState: host is not null, token),
                 CancellationToken.None);
             try
@@ -537,13 +557,18 @@
                     });
                 });
                 var link = await coordinator.PrepareComparisonPreviewAsync(
-                    Commit.PrNumber,
-                    Commit.Sha,
+                    commit.PrNumber,
+                    commit.Sha,
                     file.Path,
                     progress,
                     token);
                 if (link is not null)
                 {
+                    if (!CanPublishPreview(operation, commit.Sha))
+                    {
+                        return;
+                    }
+
                     var previewPosition = GetPreviewPosition(file);
                     navigator.PublishComparison(new PreviewComparisonRequest(
                         link.BeforeUrl,
@@ -557,32 +582,41 @@
                     _previewStatus = $"{file.Path} を変更前 / PR HEAD で比較表示しました";
                     return;
                 }
-                _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                if (CanUpdatePreviewFeedback(operation))
+                {
+                    _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                }
                 return;
             }
             catch (OperationCanceledException)
             {
-                _previewStatus = BuildPreviewCancellationStatus();
+                if (CanUpdatePreviewFeedback(operation))
+                {
+                    _previewStatus = BuildPreviewCancellationStatus(operation);
+                }
                 return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _previewStatus = ex.Message;
+                if (CanUpdatePreviewFeedback(operation))
+                {
+                    _previewStatus = ex.Message;
+                }
                 return;
             }
             finally
             {
-                await FinishPreviewOperationAsync();
+                await FinishPreviewOperationAsync(operation);
             }
         }
 
-        if (Commit is not null && IsMarkdownPreviewable(file)
+        if (commit is not null && IsMarkdownPreviewable(file)
             && Services.GetService<IPreviewCoordinator>() is { } markdownCoordinator)
         {
-            StartPreviewOperation(file.Path, $"{file.Path} を Markdown として比較準備中…", "プレビュー起動");
-            var token = _previewCts!.Token;
+            var operation = StartPreviewOperation(commit.Sha, file.Path, $"{file.Path} を Markdown として比較準備中…", "プレビュー起動");
+            var token = operation.Cancellation.Token;
             var host = Services.GetService<PreviewServerHost>();
-            _previewPollTask = Task.Run(
+            operation.PollTask = Task.Run(
                 () => PollPreviewProgressAsync(host, includePreviewServerState: host is not null, token),
                 CancellationToken.None);
             try
@@ -596,14 +630,19 @@
                     });
                 });
                 var link = await markdownCoordinator.PrepareMarkdownComparisonPreviewAsync(
-                    Commit.PrNumber,
-                    Commit.Sha,
+                    commit.PrNumber,
+                    commit.Sha,
                     file.Path,
                     progress,
                     version: version,
                     cancellationToken: token);
                 if (link is not null)
                 {
+                    if (!CanPublishPreview(operation, commit.Sha))
+                    {
+                        return;
+                    }
+
                     var previewPosition = GetPreviewPosition(file);
                     navigator.PublishComparison(new PreviewComparisonRequest(
                         link.BeforeUrl,
@@ -620,22 +659,31 @@
                     _previewStatus = $"{file.Path} を Markdown として変更前 / PR HEAD で比較表示しました";
                     return;
                 }
-                _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                if (CanUpdatePreviewFeedback(operation))
+                {
+                    _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                }
                 return;
             }
             catch (OperationCanceledException)
             {
-                _previewStatus = BuildPreviewCancellationStatus();
+                if (CanUpdatePreviewFeedback(operation))
+                {
+                    _previewStatus = BuildPreviewCancellationStatus(operation);
+                }
                 return;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _previewStatus = ex.Message;
+                if (CanUpdatePreviewFeedback(operation))
+                {
+                    _previewStatus = ex.Message;
+                }
                 return;
             }
             finally
             {
-                await FinishPreviewOperationAsync();
+                await FinishPreviewOperationAsync(operation);
             }
         }
 
@@ -664,13 +712,22 @@
         _previewStatusPath = file.Path;
     }
 
-    private void StartPreviewOperation(string? busyPath, string status, string cancellationSubject)
+    private PreviewOperation StartPreviewOperation(string? sha, string? busyPath, string status, string cancellationSubject)
     {
+        CancelCurrentPreviewOperation();
+
+        var operation = new PreviewOperation(
+            ++_previewOperationSerial,
+            sha,
+            new CancellationTokenSource(),
+            cancellationSubject);
+        _previewOperation = operation;
         _previewBusyPath = busyPath;
+        _previewBusySha = sha;
         _previewStatusPath = busyPath;
+        _previewStatusSha = sha;
         _previewCleanupBusy = busyPath is null;
         _previewCanceling = false;
-        _previewCancellationSubject = cancellationSubject;
         _previewStatus = status;
         _previewStatusIsCleanup = _previewCleanupBusy;
         _previewStdoutTail = new List<string>();
@@ -679,24 +736,27 @@
         _previewStartedAt = DateTimeOffset.UtcNow;
         _previewElapsedSec = 0;
         _previewTimeoutSec = Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.PreviewReadyTimeoutSeconds ?? 600;
-        _previewCts = new CancellationTokenSource();
-        ArmPreviewTimeout(_previewCts);
+        ArmPreviewTimeout(operation.Cancellation);
+        return operation;
     }
 
-    private async Task FinishPreviewOperationAsync()
+    private async Task FinishPreviewOperationAsync(PreviewOperation operation)
     {
-        try { _previewCts?.Cancel(); } catch (ObjectDisposedException) { }
-        if (_previewPollTask is not null)
+        try { operation.Cancellation.Cancel(); } catch (ObjectDisposedException) { }
+        if (operation.PollTask is not null)
         {
-            try { await _previewPollTask.ConfigureAwait(false); }
+            try { await operation.PollTask.ConfigureAwait(false); }
             catch (OperationCanceledException) { }
-            _previewPollTask = null;
         }
-        _previewCts?.Dispose();
-        _previewCts = null;
-        _previewBusyPath = null;
-        _previewCleanupBusy = false;
-        _previewCanceling = false;
+        operation.Cancellation.Dispose();
+        if (ReferenceEquals(_previewOperation, operation))
+        {
+            _previewOperation = null;
+            _previewBusyPath = null;
+            _previewBusySha = null;
+            _previewCleanupBusy = false;
+            _previewCanceling = false;
+        }
         try
         {
             await InvokeAsync(StateHasChanged);
@@ -706,15 +766,40 @@
         }
     }
 
+    private void CancelCurrentPreviewOperation()
+    {
+        try { _previewOperation?.Cancellation.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
+    private void ClearPreviewOperationState()
+    {
+        _previewOperation = null;
+        _previewBusyPath = null;
+        _previewBusySha = null;
+        _previewCleanupBusy = false;
+        _previewStatusPath = null;
+        _previewStatusSha = null;
+        _previewStatus = null;
+        _previewCanceling = false;
+    }
+
+    private bool CanPublishPreview(PreviewOperation operation, string sha)
+        => ReferenceEquals(_previewOperation, operation)
+            && Commit is not null
+            && string.Equals(Commit.Sha, sha, StringComparison.Ordinal);
+
+    private bool CanUpdatePreviewFeedback(PreviewOperation operation)
+        => ReferenceEquals(_previewOperation, operation);
+
     private async Task CleanupPreviewCacheAsync()
     {
         if (IsPreviewOperationBusy)
         {
             return;
         }
-        StartPreviewOperation(busyPath: null, "キャッシュをクリーンアップ中…", "キャッシュ削除");
-        var token = _previewCts!.Token;
-        _previewPollTask = Task.Run(
+        var operation = StartPreviewOperation(sha: null, busyPath: null, "キャッシュをクリーンアップ中…", "キャッシュ削除");
+        var token = operation.Cancellation.Token;
+        operation.PollTask = Task.Run(
             () => PollPreviewProgressAsync(host: null, includePreviewServerState: false, token),
             CancellationToken.None);
         try
@@ -729,26 +814,32 @@
         }
         catch (OperationCanceledException)
         {
-            _previewStatus = BuildPreviewCancellationStatus();
+            if (CanUpdatePreviewFeedback(operation))
+            {
+                _previewStatus = BuildPreviewCancellationStatus(operation);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _previewStatus = ex.Message;
+            if (CanUpdatePreviewFeedback(operation))
+            {
+                _previewStatus = ex.Message;
+            }
         }
         finally
         {
-            await FinishPreviewOperationAsync();
+            await FinishPreviewOperationAsync(operation);
         }
     }
 
     private Task CancelPreviewAsync()
     {
-        if (!IsPreviewOperationBusy || _previewCts is null || _previewCanceling)
+        if (!IsPreviewOperationBusy || _previewOperation is null || _previewCanceling)
         {
             return Task.CompletedTask;
         }
         _previewCanceling = true;
-        try { _previewCts.Cancel(); } catch (ObjectDisposedException) { }
+        try { _previewOperation.Cancellation.Cancel(); } catch (ObjectDisposedException) { }
         return Task.CompletedTask;
     }
 
@@ -760,10 +851,10 @@
         }
     }
 
-    private string BuildPreviewCancellationStatus()
+    private string BuildPreviewCancellationStatus(PreviewOperation operation)
         => _previewCanceling
-            ? $"{_previewCancellationSubject}を中止しました"
-            : $"{_previewCancellationSubject}が上限 {_previewTimeoutSec} 秒を超えたため中止しました";
+            ? $"{operation.CancellationSubject}を中止しました"
+            : $"{operation.CancellationSubject}が上限 {_previewTimeoutSec} 秒を超えたため中止しました";
 
     private async Task PollPreviewProgressAsync(PreviewServerHost? host, bool includePreviewServerState, CancellationToken token)
     {
@@ -900,14 +991,15 @@
             || line.StartsWith("Reviewed-by:", StringComparison.OrdinalIgnoreCase)
             || line.StartsWith("Acked-by:", StringComparison.OrdinalIgnoreCase);
 
-    private string BuildPullRequestUrl(Commit commit)
+    private string BuildCommitDiffUrl(Commit commit)
     {
         var options = Services.GetService<IOptions<GitHubOptions>>()?.Value ?? new GitHubOptions();
         var owner = Uri.EscapeDataString(options.Owner.Trim());
         var repo = Uri.EscapeDataString(options.Repo.Trim());
+        var sha = Uri.EscapeDataString(commit.Sha.Trim());
         return string.Create(
             System.Globalization.CultureInfo.InvariantCulture,
-            $"https://github.com/{owner}/{repo}/pull/{commit.PrNumber}");
+            $"https://github.com/{owner}/{repo}/commit/{sha}");
     }
 
     private readonly record struct PreviewFilePosition(int Ordinal, int Total);
