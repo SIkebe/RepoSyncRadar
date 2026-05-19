@@ -104,7 +104,7 @@
               Background="#0D1117"
               BorderBrush="#30363D"
               BorderThickness="0,0,0,1"
-              Padding="46,4,10,4">
+              Padding="150,4,10,4">
         <Grid>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -334,6 +334,9 @@
               VerticalAlignment="Center"
               Margin="8,0,0,0"
               Style="{StaticResource PreviewFocusIconButtonStyle}"
+              Width="132"
+              FontFamily="Segoe UI"
+              FontSize="12"
               Content="‹‹"
               AutomationProperties.AutomationId="PreviewFocusToggleButton"
               AutomationProperties.Name="プレビューだけ表示"

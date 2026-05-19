@@ -61,6 +61,7 @@ RepoSyncRadar を「コードの集合」ではなく「実際に使うアプリ
    ```
 
 2. 起動に失敗したら、まず terminal output、例外、設定 validation、port/process lock、DB path、WebView2 のいずれかを切り分ける。
+   - WPF GUI は `dotnet run` が無音のまま待機し、ウィンドウを閉じる/プロセス停止後に exit code 1 だけ残ることがある。stdout/stderr に例外がなく、`Get-Process RepoSyncRadar` で起動中の応答ありウィンドウを確認できた場合は起動成功として扱い、終了コードだけで起動失敗 finding にしない。
 3. 起動できたら、主要画面を実際に操作する。
    - 初期画面の状態、空状態、次に何をすべきか
    - Settings の表示/編集/保存/エラー

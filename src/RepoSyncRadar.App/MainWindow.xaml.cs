@@ -2168,7 +2168,7 @@ public partial class MainWindow : Window
     }
 
     internal static string BuildPreviewFocusToggleText(bool isPreviewFocusMode)
-        => isPreviewFocusMode ? "››" : "‹‹";
+        => isPreviewFocusMode ? "作業ペインを戻す" : "プレビューだけ表示";
 
     internal static string BuildPreviewFocusToggleToolTip(bool isPreviewFocusMode)
         => isPreviewFocusMode
