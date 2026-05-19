@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 using RepoSyncRadar.App;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Services.Preview;
@@ -47,6 +48,103 @@ public sealed class MainWindowPreviewComparisonTests
     public void BuildSinglePageHeaderLabel_Describes_Navigation_Target(string url, string expected)
     {
         Assert.Equal(expected, MainWindow.BuildSinglePageHeaderLabel(new Uri(url)));
+    }
+
+    [Fact]
+    public void BuildInstallMouseHistoryNavigationScript_Posts_Back_And_Forward_Messages()
+    {
+        var script = MainWindow.BuildInstallMouseHistoryNavigationScript();
+
+        Assert.Contains("event.button === 3", script, StringComparison.Ordinal);
+        Assert.Contains("event.button === 4", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-webview-history:${direction}", script, StringComparison.Ordinal);
+        Assert.Contains("preventDefault", script, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("rsr-webview-history:back", "Back")]
+    [InlineData("rsr-webview-history:forward", "Forward")]
+    [InlineData("rsr-webview-history:BACK", "Back")]
+    public void TryParseWebViewHistoryNavigationMessage_Parses_Direction(
+        string message,
+        string expected)
+    {
+        Assert.True(MainWindow.TryParseWebViewHistoryNavigationMessage(message, out var direction));
+        Assert.Equal(expected, direction.ToString());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("rsr-webview-history:")]
+    [InlineData("rsr-webview-history:next")]
+    [InlineData("rsr-preview-scroll:before:0.25")]
+    public void TryParseWebViewHistoryNavigationMessage_Rejects_Invalid_Messages(string? message)
+    {
+        Assert.False(MainWindow.TryParseWebViewHistoryNavigationMessage(message, out _));
+    }
+
+    [Theory]
+    [InlineData(MouseButton.XButton1, "Back")]
+    [InlineData(MouseButton.XButton2, "Forward")]
+    public void TryResolveMouseHistoryNavigationButton_Maps_XButtons(MouseButton button, string expected)
+    {
+        Assert.True(MainWindow.TryResolveMouseHistoryNavigationButton(button, out var direction));
+        Assert.Equal(expected, direction.ToString());
+    }
+
+    [Theory]
+    [InlineData(MouseButton.Left)]
+    [InlineData(MouseButton.Right)]
+    [InlineData(MouseButton.Middle)]
+    public void TryResolveMouseHistoryNavigationButton_Rejects_Ordinary_Buttons(MouseButton button)
+    {
+        Assert.False(MainWindow.TryResolveMouseHistoryNavigationButton(button, out _));
+    }
+
+    [Theory]
+    [InlineData(0x020B, 0x00010000, 0, "Back")]
+    [InlineData(0x020B, 0x00020000, 0, "Forward")]
+    [InlineData(0x0319, 0, 0x00010000, "Back")]
+    [InlineData(0x0319, 0, 0x00020000, "Forward")]
+    public void TryParseNativeMouseHistoryNavigationMessage_Maps_Windows_Messages(
+        int message,
+        long wParam,
+        long lParam,
+        string expected)
+    {
+        Assert.True(MainWindow.TryParseNativeMouseHistoryNavigationMessage(message, new IntPtr(wParam), new IntPtr(lParam), out var direction));
+        Assert.Equal(expected, direction.ToString());
+    }
+
+    [Theory]
+    [InlineData(0x020B, 0x00030000, 0)]
+    [InlineData(0x0319, 0, 0x00030000)]
+    [InlineData(0x020A, 0x00010000, 0)]
+    public void TryParseNativeMouseHistoryNavigationMessage_Rejects_Other_Messages(
+        int message,
+        long wParam,
+        long lParam)
+    {
+        Assert.False(MainWindow.TryParseNativeMouseHistoryNavigationMessage(message, new IntPtr(wParam), new IntPtr(lParam), out _));
+    }
+
+    [Theory]
+    [InlineData(0x0040, "Back")]
+    [InlineData(0x0100, "Forward")]
+    public void TryResolveRawMouseButtonFlags_Maps_XButton_Down(ushort buttonFlags, string expected)
+    {
+        Assert.True(MainWindow.TryResolveRawMouseButtonFlags(buttonFlags, out var direction));
+        Assert.Equal(expected, direction.ToString());
+    }
+
+    [Theory]
+    [InlineData(0x0001)]
+    [InlineData(0x0080)]
+    [InlineData(0x0200)]
+    public void TryResolveRawMouseButtonFlags_Rejects_Other_Button_Flags(ushort buttonFlags)
+    {
+        Assert.False(MainWindow.TryResolveRawMouseButtonFlags(buttonFlags, out _));
     }
 
     [Fact]

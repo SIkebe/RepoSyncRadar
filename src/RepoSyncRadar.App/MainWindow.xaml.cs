@@ -57,6 +57,12 @@ internal readonly record struct PreviewFileNavigationState(
     int Ordinal,
     int Count);
 
+internal enum WebViewHistoryNavigationDirection
+{
+    Back,
+    Forward,
+}
+
 /// <summary>
 /// Top-level shell. Hosts a BlazorWebView (UI shell) and WebView2 docs surfaces.
 /// Rendering mode C from DESIGN.md §9.3.
@@ -85,6 +91,20 @@ public partial class MainWindow : Window
     private const int DwmwaBorderColor = 34;
     private const int DwmwaCaptionColor = 35;
     private const int DwmwaTextColor = 36;
+    private const int WmXbuttondown = 0x020B;
+    private const int WmAppcommand = 0x0319;
+    private const int WmInput = 0x00FF;
+    private const int Xbutton1 = 0x0001;
+    private const int Xbutton2 = 0x0002;
+    private const int AppcommandBrowserBackward = 1;
+    private const int AppcommandBrowserForward = 2;
+    private const int RidInput = 0x10000003;
+    private const int RimTypemouse = 0;
+    private const int RidevInputsink = 0x00000100;
+    private const ushort HidUsagePageGeneric = 0x01;
+    private const ushort HidUsageGenericMouse = 0x02;
+    private const ushort RiMouseButton4Down = 0x0040;
+    private const ushort RiMouseButton5Down = 0x0100;
 
     private static readonly Uri InitialDocsUri = new("https://docs.github.com/en");
 
@@ -131,18 +151,25 @@ public partial class MainWindow : Window
     private bool _previewFocusModeChangeScheduled;
     private DocsThemeMode _docsTheme = DocsThemeMode.Dark;
     private readonly DispatcherTimer _previewFocusLayoutShieldTimer;
+    private HwndSource? _windowHwndSource;
     private string? _docsThemeDocumentScriptId;
     private string? _previewThemeDocumentScriptId;
     // §Step 19.9: DocsVersionSelector を code で SelectedItem を設定したときの
     // SelectionChanged をスキップするためのガード。ユーザー操作でだけ
     // navigator.RequestVersionChange を発火し、セレクション同期のループを防ぐ。
     private bool _suppressDocsVersionSelectionChanged;
+    // 1 回の XButton 押下で JS postMessage / PreviewMouseDown / WM_XBUTTONDOWN /
+    // WM_APPCOMMAND / WM_INPUT の複数経路が重複発火するため、view ごとに最後の
+    // 履歴ナビゲーション時刻を覚えて短時間の重複コールを 1 件にまとめる。
+    private static readonly TimeSpan WebViewHistoryNavigationDebounce = TimeSpan.FromMilliseconds(250);
+    private DateTime _docsViewLastHistoryNavigationAt;
+    private DateTime _previewViewLastHistoryNavigationAt;
 
     public MainWindow(IServiceProvider services)
     {
         ArgumentNullException.ThrowIfNull(services);
         InitializeComponent();
-        SourceInitialized += (_, _) => ApplyNativeWindowChromeTheme(_docsTheme);
+        SourceInitialized += OnSourceInitialized;
         _previewFocusLayoutShieldTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = PreviewFocusLayoutShieldDuration,
@@ -168,6 +195,8 @@ public partial class MainWindow : Window
         PreviewView.NavigationStarting += OnPreviewViewNavigationStarting;
         DocsView.NavigationCompleted += OnDocsViewNavigationCompleted;
         PreviewView.NavigationCompleted += OnPreviewViewNavigationCompleted;
+        DocsView.PreviewMouseDown += OnDocsSurfacePreviewMouseDown;
+        PreviewView.PreviewMouseDown += OnDocsSurfacePreviewMouseDown;
         Closed += (_, _) =>
         {
             _previewNavigator.Requested -= OnPreviewRequested;
@@ -176,7 +205,11 @@ public partial class MainWindow : Window
             PreviewView.NavigationStarting -= OnPreviewViewNavigationStarting;
             DocsView.NavigationCompleted -= OnDocsViewNavigationCompleted;
             PreviewView.NavigationCompleted -= OnPreviewViewNavigationCompleted;
+            DocsView.PreviewMouseDown -= OnDocsSurfacePreviewMouseDown;
+            PreviewView.PreviewMouseDown -= OnDocsSurfacePreviewMouseDown;
             _userSettingsStore.SettingsChanged -= OnUserSettingsChanged;
+            _windowHwndSource?.RemoveHook(OnWindowMessage);
+            _windowHwndSource = null;
             if (DocsView.CoreWebView2 is not null)
             {
                 DocsView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
@@ -225,6 +258,70 @@ public partial class MainWindow : Window
         // is set. Setting Source triggers the initialization pipeline. We also pin
         // the initial path to /en so the first navigation skips the locale redirect.
         DocsView.Source = InitialDocsUri;
+    }
+
+    private void OnSourceInitialized(object? sender, EventArgs e)
+    {
+        ApplyNativeWindowChromeTheme(_docsTheme);
+        _windowHwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        _windowHwndSource?.AddHook(OnWindowMessage);
+        RegisterRawMouseInput(new WindowInteropHelper(this).Handle);
+    }
+
+    private IntPtr OnWindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (TryParseNativeMouseHistoryNavigationMessage(message, wParam, lParam, out var direction)
+            && TryResolveDocsSurfaceUnderCursor(out var view))
+        {
+            NavigateWebViewHistory(view, direction);
+            handled = true;
+            return IntPtr.Zero;
+        }
+
+        if (message == WmInput
+            && TryParseRawMouseHistoryNavigationMessage(lParam, out direction)
+            && TryResolveDocsSurfaceUnderCursor(out view))
+        {
+            NavigateWebViewHistory(view, direction);
+            handled = true;
+        }
+
+        return IntPtr.Zero;
+    }
+
+    private void RegisterRawMouseInput(IntPtr handle)
+    {
+        if (handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var devices = new[]
+        {
+            new RAWINPUTDEVICE
+            {
+                usUsagePage = HidUsagePageGeneric,
+                usUsage = HidUsageGenericMouse,
+                dwFlags = RidevInputsink,
+                hwndTarget = handle,
+            },
+        };
+        if (!RegisterRawInputDevices(devices, (uint)devices.Length, (uint)Marshal.SizeOf<RAWINPUTDEVICE>()))
+        {
+            LogRawMouseInputRegistrationFailed(_logger);
+        }
+    }
+
+    private void OnDocsSurfacePreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not WebView2CompositionControl view
+            || !TryResolveMouseHistoryNavigationButton(e.ChangedButton, out var direction))
+        {
+            return;
+        }
+
+        NavigateWebViewHistory(view, direction);
+        e.Handled = true;
     }
 
     /// <summary>
@@ -562,8 +659,28 @@ public partial class MainWindow : Window
         view.CoreWebView2.Settings.IsWebMessageEnabled = true;
         view.CoreWebView2.WebMessageReceived += OnPreviewScrollMessageReceived;
         ApplyWebViewThemePreference(view, _docsTheme);
+        _ = InstallMouseHistoryNavigationAsync(view);
         _ = InstallDocsThemeDocumentScriptAsync(view, _docsTheme);
         _ = ApplyDocsThemeAsync(view);
+    }
+
+    private async Task InstallMouseHistoryNavigationAsync(WebView2CompositionControl view)
+    {
+        try
+        {
+            if (view.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            var script = BuildInstallMouseHistoryNavigationScript();
+            await view.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
+            await view.ExecuteScriptAsync(script);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogMouseHistoryNavigationInstallFailed(_logger, ex);
+        }
     }
 
     private async Task InstallDocsThemeDocumentScriptAsync(
@@ -960,17 +1077,23 @@ public partial class MainWindow : Window
 
     private void OnPreviewScrollMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (_activePreviewDiffRequest is null)
-        {
-            return;
-        }
-
         string? message;
         try
         {
             message = e.TryGetWebMessageAsString();
         }
         catch (ArgumentException)
+        {
+            return;
+        }
+
+        if (TryParseWebViewHistoryNavigationMessage(message, out var historyDirection))
+        {
+            HandleWebViewHistoryNavigationMessage(sender, historyDirection);
+            return;
+        }
+
+        if (_activePreviewDiffRequest is null)
         {
             return;
         }
@@ -1035,6 +1158,107 @@ public partial class MainWindow : Window
         }
 
         _previewNavigator.RequestVersionChange(version);
+    }
+
+    private void HandleWebViewHistoryNavigationMessage(object? sender, WebViewHistoryNavigationDirection direction)
+    {
+        var senderCore = sender as CoreWebView2;
+        if (ReferenceEquals(senderCore, DocsView.CoreWebView2))
+        {
+            NavigateWebViewHistory(DocsView, direction);
+            return;
+        }
+        if (ReferenceEquals(senderCore, PreviewView.CoreWebView2))
+        {
+            NavigateWebViewHistory(PreviewView, direction);
+        }
+    }
+
+    private void NavigateWebViewHistory(
+        WebView2CompositionControl view,
+        WebViewHistoryNavigationDirection direction)
+    {
+        if (view.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        if (!TryAcceptWebViewHistoryNavigation(view))
+        {
+            return;
+        }
+
+        if (direction == WebViewHistoryNavigationDirection.Back && view.CanGoBack)
+        {
+            view.GoBack();
+            return;
+        }
+        if (direction == WebViewHistoryNavigationDirection.Forward && view.CanGoForward)
+        {
+            view.GoForward();
+        }
+    }
+
+    private bool TryAcceptWebViewHistoryNavigation(WebView2CompositionControl view)
+    {
+        var now = DateTime.UtcNow;
+        if (ReferenceEquals(view, DocsView))
+        {
+            if (now - _docsViewLastHistoryNavigationAt < WebViewHistoryNavigationDebounce)
+            {
+                return false;
+            }
+            _docsViewLastHistoryNavigationAt = now;
+            return true;
+        }
+        if (ReferenceEquals(view, PreviewView))
+        {
+            if (now - _previewViewLastHistoryNavigationAt < WebViewHistoryNavigationDebounce)
+            {
+                return false;
+            }
+            _previewViewLastHistoryNavigationAt = now;
+            return true;
+        }
+        return true;
+    }
+
+    private bool TryResolveDocsSurfaceUnderCursor(out WebView2CompositionControl view)
+    {
+        view = DocsView;
+        if (!GetCursorPos(out var cursor))
+        {
+            return false;
+        }
+
+        var screenPoint = new Point(cursor.X, cursor.Y);
+        if (IsScreenPointOverElement(PreviewView, screenPoint))
+        {
+            view = PreviewView;
+            return true;
+        }
+        if (IsScreenPointOverElement(DocsView, screenPoint))
+        {
+            view = DocsView;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsScreenPointOverElement(FrameworkElement element, Point screenPoint)
+    {
+        if (!element.IsVisible || element.ActualWidth <= 0 || element.ActualHeight <= 0)
+        {
+            return false;
+        }
+
+        var topLeft = element.PointToScreen(new Point(0, 0));
+        var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
+        return screenPoint.X >= topLeft.X
+            && screenPoint.X <= bottomRight.X
+            && screenPoint.Y >= topLeft.Y
+            && screenPoint.Y <= bottomRight.Y;
     }
 
     private async Task ApplySynchronizedScrollAsync(
@@ -1587,6 +1811,34 @@ public partial class MainWindow : Window
 """;
         }
 
+        internal static string BuildInstallMouseHistoryNavigationScript()
+            => """
+(() => {
+    const stateKey = '__repoSyncRadarMouseHistoryNavigation';
+    const existing = window[stateKey];
+    if (existing && existing.handler) {
+        window.removeEventListener('mousedown', existing.handler, true);
+        window.removeEventListener('auxclick', existing.handler, true);
+    }
+
+    const handler = (event) => {
+        const direction = event.button === 3 ? 'back' : event.button === 4 ? 'forward' : '';
+        if (!direction) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        window.chrome?.webview?.postMessage(`rsr-webview-history:${direction}`);
+    };
+
+    window[stateKey] = { handler };
+    window.addEventListener('mousedown', handler, true);
+    window.addEventListener('auxclick', handler, true);
+    return true;
+})();
+""";
+
         internal static string BuildApplySynchronizedScrollScript(double ratio)
             => BuildApplySynchronizedScrollScript(ratio, anchorOffsetPx: null, anchorFingerprintBase64: null);
 
@@ -1705,6 +1957,140 @@ public partial class MainWindow : Window
             return false;
         }
 
+        internal static bool TryParseWebViewHistoryNavigationMessage(
+            string? message,
+            out WebViewHistoryNavigationDirection direction)
+        {
+            direction = default;
+            const string Prefix = "rsr-webview-history:";
+            if (string.IsNullOrWhiteSpace(message)
+                || !message.StartsWith(Prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var value = message[Prefix.Length..].Trim();
+            if (string.Equals(value, "back", StringComparison.OrdinalIgnoreCase))
+            {
+                direction = WebViewHistoryNavigationDirection.Back;
+                return true;
+            }
+            if (string.Equals(value, "forward", StringComparison.OrdinalIgnoreCase))
+            {
+                direction = WebViewHistoryNavigationDirection.Forward;
+                return true;
+            }
+
+            return false;
+        }
+
+        internal static bool TryResolveMouseHistoryNavigationButton(
+            MouseButton button,
+            out WebViewHistoryNavigationDirection direction)
+        {
+            direction = button switch
+            {
+                MouseButton.XButton1 => WebViewHistoryNavigationDirection.Back,
+                MouseButton.XButton2 => WebViewHistoryNavigationDirection.Forward,
+                _ => default,
+            };
+            return button is MouseButton.XButton1 or MouseButton.XButton2;
+        }
+
+        internal static bool TryParseNativeMouseHistoryNavigationMessage(
+            int message,
+            IntPtr wParam,
+            IntPtr lParam,
+            out WebViewHistoryNavigationDirection direction)
+        {
+            direction = default;
+            if (message == WmXbuttondown)
+            {
+                var button = HiWord(wParam);
+                if (button == Xbutton1)
+                {
+                    direction = WebViewHistoryNavigationDirection.Back;
+                    return true;
+                }
+                if (button == Xbutton2)
+                {
+                    direction = WebViewHistoryNavigationDirection.Forward;
+                    return true;
+                }
+            }
+
+            if (message == WmAppcommand)
+            {
+                var command = HiWord(lParam) & ~0xF000;
+                if (command == AppcommandBrowserBackward)
+                {
+                    direction = WebViewHistoryNavigationDirection.Back;
+                    return true;
+                }
+                if (command == AppcommandBrowserForward)
+                {
+                    direction = WebViewHistoryNavigationDirection.Forward;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        internal static bool TryResolveRawMouseButtonFlags(
+            ushort buttonFlags,
+            out WebViewHistoryNavigationDirection direction)
+        {
+            direction = default;
+            if ((buttonFlags & RiMouseButton4Down) != 0)
+            {
+                direction = WebViewHistoryNavigationDirection.Back;
+                return true;
+            }
+            if ((buttonFlags & RiMouseButton5Down) != 0)
+            {
+                direction = WebViewHistoryNavigationDirection.Forward;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryParseRawMouseHistoryNavigationMessage(
+            IntPtr rawInputHandle,
+            out WebViewHistoryNavigationDirection direction)
+        {
+            direction = default;
+            uint size = 0;
+            var headerSize = (uint)Marshal.SizeOf<RAWINPUTHEADER>();
+            _ = GetRawInputData(rawInputHandle, RidInput, IntPtr.Zero, ref size, headerSize);
+            if (size == 0)
+            {
+                return false;
+            }
+
+            var buffer = Marshal.AllocHGlobal((int)size);
+            try
+            {
+                var copied = GetRawInputData(rawInputHandle, RidInput, buffer, ref size, headerSize);
+                if (copied != size)
+                {
+                    return false;
+                }
+
+                var rawInput = Marshal.PtrToStructure<RAWINPUT>(buffer);
+                return rawInput.header.dwType == RimTypemouse
+                    && TryResolveRawMouseButtonFlags(rawInput.mouse.usButtonFlags, out direction);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
+        private static int HiWord(IntPtr value)
+            => unchecked((ushort)(((long)value >> 16) & 0xFFFF));
+
         internal static bool TryParsePreviewScrollMessage(
                 string? message,
                 out PreviewDiffPane pane,
@@ -1812,6 +2198,91 @@ public partial class MainWindow : Window
                 expectedUrl.GetComponents(UriComponents.SchemeAndServer | UriComponents.PathAndQuery, UriFormat.UriEscaped),
                 StringComparison.OrdinalIgnoreCase);
 
+    [DllImport("user32.dll", ExactSpelling = true)]
+    private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern bool RegisterRawInputDevices(
+        [In] RAWINPUTDEVICE[] pRawInputDevices,
+        uint uiNumDevices,
+        uint cbSize);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    private static extern uint GetRawInputData(
+        IntPtr hRawInput,
+        uint uiCommand,
+        IntPtr pData,
+        ref uint pcbSize,
+        uint cbSizeHeader);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct POINT
+    {
+        public readonly int X;
+
+        public readonly int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RAWINPUTDEVICE
+    {
+        public ushort usUsagePage;
+
+        public ushort usUsage;
+
+        public int dwFlags;
+
+        public IntPtr hwndTarget;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct RAWINPUTHEADER
+    {
+        public readonly int dwType;
+
+        public readonly int dwSize;
+
+        public readonly IntPtr hDevice;
+
+        public readonly IntPtr wParam;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct RAWINPUT
+    {
+        public readonly RAWINPUTHEADER header;
+
+        public readonly RAWMOUSE mouse;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    private readonly struct RAWMOUSE
+    {
+        [FieldOffset(0)]
+        public readonly ushort usFlags;
+
+        [FieldOffset(4)]
+        public readonly uint ulButtons;
+
+        [FieldOffset(4)]
+        public readonly ushort usButtonFlags;
+
+        [FieldOffset(6)]
+        public readonly ushort usButtonData;
+
+        [FieldOffset(8)]
+        public readonly uint ulRawButtons;
+
+        [FieldOffset(12)]
+        public readonly int lLastX;
+
+        [FieldOffset(16)]
+        public readonly int lLastY;
+
+        [FieldOffset(20)]
+        public readonly uint ulExtraInformation;
+    }
+
     [LoggerMessage(
         EventId = 1,
         Level = LogLevel.Warning,
@@ -1853,4 +2324,16 @@ public partial class MainWindow : Window
         Level = LogLevel.Warning,
         Message = "Docs theme preference save failed.")]
     private static partial void LogDocsThemePreferenceSaveFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 8,
+        Level = LogLevel.Debug,
+        Message = "Mouse history navigation install failed.")]
+    private static partial void LogMouseHistoryNavigationInstallFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 9,
+        Level = LogLevel.Debug,
+        Message = "Raw mouse input registration failed.")]
+    private static partial void LogRawMouseInputRegistrationFailed(ILogger logger);
 }
