@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
@@ -15,6 +16,59 @@ namespace RepoSyncRadar.App.Tests;
 /// </summary>
 public class StartupSignInTests
 {
+    [Fact]
+    public async Task ConfigureAppConfiguration_Reads_Explicit_Local_Appsettings_Path()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "rsr-startup-config-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        var basePath = Path.Combine(tempRoot, "app");
+        Directory.CreateDirectory(basePath);
+        var explicitLocalPath = Path.Combine(tempRoot, "shared", "appsettings.local.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(explicitLocalPath)!);
+        await File.WriteAllTextAsync(
+            Path.Combine(basePath, "appsettings.json"),
+            """
+            {
+              "Copilot": {
+                "OAuthClientId": ""
+              }
+            }
+            """,
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            explicitLocalPath,
+            """
+            {
+              "Copilot": {
+                "OAuthClientId": "Iv1.from-explicit-local"
+              }
+            }
+            """,
+            TestContext.Current.CancellationToken);
+        try
+        {
+            var configuration = (IConfigurationRoot)App.ConfigureAppConfiguration(
+                new ConfigurationBuilder(),
+                basePath,
+                explicitLocalPath).Build();
+
+            Assert.Equal("Iv1.from-explicit-local", configuration["Copilot:OAuthClientId"]);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
     [Fact]
     public async Task TrySignInOnStartupAsync_WhenClientIdMissing_WarnsUserAndSkipsProvider()
     {
