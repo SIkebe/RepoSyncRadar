@@ -92,6 +92,7 @@
         {
             return;
         }
+        _status = null;
         await LoadAsync();
         _lastLoadedSha = Sha;
     }
@@ -293,10 +294,21 @@
         builder.CloseElement();
         builder.CloseElement();
 
-        builder.OpenElement(13, "pre");
-        builder.AddAttribute(14, "data-testid", $"drafts-body-{channel}");
-        builder.AddContent(15, body ?? string.Empty);
-        builder.CloseElement();
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            builder.OpenElement(13, "p");
+            builder.AddAttribute(14, "class", "drafts-placeholder");
+            builder.AddAttribute(15, "data-testid", $"drafts-empty-{channel}");
+            builder.AddContent(16, "まだ生成されていません。上部の再生成ボタンで作成できます。");
+            builder.CloseElement();
+        }
+        else
+        {
+            builder.OpenElement(13, "pre");
+            builder.AddAttribute(14, "data-testid", $"drafts-body-{channel}");
+            builder.AddContent(15, body);
+            builder.CloseElement();
+        }
 
         builder.CloseElement();
     };

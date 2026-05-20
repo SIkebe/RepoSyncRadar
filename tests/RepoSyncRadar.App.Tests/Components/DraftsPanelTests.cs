@@ -61,6 +61,35 @@ public sealed class DraftsPanelTests
     }
 
     [Fact]
+    public async Task Renders_Placeholders_When_Drafts_Have_Not_Been_Generated()
+    {
+        var ct = Xunit.TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("sha1", ct);
+
+        using var ctx = new Bunit.BunitContext();
+        var clipboard = Substitute.For<IClipboard>();
+        var agent = Substitute.For<ICopilotAgent>();
+        ctx.Services
+            .AddSingleton(harness.DbFactory)
+            .AddSingleton(clipboard)
+            .AddSingleton(agent);
+
+        var sp = ctx.Services.BuildServiceProvider();
+        var cut = ctx.Render<DraftsPanel>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "sha1"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("まだ生成されていません", cut.Find("[data-testid=\"drafts-empty-explanation\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("再生成ボタン", cut.Find("[data-testid=\"drafts-empty-twitter\"]").TextContent, StringComparison.Ordinal);
+            Assert.True(cut.Find("[data-testid=\"drafts-copy-explanation\"]").HasAttribute("disabled"));
+            Assert.Empty(cut.FindAll("[data-testid=\"drafts-body-explanation\"]"));
+        });
+    }
+
+    [Fact]
     public async Task Copy_Button_Invokes_Clipboard()
     {
         var ct = Xunit.TestContext.Current.CancellationToken;
@@ -89,6 +118,47 @@ public sealed class DraftsPanelTests
         cut.WaitForAssertion(() => cut.Find("[data-testid=\"drafts-copy-twitter\"]"));
         cut.Find("[data-testid=\"drafts-copy-twitter\"]").Click();
         await clipboard.Received(1).SetTextAsync("tweet-body");
+    }
+
+    [Fact]
+    public async Task Changing_Sha_Clears_Previous_Status()
+    {
+        var ct = Xunit.TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("sha1", ct);
+        await harness.InsertCommitAsync("sha2", ct);
+        await using (var seed = harness.CreateDb())
+        {
+            seed.Drafts.Add(new Draft { Sha = "sha1", Channel = "twitter", Body = "tweet-body", GeneratedAt = DateTime.UtcNow });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        using var ctx = new Bunit.BunitContext();
+        var clipboard = Substitute.For<IClipboard>();
+        clipboard.SetTextAsync(Arg.Any<string>()).Returns(Task.CompletedTask);
+        var agent = Substitute.For<ICopilotAgent>();
+        ctx.Services
+            .AddSingleton(harness.DbFactory)
+            .AddSingleton(clipboard)
+            .AddSingleton(agent);
+
+        var sp = ctx.Services.BuildServiceProvider();
+        var cut = ctx.Render<DraftsPanel>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "sha1"));
+
+        cut.WaitForAssertion(() => cut.Find("[data-testid=\"drafts-copy-twitter\"]"));
+        cut.Find("[data-testid=\"drafts-copy-twitter\"]").Click();
+        cut.WaitForAssertion(() =>
+            Assert.Contains("コピーしました", cut.Find("[data-testid=\"drafts-status\"]").TextContent, StringComparison.Ordinal));
+
+        cut.Render(parameters => parameters.Add(c => c.Sha, "sha2"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll("[data-testid=\"drafts-status\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"drafts-empty-twitter\"]"));
+        });
     }
 
     [Fact]

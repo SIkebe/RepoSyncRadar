@@ -1545,6 +1545,15 @@ html, body {
     line-height: 1.45;
 }
 
+.drafts-placeholder {
+    margin: 0;
+    min-height: 2.5rem;
+    padding: 0.6rem;
+    color: #57606a;
+    font-size: 0.85rem;
+    line-height: 1.45;
+}
+
 .drafts-channel-large pre {
     max-height: 22rem;
 }
@@ -1872,6 +1881,7 @@ html, body {
 .radar-theme-dark .action-status,
 .radar-theme-dark .drafts-status,
 .radar-theme-dark .drafts-empty,
+.radar-theme-dark .drafts-placeholder,
 .radar-theme-dark .drafts-busy,
 .radar-theme-dark .ask-palette-input label,
 .radar-theme-dark .ask-palette-busy,
