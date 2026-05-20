@@ -87,6 +87,25 @@ public sealed partial class AppCssContrastTests
         Assert.Contains("overflow-wrap: anywhere", settingsFieldLabelBlock, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void LocalSettingsGrid_Does_Not_Force_Horizontal_Overflow_On_Narrow_Workbench()
+    {
+        var css = ReadAppCss();
+        var panelBlock = GetRuleBlock(css, ".app-settings-panel");
+        var errorBlock = GetRuleBlock(css, ".settings-error");
+        var gridBlock = GetRuleBlock(css, ".local-settings-grid");
+        var groupBlock = GetRuleBlock(css, ".local-settings-group");
+
+        Assert.Contains("min-width: 0", panelBlock, StringComparison.Ordinal);
+        Assert.Matches(@"\.settings-section\s*\{[^}]*min-width:\s*0", css);
+        Assert.Matches(
+            @"\.app-settings-header p,\s*\.settings-muted\s*\{[^}]*overflow-wrap:\s*anywhere",
+            css);
+        Assert.Contains("overflow-wrap: anywhere", errorBlock, StringComparison.Ordinal);
+        Assert.Contains("minmax(min(18rem, 100%), 1fr)", gridBlock, StringComparison.Ordinal);
+        Assert.Contains("min-width: 0", groupBlock, StringComparison.Ordinal);
+    }
+
     private static Dictionary<string, string> ReadDarkThemeVariables()
     {
         var darkThemeBlock = GetRuleBlock(ReadAppCss(), ".radar-shell.radar-theme-dark");

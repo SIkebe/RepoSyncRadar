@@ -922,6 +922,7 @@ html, body {
     flex-direction: column;
     gap: 0.75rem;
     margin-top: 0.75rem;
+    min-width: 0;
     padding-top: 0.75rem;
 }
 
@@ -958,6 +959,7 @@ html, body {
     color: #57606a;
     font-size: 0.82rem;
     margin: 0.15rem 0 0;
+    overflow-wrap: anywhere;
 }
 
 .settings-muted[data-testid="settings-local-appsettings-path"] {
@@ -968,6 +970,7 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    min-width: 0;
 }
 
 .settings-subheader {
@@ -975,6 +978,7 @@ html, body {
     display: flex;
     gap: 0.75rem;
     justify-content: space-between;
+    min-width: 0;
 }
 
 .settings-actions {
@@ -993,6 +997,7 @@ html, body {
     color: #a40e26;
     font-size: 0.82rem;
     margin: 0;
+    overflow-wrap: anywhere;
 }
 
 .settings-usage-grid {
@@ -1024,7 +1029,7 @@ html, body {
 .local-settings-grid {
     display: grid;
     gap: 0.6rem;
-    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
 }
 
 .local-settings-group {
@@ -1034,6 +1039,7 @@ html, body {
     gap: 0.5rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin: 0;
+    min-width: 0;
     padding: 0.65rem;
 }
 

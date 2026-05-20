@@ -430,6 +430,7 @@ internal static class CopilotModelPricing
         [NormalizeModelKey("Gemini 2.5 Pro")] = new(1.25, 0.125, 10.00),
         [NormalizeModelKey("Gemini 3 Flash")] = new(0.50, 0.05, 3.00),
         [NormalizeModelKey("Gemini 3.1 Pro")] = new(2.00, 0.20, 12.00),
+        [NormalizeModelKey("Gemini 3.5 Flash")] = new(1.50, 0.15, 9.00),
         [NormalizeModelKey("Raptor mini")] = new(0.25, 0.025, 2.00),
         [NormalizeModelKey("Goldeneye")] = new(1.25, 0.125, 10.00),
     };

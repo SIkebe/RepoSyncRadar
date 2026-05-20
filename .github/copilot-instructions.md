@@ -76,6 +76,7 @@ Use these repository instructions first. Search only when the instructions are i
 ## Maintaining These Instructions
 
 - Treat this file as living repository knowledge. During normal work, if you discover a repo-wide rule, command, SDK behavior, test workaround, UI convention, or failure mode that would save future agents time, update this file in the same change when it is stable and broadly useful.
+- Treat invoked skills as living workflow knowledge too. If a task exposes a stable improvement, missing guardrail, or recurring pitfall in a relevant `.github/skills/*/SKILL.md`, update that skill in the same change without waiting for an explicit request.
 - Keep additions concise and non-task-specific. Do not record one-off task details, secrets, machine-local absolute paths beyond repo examples, or temporary failures that are unlikely to recur.
 - Prefer updating an existing bullet over adding a duplicate. Remove or correct instructions that become false.
 - After changing this file, run at least a focused validation relevant to the change. For code changes in the same task, still run the normal build/test gate above.

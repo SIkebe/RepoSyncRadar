@@ -4,10 +4,12 @@ using Microsoft.AspNetCore.Components.WebView.Wpf;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
+using RepoSyncRadar.App.Settings;
 using RepoSyncRadar.Core;
 using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Data;
@@ -51,11 +53,7 @@ public partial class App : Application
 
         var builder = Host.CreateApplicationBuilder(e.Args);
 
-        builder.Configuration
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true)
-            .AddEnvironmentVariables("RADAR_");
+        ConfigureAppConfiguration(builder.Configuration, AppContext.BaseDirectory);
 
         builder.Logging.AddDebug();
 
@@ -92,6 +90,51 @@ public partial class App : Application
         _ = PrewarmPreviewAsync(
             Services.GetRequiredService<IPreviewCoordinator>(),
             Services.GetRequiredService<ILogger<App>>());
+    }
+
+    internal static IConfigurationBuilder ConfigureAppConfiguration(
+        IConfigurationBuilder configuration,
+        string basePath)
+        => ConfigureAppConfiguration(
+            configuration,
+            basePath,
+            Environment.GetEnvironmentVariable(FileLocalAppSettingsStore.LocalSettingsPathEnv));
+
+    internal static IConfigurationBuilder ConfigureAppConfiguration(
+        IConfigurationBuilder configuration,
+        string basePath,
+        string? localSettingsPath)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        ArgumentException.ThrowIfNullOrWhiteSpace(basePath);
+
+        configuration
+            .SetBasePath(basePath)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+
+        if (string.IsNullOrWhiteSpace(localSettingsPath))
+        {
+            configuration.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true);
+        }
+        else
+        {
+            var fullPath = Path.GetFullPath(localSettingsPath);
+            var directory = Path.GetDirectoryName(fullPath);
+            var fileName = Path.GetFileName(fullPath);
+            if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName))
+            {
+                throw new InvalidOperationException(
+                    $"{FileLocalAppSettingsStore.LocalSettingsPathEnv} must point to an appsettings.local.json file.");
+            }
+
+            configuration.AddJsonFile(
+                new PhysicalFileProvider(directory),
+                fileName,
+                optional: true,
+                reloadOnChange: true);
+        }
+
+        return configuration.AddEnvironmentVariables("RADAR_");
     }
 
     internal static async Task PrewarmPreviewAsync(IPreviewCoordinator coordinator, ILogger logger)
