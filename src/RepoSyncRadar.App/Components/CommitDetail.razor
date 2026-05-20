@@ -227,7 +227,7 @@
 @code {
     private const string PreviewButtonLabel = "WebView2 で開く";
     private const int MaxLogTailLines = 10;
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
@@ -873,13 +873,13 @@
                 var pid = includePreviewServerState && host is not null
                     ? host.CurrentProcessId
                     : _previewPid;
-                var elapsed = (int)(DateTimeOffset.UtcNow - _previewStartedAt).TotalSeconds;
+                var actualElapsed = (int)(DateTimeOffset.UtcNow - _previewStartedAt).TotalSeconds;
                 await InvokeAsync(() =>
                 {
                     _previewStdoutTail = stdoutTail;
                     _previewStderrTail = stderrTail;
                     _previewPid = pid;
-                    _previewElapsedSec = elapsed;
+                    _previewElapsedSec = SmoothPreviewElapsedSeconds(_previewElapsedSec, actualElapsed);
                     StateHasChanged();
                 });
             }
@@ -888,6 +888,16 @@
         {
             // expected when startup completes or the user cancels
         }
+    }
+
+    internal static int SmoothPreviewElapsedSeconds(int displayedElapsedSeconds, int actualElapsedSeconds)
+    {
+        if (actualElapsedSeconds <= displayedElapsedSeconds)
+        {
+            return displayedElapsedSeconds;
+        }
+
+        return displayedElapsedSeconds + 1;
     }
 
     private static List<string> TakeTail(IReadOnlyList<string> source, int take)

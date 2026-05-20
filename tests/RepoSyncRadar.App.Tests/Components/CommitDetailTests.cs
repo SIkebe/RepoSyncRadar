@@ -24,6 +24,19 @@ public class CommitDetailTests
         "/en/enterprise-cloud@latest/copilot/about-copilot",
     ];
 
+    [Theory]
+    [InlineData(17, 17, 17)]
+    [InlineData(17, 18, 18)]
+    [InlineData(17, 24, 18)]
+    [InlineData(0, 9, 1)]
+    public void SmoothPreviewElapsedSeconds_Advances_At_Most_One_Second_Per_Render(
+        int displayed,
+        int actual,
+        int expected)
+    {
+        Assert.Equal(expected, CommitDetail.SmoothPreviewElapsedSeconds(displayed, actual));
+    }
+
     [Fact]
     public void CommitDetail_Shows_Resolved_Urls()
     {
