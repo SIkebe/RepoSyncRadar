@@ -89,6 +89,50 @@ html, body {
     color: var(--radar-fg) !important;
 }
 
+.app-header-triage-progress {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    max-width: 100%;
+    font-size: 0.85rem;
+    color: var(--radar-fg);
+}
+
+.app-header-triage-phase {
+    margin-right: 0.15rem;
+    color: var(--radar-muted-fg);
+    font-weight: 600;
+}
+
+.app-header-triage-metric {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    min-height: 1.5rem;
+    padding: 0.12rem 0.45rem;
+    border: 1px solid var(--radar-border-subtle);
+    border-radius: 6px;
+    background: var(--radar-panel-alt-bg);
+    white-space: nowrap;
+}
+
+.app-header-triage-label {
+    color: var(--radar-muted-fg);
+    font-weight: 600;
+}
+
+.app-header-triage-value {
+    color: var(--radar-fg);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+
+.app-header-triage-working {
+    color: var(--radar-accent-fg);
+    font-weight: 700;
+}
+
 .radar-sidebar {
     display: flex;
     flex-direction: column;

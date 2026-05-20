@@ -150,11 +150,12 @@ public sealed class AppHeaderTests
         {
             var status = cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent;
             Assert.Contains("スコアリング", status, StringComparison.Ordinal);
-            Assert.Contains("分析 3 / 5", status, StringComparison.Ordinal);
-            Assert.Contains("スコア保存 2 / 5", status, StringComparison.Ordinal);
-            Assert.Contains("2 / 5", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("未確認コミットをスコアリング中", status, StringComparison.Ordinal);
+            Assert.Equal("対象 5 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-target\"]").TextContent));
+            Assert.Equal("分析済み 3 / 5 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-analyzed\"]").TextContent));
+            Assert.Equal("保存済み 2 / 5 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-saved\"]").TextContent));
             Assert.Contains("Copilot 分析中", status, StringComparison.Ordinal);
-            Assert.Contains("経過", status, StringComparison.Ordinal);
+            Assert.Contains("経過", cut.Find("[data-testid=\"app-header-triage-elapsed\"]").TextContent, StringComparison.Ordinal);
         });
 
         gate.SetResult(new IngestionReport(Total: 1, Inserted: 1, Skipped: 0));
@@ -713,4 +714,7 @@ public sealed class AppHeaderTests
             .AddSingleton(usageTracker ?? new CopilotUsageTracker())
             .BuildServiceProvider();
     }
+
+    private static string NormalizeText(string text)
+        => string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }

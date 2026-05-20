@@ -69,13 +69,43 @@
         }
         @if (_triageStatus is not null)
         {
-            <span data-testid="app-header-triage-status" style="font-size:0.85em; opacity:0.85;">
-                @FormatTriageStatus(_triageStatus)
-                @if (_busy)
-                {
-                    <span>（経過 @FormatElapsed(_triageElapsed)）</span>
-                }
-            </span>
+            @if (BuildTriageProgressView(_triageStatus) is { } triageProgress)
+            {
+                <span data-testid="app-header-triage-status"
+                      class="app-header-triage-progress"
+                      aria-label="@triageProgress.AriaLabel">
+                    <span class="app-header-triage-phase">@triageProgress.Phase</span>
+                    <span class="app-header-triage-metric" data-testid="app-header-triage-target">
+                        <span class="app-header-triage-label">対象</span>
+                        <span class="app-header-triage-value">@FormatCount(triageProgress.TargetCount)</span>
+                    </span>
+                    <span class="app-header-triage-metric" data-testid="app-header-triage-analyzed">
+                        <span class="app-header-triage-label">分析済み</span>
+                        <span class="app-header-triage-value">@FormatProgressCount(triageProgress.AnalyzedCount, triageProgress.TotalCount)</span>
+                    </span>
+                    <span class="app-header-triage-metric" data-testid="app-header-triage-saved">
+                        <span class="app-header-triage-label">保存済み</span>
+                        <span class="app-header-triage-value">@FormatProgressCount(triageProgress.SavedCount, triageProgress.TotalCount)</span>
+                    </span>
+                    <span class="app-header-triage-metric app-header-triage-working" data-testid="app-header-triage-working">
+                        @BuildCopilotWorkingLabel()
+                    </span>
+                    <span class="app-header-triage-metric" data-testid="app-header-triage-elapsed">
+                        <span class="app-header-triage-label">経過</span>
+                        <span class="app-header-triage-value">@FormatElapsed(_triageElapsed)</span>
+                    </span>
+                </span>
+            }
+            else
+            {
+                <span data-testid="app-header-triage-status" style="font-size:0.85em; opacity:0.85;">
+                    @FormatTriageStatus(_triageStatus)
+                    @if (_busy)
+                    {
+                        <span>（経過 @FormatElapsed(_triageElapsed)）</span>
+                    }
+                </span>
+            }
         }
         @if (_copilotUsage.TurnCount > 0)
         {
@@ -650,6 +680,119 @@
         var dots = ((int)_triageElapsed.TotalSeconds % 3) + 1;
         return $"{status} / Copilot 分析中{new string('.', dots)}";
     }
+
+    private TriageProgressView? BuildTriageProgressView(string status)
+    {
+        if (!_busy || !status.Contains("スコアリング", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (!TryReadCountAfter(status, "対象", out var targetCount) ||
+            !TryReadProgressAfter(status, "分析", out var analyzedCount, out var analyzedTotalCount) ||
+            !TryReadProgressAfter(status, "スコア保存", out var savedCount, out var savedTotalCount))
+        {
+            return null;
+        }
+
+        var totalCount = Math.Max(Math.Max(targetCount, analyzedTotalCount), savedTotalCount);
+        var sourcePhase = ExtractTriagePhase(status);
+        var phase = sourcePhase.Contains("スコアリング", StringComparison.Ordinal)
+            ? "スコアリング中"
+            : sourcePhase;
+        return new TriageProgressView(
+            phase,
+            targetCount,
+            analyzedCount,
+            savedCount,
+            totalCount,
+            $"{sourcePhase}。対象 {targetCount} 件、分析済み {analyzedCount} / {totalCount} 件、保存済み {savedCount} / {totalCount} 件、{BuildCopilotWorkingLabel()}、経過 {FormatElapsed(_triageElapsed)}");
+    }
+
+    private static string ExtractTriagePhase(string status)
+    {
+        var separatorIndex = status.IndexOf(':', StringComparison.Ordinal);
+        return separatorIndex > 0
+            ? status[..separatorIndex].Trim()
+            : status.Trim();
+    }
+
+    private string BuildCopilotWorkingLabel()
+    {
+        var dots = ((int)_triageElapsed.TotalSeconds % 3) + 1;
+        return $"Copilot 分析中{new string('.', dots)}";
+    }
+
+    private static bool TryReadCountAfter(string status, string label, out int count)
+    {
+        count = 0;
+        var startIndex = FindValueStart(status, label);
+        return startIndex >= 0 && TryReadInt(status, startIndex, out count, out _);
+    }
+
+    private static bool TryReadProgressAfter(string status, string label, out int currentCount, out int totalCount)
+    {
+        currentCount = 0;
+        totalCount = 0;
+        var startIndex = FindValueStart(status, label);
+        if (startIndex < 0 || !TryReadInt(status, startIndex, out currentCount, out var afterCurrentIndex))
+        {
+            return false;
+        }
+
+        var separatorIndex = status.IndexOf('/', afterCurrentIndex);
+        return separatorIndex >= 0 && TryReadInt(status, separatorIndex + 1, out totalCount, out _);
+    }
+
+    private static int FindValueStart(string status, string label)
+    {
+        var labelIndex = status.IndexOf(label, StringComparison.Ordinal);
+        if (labelIndex < 0)
+        {
+            return -1;
+        }
+
+        var valueIndex = labelIndex + label.Length;
+        while (valueIndex < status.Length && char.IsWhiteSpace(status[valueIndex]))
+        {
+            valueIndex++;
+        }
+
+        return valueIndex;
+    }
+
+    private static bool TryReadInt(string text, int startIndex, out int value, out int nextIndex)
+    {
+        value = 0;
+        nextIndex = startIndex;
+        while (nextIndex < text.Length && char.IsWhiteSpace(text[nextIndex]))
+        {
+            nextIndex++;
+        }
+
+        var digitStartIndex = nextIndex;
+        while (nextIndex < text.Length && char.IsDigit(text[nextIndex]))
+        {
+            nextIndex++;
+        }
+
+        return nextIndex > digitStartIndex &&
+            int.TryParse(text.AsSpan(digitStartIndex, nextIndex - digitStartIndex), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out value);
+    }
+
+    private static string FormatCount(int count)
+        => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{count} 件");
+
+    private static string FormatProgressCount(int currentCount, int totalCount)
+        => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{currentCount} / {totalCount} 件");
+
+    private sealed record TriageProgressView(
+        string Phase,
+        int TargetCount,
+        int AnalyzedCount,
+        int SavedCount,
+        int TotalCount,
+        string AriaLabel);
 
     private static string FormatCreatedAt(DateTime createdAt)
         => createdAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm", System.Globalization.CultureInfo.CurrentCulture);
