@@ -26,6 +26,7 @@ namespace RepoSyncRadar.Core.Services.Preview;
 ///   (公式 docs 上は条件式が真の場合のみ表示されるが、レビューでは保守的に表示)。</item>
 ///   <item><c>{% octicon "name" ... %}</c> → Primer Octicons 相当の SVG に展開する。</item>
 ///   <item><c>{% raw %}…{% endraw %}</c> → 中身を保護し、評価対象から外す。</item>
+///   <item>出力を持たない <c>comment</c> / <c>assign</c> / <c>capture</c> は本文から除去する。</item>
 /// </list>
 /// 解決できないタグはそのまま残し、後段の
 /// <see cref="MarkdownPreviewRenderer"/> でハイライト span に包む。
@@ -40,6 +41,15 @@ internal static partial class DocsLiquidEvaluator
     // {% raw %}...{% endraw %} — 中身を退避する。
     [GeneratedRegex(@"\{%\s*raw\s*%\}(?<content>.*?)\{%\s*endraw\s*%\}", RegexOptions.Singleline)]
     private static partial Regex RawBlockRegex();
+
+    [GeneratedRegex(@"\{%-?\s*comment\s*-?%\}(?<content>.*?)\{%-?\s*endcomment\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex CommentBlockRegex();
+
+    [GeneratedRegex(@"\{%-?\s*capture\s+[A-Za-z_][A-Za-z0-9_]*\s*-?%\}(?<content>.*?)\{%-?\s*endcapture\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex CaptureBlockRegex();
+
+    [GeneratedRegex(@"\{%-?\s*assign\s+[A-Za-z_][A-Za-z0-9_]*\s*=.*?\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex AssignTagRegex();
 
     // {% data variables.X.Y %} / {% data reusables.X.Y %} / {% data reusables.X.Y+arg %}
     [GeneratedRegex(@"\{%-?\s*data\s+(?<expr>[A-Za-z0-9_.\-/+\[\]]+)\s*-?%\}")]
@@ -73,6 +83,18 @@ internal static partial class DocsLiquidEvaluator
     private static readonly Dictionary<string, OcticonDefinition> s_octicons =
         new Dictionary<string, OcticonDefinition>(StringComparer.Ordinal)
         {
+            ["check"] = new(
+                16,
+                16,
+                """<path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"></path>"""),
+            ["dash"] = new(
+                16,
+                16,
+                """<path d="M2 7.75A.75.75 0 0 1 2.75 7h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 7.75Z"></path>"""),
+            ["x"] = new(
+                16,
+                16,
+                """<path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"></path>"""),
             ["alert"] = new(
                 16,
                 16,
@@ -108,10 +130,11 @@ internal static partial class DocsLiquidEvaluator
         };
 
     // {% octicon "gear" aria-hidden="true" aria-label="gear" %}
-    [GeneratedRegex("""\{%-?\s*octicon\s+["'](?<icon>[A-Za-z0-9-]+)["'](?<options>.*?)\s*-?%\}""", RegexOptions.Singleline)]
+    // github/docs data YAML can HTML-entity encode quotes inside table cells.
+    [GeneratedRegex("""\{%-?\s*octicon\s+(?:["']|&quot;|&#34;|&#x22;)(?<icon>[A-Za-z0-9-]+)(?:["']|&quot;|&#34;|&#x22;)(?<options>.*?)\s*-?%\}""", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
     private static partial Regex OcticonTagRegex();
 
-    [GeneratedRegex("""(?<key>[A-Za-z_:][-A-Za-z0-9_:.]*)=(?<quote>["'])(?<value>.*?)\k<quote>""", RegexOptions.Singleline)]
+    [GeneratedRegex("""(?<key>[A-Za-z_:][-A-Za-z0-9_:.]*)=(?<quote>["']|&quot;|&#34;|&#x22;)(?<value>.*?)\k<quote>""", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
     private static partial Regex OcticonOptionRegex();
 
     // 最も内側の {% if(version) %}...{% endif %}。body に if/ifversion を含まない
@@ -156,6 +179,8 @@ internal static partial class DocsLiquidEvaluator
             rawSegments.Add(m.Groups["content"].Value);
             return CreateRawSentinel(rawSegments.Count - 1);
         });
+
+        current = StripNonOutputLiquid(current);
 
         // 2. for / ifversion / if を内側から再帰的に解く。for は data YAML 配列を
         //    簡易展開し、ifversion は version で真評価、if (= 版に依存しない) は
@@ -208,6 +233,13 @@ internal static partial class DocsLiquidEvaluator
         DocsLiquidContext context,
         int maxRecursionDepth = DefaultMaxRecursionDepth)
         => Evaluate(source, context, DocsVersionCatalog.Default, maxRecursionDepth);
+
+    private static string StripNonOutputLiquid(string source)
+    {
+        var current = CommentBlockRegex().Replace(source, string.Empty);
+        current = CaptureBlockRegex().Replace(current, string.Empty);
+        return AssignTagRegex().Replace(current, string.Empty);
+    }
 
     private static string ResolveDataExpr(Match match, DocsLiquidContext context, string source)
     {
@@ -447,17 +479,17 @@ internal static partial class DocsLiquidEvaluator
     private static string ResolveOcticonTag(Match match)
     {
         var iconName = NormalizeOcticonName(match.Groups["icon"].Value);
-        if (!s_octicons.TryGetValue(iconName, out var definition))
-        {
-            return match.Value;
-        }
-
         var options = ParseOcticonOptions(match.Groups["options"].Value);
         if (!options.ContainsKey("aria-label"))
         {
             options["aria-label"] = string.Create(
                 CultureInfo.InvariantCulture,
                 $"{DefaultOcticonLabel(iconName)} icon");
+        }
+
+        if (!s_octicons.TryGetValue(iconName, out var definition))
+        {
+            return RenderFallbackOcticonSvg(iconName, options);
         }
 
         return RenderOcticonSvg(iconName, definition, options);
@@ -539,6 +571,46 @@ internal static partial class DocsLiquidEvaluator
         sb.Append('>')
             .Append(definition.Path)
             .Append("</svg>");
+        return sb.ToString();
+    }
+
+    private static string RenderFallbackOcticonSvg(string iconName, Dictionary<string, string> options)
+    {
+        var attributes = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["version"] = "1.1",
+            ["width"] = "16",
+            ["height"] = "16",
+            ["viewBox"] = "0 0 16 16",
+            ["class"] = string.Create(CultureInfo.InvariantCulture, $"octicon octicon-{iconName} rsr-octicon-fallback"),
+            ["data-component"] = "Octicon",
+            ["role"] = "img",
+        };
+
+        foreach (var (key, value) in options)
+        {
+            if (string.Equals(key, "class", StringComparison.Ordinal))
+            {
+                attributes["class"] = string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"octicon octicon-{iconName} rsr-octicon-fallback {value}").TrimEnd();
+                continue;
+            }
+            attributes[key] = value;
+        }
+        attributes.Remove("aria-hidden");
+
+        var sb = new StringBuilder(256);
+        sb.Append("<svg");
+        foreach (var (key, value) in attributes)
+        {
+            sb.Append(' ')
+                .Append(key)
+                .Append("=\"")
+                .Append(WebUtility.HtmlEncode(value))
+                .Append('"');
+        }
+        sb.Append("><circle cx=\"8\" cy=\"8\" r=\"5.5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"></circle></svg>");
         return sb.ToString();
     }
 

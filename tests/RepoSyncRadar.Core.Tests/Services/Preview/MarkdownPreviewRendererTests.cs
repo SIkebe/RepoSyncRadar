@@ -104,6 +104,10 @@ public sealed class MarkdownPreviewRendererTests
                         ["model"] = "GPT-5",
                         ["provider"] = "openai",
                         ["input"] = "$1.00",
+                        ["agent"] = "{% octicon &quot;check&quot; aria-label=&quot;Included&quot; %}",
+                        ["ask"] = "{% octicon &quot;x&quot; aria-label=&quot;Not supported&quot; %}",
+                        ["edit"] = "{% octicon &quot;dash&quot; aria-label=&quot;Not applicable&quot; %}",
+                        ["notes"] = "{% octicon &quot;pencil&quot; aria-label=&quot;Edit&quot; %}",
                     },
                     new Dictionary<string, string>(StringComparer.Ordinal)
                     {
@@ -118,10 +122,10 @@ public sealed class MarkdownPreviewRendererTests
             title: Pricing tables
             ---
 
-            | Model | Input |
-            | --- | ---: |
+            | Model | Input | Agent | Ask | Edit | Notes |
+            | --- | ---: | --- | --- | --- | --- |
             | {% for entry in tables.copilot.models-and-pricing %}{% if entry.provider == "openai" %} |
-            | {{ entry.model }} | {{ entry.input }} |
+            | {{ entry.model }} | {{ entry.input }} | {{ entry.agent }} | {{ entry.ask }} | {{ entry.edit }} | {{ entry.notes }} |
             | {% endif %}{% endfor %} |
             """;
 
@@ -134,8 +138,15 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("GPT-5", html, StringComparison.Ordinal);
         Assert.Contains("$1.00", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-check\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-x\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-dash\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-pencil rsr-octicon-fallback\"", html, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Included\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Claude Sonnet", html, StringComparison.Ordinal);
         Assert.DoesNotContain("{% for", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&amp;quot;check", html, StringComparison.Ordinal);
         Assert.DoesNotContain("{{ entry.", html, StringComparison.Ordinal);
     }
 

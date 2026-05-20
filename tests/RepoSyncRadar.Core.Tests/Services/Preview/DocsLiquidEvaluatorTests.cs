@@ -267,6 +267,68 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Renders_Entity_Quoted_Octicon_Tags_As_Primer_Svg()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% octicon &quot;check&quot; aria-label=&quot;Included&quot; %}",
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("class=\"octicon octicon-check\"", result, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Included\"", result, StringComparison.Ordinal);
+        Assert.Contains("role=\"img\"", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("&quot;check&quot;", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_Common_Table_Octicons_As_Primer_Svg()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% octicon \"check\" aria-label=\"Yes\" %} {% octicon \"x\" aria-label=\"No\" %} {% octicon \"dash\" aria-label=\"Not applicable\" %}",
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("class=\"octicon octicon-check\"", result, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-x\"", result, StringComparison.Ordinal);
+        Assert.Contains("class=\"octicon octicon-dash\"", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Unknown_Octicon_Tags_Render_As_Accessible_Fallback_Svg()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            "Use {% octicon \"pencil\" aria-label=\"Edit\" %} to edit.",
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("class=\"octicon octicon-pencil rsr-octicon-fallback\"", result, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Edit\"", result, StringComparison.Ordinal);
+        Assert.Contains("role=\"img\"", result, StringComparison.Ordinal);
+        Assert.Contains("<circle", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Removes_NonOutput_Liquid_Tags()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            """
+            Before
+            {% comment %}Hidden note{% endcomment %}
+            {%- assign supportLevel = "supported" -%}
+            {% capture service_first_step %}1. Stop the service.{% endcapture %}
+            After
+            """,
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("Before", result, StringComparison.Ordinal);
+        Assert.Contains("After", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("Hidden note", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("assign supportLevel", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("capture service_first_step", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("1. Stop the service.", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Renders_Security_Configuration_Octicons_As_Primer_Svg()
     {
         var result = DocsLiquidEvaluator.Evaluate(

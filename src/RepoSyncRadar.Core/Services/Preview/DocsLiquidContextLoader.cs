@@ -427,9 +427,11 @@ internal static partial class DocsLiquidContextLoader
         }
 
         var seenFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var fileNameHints = BuildRedirectFileNameHints(unresolved);
         foreach (var directory in BuildRedirectScanDirectories(unresolved))
         {
-            foreach (var file in await source.EnumerateFilesAsync(directory, ".md", cancellationToken).ConfigureAwait(false))
+            var files = await source.EnumerateFilesAsync(directory, ".md", cancellationToken).ConfigureAwait(false);
+            foreach (var file in PrioritizeRedirectScanFiles(files, fileNameHints))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!seenFiles.Add(file))
@@ -1243,6 +1245,42 @@ internal static partial class DocsLiquidContextLoader
             }
         }
         return result.ToArray();
+    }
+
+    private static HashSet<string> BuildRedirectFileNameHints(IEnumerable<string> unresolvedRoutes)
+    {
+        var hints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var route in unresolvedRoutes)
+        {
+            var normalized = route.Replace('\\', '/').Trim('/');
+            if (normalized.Length == 0)
+            {
+                continue;
+            }
+
+            var lastSlash = normalized.LastIndexOf('/');
+            var leaf = lastSlash < 0 ? normalized : normalized[(lastSlash + 1)..];
+            if (leaf.Length == 0 || leaf.Contains('@', StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            hints.Add(leaf.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? leaf : leaf + ".md");
+        }
+        return hints;
+    }
+
+    private static IEnumerable<string> PrioritizeRedirectScanFiles(
+        IReadOnlyList<string> files,
+        HashSet<string> fileNameHints)
+    {
+        if (fileNameHints.Count == 0)
+        {
+            return files;
+        }
+
+        return files
+            .OrderByDescending(file => fileNameHints.Contains(Path.GetFileName(file.Replace('/', Path.DirectorySeparatorChar))));
     }
 
     private sealed class WorktreeDocsFileSource(string rootPath) : IDocsFileSource

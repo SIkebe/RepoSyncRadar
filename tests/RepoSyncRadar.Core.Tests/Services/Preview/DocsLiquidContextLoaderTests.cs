@@ -280,6 +280,41 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadForMarkdownAsync_Prioritizes_Redirect_FileName_Hint_In_Broad_Scan()
+    {
+        var source = new RecordingDocsFileSource();
+        source.Add(
+            "content/code-security/concepts/unrelated.md",
+            """
+            ---
+            title: Unrelated
+            ---
+            """);
+        source.Add(
+            "content/code-security/tutorials/secure-your-organization/best-practices-for-preventing-data-leaks-in-your-organization.md",
+            """
+            ---
+            title: Preventing data leaks
+            redirect_from:
+              - /code-security/getting-started/best-practices-for-preventing-data-leaks-in-your-organization
+            ---
+            """);
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            source,
+            "content/organizations/managing-organization-settings/upgrading-to-the-github-customer-agreement.md",
+            "See [AUTOTITLE](/code-security/getting-started/best-practices-for-preventing-data-leaks-in-your-organization).",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Preventing data leaks", context.PageTitles["code-security/getting-started/best-practices-for-preventing-data-leaks-in-your-organization"]);
+        Assert.Contains("content/code-security", source.EnumeratedDirectories);
+        Assert.Contains(
+            "content/code-security/tutorials/secure-your-organization/best-practices-for-preventing-data-leaks-in-your-organization.md",
+            source.ReadPaths);
+        Assert.DoesNotContain("content/code-security/concepts/unrelated.md", source.ReadPaths);
+    }
+
+    [Fact]
     public async Task Skips_Files_With_Invalid_Yaml_Without_Failing_Whole_Load()
     {
         WriteVariablesFile("good.yml", "key: value");
@@ -303,6 +338,8 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
 
         public List<string> EnumeratedDirectories { get; } = [];
 
+        public List<string> ReadPaths { get; } = [];
+
         public void Add(string repoPath, string content)
         {
             _files[repoPath] = content;
@@ -310,6 +347,7 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
 
         public Task<string?> ReadTextAsync(string repoPath, CancellationToken cancellationToken)
         {
+            ReadPaths.Add(repoPath);
             _files.TryGetValue(repoPath, out var content);
             return Task.FromResult<string?>(content);
         }
