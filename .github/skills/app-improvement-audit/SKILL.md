@@ -50,7 +50,7 @@ RepoSyncRadar を「コードの集合」ではなく「実際に使うアプリ
 1. `git status --short` で既存の未コミット変更を把握する。
 2. 直近の terminal に `dotnet run --project src/RepoSyncRadar.App` の失敗がある場合は、その output を確認する。
 3. `appsettings.json` / `appsettings.local.json` / 環境変数に依存する操作は、機密情報を表示せずに有無だけ確認する。
-4. 既存の E2E / component tests が何をカバーしているか軽く見る。
+4. 既存の E2E / component tests が何をカバーしているか軽く見る。特に `AppHost` / Playwright CDP helper と `data-testid` selector は、repo 外の一時スモークスクリプトにも流用できる。
 
 ### 3. 実際に起動して観察する
 
@@ -67,7 +67,7 @@ RepoSyncRadar を「コードの集合」ではなく「実際に使うアプリ
    - Sync / triage / drafts / preview のボタン状態、進捗、キャンセル、失敗表示
    - Copilot usage / AI Credits 表示の分かりやすさ
    - WebView2 / preview の navigation、loading、リンク、テーマ
-4. ブラウザ/CDP/Playwright 操作が使える場合は、スクリーンショットや DOM state で確認する。使えない場合は terminal output、E2E tests、component tests、コード上の state transition で代替する。
+4. ブラウザ/CDP/Playwright 操作が使える場合は、スクリーンショットや DOM state で確認する。既存 E2E の helper を参考に、必要なら artifacts 配下に使い捨ての Playwright/CDP smoke を作り、実設定パスは `REPOSYNCRADAR_LOCAL_APPSETTINGS_PATH` で明示する。使えない場合は terminal output、E2E tests、component tests、コード上の state transition で代替する。
 
 ### 4. 観察メモを finding に変換する
 
