@@ -39,7 +39,7 @@ RepoSyncRadar が SDK から AI Credits / nano AIU を受け取れない場合�
 3. **Anthropic cache write を別扱いする**。Anthropic 表には cache write cost がある。`ModelTokenPricing(input, cachedInput, output, cacheWrite)` の第 4 引数に入れる。OpenAI/Google/Fine-tuned など cache write 列が無いモデルには入れない。
 4. **不明モデルを推測しない**。公式価格表にないモデルは `SupportsModel` が false のままにし、UI は `credits 未報告` を維持する。
 5. **価格掲載と fallback 適性を混同しない**。価格表に載っている retired / closing down モデルは、過去 usage の推定用に残すことがあり得る。ただし `CopilotSessionFactory` の preferred fallback には入れない。
-6. **fallback 候補の価格 coverage を確認する**。`CopilotSessionFactory.DefaultFallbackModel` と preferred fallback 候補が公式価格表に載っているか確認し、載っているものは SDK ID 形式の正規化テストを追加/更新する。載っていないものは最終レポートで `credits 未報告` になる可能性を明記する。
+6. **fallback 候補の価格 coverage を確認する**。`CopilotSessionFactory.DefaultFallbackModel` と preferred fallback 候補が公式価格表に載っているか確認し、載っているものは SDK ID 形式の正規化テストを追加/更新する。載っていないものは最終レポートで `credits 未報告` になる可能性を明記する。価格表更新だけの作業では、fallback 候補の変更や `_retiringFallbackModels` の網羅拡張に便乗しない。preferred fallback が retired / closing down になった、または候補自体を変更する必要がある場合だけ `CopilotSessionFactory` を最小差分で編集する。
 7. **正規化と別名をテストする**。SDK が `gpt-5.3-codex`、`gpt-5.4-mini`、`gpt-5-mini`、`claude-haiku-4.5`、`claude-sonnet-4.6` のような ID 形式を返しても、公式表の表示名と一致するよう `NormalizeModelKey` の既存挙動を確認する。
 8. **dirty worktree を尊重する**。関係ない未コミット変更は戻さない。価格表更新に必要なファイルだけを触る。
 
@@ -74,6 +74,7 @@ RepoSyncRadar が SDK から AI Credits / nano AIU を受け取れない場合�
 - 価格の小数は公式表に合わせ、意味のない丸めや変換済み AI Credits 値を入れない。
 - 旧モデルが公式表から消えた場合は、ユーザーへの影響を考えて扱いを決める。原則として公式表に無いモデルは固定テーブルから外すが、SDK がまだ返す known model なら最終レポートで確認事項として明記する。
 - `CopilotSessionFactory` の fallback 候補が公式価格表にある場合、`CopilotModelPricing` でも推定できるようにする。公式価格表にない fallback 候補は推測で追加せず、必要なら fallback 候補の見直しを提案する。
+- `CopilotSessionFactory` は整合性確認の対象であり、価格 fallback テーブル更新の主対象ではない。公式 lifecycle 情報で既存 preferred fallback に問題がない場合はコード差分を出さず、確認結果だけを完了レポートに残す。
 
 ### 4. テストを更新する
 
