@@ -879,7 +879,7 @@
                     _previewStdoutTail = stdoutTail;
                     _previewStderrTail = stderrTail;
                     _previewPid = pid;
-                    _previewElapsedSec = SmoothPreviewElapsedSeconds(_previewElapsedSec, actualElapsed);
+                    _previewElapsedSec = ProgressElapsedDisplay.SmoothElapsedSeconds(_previewElapsedSec, actualElapsed);
                     StateHasChanged();
                 });
             }
@@ -888,16 +888,6 @@
         {
             // expected when startup completes or the user cancels
         }
-    }
-
-    internal static int SmoothPreviewElapsedSeconds(int displayedElapsedSeconds, int actualElapsedSeconds)
-    {
-        if (actualElapsedSeconds <= displayedElapsedSeconds)
-        {
-            return displayedElapsedSeconds;
-        }
-
-        return displayedElapsedSeconds + 1;
     }
 
     private static List<string> TakeTail(IReadOnlyList<string> source, int take)

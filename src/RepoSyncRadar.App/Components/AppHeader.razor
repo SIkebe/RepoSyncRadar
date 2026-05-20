@@ -618,7 +618,7 @@
             {
                 if (_triageStartedAt is { } startedAt)
                 {
-                    _triageElapsed = DateTimeOffset.UtcNow - startedAt;
+                    _triageElapsed = ProgressElapsedDisplay.Advance(_triageElapsed, startedAt, DateTimeOffset.UtcNow);
                     await InvokeAsync(StateHasChanged);
                 }
             }

@@ -29,12 +29,12 @@ public class CommitDetailTests
     [InlineData(17, 18, 18)]
     [InlineData(17, 24, 18)]
     [InlineData(0, 9, 1)]
-    public void SmoothPreviewElapsedSeconds_Advances_At_Most_One_Second_Per_Render(
+    public void SmoothElapsedSeconds_Advances_At_Most_One_Second_Per_Render(
         int displayed,
         int actual,
         int expected)
     {
-        Assert.Equal(expected, CommitDetail.SmoothPreviewElapsedSeconds(displayed, actual));
+        Assert.Equal(expected, ProgressElapsedDisplay.SmoothElapsedSeconds(displayed, actual));
     }
 
     [Fact]

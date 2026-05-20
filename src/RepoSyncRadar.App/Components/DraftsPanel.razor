@@ -225,7 +225,7 @@
         {
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
-                _elapsed = DateTimeOffset.UtcNow - _startedAt;
+                _elapsed = ProgressElapsedDisplay.Advance(_elapsed, _startedAt, DateTimeOffset.UtcNow);
                 await InvokeAsync(StateHasChanged);
             }
         }

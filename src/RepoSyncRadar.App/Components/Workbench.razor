@@ -585,7 +585,10 @@
         {
             while (await timer.WaitForNextTickAsync(cancellationToken))
             {
-                _batchExplanationElapsed = DateTimeOffset.UtcNow - _batchExplanationStartedAt;
+                _batchExplanationElapsed = ProgressElapsedDisplay.Advance(
+                    _batchExplanationElapsed,
+                    _batchExplanationStartedAt,
+                    DateTimeOffset.UtcNow);
                 await InvokeAsync(StateHasChanged);
             }
         }
