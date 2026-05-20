@@ -68,6 +68,9 @@ Use these repository instructions first. Search only when the instructions are i
 - github/docs preview needs `REQUEST_TIMEOUT=600000` because Windows ARM64 first-page compilation can exceed the default 15 seconds.
 - WebView2 `Source` assignment is a no-op for identical URIs. Markdown preview URLs must include content-affecting dimensions such as docs version and file path in the query. `LocalPreviewContentServer.NormalizeRoute` strips query strings for route lookup.
 - Markdown/Liquid preview should mimic github/docs rendering. Render `{% octicon "name" ... %}` as Primer Octicons inline SVG with appropriate classes/attributes. Preserve data tag indentation, alert blocks, tool/platform blocks, prompt blocks, and Copilot links where practical.
+- Markdown comparison preview should read Markdown and referenced Liquid inputs from the bare clone by SHA (`git show`/`git ls-tree`) instead of creating full worktrees; reserve full worktrees for npm/Next preview. Still materialize and serve referenced local assets (for example `assets/images/**/*.png`) from the same commit so screenshots do not break.
+- Markdown preview Liquid context must stay lazy but complete for the clicked file: load referenced reusables, AUTOTITLE targets, and referenced `data/**/*.yml` sequence files used by `for` loops such as `tables.copilot.models-and-pricing`; do not fall back to all-repo reusable/content scans for interactivity.
+- Cache cleanup should detach/rename large worktree directories quickly and let physical deletion continue in the background so the Blazor UI is not blocked by hundreds of MB of file deletes.
 - Dark-theme docs preview must keep text readable; diff highlights should be low-alpha tints with borders/outlines and `color: inherit`.
 
 ## Maintaining These Instructions
