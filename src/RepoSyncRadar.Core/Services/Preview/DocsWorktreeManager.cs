@@ -1,4 +1,6 @@
+using System.Formats.Tar;
 using System.Globalization;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.Core.Options;
@@ -13,6 +15,9 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 public sealed partial class DocsWorktreeManager
 {
+    private const string DeletePendingDirectoryName = ".delete-pending";
+    private const string MarkdownAssetCacheDirectoryName = ".markdown-assets";
+
     private readonly IProcessRunner _runner;
     private readonly DocsRepositoryOptions _options;
     private readonly ILogger<DocsWorktreeManager> _logger;
@@ -94,6 +99,41 @@ public sealed partial class DocsWorktreeManager
         {
             throw new InvalidOperationException($"git fetch failed (exit {result.ExitCode}): {result.StandardError}");
         }
+    }
+
+    /// <summary>
+    /// Ensures <paramref name="commitSha"/> is available in the bare clone, avoiding
+    /// a network fetch when a previous preview or sync already brought it in.
+    /// </summary>
+    public async Task EnsureCommitAvailableAsync(
+        int pullRequestNumber,
+        string commitSha,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsEnabled)
+        {
+            return;
+        }
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pullRequestNumber);
+        ArgumentException.ThrowIfNullOrWhiteSpace(commitSha);
+
+        progress?.Report($"PR #{pullRequestNumber.ToString(CultureInfo.InvariantCulture)} の対象コミットをローカルの bare clone で確認中…");
+        if (await ContainsCommitAsync(commitSha, cancellationToken).ConfigureAwait(false))
+        {
+            progress?.Report("対象コミットはローカルの bare clone にあります");
+            return;
+        }
+
+        progress?.Report($"PR #{pullRequestNumber.ToString(CultureInfo.InvariantCulture)} を取得中… (git fetch)");
+        await FetchPrAsync(pullRequestNumber, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<bool> ContainsCommitAsync(string commitSha, CancellationToken cancellationToken)
+    {
+        var args = string.Create(CultureInfo.InvariantCulture, $"cat-file -e {commitSha}^{{commit}}");
+        var result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        return result.ExitCode == 0;
     }
 
     /// <summary>Resolves the first parent SHA for <paramref name="commitSha"/> inside the bare clone.</summary>
@@ -220,6 +260,180 @@ public sealed partial class DocsWorktreeManager
         {
             await RemoveWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
             return false;
+        }
+    }
+
+    public async Task<string?> ReadFileTextAsync(
+        string commitSha,
+        string repoPath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commitSha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(repoPath);
+        if (!IsEnabled)
+        {
+            return null;
+        }
+
+        var normalizedPath = NormalizeRepoPath(repoPath);
+        var result = await _runner.RunAsync(
+                "git",
+                string.Create(CultureInfo.InvariantCulture, $"show {commitSha}:{normalizedPath}"),
+                _options.BareCloneDir,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return result.ExitCode == 0 ? result.StandardOutput : null;
+    }
+
+    public async Task<IReadOnlyList<string>> ListFilesAsync(
+        string commitSha,
+        string repoDirectory,
+        string extension,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commitSha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(repoDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(extension);
+        if (!IsEnabled)
+        {
+            return Array.Empty<string>();
+        }
+
+        var normalizedDirectory = NormalizeRepoPath(repoDirectory);
+        var result = await _runner.RunAsync(
+                "git",
+                string.Create(CultureInfo.InvariantCulture, $"ls-tree -r --name-only {commitSha} -- {normalizedDirectory}"),
+                _options.BareCloneDir,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (result.ExitCode != 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return result.StandardOutput
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(static path => path.TrimEnd('\r'))
+            .Where(path => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyList<string>> MaterializeFilesAsync(
+        string commitSha,
+        IEnumerable<string> repoPaths,
+        string destinationRoot,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commitSha);
+        ArgumentNullException.ThrowIfNull(repoPaths);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationRoot);
+        if (!IsEnabled)
+        {
+            return Array.Empty<string>();
+        }
+
+        var normalizedPaths = repoPaths
+            .Select(NormalizeRepoPath)
+            .Where(static path => path.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (normalizedPaths.Length == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        Directory.CreateDirectory(destinationRoot);
+        var existingPaths = new List<string>(normalizedPaths.Length);
+        foreach (var path in normalizedPaths)
+        {
+            var exists = await _runner.RunAsync(
+                    "git",
+                    string.Create(CultureInfo.InvariantCulture, $"cat-file -e {QuoteProcessArgument(commitSha + ":" + path)}"),
+                    _options.BareCloneDir,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (exists.ExitCode == 0)
+            {
+                existingPaths.Add(path);
+            }
+        }
+
+        if (existingPaths.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var tarPath = Path.Combine(destinationRoot, ".reposyncradar-assets-" + Guid.NewGuid().ToString("N") + ".tar");
+        var args = string.Create(
+            CultureInfo.InvariantCulture,
+            $"archive --format=tar --output {QuoteProcessArgument(tarPath)} {QuoteProcessArgument(commitSha)} -- {string.Join(' ', existingPaths.Select(QuoteProcessArgument))}");
+        var archive = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        if (archive.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"git archive failed (exit {archive.ExitCode}): {archive.StandardError}");
+        }
+
+        try
+        {
+            TarFile.ExtractToDirectory(tarPath, destinationRoot, overwriteFiles: true);
+        }
+        finally
+        {
+            TryDeleteFile(tarPath);
+        }
+
+        return existingPaths;
+    }
+
+    private static string NormalizeRepoPath(string repoPath)
+        => repoPath.Replace('\\', '/').Trim('/');
+
+    private static string QuoteProcessArgument(string value)
+    {
+        var quoted = new StringBuilder(value.Length + 2);
+        quoted.Append('"');
+        var backslashCount = 0;
+        foreach (var ch in value)
+        {
+            if (ch == '\\')
+            {
+                backslashCount++;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                quoted.Append('\\', backslashCount * 2 + 1);
+                quoted.Append('"');
+                backslashCount = 0;
+                continue;
+            }
+
+            quoted.Append('\\', backslashCount);
+            backslashCount = 0;
+            quoted.Append(ch);
+        }
+        quoted.Append('\\', backslashCount * 2);
+        quoted.Append('"');
+        return quoted.ToString();
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+            // Temporary archive cleanup is best-effort.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Temporary archive cleanup is best-effort.
         }
     }
 
@@ -518,7 +732,7 @@ public sealed partial class DocsWorktreeManager
             var line = rawLine.TrimEnd('\r');
             if (line.Length == 0)
             {
-                if (path is not null && sha is not null && !isBare)
+                if (path is not null && sha is not null && !isBare && Directory.Exists(path))
                 {
                     var mtime = SafeGetMtime(path);
                     entries.Add((path, sha, mtime));
@@ -541,7 +755,7 @@ public sealed partial class DocsWorktreeManager
                 isBare = true;
             }
         }
-        if (path is not null && sha is not null && !isBare)
+        if (path is not null && sha is not null && !isBare && Directory.Exists(path))
         {
             entries.Add((path, sha, SafeGetMtime(path)));
         }
@@ -573,10 +787,9 @@ public sealed partial class DocsWorktreeManager
     }
 
     /// <summary>
-    /// Removes every tracked worktree via <c>git worktree remove --force</c> followed
-    /// by <c>git worktree prune</c>. Returns the number of worktrees removed. Intended
-    /// to be wired to a "Clean up cache" UI action / CLI script so users can free disk
-    /// space without dropping to the shell.
+    /// Detaches every tracked worktree into a delete-pending directory and queues
+    /// physical deletion plus <c>git worktree prune</c> in the background. Returns the
+    /// number of worktrees detached so the UI can become interactive quickly.
     /// </summary>
     public async Task<int> PruneAllAsync(CancellationToken cancellationToken = default)
     {
@@ -585,20 +798,158 @@ public sealed partial class DocsWorktreeManager
             return 0;
         }
         await RestoreFromDiskAsync(cancellationToken).ConfigureAwait(false);
+        QueuePendingDeletes();
 
         var paths = _worktrees.Values.Select(v => v.Path).ToList();
+        var trackedPaths = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+        paths.AddRange(EnumerateUntrackedWorktreeDirectories(trackedPaths));
         var removed = 0;
         foreach (var p in paths)
         {
-            if (await RemoveWorktreeAsync(p, cancellationToken).ConfigureAwait(false))
+            if (await DetachWorktreeForBackgroundDeleteAsync(p, cancellationToken).ConfigureAwait(false))
             {
                 removed++;
             }
         }
         _worktrees.Clear();
-        await _runner.RunAsync("git", "worktree prune", _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        QueueGitWorktreePrune();
         return removed;
     }
+
+    private string[] EnumerateUntrackedWorktreeDirectories(HashSet<string> trackedPaths)
+    {
+        if (string.IsNullOrWhiteSpace(_options.WorktreeRoot)
+            || !Directory.Exists(_options.WorktreeRoot))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            return Directory.EnumerateDirectories(_options.WorktreeRoot)
+                .Where(path => !string.Equals(Path.GetFileName(path), DeletePendingDirectoryName, StringComparison.OrdinalIgnoreCase))
+                .Where(path => !string.Equals(Path.GetFileName(path), MarkdownAssetCacheDirectoryName, StringComparison.OrdinalIgnoreCase))
+                .Where(path => !trackedPaths.Contains(path))
+                .ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogUntrackedWorktreeScanFailed(_logger, _options.WorktreeRoot, ex.Message);
+            return Array.Empty<string>();
+        }
+    }
+
+    private void QueueGitWorktreePrune()
+        => _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await _runner.RunAsync(
+                        "git",
+                        "worktree prune",
+                        _options.BareCloneDir,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+                if (result.ExitCode != 0)
+                {
+                    LogBackgroundWorktreePruneFailed(_logger, result.StandardError);
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                LogBackgroundWorktreePruneFailed(_logger, ex.Message);
+            }
+        }, CancellationToken.None);
+
+    private async Task<bool> DetachWorktreeForBackgroundDeleteAsync(string path, CancellationToken cancellationToken)
+    {
+        await StopStaleServersBeforeRemovalAsync(path, cancellationToken).ConfigureAwait(false);
+
+        await _runner.RunAsync(
+            "git",
+            string.Create(CultureInfo.InvariantCulture, $"worktree unlock {path}"),
+            _options.BareCloneDir,
+            cancellationToken).ConfigureAwait(false);
+
+        if (!Directory.Exists(path))
+        {
+            return false;
+        }
+
+        if (TryMoveToDeletePending(path, out var pendingPath))
+        {
+            QueueDeleteDirectory(pendingPath);
+            return true;
+        }
+
+        return await RemoveWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
+    }
+
+    private bool TryMoveToDeletePending(string path, out string pendingPath)
+    {
+        pendingPath = string.Empty;
+        try
+        {
+            var parent = Path.GetDirectoryName(path);
+            if (string.IsNullOrWhiteSpace(parent))
+            {
+                return false;
+            }
+
+            var pendingRoot = Path.Combine(parent, DeletePendingDirectoryName);
+            Directory.CreateDirectory(pendingRoot);
+            pendingPath = Path.Combine(
+                pendingRoot,
+                Path.GetFileName(path) + "-" + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture));
+            Directory.Move(path, pendingPath);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogWorktreeMoveToDeletePendingFailed(_logger, path, ex.Message);
+            return false;
+        }
+    }
+
+    private void QueuePendingDeletes()
+    {
+        if (string.IsNullOrWhiteSpace(_options.WorktreeRoot))
+        {
+            return;
+        }
+
+        var pendingRoot = Path.Combine(_options.WorktreeRoot, DeletePendingDirectoryName);
+        if (!Directory.Exists(pendingRoot))
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var directory in Directory.EnumerateDirectories(pendingRoot))
+            {
+                QueueDeleteDirectory(directory);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogPendingDeleteScanFailed(_logger, pendingRoot, ex.Message);
+        }
+    }
+
+    private void QueueDeleteDirectory(string path)
+        => _ = Task.Run(async () =>
+        {
+            try
+            {
+                await DeleteDirectoryRobustAsync(path, CancellationToken.None).ConfigureAwait(false);
+                LogBackgroundDeleteCompleted(_logger, path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                LogBackgroundDeleteFailed(_logger, path, ex.Message);
+            }
+        }, CancellationToken.None);
 
     private async Task StopStaleServersBeforeRemovalAsync(string path, CancellationToken cancellationToken)
     {
@@ -723,4 +1074,28 @@ public sealed partial class DocsWorktreeManager
     [LoggerMessage(EventId = 9, Level = LogLevel.Warning,
         Message = "Failed to clean interrupted preview worktree {Path}: {Message}")]
     private static partial void LogInterruptedWorktreeCleanupFailed(ILogger logger, string path, string message);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning,
+        Message = "Failed to move worktree {Path} to delete-pending: {Message}")]
+    private static partial void LogWorktreeMoveToDeletePendingFailed(ILogger logger, string path, string message);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Warning,
+        Message = "Failed to scan pending delete directory {Path}: {Message}")]
+    private static partial void LogPendingDeleteScanFailed(ILogger logger, string path, string message);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Debug,
+        Message = "Background worktree delete completed for {Path}")]
+    private static partial void LogBackgroundDeleteCompleted(ILogger logger, string path);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Warning,
+        Message = "Background worktree delete failed for {Path}: {Message}")]
+    private static partial void LogBackgroundDeleteFailed(ILogger logger, string path, string message);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Warning,
+        Message = "Background git worktree prune failed: {Message}")]
+    private static partial void LogBackgroundWorktreePruneFailed(ILogger logger, string message);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning,
+        Message = "Failed to scan untracked worktree directories under {Path}: {Message}")]
+    private static partial void LogUntrackedWorktreeScanFailed(ILogger logger, string path, string message);
 }

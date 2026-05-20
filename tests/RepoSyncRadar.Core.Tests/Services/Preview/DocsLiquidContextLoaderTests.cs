@@ -45,9 +45,25 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
         return path;
     }
 
+    private string WriteDataFile(string relativePath, string yaml)
+    {
+        var path = Path.Combine(_root, "data", relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, yaml);
+        return path;
+    }
+
     private string WriteReusablesFile(string relativePath, string markdown)
     {
         var path = Path.Combine(_root, "data", "reusables", relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, markdown);
+        return path;
+    }
+
+    private string WriteContentFile(string relativePath, string markdown)
+    {
+        var path = Path.Combine(_root, "content", relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, markdown);
         return path;
@@ -121,6 +137,149 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadForMarkdownAsync_Loads_Only_Referenced_Reusables_Recursively()
+    {
+        WriteVariablesFile("product.yml", "prodname: GitHub");
+        WriteReusablesFile(Path.Combine("copilot", "outer.md"), "Outer {% data variables.product.prodname %} {% data reusables.copilot.inner %}");
+        WriteReusablesFile(Path.Combine("copilot", "inner.md"), "Inner");
+        WriteReusablesFile(Path.Combine("copilot", "unused.md"), "Unused");
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/copilot/example.md",
+            "Body {% data reusables.copilot.outer %}",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("GitHub", context.Variables["product.prodname"]);
+        Assert.Equal("Outer {% data variables.product.prodname %} {% data reusables.copilot.inner %}", context.Reusables["copilot.outer"]);
+        Assert.Equal("Inner", context.Reusables["copilot.inner"]);
+        Assert.DoesNotContain("copilot.unused", context.Reusables.Keys);
+    }
+
+    [Fact]
+    public async Task LoadForMarkdownAsync_Loads_Only_Referenced_Variable_Files()
+    {
+        WriteVariablesFile("product.yml", "prodname: GitHub");
+        WriteVariablesFile("unused.yml", "value: Unused");
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/actions/example.md",
+            "Use {% data variables.product.prodname %} and {{ site.data.variables.product.prodname }}.",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("GitHub", context.Variables["product.prodname"]);
+        Assert.DoesNotContain("unused.value", context.Variables.Keys);
+    }
+
+    [Fact]
+    public async Task LoadForMarkdownAsync_Loads_Only_Referenced_Data_Sequences()
+    {
+        WriteDataFile(
+            Path.Combine("tables", "copilot", "models-and-pricing.yml"),
+            """
+            - model: GPT-5
+              provider: openai
+              input: $1.00
+            - model: Claude Sonnet
+              provider: anthropic
+              input: $3.00
+            """);
+        WriteDataFile(
+            Path.Combine("tables", "copilot", "unused.yml"),
+            """
+            - model: Unused
+              provider: unused
+            """);
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/copilot/reference/models.md",
+            "{% for entry in tables.copilot.models-and-pricing %}{{ entry.model }}{% endfor %}",
+            TestContext.Current.CancellationToken);
+
+        var rows = context.DataSequences["tables.copilot.models-and-pricing"];
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("GPT-5", rows[0]["model"]);
+        Assert.Equal("openai", rows[0]["provider"]);
+        Assert.Equal("$3.00", rows[1]["input"]);
+        Assert.DoesNotContain("tables.copilot.unused", context.DataSequences.Keys);
+    }
+
+    [Fact]
+    public async Task LoadForMarkdownAsync_Loads_Direct_Autotitle_Target()
+    {
+        WriteContentFile(
+            Path.Combine("copilot", "concepts", "billing.md"),
+            """
+            ---
+            title: Copilot billing
+            ---
+
+            Target.
+            """);
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/copilot/reference/models.md",
+            "See [AUTOTITLE](/copilot/concepts/billing).",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Copilot billing", context.PageTitles["copilot/concepts/billing"]);
+        Assert.Equal("Copilot billing", context.PageTitles["content/copilot/concepts/billing.md"]);
+    }
+
+    [Fact]
+    public async Task LoadForMarkdownAsync_Falls_Back_To_Redirect_Autotitle_Scan()
+    {
+        WriteContentFile(
+            Path.Combine("copilot", "concepts", "new-billing.md"),
+            """
+            ---
+            title: New billing
+            redirect_from:
+              - /copilot/concepts/old-billing
+            ---
+
+            Target.
+            """);
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/copilot/reference/models.md",
+            "See [AUTOTITLE](/copilot/concepts/old-billing).",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("New billing", context.PageTitles["copilot/concepts/old-billing"]);
+    }
+
+    [Fact]
+    public async Task LoadForMarkdownAsync_Finds_Redirect_Autotitle_In_Route_Near_Subdirectory()
+    {
+        var source = new RecordingDocsFileSource();
+        source.Add(
+            "content/actions/reference/workflows-and-actions/expressions.md",
+            """
+            ---
+            title: Evaluate expressions
+            redirect_from:
+              - /actions/reference/evaluate-expressions-in-workflows-and-actions
+            ---
+
+            Target.
+            """);
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            source,
+            "content/actions/reference/workflows-and-actions/workflow-cancellation.md",
+            "See [AUTOTITLE](/actions/reference/evaluate-expressions-in-workflows-and-actions#cancelled).",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Evaluate expressions", context.PageTitles["actions/reference/evaluate-expressions-in-workflows-and-actions"]);
+        Assert.Equal(["content/actions/reference"], source.EnumeratedDirectories);
+    }
+
+    [Fact]
     public async Task Skips_Files_With_Invalid_Yaml_Without_Failing_Whole_Load()
     {
         WriteVariablesFile("good.yml", "key: value");
@@ -136,5 +295,38 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
         Assert.Equal("value", context.Variables["good.key"]);
         // bad.yml is silently skipped — no entries from it survive.
         Assert.DoesNotContain("bad.broken", context.Variables.Keys);
+    }
+
+    private sealed class RecordingDocsFileSource : IDocsFileSource
+    {
+        private readonly Dictionary<string, string> _files = new(StringComparer.OrdinalIgnoreCase);
+
+        public List<string> EnumeratedDirectories { get; } = [];
+
+        public void Add(string repoPath, string content)
+        {
+            _files[repoPath] = content;
+        }
+
+        public Task<string?> ReadTextAsync(string repoPath, CancellationToken cancellationToken)
+        {
+            _files.TryGetValue(repoPath, out var content);
+            return Task.FromResult<string?>(content);
+        }
+
+        public Task<IReadOnlyList<string>> EnumerateFilesAsync(
+            string repoDirectory,
+            string extension,
+            CancellationToken cancellationToken)
+        {
+            EnumeratedDirectories.Add(repoDirectory);
+            var prefix = repoDirectory.TrimEnd('/') + "/";
+            IReadOnlyList<string> files = _files.Keys
+                .Where(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    && path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return Task.FromResult(files);
+        }
     }
 }

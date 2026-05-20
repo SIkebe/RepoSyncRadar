@@ -11,6 +11,8 @@ namespace RepoSyncRadar.Core.Services.Preview;
 ///   をキー、本文を値とする辞書。</item>
 ///   <item><see cref="PageTitles"/>: <c>content/**/*.md</c> の frontmatter
 ///   <c>title</c> をリンク解決用の repo path / docs path alias で引ける辞書。</item>
+///   <item><see cref="DataSequences"/>: <c>data/**/*.yml</c> のうち root が配列の
+///   ファイルを <c>tables.copilot.models-and-pricing</c> 形式のキーで引ける辞書。</item>
 /// </list>
 /// 値は加工せず生のまま保持し、評価時に <see cref="DocsLiquidEvaluator"/> が
 /// 再帰展開する。
@@ -18,8 +20,21 @@ namespace RepoSyncRadar.Core.Services.Preview;
 public sealed record DocsLiquidContext(
     IReadOnlyDictionary<string, string> Variables,
     IReadOnlyDictionary<string, string> Reusables,
-    IReadOnlyDictionary<string, string> PageTitles)
+    IReadOnlyDictionary<string, string> PageTitles,
+    IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>> DataSequences)
 {
+    public DocsLiquidContext(
+        IReadOnlyDictionary<string, string> variables,
+        IReadOnlyDictionary<string, string> reusables,
+        IReadOnlyDictionary<string, string> pageTitles)
+        : this(
+            variables,
+            reusables,
+            pageTitles,
+            new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal))
+    {
+    }
+
     public DocsLiquidContext(
         IReadOnlyDictionary<string, string> variables,
         IReadOnlyDictionary<string, string> reusables)
@@ -30,9 +45,10 @@ public sealed record DocsLiquidContext(
     {
     }
 
-    /// <summary>variables / reusables が一つも見つからなかったときの空コンテキスト。</summary>
+    /// <summary>Liquid 展開対象が一つも見つからなかったときの空コンテキスト。</summary>
     public static DocsLiquidContext Empty { get; } = new(
         new Dictionary<string, string>(StringComparer.Ordinal),
         new Dictionary<string, string>(StringComparer.Ordinal),
-        new Dictionary<string, string>(StringComparer.Ordinal));
+        new Dictionary<string, string>(StringComparer.Ordinal),
+        new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal));
 }

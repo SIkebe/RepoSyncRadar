@@ -32,6 +32,18 @@ public sealed class DocsLiquidEvaluatorTests
         return new DocsLiquidContext(new Dictionary<string, string>(StringComparer.Ordinal), reusables);
     }
 
+    private static DocsLiquidContext WithDataSequence(
+        string key,
+        params IReadOnlyDictionary<string, string>[] rows)
+        => new(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal)
+            {
+                [key] = rows,
+            });
+
     [Fact]
     public void Returns_Empty_For_Null_Input()
     {
@@ -206,6 +218,38 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Expands_DataSequence_ForLoop_With_Scoped_If()
+    {
+        var ctx = WithDataSequence(
+            "tables.copilot.models-and-pricing",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["model"] = "GPT-5",
+                ["provider"] = "openai",
+                ["input"] = "$1.00",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["model"] = "Claude Sonnet",
+                ["provider"] = "anthropic",
+                ["input"] = "$3.00",
+            });
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            """
+            | {% for entry in tables.copilot.models-and-pricing %}{% if entry.provider == "openai" %} |
+            | {{ entry.model }} | {{ entry.input }} |
+            | {% endif %}{% endfor %} |
+            """,
+            ctx);
+
+        Assert.Contains("| GPT-5 | $1.00 |", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("Claude Sonnet", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% for", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{ entry.", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Renders_Octicon_Tags_As_Primer_Svg()
     {
         var result = DocsLiquidEvaluator.Evaluate(
@@ -247,6 +291,20 @@ public sealed class DocsLiquidEvaluatorTests
         Assert.Contains("aria-label=\"download icon\"", result, StringComparison.Ordinal);
         Assert.Contains("role=\"img\"", result, StringComparison.Ordinal);
         Assert.Contains("Download CSV.", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_Alert_Octicon_As_Primer_Svg()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            "Review {% octicon \"alert\" aria-hidden=\"true\" aria-label=\"alert\" %} Failed reason.",
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("class=\"octicon octicon-alert\"", result, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"alert\"", result, StringComparison.Ordinal);
+        Assert.Contains("role=\"img\"", result, StringComparison.Ordinal);
+        Assert.Contains("Failed reason.", result, StringComparison.Ordinal);
         Assert.DoesNotContain("{% octicon", result, StringComparison.Ordinal);
     }
 

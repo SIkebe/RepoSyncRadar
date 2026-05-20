@@ -61,6 +61,53 @@ public sealed class DocsWorktreeManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureCommitAvailableAsync_Skips_Fetch_When_Commit_Exists()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        Directory.CreateDirectory(bare);
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "cat-file -e abcdef^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var sut = BuildSut(runner, bareCloneDir: bare, cloneUrl: "https://example.invalid/docs.git");
+
+        await sut.EnsureCommitAvailableAsync(123, "abcdef", cancellationToken: ct);
+
+        await runner.Received(1).RunAsync(
+            "git",
+            "cat-file -e abcdef^{commit}",
+            bare,
+            Arg.Any<CancellationToken>());
+        await runner.DidNotReceive().RunAsync(
+            "git",
+            Arg.Is<string>(a => a.StartsWith("fetch origin", StringComparison.Ordinal)),
+            bare,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EnsureCommitAvailableAsync_Fetches_When_Commit_Is_Missing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        Directory.CreateDirectory(bare);
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "cat-file -e abcdef^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(128, string.Empty, "missing")));
+        runner.RunAsync("git", "fetch origin +refs/pull/123/head:refs/pull/123/head", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var sut = BuildSut(runner, bareCloneDir: bare, cloneUrl: "https://example.invalid/docs.git");
+
+        await sut.EnsureCommitAvailableAsync(123, "abcdef", cancellationToken: ct);
+
+        await runner.Received(1).RunAsync(
+            "git",
+            "fetch origin +refs/pull/123/head:refs/pull/123/head",
+            bare,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ResolveFirstParentAsync_Uses_Git_RevParse()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -140,6 +187,7 @@ public sealed class DocsWorktreeManagerTests : IDisposable
         Assert.False(sut.IsEnabled);
         await sut.EnsureBareCloneAsync(ct);
         await sut.FetchPrAsync(1, ct);
+        await sut.EnsureCommitAvailableAsync(1, "abcdef0123", cancellationToken: ct);
         var path = await sut.CheckoutAsync("abcdef0123", ct);
 
         Assert.Null(path);
@@ -732,14 +780,16 @@ public sealed class DocsWorktreeManagerTests : IDisposable
 
         Assert.Equal(2, removed);
         await runner.Received().RunAsync("git",
-            Arg.Is<string>(a => a.StartsWith("worktree remove --force", StringComparison.Ordinal)
+            Arg.Is<string>(a => a.StartsWith("worktree unlock", StringComparison.Ordinal)
                 && a.Contains(p1, StringComparison.Ordinal)),
             bare, Arg.Any<CancellationToken>());
         await runner.Received().RunAsync("git",
-            Arg.Is<string>(a => a.StartsWith("worktree remove --force", StringComparison.Ordinal)
+            Arg.Is<string>(a => a.StartsWith("worktree unlock", StringComparison.Ordinal)
                 && a.Contains(p2, StringComparison.Ordinal)),
             bare, Arg.Any<CancellationToken>());
-        await runner.Received().RunAsync("git", "worktree prune", bare, Arg.Any<CancellationToken>());
+        await runner.DidNotReceive().RunAsync("git",
+            Arg.Is<string>(a => a.StartsWith("worktree remove --force", StringComparison.Ordinal)),
+            bare, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -762,16 +812,6 @@ public sealed class DocsWorktreeManagerTests : IDisposable
                 0,
                 $"worktree {path}\nHEAD aaaaaaaaaaaaaa01\ndetached\n\n",
                 string.Empty)));
-        runner.RunAsync(
-                "git",
-                Arg.Is<string>(a => a.StartsWith("worktree remove --force", StringComparison.Ordinal)),
-                bare,
-                Arg.Any<CancellationToken>())
-            .Returns(_ =>
-            {
-                Assert.True(cleanerCalled);
-                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
-            });
         var cleaner = Substitute.For<IPreviewServerProcessCleaner>();
         cleaner.StopStaleServersAsync(path, null, Arg.Any<CancellationToken>())
             .Returns(_ =>
@@ -784,7 +824,97 @@ public sealed class DocsWorktreeManagerTests : IDisposable
         var removed = await sut.PruneAllAsync(ct);
 
         Assert.Equal(1, removed);
+    Assert.True(cleanerCalled);
         await cleaner.Received(1).StopStaleServersAsync(path, null, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ReadFileTextAsync_Reads_File_From_Bare_Clone_Object()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        Directory.CreateDirectory(bare);
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "show abc123:content/foo.md", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "# Foo", string.Empty)));
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", Path.Combine(_tempRoot, "wt"));
+
+        var content = await sut.ReadFileTextAsync("abc123", "content/foo.md", ct);
+
+        Assert.Equal("# Foo", content);
+    }
+
+    [Fact]
+    public async Task ListFilesAsync_Lists_Matching_Files_From_Bare_Clone_Object()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        Directory.CreateDirectory(bare);
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "ls-tree -r --name-only abc123 -- content", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(
+                0,
+                "content/a.md\ncontent/b.yml\ncontent/nested/c.md\n",
+                string.Empty)));
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", Path.Combine(_tempRoot, "wt"));
+
+        var files = await sut.ListFilesAsync("abc123", "content", ".md", ct);
+
+        Assert.Equal(["content/a.md", "content/nested/c.md"], files);
+    }
+
+    [Fact]
+    public async Task PruneAllAsync_Ignores_Already_Detached_Worktree_Metadata()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var missingPath = Path.Combine(worktreeRoot, "missing-worktree");
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(
+                0,
+                $"worktree {missingPath}\nHEAD abcdef0123456789\ndetached\n\n",
+                string.Empty)));
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var removed = await sut.PruneAllAsync(ct);
+
+        Assert.Equal(0, removed);
+        await runner.DidNotReceive().RunAsync("git",
+            Arg.Is<string>(a => a.StartsWith("worktree unlock", StringComparison.Ordinal)),
+            bare, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PruneAllAsync_Detaches_Untracked_Worktree_Directories()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        var worktreeRoot = Path.Combine(_tempRoot, "wt");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(worktreeRoot);
+        var stalePath = Path.Combine(worktreeRoot, "stale-directory");
+        Directory.CreateDirectory(stalePath);
+        File.WriteAllText(Path.Combine(stalePath, "leftover.txt"), "stale");
+
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", worktreeRoot);
+
+        var removed = await sut.PruneAllAsync(ct);
+
+        Assert.Equal(1, removed);
+        Assert.False(Directory.Exists(stalePath));
+        Assert.True(Directory.Exists(Path.Combine(worktreeRoot, ".delete-pending")));
     }
 
     private static DocsWorktreeManager BuildSut(

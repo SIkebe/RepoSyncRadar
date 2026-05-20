@@ -89,6 +89,57 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Expands_DataSequence_ForLoops_In_Body()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal)
+            {
+                ["tables.copilot.models-and-pricing"] =
+                [
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["model"] = "GPT-5",
+                        ["provider"] = "openai",
+                        ["input"] = "$1.00",
+                    },
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["model"] = "Claude Sonnet",
+                        ["provider"] = "anthropic",
+                        ["input"] = "$3.00",
+                    },
+                ],
+            });
+        var markdown = """
+            ---
+            title: Pricing tables
+            ---
+
+            | Model | Input |
+            | --- | ---: |
+            | {% for entry in tables.copilot.models-and-pricing %}{% if entry.provider == "openai" %} |
+            | {{ entry.model }} | {{ entry.input }} |
+            | {% endif %}{% endfor %} |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/reference/copilot-billing/models-and-pricing.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        Assert.Contains("GPT-5", html, StringComparison.Ordinal);
+        Assert.Contains("$1.00", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Claude Sonnet", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% for", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{ entry.", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Frontmatter_Only_Index_Page_Shows_Metadata_Only_Message()
     {
         var context = new DocsLiquidContext(
@@ -608,6 +659,29 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("<strong>Copilot</strong>", html, StringComparison.Ordinal);
         Assert.Contains("<strong>Policies</strong>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("{% octicon \"copilot\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-liquid", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_Docs_Alert_Octicon_Tag_As_Inline_Svg()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            6. From the results list, click {% octicon "alert" aria-hidden="true" aria-label="alert" %} **Failed reason**.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("class=\"octicon octicon-alert\"", html, StringComparison.Ordinal);
+        Assert.Contains("<strong>Failed reason</strong>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% octicon \"alert\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-liquid", html, StringComparison.Ordinal);
     }
 

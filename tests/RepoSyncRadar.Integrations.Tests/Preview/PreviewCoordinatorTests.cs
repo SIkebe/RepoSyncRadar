@@ -1,3 +1,5 @@
+using System.Formats.Tar;
+using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -55,6 +57,12 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 calls.Add($"RUN {call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
                 return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
             });
+        runner.RunAsync("git", "cat-file -e deadbeefcafe^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"RUN {call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(128, string.Empty, "missing"));
+            });
         var handle = Substitute.For<IProcessHandle>();
         runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
             .Returns(call =>
@@ -76,11 +84,12 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.NotNull(link);
         Assert.Equal(4500, link!.Port);
         Assert.Equal(new Uri("http://localhost:4500/en/foo/bar"), link.Url);
-        Assert.Equal(4, calls.Count);
+        Assert.Equal(5, calls.Count);
         Assert.StartsWith("RUN git clone --bare", calls[0], StringComparison.Ordinal);
-        Assert.StartsWith("RUN git fetch origin +refs/pull/123/head:refs/pull/123/head", calls[1], StringComparison.Ordinal);
-        Assert.StartsWith("RUN git worktree add", calls[2], StringComparison.Ordinal);
-        Assert.StartsWith("START npm run dev -- --port 4500", calls[3], StringComparison.Ordinal);
+        Assert.StartsWith("RUN git cat-file -e deadbeefcafe^{commit}", calls[1], StringComparison.Ordinal);
+        Assert.StartsWith("RUN git fetch origin +refs/pull/123/head:refs/pull/123/head", calls[2], StringComparison.Ordinal);
+        Assert.StartsWith("RUN git worktree add", calls[3], StringComparison.Ordinal);
+        Assert.StartsWith("START npm run dev -- --port 4500", calls[4], StringComparison.Ordinal);
         Assert.True(session.IsActive);
         Assert.Equal(4500, session.ActivePort);
     }
@@ -151,6 +160,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var runner = Substitute.For<IProcessRunner>();
         runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "cat-file -e headsha^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(128, string.Empty, "missing")));
         runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
         runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
@@ -196,6 +207,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var runner = Substitute.For<IProcessRunner>();
         runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "cat-file -e headsha^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(128, string.Empty, "missing")));
         runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
         var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -248,10 +261,73 @@ public sealed class PreviewCoordinatorTests : IDisposable
         await contentServer.Received(1).StartAsync(
             4500,
             Arg.Any<IReadOnlyDictionary<string, string>>(),
-            Arg.Is<IReadOnlyDictionary<string, string>>(roots =>
-                roots.ContainsKey("/markdown-assets/before")
-                && roots.ContainsKey("/markdown-assets/after")),
+            Arg.Is<IReadOnlyDictionary<string, string>>(roots => roots.Count == 0),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Materializes_Local_Image_Assets_From_BareClone()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-markdown-assets.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-markdown-assets");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        Dictionary<string, string>? capturedAssetRoots = null;
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                capturedAssetRoots = new Dictionary<string, string>(
+                    call.ArgAt<IReadOnlyDictionary<string, string>>(2),
+                    StringComparer.Ordinal);
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+        var sourcePath = "content/copilot/how-tos/use-copilot-agents/copilot-memory.md";
+        var sut = BuildSut(
+            runner,
+            bare,
+            "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, _) =>
+            {
+                var contentDir = Path.Combine(path, "content", "copilot", "how-tos", "use-copilot-agents");
+                Directory.CreateDirectory(Path.Combine(contentDir, "images"));
+                Directory.CreateDirectory(Path.Combine(path, "assets", "images", "help", "copilot"));
+                File.WriteAllText(
+                    Path.Combine(contentDir, "copilot-memory.md"),
+                    "![User memory](/assets/images/help/copilot/copilot-user-memory-list.png)\n\n![Local diagram](<images/local diagram.png>)");
+                File.WriteAllBytes(Path.Combine(path, "assets", "images", "help", "copilot", "copilot-user-memory-list.png"), [0x89, 0x50, 0x4e, 0x47]);
+                File.WriteAllBytes(Path.Combine(contentDir, "images", "local diagram.png"), [0x4c, 0x4f, 0x43, 0x41, 0x4c]);
+            });
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", sourcePath, cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.NotNull(capturedAssetRoots);
+        Assert.True(capturedAssetRoots!.TryGetValue("/markdown-assets/before", out var beforeAssetRoot));
+        Assert.True(capturedAssetRoots.TryGetValue("/markdown-assets/after", out var afterAssetRoot));
+        Assert.Contains("src=\"/markdown-assets/after/assets/images/help/copilot/copilot-user-memory-list.png\"", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains("src=\"/markdown-assets/after/content/copilot/how-tos/use-copilot-agents/images/local%20diagram.png\"", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Equal([0x89, 0x50, 0x4e, 0x47], await File.ReadAllBytesAsync(Path.Combine(afterAssetRoot!, "assets", "images", "help", "copilot", "copilot-user-memory-list.png"), ct));
+        Assert.Equal([0x4c, 0x4f, 0x43, 0x41, 0x4c], await File.ReadAllBytesAsync(Path.Combine(beforeAssetRoot!, "content", "copilot", "how-tos", "use-copilot-agents", "images", "local diagram.png"), ct));
+        runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!, default);
     }
 
     [Fact]
@@ -263,6 +339,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var runner = Substitute.For<IProcessRunner>();
         runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "cat-file -e headsha^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(128, string.Empty, "missing")));
         runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
         var contentServer = Substitute.For<ILocalPreviewContentServer>();
@@ -287,8 +365,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Contains(progress.Items, m => m.Contains("準備済みデータ", StringComparison.Ordinal));
         Assert.Contains(progress.Items, m => m.Contains("git fetch", StringComparison.Ordinal));
         Assert.Contains(progress.Items, m => m.Contains("親コミット", StringComparison.Ordinal));
-        Assert.Contains(progress.Items, m => m.Contains("変更前 worktree", StringComparison.Ordinal));
-        Assert.Contains(progress.Items, m => m.Contains("PR HEAD worktree", StringComparison.Ordinal));
+        Assert.Contains(progress.Items, m => m.Contains("bare clone", StringComparison.Ordinal));
         Assert.Contains(progress.Items, m => m.Contains("変更前 Markdown", StringComparison.Ordinal));
         Assert.Contains(progress.Items, m => m.Contains("PR HEAD Markdown", StringComparison.Ordinal));
         Assert.Contains(progress.Items, m => m.Contains("フロントマター", StringComparison.Ordinal));
@@ -685,14 +762,11 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task PredictivePrewarmAsync_Warms_BareClone_Fetch_Worktrees_And_LiquidContext()
+    public async Task PredictivePrewarmAsync_Warms_BareClone_Fetch_And_ParentSha()
     {
         // §Step 19.10 (perf): 先読み (PR を選択した瞬間に fire-and-forget で走る)
-        // が bare clone + git fetch までしか warm up しないと、ユーザが最初に
-        // Markdown ファイルをクリックした瞬間に git rev-parse / git worktree add ×2 /
-        // data/variables・data/reusables の全件読み込みが直列で走り、見た目の
-        // 「準備中…」がかなり長くなる。EnsurePreparedSessionAsync を呼ぶ実装に
-        // 変わったので、worktree add まで進んでいることを保証する。
+        // は bare clone / git fetch / 親 SHA 解決までに留める。Markdown preview 本体は
+        // git object から必要ファイルだけを読むため、選択だけで巨大 worktree を作らない。
         // 内部の SemaphoreSlim<(prNumber, sha)> がユーザクリック側とのレースを防ぐ。
         var ct = TestContext.Current.CancellationToken;
         var bare = Path.Combine(_tempRoot, "bare-predictive.git");
@@ -704,6 +778,12 @@ public sealed class PreviewCoordinatorTests : IDisposable
             {
                 calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
                 return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        runner.RunAsync("git", "cat-file -e deadbeefcafe^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(128, string.Empty, "missing"));
             });
         runner.RunAsync("git", "rev-parse deadbeefcafe^", bare, Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -718,9 +798,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Contains(calls, c => c.StartsWith("git clone --bare", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("git fetch origin +refs/pull/4242/head:refs/pull/4242/head", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("git rev-parse deadbeefcafe^", StringComparison.Ordinal));
-        // §Step 19.10: 先読みも worktree add まで warm up する (per-key SemaphoreSlim でレース回避)。
         var worktreeAddCount = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));
-        Assert.Equal(2, worktreeAddCount);
+        Assert.Equal(0, worktreeAddCount);
     }
 
     [Fact]
@@ -739,6 +818,12 @@ public sealed class PreviewCoordinatorTests : IDisposable
             {
                 calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
                 return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        runner.RunAsync("git", "cat-file -e headsha^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(128, string.Empty, "missing"));
             });
         runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -768,7 +853,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var prewarmFetchCount = calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal));
         var prewarmWorktreeAddCount = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));
         Assert.Equal(1, prewarmFetchCount);
-        Assert.Equal(2, prewarmWorktreeAddCount);
+        Assert.Equal(0, prewarmWorktreeAddCount);
 
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(
             123, "headsha", "CHANGELOG.md", cancellationToken: ct);
@@ -784,7 +869,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
     {
         // §Step 19.10 (perf): 1/7 → 2/7 のファイル切替で「全体をコンパイルしている?」と
         // ユーザが感じるほど遅かった元凶。同一 (prNumber, sha) の 2 回目以降の
-        // PrepareMarkdownComparisonPreviewAsync では git fetch / worktree add / liquid 読込が
+        // PrepareMarkdownComparisonPreviewAsync では git fetch / worktree add が
         // 一切走らないことを保証する。
         var ct = TestContext.Current.CancellationToken;
         var bare = Path.Combine(_tempRoot, "bare-fileswitch.git");
@@ -796,6 +881,12 @@ public sealed class PreviewCoordinatorTests : IDisposable
             {
                 calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
                 return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+            });
+        runner.RunAsync("git", "cat-file -e headsha^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                calls.Add($"{call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
+                return Task.FromResult(new ProcessRunResult(128, string.Empty, "missing"));
             });
         runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -830,7 +921,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var fetchAfterFirst = calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal));
         var worktreeAddAfterFirst = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));
         Assert.Equal(1, fetchAfterFirst);
-        Assert.Equal(2, worktreeAddAfterFirst);
+        Assert.Equal(0, worktreeAddAfterFirst);
 
         var secondLink = await sut.PrepareMarkdownComparisonPreviewAsync(
             123, "headsha", "FILE2.md", cancellationToken: ct);
@@ -874,6 +965,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 if (args.StartsWith("clone --bare", StringComparison.Ordinal))
                 {
                     return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+                }
+                if (args.StartsWith("cat-file -e", StringComparison.Ordinal))
+                {
+                    return Task.FromResult(new ProcessRunResult(128, string.Empty, "missing"));
                 }
                 if (args.StartsWith("fetch origin", StringComparison.Ordinal))
                 {
@@ -973,8 +1068,12 @@ public sealed class PreviewCoordinatorTests : IDisposable
         await handle.Received(1).KillAsync(Arg.Any<CancellationToken>());
         Assert.False(session.IsActive);
         await runner.Received().RunAsync("git",
-            Arg.Is<string>(a => a.StartsWith("worktree remove --force", StringComparison.Ordinal)
+            Arg.Is<string>(a => a.StartsWith("worktree unlock", StringComparison.Ordinal)
                 && a.Contains(leftover, StringComparison.Ordinal)),
+            bare,
+            Arg.Any<CancellationToken>());
+        await runner.DidNotReceive().RunAsync("git",
+            Arg.Is<string>(a => a.StartsWith("worktree remove --force", StringComparison.Ordinal)),
             bare,
             Arg.Any<CancellationToken>());
     }
@@ -1021,7 +1120,150 @@ public sealed class PreviewCoordinatorTests : IDisposable
         });
         // Tests mostly exercise the warm path where dependencies already exist.
         // The fake IProcessRunner does not materialize the worktree, so intercept
-        // `git worktree add` and stub node_modules on disk.
+        // `git worktree add` and git-object reads on disk.
+        var objectSourceRoot = Path.Combine(worktreeRoot ?? _fallbackObjectSourceRoot, ".git-object-stubs");
+        var materializedObjects = new HashSet<string>(StringComparer.Ordinal);
+        void MaterializeObjectSource(string sha)
+        {
+            if (!materializedObjects.Add(sha))
+            {
+                return;
+            }
+
+            var root = Path.Combine(objectSourceRoot, sha);
+            Directory.CreateDirectory(root);
+            onWorktreeAdd?.Invoke(root, sha);
+        }
+
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("show ", StringComparison.Ordinal)),
+                bareCloneDir,
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var args = call.ArgAt<string>(1);
+                var spec = args["show ".Length..];
+                var separator = spec.IndexOf(':', StringComparison.Ordinal);
+                if (separator <= 0)
+                {
+                    return Task.FromResult(new ProcessRunResult(128, string.Empty, "invalid object spec"));
+                }
+
+                var sha = spec[..separator];
+                var repoPath = spec[(separator + 1)..].TrimStart('/');
+                MaterializeObjectSource(sha);
+                var file = Path.Combine(objectSourceRoot, sha, repoPath.Replace('/', Path.DirectorySeparatorChar));
+                return Task.FromResult(File.Exists(file)
+                    ? new ProcessRunResult(0, File.ReadAllText(file), string.Empty)
+                    : new ProcessRunResult(128, string.Empty, "path not found"));
+            });
+
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("ls-tree -r --name-only ", StringComparison.Ordinal)),
+                bareCloneDir,
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var args = call.ArgAt<string>(1);
+                var prefix = "ls-tree -r --name-only ";
+                var remainder = args[prefix.Length..];
+                var split = remainder.Split(" -- ", 2, StringSplitOptions.None);
+                if (split.Length != 2)
+                {
+                    return Task.FromResult(new ProcessRunResult(128, string.Empty, "invalid ls-tree arguments"));
+                }
+
+                var sha = split[0];
+                var repoDirectory = split[1].Trim('/');
+                MaterializeObjectSource(sha);
+                var root = Path.Combine(objectSourceRoot, sha);
+                var directory = Path.Combine(root, repoDirectory.Replace('/', Path.DirectorySeparatorChar));
+                if (!Directory.Exists(directory))
+                {
+                    return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+                }
+
+                var output = string.Join(
+                    '\n',
+                    Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+                        .Select(path => Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/')));
+                return Task.FromResult(new ProcessRunResult(0, output, string.Empty));
+            });
+
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("cat-file -e ", StringComparison.Ordinal)
+                    && a.Contains(':', StringComparison.Ordinal)),
+                bareCloneDir,
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var args = call.ArgAt<string>(1);
+                if (!TryReadSingleQuotedArgument(args["cat-file -e ".Length..], out var objectSpec))
+                {
+                    return Task.FromResult(new ProcessRunResult(128, string.Empty, "invalid object spec"));
+                }
+
+                var separator = objectSpec.IndexOf(':', StringComparison.Ordinal);
+                if (separator <= 0)
+                {
+                    return Task.FromResult(new ProcessRunResult(128, string.Empty, "invalid object spec"));
+                }
+
+                var sha = objectSpec[..separator];
+                var repoPath = objectSpec[(separator + 1)..].TrimStart('/');
+                MaterializeObjectSource(sha);
+                var file = Path.Combine(objectSourceRoot, sha, repoPath.Replace('/', Path.DirectorySeparatorChar));
+                return Task.FromResult(File.Exists(file)
+                    ? new ProcessRunResult(0, string.Empty, string.Empty)
+                    : new ProcessRunResult(128, string.Empty, "path not found"));
+            });
+
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => a.StartsWith("archive --format=tar --output ", StringComparison.Ordinal)),
+                bareCloneDir,
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var args = call.ArgAt<string>(1);
+                if (!TryParseArchiveArguments(args, out var outputPath, out var sha, out var repoPaths))
+                {
+                    return Task.FromResult(new ProcessRunResult(128, string.Empty, "invalid archive arguments"));
+                }
+
+                MaterializeObjectSource(sha);
+                var subsetRoot = Path.Combine(Path.GetTempPath(), "rsr-preview-archive-" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    foreach (var repoPath in repoPaths)
+                    {
+                        var source = Path.Combine(objectSourceRoot, sha, repoPath.Replace('/', Path.DirectorySeparatorChar));
+                        if (!File.Exists(source))
+                        {
+                            continue;
+                        }
+
+                        var destination = Path.Combine(subsetRoot, repoPath.Replace('/', Path.DirectorySeparatorChar));
+                        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                        File.Copy(source, destination, overwrite: true);
+                    }
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+                    TarFile.CreateFromDirectory(subsetRoot, outputPath, includeBaseDirectory: false);
+                    return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
+                }
+                finally
+                {
+                    if (Directory.Exists(subsetRoot))
+                    {
+                        Directory.Delete(subsetRoot, recursive: true);
+                    }
+                }
+            });
+
         runner.WhenForAnyArgs(r => r.RunAsync(default!, default!, default!, default))
             .Do(call =>
             {
@@ -1072,12 +1314,111 @@ public sealed class PreviewCoordinatorTests : IDisposable
             NullLogger<PreviewCoordinator>.Instance);
     }
 
+    private static readonly string _fallbackObjectSourceRoot = Path.Combine(
+        Path.GetTempPath(),
+        "rsr-preview-coord-object-stubs");
+
     private sealed class FixedPreviewPortAllocator(int basePort) : IPreviewPortAllocator
     {
         public int AllocateSingle(int preferredPort, IReadOnlyCollection<int> reusablePorts) => preferredPort;
 
         public PreviewPortPair AllocateComparison(int preferredAfterPort, IReadOnlyCollection<int> reusablePorts)
             => new(basePort, basePort + 1);
+    }
+
+    private static bool TryParseArchiveArguments(
+        string args,
+        out string outputPath,
+        out string sha,
+        out IReadOnlyList<string> repoPaths)
+    {
+        outputPath = string.Empty;
+        sha = string.Empty;
+        repoPaths = Array.Empty<string>();
+        const string prefix = "archive --format=tar --output ";
+        if (!args.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var remainder = args[prefix.Length..];
+        if (!TryReadSingleQuotedArgument(remainder, out outputPath, out var consumed))
+        {
+            return false;
+        }
+
+        remainder = remainder[consumed..].TrimStart();
+        if (!TryReadSingleQuotedArgument(remainder, out sha, out consumed))
+        {
+            return false;
+        }
+
+        remainder = remainder[consumed..].TrimStart();
+        if (!remainder.StartsWith("-- ", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        remainder = remainder["-- ".Length..];
+        var paths = new List<string>();
+        while (remainder.Length > 0)
+        {
+            if (!TryReadSingleQuotedArgument(remainder, out var path, out consumed))
+            {
+                return false;
+            }
+            paths.Add(path);
+            remainder = remainder[consumed..].TrimStart();
+        }
+
+        repoPaths = paths;
+        return true;
+    }
+
+    private static bool TryReadSingleQuotedArgument(string input, out string value)
+        => TryReadSingleQuotedArgument(input, out value, out _);
+
+    private static bool TryReadSingleQuotedArgument(string input, out string value, out int consumed)
+    {
+        value = string.Empty;
+        consumed = 0;
+        if (input.Length == 0 || input[0] != '"')
+        {
+            return false;
+        }
+
+        var parsed = new StringBuilder();
+        var backslashCount = 0;
+        for (var index = 1; index < input.Length; index++)
+        {
+            var ch = input[index];
+            if (ch == '\\')
+            {
+                backslashCount++;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                parsed.Append('\\', backslashCount / 2);
+                if (backslashCount % 2 == 0)
+                {
+                    value = parsed.ToString();
+                    consumed = index + 1;
+                    return true;
+                }
+
+                parsed.Append('"');
+                backslashCount = 0;
+                continue;
+            }
+
+            parsed.Append('\\', backslashCount);
+            backslashCount = 0;
+            parsed.Append(ch);
+        }
+
+        return false;
     }
 
     public void Dispose()

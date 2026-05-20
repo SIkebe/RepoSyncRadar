@@ -49,6 +49,20 @@ internal static partial class DocsLiquidEvaluator
     [GeneratedRegex(@"\{%-?\s*indented_data_reference\s+(?<expr>[A-Za-z0-9_.\-/+]+)(?:\s+spaces=(?<spaces>\d+))?\s*-?%\}")]
     private static partial Regex IndentedDataRegex();
 
+    // {% for entry in tables.copilot.models-and-pricing %}...{% endfor %}
+    [GeneratedRegex(@"\{%-?\s*for\s+(?<var>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<expr>[A-Za-z0-9_.\-/]+)\s*-?%\}(?<body>.*?)\{%-?\s*endfor\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex ForBlockRegex();
+
+    // {{ entry.model }} within supported for loops.
+    [GeneratedRegex(@"\{\{-?\s*(?<var>[A-Za-z_][A-Za-z0-9_]*)\.(?<key>[A-Za-z0-9_-]+)\s*-?\}\}")]
+    private static partial Regex LoopVariableExprRegex();
+
+    [GeneratedRegex("""^(?<var>[A-Za-z_][A-Za-z0-9_]*)\.(?<key>[A-Za-z0-9_-]+)\s*(?<op>==|!=)\s*(?<quote>["'])(?<value>.*?)\k<quote>$""")]
+    private static partial Regex LoopComparisonRegex();
+
+    [GeneratedRegex(@"^(?<var>[A-Za-z_][A-Za-z0-9_]*)\.(?<key>[A-Za-z0-9_-]+)$")]
+    private static partial Regex LoopTruthyRegex();
+
     // {{ variables.X.Y }} / {{ site.data.variables.X.Y }}
     [GeneratedRegex(@"\{\{-?\s*(?<expr>[A-Za-z0-9_.\-/\[\]]+)\s*-?\}\}")]
     private static partial Regex VariableExprRegex();
@@ -59,6 +73,10 @@ internal static partial class DocsLiquidEvaluator
     private static readonly Dictionary<string, OcticonDefinition> s_octicons =
         new Dictionary<string, OcticonDefinition>(StringComparer.Ordinal)
         {
+            ["alert"] = new(
+                16,
+                16,
+                """<path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path>"""),
             ["copilot"] = new(
                 16,
                 16,
@@ -139,10 +157,12 @@ internal static partial class DocsLiquidEvaluator
             return CreateRawSentinel(rawSegments.Count - 1);
         });
 
-        // 2. ifversion / if を内側から再帰的に解く。ifversion は version で真評価、
-        //    if (= 版に依存しない) は最初の分岐を採用 (保守的)。
+        // 2. for / ifversion / if を内側から再帰的に解く。for は data YAML 配列を
+        //    簡易展開し、ifversion は version で真評価、if (= 版に依存しない) は
+        //    最初の分岐を採用 (保守的)。
         //    variables / reusables の展開で新しい ifversion が現れることがあるため、
         //    反復展開の中でも毎回 ResolveConditionals を通す。
+        current = ResolveForLoops(current, context, version);
         current = ResolveConditionals(current, version);
         current = OcticonTagRegex().Replace(current, ResolveOcticonTag);
 
@@ -150,10 +170,12 @@ internal static partial class DocsLiquidEvaluator
         for (var depth = 0; depth < maxRecursionDepth; depth++)
         {
             var before = current;
+            current = ResolveForLoops(current, context, version);
             var dataSource = current;
             current = DataTagRegex().Replace(current, m => ResolveDataExpr(m, context, dataSource));
             current = IndentedDataRegex().Replace(current, m => ResolveIndentedDataExpr(m, context));
             current = VariableExprRegex().Replace(current, m => ResolveDataExpr(m.Groups["expr"].Value, context, m.Value));
+            current = ResolveForLoops(current, context, version);
             current = ResolveConditionals(current, version);
             current = OcticonTagRegex().Replace(current, ResolveOcticonTag);
             if (string.Equals(before, current, StringComparison.Ordinal))
@@ -230,6 +252,85 @@ internal static partial class DocsLiquidEvaluator
             return expr["data.".Length..];
         }
         return expr;
+    }
+
+    private static string ResolveForLoops(string source, DocsLiquidContext context, DocsVersion version)
+    {
+        var current = source;
+        for (var safety = 0; safety < InfiniteLoopGuard; safety++)
+        {
+            var replaced = ForBlockRegex().Replace(current, m => ResolveForBlock(m, context, version));
+            if (string.Equals(replaced, current, StringComparison.Ordinal))
+            {
+                break;
+            }
+            current = replaced;
+        }
+        return current;
+    }
+
+    private static string ResolveForBlock(Match match, DocsLiquidContext context, DocsVersion version)
+    {
+        var variableName = match.Groups["var"].Value;
+        var sequenceKey = NormalizeDataExpr(match.Groups["expr"].Value);
+        if (!context.DataSequences.TryGetValue(sequenceKey, out var rows))
+        {
+            return match.Value;
+        }
+
+        var body = match.Groups["body"].Value;
+        var sb = new StringBuilder(body.Length * Math.Min(rows.Count, 4));
+        foreach (var row in rows)
+        {
+            var scope = new LoopScope(variableName, row);
+            var rendered = ResolveConditionals(body, version, scope);
+            rendered = ResolveLoopVariables(rendered, scope);
+            sb.Append(rendered);
+        }
+        return sb.ToString();
+    }
+
+    private static string ResolveLoopVariables(string source, LoopScope scope)
+        => LoopVariableExprRegex().Replace(source, m =>
+        {
+            if (!string.Equals(m.Groups["var"].Value, scope.Name, StringComparison.Ordinal))
+            {
+                return m.Value;
+            }
+
+            var key = m.Groups["key"].Value;
+            return scope.Values.TryGetValue(key, out var value) ? value : string.Empty;
+        });
+
+    private static bool TryEvaluateLoopCondition(string condition, LoopScope? scope, out bool result)
+    {
+        result = false;
+        if (scope is null)
+        {
+            return false;
+        }
+
+        var trimmed = condition.Trim();
+        var comparison = LoopComparisonRegex().Match(trimmed);
+        if (comparison.Success && string.Equals(comparison.Groups["var"].Value, scope.Name, StringComparison.Ordinal))
+        {
+            var key = comparison.Groups["key"].Value;
+            var expected = comparison.Groups["value"].Value;
+            var actual = scope.Values.TryGetValue(key, out var value) ? value : string.Empty;
+            var isEqual = string.Equals(actual, expected, StringComparison.Ordinal);
+            result = comparison.Groups["op"].Value == "==" ? isEqual : !isEqual;
+            return true;
+        }
+
+        var truthy = LoopTruthyRegex().Match(trimmed);
+        if (truthy.Success && string.Equals(truthy.Groups["var"].Value, scope.Name, StringComparison.Ordinal))
+        {
+            var key = truthy.Groups["key"].Value;
+            result = scope.Values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value);
+            return true;
+        }
+
+        return false;
     }
 
     private static string ApplyDataTagContext(Match match, string source, string text)
@@ -473,6 +574,8 @@ internal static partial class DocsLiquidEvaluator
     [GeneratedRegex(@"[^a-z0-9]+", RegexOptions.IgnoreCase)]
     private static partial Regex NonAlphanumericRegex();
 
+    private sealed record LoopScope(string Name, IReadOnlyDictionary<string, string> Values);
+
     private static string IndentLines(string content, int spaces)
     {
         var indent = new string(' ', spaces);
@@ -508,7 +611,7 @@ internal static partial class DocsLiquidEvaluator
         sb.Append(segment);
     }
 
-    private static string ResolveConditionals(string source, DocsVersion version)
+    private static string ResolveConditionals(string source, DocsVersion version, LoopScope? scope = null)
     {
         var current = source;
         for (var safety = 0; safety < InfiniteLoopGuard; safety++)
@@ -518,7 +621,7 @@ internal static partial class DocsLiquidEvaluator
                 var tag = m.Groups["tag"].Value;
                 var cond = m.Groups["cond"].Value;
                 var body = m.Groups["body"].Value;
-                return EvaluateBlock(tag, cond, body, version);
+                return EvaluateBlock(tag, cond, body, version, scope);
             });
             if (string.Equals(replaced, current, StringComparison.Ordinal))
             {
@@ -534,7 +637,7 @@ internal static partial class DocsLiquidEvaluator
     /// 採用すべき分岐の本文 (= elsif/else 境界で切り出した片) を返す。
     /// どの分岐も真でなく <c>{% else %}</c> も無ければ空文字列。
     /// </summary>
-    private static string EvaluateBlock(string tag, string cond, string body, DocsVersion version)
+    private static string EvaluateBlock(string tag, string cond, string body, DocsVersion version, LoopScope? scope)
     {
         var isVersion = string.Equals(tag, "ifversion", StringComparison.Ordinal);
 
@@ -542,12 +645,12 @@ internal static partial class DocsLiquidEvaluator
         var separators = BranchSeparatorRegex().Matches(body);
         if (separators.Count == 0)
         {
-            return EvaluateCondition(cond, isVersion, version) ? body : string.Empty;
+            return EvaluateCondition(cond, isVersion, version, scope) ? body : string.Empty;
         }
 
         // 0 番目 = if 本体 (条件: cond)
         var firstBranchBody = body[..separators[0].Index];
-        if (EvaluateCondition(cond, isVersion, version))
+        if (EvaluateCondition(cond, isVersion, version, scope))
         {
             return firstBranchBody;
         }
@@ -566,7 +669,7 @@ internal static partial class DocsLiquidEvaluator
             {
                 return branchBody;
             }
-            if (EvaluateCondition(branchCond, isVersion, version))
+            if (EvaluateCondition(branchCond, isVersion, version, scope))
             {
                 return branchBody;
             }
@@ -575,12 +678,17 @@ internal static partial class DocsLiquidEvaluator
         return string.Empty;
     }
 
-    private static bool EvaluateCondition(string condition, bool isVersion, DocsVersion version)
+    private static bool EvaluateCondition(string condition, bool isVersion, DocsVersion version, LoopScope? scope)
     {
         if (isVersion)
         {
             return VersionExpressionEvaluator.Evaluate(condition, version);
         }
+        if (TryEvaluateLoopCondition(condition, scope, out var loopConditionResult))
+        {
+            return loopConditionResult;
+        }
+
         // {% if X %} は版とは無関係の Liquid 条件式 (truthiness)。
         // フル Liquid 評価器は実装していないため、保守的に true 扱いとし最初の分岐を採用する。
         return true;

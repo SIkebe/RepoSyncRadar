@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
@@ -26,6 +27,9 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </remarks>
 public sealed partial class SystemProcessRunner : IProcessRunner
 {
+    private static readonly ConcurrentDictionary<string, string> s_resolvedExecutableCache =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     private readonly ILogger<SystemProcessRunner> _logger;
 
     public SystemProcessRunner()
@@ -190,11 +194,26 @@ public sealed partial class SystemProcessRunner : IProcessRunner
     /// so production code stays simple while tests can inject their own filesystem.
     /// </summary>
     private static string ResolveOnPath(string fileName)
-        => ResolveExecutable(
-            fileName,
-            pathEnv: Environment.GetEnvironmentVariable("PATH"),
-            pathExtEnv: Environment.GetEnvironmentVariable("PATHEXT"),
-            fileExists: File.Exists);
+    {
+        if (!OperatingSystem.IsWindows()
+            || Path.IsPathRooted(fileName)
+            || Path.HasExtension(fileName))
+        {
+            return fileName;
+        }
+
+        var pathEnv = Environment.GetEnvironmentVariable("PATH");
+        var pathExtEnv = Environment.GetEnvironmentVariable("PATHEXT");
+        var cacheKey = string.Concat(fileName, "\0", pathEnv, "\0", pathExtEnv);
+        return s_resolvedExecutableCache.GetOrAdd(
+            cacheKey,
+            static (_, state) => ResolveExecutable(
+                state.FileName,
+                state.PathEnv,
+                state.PathExtEnv,
+                File.Exists),
+            (FileName: fileName, PathEnv: pathEnv, PathExtEnv: pathExtEnv));
+    }
 
     /// <summary>
     /// Resolves a bare command name (e.g. <c>npm</c>) into a full path such as

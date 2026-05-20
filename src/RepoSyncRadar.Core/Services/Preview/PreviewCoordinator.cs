@@ -1,5 +1,8 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Net;
+using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.Core.Options;
@@ -86,16 +89,16 @@ public interface IPreviewCoordinator
     Task PrewarmAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Predictively warms everything needed to render Markdown comparison previews
-    /// for a freshly selected commit so the user's first "ローカルプレビュー" click
-    /// only pays the per-file Markdown render cost (typically 10-50 ms). Performs
+    /// Predictively warms the repository and before/after worktrees for a freshly
+    /// selected commit so the user's first "ローカルプレビュー" click does not pay
+    /// the network fetch or worktree setup cost when the data is already local. Performs
     /// <see cref="DocsWorktreeManager.EnsureBareCloneAsync"/>,
-    /// <see cref="DocsWorktreeManager.FetchPrAsync"/>,
+    /// commit availability check / PR fetch when needed,
     /// <see cref="DocsWorktreeManager.ResolveFirstParentAsync"/>,
     /// <see cref="DocsWorktreeManager.CheckoutAsync"/> for both the before/after
-    /// commits, and loads the <c>DocsLiquidContext</c> (data/variables and
-    /// data/reusables, thousands of files for the public docs repo). All work
-    /// is serialized through a per-(prNumber, sha) <see cref="SemaphoreSlim"/>,
+    /// commits. Per-file Liquid context is loaded lazily from only the clicked
+    /// Markdown's referenced variables/reusables/AUTOTITLE targets. All work is
+    /// serialized through a per-(prNumber, sha) <see cref="SemaphoreSlim"/>,
     /// so concurrent invocations from the predictive path and the user-click
     /// path coalesce instead of racing the internal Dictionary in
     /// <see cref="DocsWorktreeManager"/>. Best-effort: any failure (network,
@@ -165,13 +168,13 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     private readonly ILogger<PreviewCoordinator> _logger;
     private string? _activeSha;
     private string? _activeBeforeSha;
+    private string? _activeMarkdownAssetRoot;
 
     // §Step 19.10 (perf): 同一 PR HEAD で 1/7 → 2/7 → 3/7 のように別ファイルへ
-    // 切り替えるたびに毎回 git fetch + git rev-parse + git worktree add ×2 +
-    // data/variables/**/*.yml と data/reusables/**/*.md の全件読み込みを走らせると、
+    // 切り替えるたびに毎回 git fetch + git rev-parse + git worktree add ×2 を走らせると、
     // 公式 docs (数千ファイル) では 1 ファイル切り替えに数秒〜10 秒掛かる。
     // (prNumber, sha) ごとに「準備済みセッション」をキャッシュして、ファイル切替の
-    // たびに走らせるのは ReadWorktreeFile + Markdig レンダリングだけにする。
+    // たびに走らせるのはファイル読込 + 対象Markdown用Liquid context + Markdigだけにする。
     private readonly ConcurrentDictionary<PreparedSessionKey, PreparedMarkdownSession> _preparedSessions = new();
 
     // (prNumber, sha) ごとの準備処理は 1 本にシリアライズする。先読み (PredictivePrewarmAsync)
@@ -180,19 +183,15 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     // Dictionary は thread-safe ではないので、これを介して保護する。
     private readonly ConcurrentDictionary<PreparedSessionKey, SemaphoreSlim> _preparedSessionLocks = new();
 
-    // 同じ worktreePath なら data/variables / data/reusables の中身は不変なので、
-    // 1 回読んだ DocsLiquidContext は何度でも使い回す。
-    private readonly ConcurrentDictionary<string, DocsLiquidContext> _liquidContextCache
-        = new(StringComparer.OrdinalIgnoreCase);
+    // commitSha + filePath ごとに、クリックされた Markdown が実際に参照する
+    // variables/reusables/page titles だけを読み込んだ DocsLiquidContext を使い回す。
+    private readonly ConcurrentDictionary<LiquidContextCacheKey, DocsLiquidContext> _liquidContextCache = new();
 
     private readonly record struct PreparedSessionKey(int PrNumber, string Sha);
 
-    private sealed record PreparedMarkdownSession(
-        string BeforeSha,
-        string BeforeWorktreePath,
-        string AfterWorktreePath,
-        DocsLiquidContext BeforeLiquid,
-        DocsLiquidContext AfterLiquid);
+    private readonly record struct LiquidContextCacheKey(string CommitSha, string FilePath);
+
+    private sealed record PreparedMarkdownSession(string BeforeSha);
 
     public PreviewCoordinator(
         DocsWorktreeManager worktree,
@@ -241,8 +240,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         progress?.Report("リポジトリを準備中… (初回は git clone --bare で 1〜2 分)");
         await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
 
-        progress?.Report($"PR #{prNumber.ToString(CultureInfo.InvariantCulture)} を取得中… (git fetch)");
-        await _worktree.FetchPrAsync(prNumber, cancellationToken).ConfigureAwait(false);
+        await _worktree.EnsureCommitAvailableAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
 
         progress?.Report("worktree を作成中… (git worktree add)");
         var worktreePath = await _worktree.CheckoutAsync(sha, cancellationToken).ConfigureAwait(false);
@@ -299,8 +297,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         progress?.Report("リポジトリを準備中… (初回は git clone --bare で 1〜2 分)");
         await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
 
-        progress?.Report($"PR #{prNumber.ToString(CultureInfo.InvariantCulture)} を取得中… (git fetch)");
-        await _worktree.FetchPrAsync(prNumber, cancellationToken).ConfigureAwait(false);
+        await _worktree.EnsureCommitAvailableAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
 
         progress?.Report("比較元の親コミットを解決中… (git rev-parse <sha>^)");
         var beforeSha = await _worktree.ResolveFirstParentAsync(sha, cancellationToken).ConfigureAwait(false);
@@ -421,26 +418,39 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
-        progress?.Report($"{filePath} の変更前 Markdown を読み込み中…");
-        var beforeMarkdown = await ReadWorktreeFileOrNullAsync(session.BeforeWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
-        progress?.Report($"{filePath} の PR HEAD Markdown を読み込み中…");
-        var afterMarkdown = await ReadWorktreeFileOrNullAsync(session.AfterWorktreePath, filePath, cancellationToken).ConfigureAwait(false);
+        progress?.Report($"{filePath} の変更前 Markdown を bare clone から読み込み中…");
+        var beforeMarkdown = await _worktree.ReadFileTextAsync(session.BeforeSha, filePath, cancellationToken).ConfigureAwait(false);
+        progress?.Report($"{filePath} の PR HEAD Markdown を bare clone から読み込み中…");
+        var afterMarkdown = await _worktree.ReadFileTextAsync(sha, filePath, cancellationToken).ConfigureAwait(false);
+
+        progress?.Report("変更前 Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
+        var beforeLiquid = await LoadLiquidContextCachedAsync(
+            session.BeforeSha,
+                filePath,
+                beforeMarkdown,
+                cancellationToken)
+            .ConfigureAwait(false);
+        progress?.Report("PR HEAD Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
+        var afterLiquid = await LoadLiquidContextCachedAsync(
+            sha,
+                filePath,
+                afterMarkdown,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         progress?.Report("公式版 (fpt/ghec/ghes) で差分の出る版を解析中…");
         var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetails(
             beforeMarkdown,
-            session.BeforeLiquid,
+            beforeLiquid,
             afterMarkdown,
-            session.AfterLiquid);
+            afterLiquid);
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
         progress?.Report("フロントマターの変更点を解析中…");
         var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
         progress?.Report("Liquid 条件と関連 data ファイルの差分を解析中…");
         var sourceDiff = MarkdownSourceDiffAnalyzer.Analyze(
             beforeMarkdown,
-            afterMarkdown,
-            session.BeforeWorktreePath,
-            session.AfterWorktreePath);
+            afterMarkdown);
         var sourceChangeCount = frontmatterChanges.Count
             + sourceDiff.IfversionChanges.Count
             + sourceDiff.RelatedFileChanges.Sum(static file => file.Changes.Count);
@@ -451,7 +461,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             beforeMarkdown,
             session.BeforeSha,
             "変更前",
-            session.BeforeLiquid,
+            beforeLiquid,
             effectiveVersion,
             affectedVersions,
             versionImpacts: versionImpacts,
@@ -465,7 +475,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             afterMarkdown,
             sha,
             "PR HEAD",
-            session.AfterLiquid,
+            afterLiquid,
             effectiveVersion,
             affectedVersions,
             versionImpacts: versionImpacts,
@@ -479,15 +489,26 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             ["/markdown/after"] = afterHtml,
         };
 
-        var assetRoots = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            [MarkdownBeforeAssetRoute] = session.BeforeWorktreePath,
-            [MarkdownAfterAssetRoute] = session.AfterWorktreePath,
-        };
+        var (assetRoots, markdownAssetRoot) = await PrepareMarkdownAssetRootsAsync(
+                session.BeforeSha,
+                sha,
+                beforeHtml,
+                afterHtml,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
         progress?.Report($"Markdown 比較プレビューを起動中… (ポート {port.ToString(CultureInfo.InvariantCulture)})");
-        await _contentServer.StartAsync(port, pages, assetRoots, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _contentServer.StartAsync(port, pages, assetRoots, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            DeleteDirectoryBestEffort(markdownAssetRoot);
+            throw;
+        }
+        ReplaceActiveMarkdownAssetRoot(markdownAssetRoot);
         _session.Activate(port);
 
         // §Step 19.9/19.10: バージョン切替でもファイル切替でも同じポートで
@@ -505,8 +526,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             afterUrl,
             port,
             port,
-            session.BeforeWorktreePath,
-            session.AfterWorktreePath,
+            string.Empty,
+            string.Empty,
             session.BeforeSha,
             sha)
         {
@@ -560,8 +581,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             progress?.Report("リポジトリを準備中… (初回は git clone --bare で 1〜2 分)");
             await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
 
-            progress?.Report($"PR #{prNumber.ToString(CultureInfo.InvariantCulture)} を取得中… (git fetch)");
-            await _worktree.FetchPrAsync(prNumber, cancellationToken).ConfigureAwait(false);
+            await _worktree.EnsureCommitAvailableAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
 
             progress?.Report("比較元の親コミットを解決中… (git rev-parse <sha>^)");
             var beforeSha = await _worktree.ResolveFirstParentAsync(sha, cancellationToken).ConfigureAwait(false);
@@ -570,31 +590,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 throw new InvalidOperationException("比較元になる親コミットを解決できませんでした。");
             }
 
-            progress?.Report("変更前 worktree を作成中… (git worktree add)");
-            var beforeWorktreePath = await _worktree.CheckoutAsync(beforeSha, cancellationToken).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(beforeWorktreePath))
-            {
-                return null;
-            }
-
-            progress?.Report("PR HEAD worktree を作成中… (git worktree add)");
-            var afterWorktreePath = await _worktree.CheckoutAsync(sha, cancellationToken).ConfigureAwait(false);
-            if (string.IsNullOrEmpty(afterWorktreePath))
-            {
-                return null;
-            }
-
-            progress?.Report("変更前 worktree の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
-            var beforeLiquid = await LoadLiquidContextCachedAsync(beforeWorktreePath, cancellationToken).ConfigureAwait(false);
-            progress?.Report("PR HEAD worktree の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
-            var afterLiquid = await LoadLiquidContextCachedAsync(afterWorktreePath, cancellationToken).ConfigureAwait(false);
-
-            var session = new PreparedMarkdownSession(
-                beforeSha,
-                beforeWorktreePath,
-                afterWorktreePath,
-                beforeLiquid,
-                afterLiquid);
+            var session = new PreparedMarkdownSession(beforeSha);
             _preparedSessions[key] = session;
             return session;
         }
@@ -609,45 +605,33 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
-        if (_preparedSessions.TryGetValue(key, out var cached)
-            && Directory.Exists(cached.BeforeWorktreePath)
-            && Directory.Exists(cached.AfterWorktreePath)
-            && await TryRepairPreparedWorktreeAsync("変更前", cached.BeforeWorktreePath, progress, cancellationToken).ConfigureAwait(false)
-            && await TryRepairPreparedWorktreeAsync("PR HEAD", cached.AfterWorktreePath, progress, cancellationToken).ConfigureAwait(false))
+        if (_preparedSessions.TryGetValue(key, out var cached))
         {
             return cached;
-        }
-        // Worktree directory was pruned out from under us (e.g. CleanupCacheAsync
-        // on another caller). Drop the stale entry so the next call rebuilds.
-        if (cached is not null)
-        {
-            _preparedSessions.TryRemove(key, out _);
         }
         return null;
     }
 
-    private async Task<bool> TryRepairPreparedWorktreeAsync(
-        string label,
-        string worktreePath,
-        IProgress<string>? progress,
-        CancellationToken cancellationToken)
-    {
-        progress?.Report($"キャッシュ済み {label} worktree の状態を検証中…");
-        return await _worktree.TryRepairExistingWorktreeAsync(worktreePath, cancellationToken).ConfigureAwait(false);
-    }
-
     private async Task<DocsLiquidContext> LoadLiquidContextCachedAsync(
-        string worktreePath,
+        string commitSha,
+        string filePath,
+        string? markdown,
         CancellationToken cancellationToken)
     {
-        if (_liquidContextCache.TryGetValue(worktreePath, out var cached))
+        var key = new LiquidContextCacheKey(commitSha, filePath);
+        if (_liquidContextCache.TryGetValue(key, out var cached))
         {
             return cached;
         }
-        var loaded = await DocsLiquidContextLoader.LoadAsync(worktreePath, cancellationToken).ConfigureAwait(false);
+        var loaded = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+                new GitCommitDocsFileSource(_worktree, commitSha),
+                filePath,
+                markdown,
+                cancellationToken)
+            .ConfigureAwait(false);
         // DocsLiquidContext.Empty を含めキャッシュに入れる: data/ 配下が無いのも
         // 一定の事実なので 2 回目以降のディスク I/O を避ける。
-        _liquidContextCache[worktreePath] = loaded;
+        _liquidContextCache[key] = loaded;
         return loaded;
     }
 
@@ -656,6 +640,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         await _contentServer.StopAsync(cancellationToken).ConfigureAwait(false);
         await _beforeServer.StopAsync(cancellationToken).ConfigureAwait(false);
         await _server.StopAsync(cancellationToken).ConfigureAwait(false);
+        ReplaceActiveMarkdownAssetRoot(null);
         _session.Deactivate();
         _activeBeforeSha = null;
         _activeSha = null;
@@ -682,10 +667,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             // 実際に最初の Markdown ファイルをクリックしたタイミングで
             //   - git rev-parse <sha>^
             //   - git worktree add ×2
-            //   - data/variables / data/reusables の全件読み込み
-            // が直列で走り、1/7 → 2/7 へのファイル切替時にも data 配下の I/O が
-            // 再走するため重く感じられる。EnsurePreparedSessionAsync を呼んでおけば
-            // ユーザクリック時はファイル単位の Markdown レンダリングだけで済む。
+            // が直列で走る。EnsurePreparedSessionAsync を呼んでおけば
+            // ユーザクリック時は対象MarkdownのLiquid contextとレンダリングだけで済む。
             // 同じキーに対する並列呼び出しは内部 SemaphoreSlim でシリアライズされる
             // ため DocsWorktreeManager の Dictionary レースは起こらない。
             await EnsurePreparedSessionAsync(prNumber, sha, progress: null, cancellationToken).ConfigureAwait(false);
@@ -714,6 +697,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         // Stop the running server first so we don't try to remove a worktree that
         // still has a child process holding file handles inside it.
         await StopAsync(cancellationToken).ConfigureAwait(false);
+        DeleteMarkdownAssetCacheRoot();
         var removed = await _worktree.PruneAllAsync(cancellationToken).ConfigureAwait(false);
         // PruneAllAsync の後は worktree ディレクトリが消えているので
         // _preparedSessions / _liquidContextCache を残しておくと TryGetValidPreparedSession
@@ -777,6 +761,210 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
         return fullPath;
     }
+
+    private async Task<(IReadOnlyDictionary<string, string> AssetRoots, string? MarkdownAssetRoot)> PrepareMarkdownAssetRootsAsync(
+        string beforeSha,
+        string afterSha,
+        string beforeHtml,
+        string afterHtml,
+        CancellationToken cancellationToken)
+    {
+        var beforeAssets = ExtractMarkdownAssetRepoPaths(beforeHtml, MarkdownBeforeAssetRoute);
+        var afterAssets = ExtractMarkdownAssetRepoPaths(afterHtml, MarkdownAfterAssetRoute);
+        if (beforeAssets.Count == 0 && afterAssets.Count == 0)
+        {
+            return (new Dictionary<string, string>(StringComparer.Ordinal), null);
+        }
+
+        var assetRoot = CreateMarkdownAssetRoot(beforeSha, afterSha);
+        var assetRoots = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (beforeAssets.Count > 0)
+        {
+            var beforeRoot = Path.Combine(assetRoot, "before");
+            var materialized = await _worktree.MaterializeFilesAsync(beforeSha, beforeAssets, beforeRoot, cancellationToken).ConfigureAwait(false);
+            if (materialized.Count > 0)
+            {
+                assetRoots[MarkdownBeforeAssetRoute] = beforeRoot;
+            }
+        }
+
+        if (afterAssets.Count > 0)
+        {
+            var afterRoot = Path.Combine(assetRoot, "after");
+            var materialized = await _worktree.MaterializeFilesAsync(afterSha, afterAssets, afterRoot, cancellationToken).ConfigureAwait(false);
+            if (materialized.Count > 0)
+            {
+                assetRoots[MarkdownAfterAssetRoute] = afterRoot;
+            }
+        }
+
+        if (assetRoots.Count == 0)
+        {
+            DeleteDirectoryBestEffort(assetRoot);
+            return (new Dictionary<string, string>(StringComparer.Ordinal), null);
+        }
+
+        return (assetRoots, assetRoot);
+    }
+
+    private string CreateMarkdownAssetRoot(string beforeSha, string afterSha)
+    {
+        var cacheRoot = GetMarkdownAssetCacheRoot();
+        Directory.CreateDirectory(cacheRoot);
+        var beforeSlug = beforeSha.Length >= 7 ? beforeSha[..7] : beforeSha;
+        var afterSlug = afterSha.Length >= 7 ? afterSha[..7] : afterSha;
+        return Path.Combine(cacheRoot, beforeSlug + "-" + afterSlug + "-" + Guid.NewGuid().ToString("N"));
+    }
+
+    private string GetMarkdownAssetCacheRoot()
+    {
+        if (!string.IsNullOrWhiteSpace(_options.WorktreeRoot))
+        {
+            return Path.Combine(_options.WorktreeRoot, ".markdown-assets");
+        }
+
+        var bareParent = Path.GetDirectoryName(_options.BareCloneDir);
+        return Path.Combine(
+            string.IsNullOrWhiteSpace(bareParent) ? Path.GetTempPath() : bareParent,
+            "reposyncradar-markdown-assets");
+    }
+
+    private void ReplaceActiveMarkdownAssetRoot(string? markdownAssetRoot)
+    {
+        var previous = _activeMarkdownAssetRoot;
+        _activeMarkdownAssetRoot = markdownAssetRoot;
+        if (!string.Equals(previous, markdownAssetRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            DeleteDirectoryBestEffort(previous);
+        }
+    }
+
+    private void DeleteMarkdownAssetCacheRoot()
+        => DeleteDirectoryBestEffort(GetMarkdownAssetCacheRoot());
+
+    private static HashSet<string> ExtractMarkdownAssetRepoPaths(string html, string assetRoute)
+    {
+        var routePrefix = assetRoute.TrimEnd('/') + "/";
+        var paths = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in MarkdownAssetUrlRegex().Matches(html))
+        {
+            TryAddMarkdownAssetRepoPath(match.Groups["url"].Value, routePrefix, paths);
+        }
+
+        foreach (Match match in MarkdownAssetSrcSetRegex().Matches(html))
+        {
+            AddMarkdownAssetSrcSetRepoPaths(match.Groups["value"].Value, routePrefix, paths);
+        }
+        return paths;
+    }
+
+    private static void AddMarkdownAssetSrcSetRepoPaths(string srcset, string routePrefix, ISet<string> paths)
+    {
+        foreach (var candidate in WebUtility.HtmlDecode(srcset).Split(',', StringSplitOptions.None))
+        {
+            var core = candidate.Trim();
+            if (core.Length == 0)
+            {
+                continue;
+            }
+
+            var whitespace = FindFirstWhitespace(core);
+            var url = whitespace < 0 ? core : core[..whitespace];
+            TryAddMarkdownAssetRepoPath(url, routePrefix, paths);
+        }
+    }
+
+    private static void TryAddMarkdownAssetRepoPath(string url, string routePrefix, ISet<string> paths)
+    {
+        var decodedUrl = WebUtility.HtmlDecode(url).Trim();
+        if (decodedUrl.Length == 0)
+        {
+            return;
+        }
+
+        var suffixStart = FindUrlSuffixStart(decodedUrl);
+        var route = suffixStart < 0 ? decodedUrl : decodedUrl[..suffixStart];
+        if (!route.StartsWith(routePrefix, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var relative = route[routePrefix.Length..];
+        if (TryNormalizeMarkdownAssetRepoPath(relative, out var repoPath))
+        {
+            paths.Add(repoPath);
+        }
+    }
+
+    private static bool TryNormalizeMarkdownAssetRepoPath(string relativeRoute, out string repoPath)
+    {
+        var parts = new List<string>();
+        foreach (var segment in relativeRoute.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var decoded = Uri.UnescapeDataString(segment);
+            if (decoded.Length == 0
+                || decoded.Equals(".", StringComparison.Ordinal)
+                || decoded.Equals("..", StringComparison.Ordinal)
+                || decoded.Contains('/', StringComparison.Ordinal)
+                || decoded.Contains('\\', StringComparison.Ordinal))
+            {
+                repoPath = string.Empty;
+                return false;
+            }
+            parts.Add(decoded);
+        }
+
+        repoPath = string.Join('/', parts);
+        return repoPath.Length > 0;
+    }
+
+    private static int FindUrlSuffixStart(string url)
+    {
+        var queryIndex = url.IndexOf('?');
+        var fragmentIndex = url.IndexOf('#');
+        return (queryIndex, fragmentIndex) switch
+        {
+            (>= 0, >= 0) => Math.Min(queryIndex, fragmentIndex),
+            (>= 0, _) => queryIndex,
+            (_, >= 0) => fragmentIndex,
+            _ => -1,
+        };
+    }
+
+    private static int FindFirstWhitespace(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (char.IsWhiteSpace(value[i]))
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static void DeleteDirectoryBestEffort(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Markdown asset directories are short-lived cache entries.
+        }
+    }
+
+    [GeneratedRegex("""\b(?:src|poster)\s*=\s*(?<quote>["'])(?<url>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
+    private static partial Regex MarkdownAssetUrlRegex();
+
+    [GeneratedRegex("""\bsrcset\s*=\s*(?<quote>["'])(?<value>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
+    private static partial Regex MarkdownAssetSrcSetRegex();
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Information,
         Message = "Preview comparison ready before {BeforeSha} / after {AfterSha}: {BeforeUrl} -> {AfterUrl}")]
