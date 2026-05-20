@@ -66,8 +66,30 @@ public sealed class RadarToolsTests
         await tools.ListCommitsAsync("Unseen", limit: 50, ct);
 
         var message = Assert.Single(progress.Messages);
-        Assert.Contains("全 2 件", message, StringComparison.Ordinal);
-        Assert.Contains("保存済み 0 / 2 件", message, StringComparison.Ordinal);
+        Assert.Contains("対象 2 件", message, StringComparison.Ordinal);
+        Assert.Contains("分析 0 / 2 件", message, StringComparison.Ordinal);
+        Assert.Contains("スコア保存 0 / 2 件", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RadarGetDiff_Reports_Triage_Analysis_Started()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var progress = new CapturingProgress();
+        var tracker = new TriageScoringProgressTracker();
+        var tools = new RadarTools(new StubRadarRepository(), new StubDocsGitHubClient(), new StubDocsApiClient(), tracker);
+
+        using var scope = tracker.Begin(progress);
+        tracker.ReportCommitList([
+            "aaa1111111111111111111111111111111111111",
+            "bbb2222222222222222222222222222222222222",
+        ]);
+
+        await tools.GetDiffAsync("aaa1111111111111111111111111111111111111", ct);
+
+        Assert.Contains(progress.Messages, message => message.Contains("分析 1 / 2 件", StringComparison.Ordinal)
+            && message.Contains("スコア保存 0 / 2 件", StringComparison.Ordinal)
+            && message.Contains("aaa11111", StringComparison.Ordinal));
     }
 
     [Fact]

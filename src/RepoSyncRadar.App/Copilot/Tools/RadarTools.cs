@@ -99,6 +99,7 @@ public sealed class RadarTools
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
 
+        _triageProgress.ReportAnalysisStarted(sha);
         var raw = await _github.GetUnifiedDiffAsync(sha, cancellationToken).ConfigureAwait(false);
         var masked = SecretMasker.Mask(raw);
         var wrapped = UntrustedTextWrapper.Wrap($"diff:{sha}", masked);

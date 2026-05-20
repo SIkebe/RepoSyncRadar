@@ -637,7 +637,12 @@
 
     private string FormatTriageStatus(string status)
     {
-        if (!_busy || !status.Contains("保存済み", StringComparison.Ordinal))
+        if (!_busy || !status.Contains("スコアリング", StringComparison.Ordinal))
+        {
+            return status;
+        }
+
+        if (status.Contains("Copilot 分析中", StringComparison.Ordinal))
         {
             return status;
         }

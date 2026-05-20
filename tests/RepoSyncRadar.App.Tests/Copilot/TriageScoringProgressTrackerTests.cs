@@ -16,12 +16,28 @@ public sealed class TriageScoringProgressTrackerTests
 
         var message = Assert.Single(progress.Messages);
         Assert.Contains("今回の未スコア未確認コミット", message, StringComparison.Ordinal);
-        Assert.Contains("全 2 件", message, StringComparison.Ordinal);
-        Assert.Contains("保存済み 0 / 2 件", message, StringComparison.Ordinal);
+        Assert.Contains("対象 2 件", message, StringComparison.Ordinal);
+        Assert.Contains("分析 0 / 2 件", message, StringComparison.Ordinal);
+        Assert.Contains("スコア保存 0 / 2 件", message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ReportScoreSaved_Increments_Current_Position()
+    public void ReportAnalysisStarted_Increments_Analysis_Position()
+    {
+        var tracker = new TriageScoringProgressTracker();
+        var progress = new CapturingProgress();
+
+        using var scope = tracker.Begin(progress);
+        tracker.ReportCommitList(["aaa1111111111111111111111111111111111111", "bbb2222222222222222222222222222222222222"]);
+        tracker.ReportAnalysisStarted("aaa1111111111111111111111111111111111111");
+
+        Assert.Contains(progress.Messages, message => message.Contains("分析 1 / 2 件", StringComparison.Ordinal)
+            && message.Contains("スコア保存 0 / 2 件", StringComparison.Ordinal)
+            && message.Contains("aaa11111", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ReportScoreSaved_Increments_Score_Save_Position()
     {
         var tracker = new TriageScoringProgressTracker();
         var progress = new CapturingProgress();
@@ -31,9 +47,11 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportScoreSaved("aaa1111111111111111111111111111111111111");
         tracker.ReportScoreSaved("bbb2222222222222222222222222222222222222");
 
-        Assert.Contains(progress.Messages, message => message.Contains("保存済み 1 / 2 件", StringComparison.Ordinal)
+        Assert.Contains(progress.Messages, message => message.Contains("分析 1 / 2 件", StringComparison.Ordinal)
+            && message.Contains("スコア保存 1 / 2 件", StringComparison.Ordinal)
             && message.Contains("aaa11111", StringComparison.Ordinal));
-        Assert.Contains(progress.Messages, message => message.Contains("保存済み 2 / 2 件", StringComparison.Ordinal)
+        Assert.Contains(progress.Messages, message => message.Contains("分析 2 / 2 件", StringComparison.Ordinal)
+            && message.Contains("スコア保存 2 / 2 件", StringComparison.Ordinal)
             && message.Contains("bbb22222", StringComparison.Ordinal));
     }
 
@@ -48,7 +66,7 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportScoreSaved("aaa1111111111111111111111111111111111111");
         tracker.ReportScoreSaved("aaa1111111111111111111111111111111111111");
 
-        Assert.Single(progress.Messages, message => message.Contains("保存済み 1 / 1 件", StringComparison.Ordinal));
+        Assert.Single(progress.Messages, message => message.Contains("スコア保存 1 / 1 件", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -66,7 +84,7 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportScoreSaved("aaa1111111111111111111111111111111111111");
 
         Assert.DoesNotContain(progress.Messages, message => message.Contains("全 1 件", StringComparison.Ordinal));
-        Assert.Contains(progress.Messages, message => message.Contains("保存済み 1 / 2 件", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("スコア保存 1 / 2 件", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -79,7 +97,7 @@ public sealed class TriageScoringProgressTrackerTests
         tracker.ReportCommitList(["aaa1111111111111111111111111111111111111"]);
         tracker.ReportScoreSaved("bbb2222222222222222222222222222222222222");
 
-        Assert.Contains(progress.Messages, message => message.Contains("保存済み 1 / 1 件", StringComparison.Ordinal)
+        Assert.Contains(progress.Messages, message => message.Contains("スコア保存 1 / 1 件", StringComparison.Ordinal)
             && message.Contains("bbb22222", StringComparison.Ordinal));
     }
 

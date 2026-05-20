@@ -191,9 +191,9 @@ public sealed class MorningTriageSessionTests
             NullLogger<MorningTriageSession>.Instance);
         await triage.RunAsync(progress, ct);
 
-        Assert.Contains(progress.Messages, message => message.Contains("全 2 件", StringComparison.Ordinal));
-        Assert.Contains(progress.Messages, message => message.Contains("保存済み 1 / 2 件", StringComparison.Ordinal));
-        Assert.Contains(progress.Messages, message => message.Contains("保存済み 2 / 2 件", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("対象 2 件", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("スコア保存 1 / 2 件", StringComparison.Ordinal));
+        Assert.Contains(progress.Messages, message => message.Contains("スコア保存 2 / 2 件", StringComparison.Ordinal));
     }
 
     [Fact]

@@ -136,7 +136,7 @@ public sealed class AppHeaderTests
             .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                call.Arg<IProgress<string>?>()?.Report("未確認コミットをスコアリング中: 保存済み 2 / 5 件 (abc12345)");
+                call.Arg<IProgress<string>?>()?.Report("未確認コミットをスコアリング中: 対象 5 件 / 分析 3 / 5 件 / スコア保存 2 / 5 件 (abc12345)");
                 return gate.Task;
             });
 
@@ -150,7 +150,8 @@ public sealed class AppHeaderTests
         {
             var status = cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent;
             Assert.Contains("スコアリング", status, StringComparison.Ordinal);
-            Assert.Contains("保存済み", status, StringComparison.Ordinal);
+            Assert.Contains("分析 3 / 5", status, StringComparison.Ordinal);
+            Assert.Contains("スコア保存 2 / 5", status, StringComparison.Ordinal);
             Assert.Contains("2 / 5", status, StringComparison.Ordinal);
             Assert.Contains("Copilot 分析中", status, StringComparison.Ordinal);
             Assert.Contains("経過", status, StringComparison.Ordinal);

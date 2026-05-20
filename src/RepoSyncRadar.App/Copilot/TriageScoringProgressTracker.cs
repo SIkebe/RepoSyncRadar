@@ -43,6 +43,19 @@ public sealed class TriageScoringProgressTracker
         }
     }
 
+    internal void ReportAnalysisStarted(string sha)
+    {
+        if (string.IsNullOrWhiteSpace(sha))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _activeScope?.ReportAnalysisStarted(sha.Trim());
+        }
+    }
+
     private void End(ActiveScope scope)
     {
         lock (_gate)
@@ -58,6 +71,7 @@ public sealed class TriageScoringProgressTracker
     {
         private readonly TriageScoringProgressTracker _owner;
         private readonly IProgress<string>? _progress;
+        private readonly HashSet<string> _analysisStartedShas = new(StringComparer.OrdinalIgnoreCase);
         private readonly HashSet<string> _scoredShas = new(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, int> _positions = new(StringComparer.OrdinalIgnoreCase);
         private int? _total;
@@ -94,14 +108,27 @@ public sealed class TriageScoringProgressTracker
 
             _positions = positions;
             _total = positions.Count;
+            _analysisStartedShas.RemoveWhere(sha => !_positions.ContainsKey(sha));
             _scoredShas.RemoveWhere(sha => !_positions.ContainsKey(sha));
-            var completed = _scoredShas.Count;
 
             _progress?.Report(_total == 0
                 ? "今回の未スコア未確認コミットはありません。スコアリング対象 0 / 0 件。"
-                : string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"今回の未スコア未確認コミットをスコアリング中: 全 {_total} 件 / 保存済み {completed} / {_total} 件"));
+                : BuildProgressMessage("今回の未スコア未確認コミットをスコアリング中"));
+        }
+
+        public void ReportAnalysisStarted(string sha)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (!_analysisStartedShas.Add(sha))
+            {
+                return;
+            }
+
+            _progress?.Report(BuildProgressMessage("今回の未スコア未確認コミットを分析中", sha));
         }
 
         public void ReportScoreSaved(string sha)
@@ -111,25 +138,45 @@ public sealed class TriageScoringProgressTracker
                 return;
             }
 
+            _analysisStartedShas.Add(sha);
             if (!_scoredShas.Add(sha))
             {
                 return;
             }
 
-            var completed = _total is int knownTotal
-                ? Math.Min(_scoredShas.Count, knownTotal)
-                : _scoredShas.Count;
-            var totalText = _total is int total
-                ? total.ToString(CultureInfo.InvariantCulture)
-                : "?";
-            var shortSha = sha.Length <= 8 ? sha : sha[..8];
-            var prefix = _total is int targetTotal && completed >= targetTotal
+            var prefix = _total is int targetTotal && ProgressCount(_scoredShas.Count) >= targetTotal
                 ? "今回の未スコア未確認コミットのスコアリング完了"
                 : "今回の未スコア未確認コミットをスコアリング中";
 
-            _progress?.Report(string.Create(
+            _progress?.Report(BuildProgressMessage(prefix, sha));
+        }
+
+        private string BuildProgressMessage(string prefix, string? sha = null)
+        {
+            var analysisStarted = ProgressCount(_analysisStartedShas.Count);
+            var scoreSaved = ProgressCount(_scoredShas.Count);
+            var totalText = _total is int total
+                ? total.ToString(CultureInfo.InvariantCulture)
+                : "?";
+            var suffix = string.IsNullOrWhiteSpace(sha)
+                ? string.Empty
+                : string.Create(CultureInfo.InvariantCulture, $" ({ShortSha(sha)})");
+
+            return string.Create(
                 CultureInfo.InvariantCulture,
-                $"{prefix}: 保存済み {completed} / {totalText} 件 ({shortSha})"));
+                $"{prefix}: 対象 {totalText} 件 / 分析 {analysisStarted} / {totalText} 件 / スコア保存 {scoreSaved} / {totalText} 件{suffix}");
+        }
+
+        private int ProgressCount(int count)
+        {
+            return _total is int total
+                ? Math.Min(count, total)
+                : count;
+        }
+
+        private static string ShortSha(string sha)
+        {
+            return sha.Length <= 8 ? sha : sha[..8];
         }
 
         public void Dispose()
