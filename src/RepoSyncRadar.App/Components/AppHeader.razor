@@ -149,7 +149,7 @@
                 else
                 {
                     <div class="settings-usage-grid" data-testid="settings-copilot-usage-summary">
-                        <div><span>AI Credits</span><strong>@FormatNullableAiCreditsWithUnit(_copilotUsage.AiCredits())</strong></div>
+                        <div><span>AI Credits</span><strong>@FormatSnapshotAiCreditsWithUnit(_copilotUsage)</strong></div>
                         <div><span>Premium Request cost</span><strong>@FormatNullablePremiumRequestCost(_copilotUsage.Cost)</strong></div>
                         <div><span>Premium Requests</span><strong>@FormatPremiumRequests(_copilotUsage)</strong></div>
                         <div><span>合計</span><strong>@FormatTokensWithUnit(_copilotUsage.TotalTokens)</strong></div>
@@ -162,7 +162,7 @@
                     @if (_copilotUsage.LastTurn is { } lastTurn)
                     {
                         <p class="settings-muted" data-testid="settings-copilot-usage-last">
-                            直近: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? "model unknown") / @FormatNullableAiCreditsWithUnit(lastTurn.AiCredits()) / @FormatTokensWithUnit(lastTurn.TotalTokens())
+                            直近: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? "model unknown") / @FormatTurnAiCreditsWithUnit(lastTurn) / @FormatTokensWithUnit(lastTurn.TotalTokens())
                         </p>
                     }
                     @if (_copilotUsage.SessionMetrics.FirstOrDefault() is { } sessionMetrics)
@@ -173,7 +173,7 @@
                     }
                     @if (_copilotUsage.TotalNanoAiu is { } totalNanoAiu)
                     {
-                        <p class="settings-muted" data-testid="settings-copilot-usage-aiu">@FormatBillingSource(_copilotUsage.BillingSource): @FormatNumber(totalNanoAiu) nano AIU</p>
+                        <p class="settings-muted" data-testid="settings-copilot-usage-aiu">@FormatBillingSource(_copilotUsage.BillingSource) / @FormatNumber(totalNanoAiu) nano AIU</p>
                     }
                     <button type="button"
                             class="toolbar-button compact secondary"
@@ -660,22 +660,22 @@
 
     private static string FormatAiCreditsOrTokens(CopilotUsageSnapshot usage)
         => usage.AiCredits() is { } aiCredits
-            ? $"{FormatAiCredits(aiCredits)} credits{FormatHeaderBillingSuffix(usage.BillingSource)}"
-            : $"credits 未報告 / {FormatTokens(usage.TotalTokens)} tokens";
+            ? $"AI Credits {FormatAiCredits(aiCredits)} credits{FormatEstimateSuffix(usage.BillingSource)}"
+            : $"AI Credits 未報告 / {FormatTokens(usage.TotalTokens)} tokens";
 
-    private static string FormatHeaderBillingSuffix(CopilotUsageBillingSource source)
-        => source is CopilotUsageBillingSource.OfficialPricingTable or CopilotUsageBillingSource.Mixed
-            ? " 推定"
+    private static string FormatEstimateSuffix(CopilotUsageBillingSource source)
+        => source is CopilotUsageBillingSource.SdkTokenDetails or CopilotUsageBillingSource.OfficialPricingTable or CopilotUsageBillingSource.Mixed
+            ? " (推定)"
             : string.Empty;
 
     private static string FormatBillingSource(CopilotUsageBillingSource source)
         => source switch
         {
-            CopilotUsageBillingSource.SdkReported => "SDK reported",
-            CopilotUsageBillingSource.SdkTokenDetails => "SDK token detail estimate",
-            CopilotUsageBillingSource.OfficialPricingTable => "GitHub Docs pricing estimate",
-            CopilotUsageBillingSource.Mixed => "Mixed estimate",
-            _ => "AIU estimate",
+            CopilotUsageBillingSource.SdkReported => "算出元: SDK 報告値",
+            CopilotUsageBillingSource.SdkTokenDetails => "算出元: SDK token detail から推定",
+            CopilotUsageBillingSource.OfficialPricingTable => "算出元: GitHub Docs 価格表から推定",
+            CopilotUsageBillingSource.Mixed => "算出元: SDK 報告値と推定値の混在",
+            _ => "算出元: 不明",
         };
 
     private static bool HasCopilotUsage(CopilotUsageSnapshot usage)
@@ -687,11 +687,15 @@
         return requests > 0 ? $"{FormatNumber(requests)} requests" : "未報告";
     }
 
-    private static string FormatNullableAiCredits(double? aiCredits)
-        => aiCredits is { } value ? FormatAiCredits(value) : "未報告";
+    private static string FormatSnapshotAiCreditsWithUnit(CopilotUsageSnapshot usage)
+        => usage.AiCredits() is { } value
+            ? $"{FormatAiCredits(value)} credits{FormatEstimateSuffix(usage.BillingSource)}"
+            : "未報告";
 
-    private static string FormatNullableAiCreditsWithUnit(double? aiCredits)
-        => aiCredits is { } value ? $"{FormatAiCredits(value)} credits" : "未報告";
+    private static string FormatTurnAiCreditsWithUnit(CopilotUsageRecord usage)
+        => usage.AiCredits() is { } value
+            ? $"{FormatAiCredits(value)} credits{FormatEstimateSuffix(usage.BillingSource())}"
+            : "未報告";
 
     private static string FormatAiCredits(double aiCredits)
         => aiCredits switch

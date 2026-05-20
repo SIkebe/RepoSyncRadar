@@ -380,7 +380,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         var usage = cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent;
-        Assert.Contains("credits 未報告", usage, StringComparison.Ordinal);
+        Assert.Contains("AI Credits 未報告", usage, StringComparison.Ordinal);
         Assert.Contains("1,200 tokens", usage, StringComparison.Ordinal);
     }
 
@@ -415,11 +415,13 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        Assert.Contains("credits 推定", cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent, StringComparison.Ordinal);
+        var headerUsage = cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent;
+        Assert.Contains("AI Credits", headerUsage, StringComparison.Ordinal);
+        Assert.Contains("(推定)", headerUsage, StringComparison.Ordinal);
 
         cut.Find("[data-testid=\"app-header-settings\"]").Click();
 
-        Assert.Contains("GitHub Docs pricing estimate", cut.Find("[data-testid=\"settings-copilot-usage-aiu\"]").TextContent, StringComparison.Ordinal);
+        Assert.Contains("算出元: GitHub Docs 価格表から推定", cut.Find("[data-testid=\"settings-copilot-usage-aiu\"]").TextContent, StringComparison.Ordinal);
         Assert.Contains("GitHub Docs のモデル別価格表から概算", cut.Find("[data-testid=\"settings-copilot-usage-privacy\"]").TextContent, StringComparison.Ordinal);
     }
 
