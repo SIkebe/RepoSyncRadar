@@ -193,7 +193,8 @@ public sealed class AppHeaderTests
         cut.WaitForAssertion(() =>
         {
             var status = NormalizeText(cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent);
-            Assert.StartsWith("分析中 経過", status, StringComparison.Ordinal);
+            Assert.StartsWith("進行中 経過", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("分析中 経過", status, StringComparison.Ordinal);
             Assert.DoesNotContain("今回の未スコア未確認コミットを分析中", status, StringComparison.Ordinal);
             Assert.Equal("対象 15 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-target\"]").TextContent));
             Assert.Equal("分析済み 1 / 15 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-analyzed\"]").TextContent));
