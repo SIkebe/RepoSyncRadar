@@ -36,11 +36,12 @@
         <div class="preview-progress drafts-progress" data-testid="drafts-progress">
             <div class="preview-progress-row">
                 <span class="preview-spinner" aria-hidden="true"></span>
-                <span class="preview-progress-text" data-testid="drafts-progress-text">
+                <span class="preview-progress-text progress-phase" data-testid="drafts-progress-text">
                     Copilot が差分解説と共有文案を作成中…
-                    <span class="preview-progress-elapsed" data-testid="drafts-progress-elapsed">
-                        ・ 経過 @FormatElapsed(_elapsed)
-                    </span>
+                </span>
+                <span class="progress-metric progress-metric-elapsed" data-testid="drafts-progress-elapsed">
+                    <span class="progress-metric-label">経過</span>
+                    <span class="progress-metric-value">@FormatElapsed(_elapsed)</span>
                 </span>
                 <button type="button"
                         class="preview-cancel"

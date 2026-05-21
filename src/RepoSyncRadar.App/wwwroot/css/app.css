@@ -89,6 +89,7 @@ html, body {
     color: var(--radar-fg) !important;
 }
 
+.progress-metric-list,
 .app-header-triage-progress {
     display: flex;
     align-items: center;
@@ -99,6 +100,7 @@ html, body {
     color: var(--radar-fg);
 }
 
+.progress-phase,
 .app-header-triage-phase {
     margin-right: 0.15rem;
     color: var(--radar-muted-fg);
@@ -106,6 +108,7 @@ html, body {
     white-space: nowrap;
 }
 
+.progress-metric,
 .app-header-triage-metric {
     display: inline-flex;
     align-items: baseline;
@@ -118,23 +121,27 @@ html, body {
     white-space: nowrap;
 }
 
+.progress-metric-label,
 .app-header-triage-label {
     color: var(--radar-muted-fg);
     font-weight: 600;
 }
 
+.progress-metric-value,
 .app-header-triage-value {
     color: var(--radar-fg);
     font-variant-numeric: tabular-nums;
     font-weight: 700;
 }
 
+.progress-metric-working,
 .app-header-triage-working {
     color: var(--radar-accent-fg);
     font-weight: 700;
     min-width: 8.75rem;
 }
 
+.progress-metric-elapsed,
 .app-header-triage-elapsed {
     min-width: 6.75rem;
 }

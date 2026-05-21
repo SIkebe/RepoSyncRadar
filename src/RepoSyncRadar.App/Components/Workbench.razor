@@ -150,11 +150,12 @@
                             <div class="preview-progress batch-explanation-progress" data-testid="batch-explanation-progress">
                                 <div class="preview-progress-row">
                                     <span class="preview-spinner" aria-hidden="true"></span>
-                                    <span class="preview-progress-text" data-testid="batch-explanation-progress-text">
+                                    <span class="preview-progress-text progress-phase" data-testid="batch-explanation-progress-text">
                                         Copilot が注目コミットの解説を個別生成中…
-                                        <span class="preview-progress-elapsed" data-testid="batch-explanation-progress-elapsed">
-                                            ・ 経過 @FormatElapsed(_batchExplanationElapsed)
-                                        </span>
+                                    </span>
+                                    <span class="progress-metric progress-metric-elapsed" data-testid="batch-explanation-progress-elapsed">
+                                        <span class="progress-metric-label">経過</span>
+                                        <span class="progress-metric-value">@FormatElapsed(_batchExplanationElapsed)</span>
                                     </span>
                                 </div>
                             </div>

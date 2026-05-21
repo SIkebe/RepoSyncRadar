@@ -118,11 +118,16 @@
                     <div class="preview-progress preview-cleanup-progress" data-testid="commit-detail-preview-cleanup-progress">
                         <div class="preview-progress-row">
                             <span class="preview-spinner" aria-hidden="true"></span>
-                            <span class="preview-progress-text" data-testid="commit-detail-preview-cleanup-progress-text">
+                            <span class="preview-progress-text progress-phase" data-testid="commit-detail-preview-cleanup-progress-text">
                                 @(_previewStatus ?? "キャッシュをクリーンアップ中…")
-                                <span class="preview-progress-elapsed" data-testid="commit-detail-preview-cleanup-progress-elapsed">
-                                    ・ @_previewElapsedSec 秒経過 / 上限 @_previewTimeoutSec 秒
-                                </span>
+                            </span>
+                            <span class="progress-metric progress-metric-elapsed" data-testid="commit-detail-preview-cleanup-progress-elapsed">
+                                <span class="progress-metric-label">経過</span>
+                                <span class="progress-metric-value">@_previewElapsedSec 秒</span>
+                            </span>
+                            <span class="progress-metric" data-testid="commit-detail-preview-cleanup-progress-timeout">
+                                <span class="progress-metric-label">上限</span>
+                                <span class="progress-metric-value">@_previewTimeoutSec 秒</span>
                             </span>
                             <button type="button"
                                     data-testid="commit-detail-preview-cleanup-cancel-button"
@@ -174,16 +179,24 @@
                                 <div class="preview-progress preview-file-progress" data-testid="commit-detail-preview-progress">
                                     <div class="preview-progress-row">
                                         <span class="preview-spinner" aria-hidden="true"></span>
-                                        <span class="preview-progress-text" data-testid="commit-detail-preview-progress-text">
+                                        <span class="preview-progress-text progress-phase" data-testid="commit-detail-preview-progress-text">
                                             @(_previewStatus ?? "起動中…")
-                                            <span class="preview-progress-elapsed" data-testid="commit-detail-preview-progress-elapsed">
-                                                ・ @_previewElapsedSec 秒経過 / 上限 @_previewTimeoutSec 秒
-                                                @if (_previewPid is { } pid)
-                                                {
-                                                    <span class="preview-progress-pid" data-testid="commit-detail-preview-progress-pid">・ PID @pid</span>
-                                                }
-                                            </span>
                                         </span>
+                                        <span class="progress-metric progress-metric-elapsed" data-testid="commit-detail-preview-progress-elapsed">
+                                            <span class="progress-metric-label">経過</span>
+                                            <span class="progress-metric-value">@_previewElapsedSec 秒</span>
+                                        </span>
+                                        <span class="progress-metric" data-testid="commit-detail-preview-progress-timeout">
+                                            <span class="progress-metric-label">上限</span>
+                                            <span class="progress-metric-value">@_previewTimeoutSec 秒</span>
+                                        </span>
+                                        @if (_previewPid is { } pid)
+                                        {
+                                            <span class="progress-metric preview-progress-pid" data-testid="commit-detail-preview-progress-pid">
+                                                <span class="progress-metric-label">PID</span>
+                                                <span class="progress-metric-value">@pid</span>
+                                            </span>
+                                        }
                                         <button type="button"
                                                 data-testid="commit-detail-preview-cancel-button"
                                                 class="preview-cancel"

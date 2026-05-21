@@ -205,6 +205,84 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Triage_Progress_Is_Structured_When_Agent_Reports_Ingestion_Phase()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var gate = new TaskCompletionSource<IngestionReport>();
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                call.Arg<IProgress<string>?>()?.Report("未確認コミットを取り込み中: 新規 10 / 取得 12 件 (e760b391)");
+                return gate.Task;
+            });
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = NormalizeText(cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent);
+            Assert.StartsWith("取り込み中 経過", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("未確認コミットを取り込み中", status, StringComparison.Ordinal);
+            Assert.Equal("新規 10 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-inserted\"]").TextContent));
+            Assert.Equal("取得 12 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-fetched\"]").TextContent));
+        });
+
+        gate.SetResult(new IngestionReport(Total: 12, Inserted: 10, Skipped: 0));
+    }
+
+    [Fact]
+    public void Triage_Progress_Uses_Label_Chips_For_Generic_Busy_Status()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var gate = new TaskCompletionSource<IngestionReport>();
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                call.Arg<IProgress<string>?>()?.Report("取り込み完了: 取得 12 / 新規 10 / スキップ 2");
+                return gate.Task;
+            });
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = NormalizeText(cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent);
+            Assert.StartsWith("取り込み中 経過", status, StringComparison.Ordinal);
+            Assert.Equal("取得 12 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-fetched\"]").TextContent));
+            Assert.Equal("新規 10 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-inserted\"]").TextContent));
+            Assert.Equal("スキップ 2 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-skipped\"]").TextContent));
+        });
+
+        gate.SetResult(new IngestionReport(Total: 12, Inserted: 10, Skipped: 2));
+    }
+
+    [Fact]
     public void Triage_Failure_Shows_Error_Without_Publishing_Broadcaster()
     {
         var session = Substitute.For<IGitHubAuthSession>();
