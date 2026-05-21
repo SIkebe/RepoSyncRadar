@@ -944,7 +944,10 @@ public class CommitDetailTests
         IPreviewCoordinator? coordinator,
         int previewReadyTimeoutSeconds = 600)
     {
-        var services = new ServiceCollection().AddSingleton(resolver);
+        var services = new ServiceCollection()
+            .AddSingleton(resolver)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
         if (navigator is not null)
         {
             services.AddSingleton<IPreviewNavigator>(navigator);

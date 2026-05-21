@@ -13,6 +13,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 /// repository response and that the empty state is rendered when no commits are
 /// available.
 /// </summary>
+[Collection("Localization")]
 public class CommitListTests
 {
     [Fact]
@@ -119,6 +120,8 @@ public class CommitListTests
             .Returns(_ => Task.FromResult(responses.Dequeue()));
 
         var sp = new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
             .AddSingleton(repo)
             .BuildServiceProvider();
 
@@ -198,6 +201,8 @@ public class CommitListTests
             .Returns(Task.FromResult<IReadOnlyList<Commit>>(commits));
 
         var sp = new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
             .AddSingleton(repo)
             .BuildServiceProvider();
 

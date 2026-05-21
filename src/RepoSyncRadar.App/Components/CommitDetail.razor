@@ -24,7 +24,7 @@
 <section class="radar-commit-detail" data-testid="commit-detail">
     @if (Commit is null)
     {
-        <p class="empty" data-testid="commit-detail-empty">コミットを選択してください。</p>
+        <p class="empty" data-testid="commit-detail-empty">@L["CommitDetail.Empty"]</p>
     }
     else
     {
@@ -38,14 +38,14 @@
                     <button type="button"
                         class="commit-pr-link toolbar-button compact secondary"
                         data-testid="commit-detail-open-pr"
-                        title="右ペインで PR #@Commit.PrNumber のコミット差分を開きます"
+                        title="@L["CommitDetail.OpenPrInPaneTitle", Commit.PrNumber]"
                         @onclick="() => OpenCommitDiffInWebViewAsync(commitDiffUrl)">PR #@Commit.PrNumber</button>
                     <a class="commit-pr-external-link toolbar-button compact secondary"
                        data-testid="commit-detail-open-pr-external"
                        href="@commitDiffUrl"
                        target="_blank"
                        rel="noopener"
-                       title="既定ブラウザーで PR #@Commit.PrNumber のコミット差分を開きます">↗</a>
+                       title="@L["CommitDetail.OpenPrExternalTitle", Commit.PrNumber]">↗</a>
                 }
             </div>
             <p class="message" data-testid="commit-detail-message" title="@DisplayCommitMessage(Commit.Message)">@DisplayCommitMessage(Commit.Message)</p>
@@ -56,18 +56,18 @@
             <section class="scoring" data-testid="commit-detail-scoring">
                 <div class="scoring-summary-row">
                     <div class="score-tile">
-                        <span class="score-label">スコア</span>
+                        <span class="score-label">@L["CommitDetail.Score"]</span>
                         <span class="score-value" data-testid="commit-detail-score">@FormatScore(scoring.Score)</span>
                     </div>
                     <dl class="scoring-meta">
                         <div class="scoring-meta-item">
-                            <dt>カテゴリ</dt>
+                            <dt>@L["CommitDetail.Category"]</dt>
                             <dd data-testid="commit-detail-category"><span class="meta-chip category-chip">@scoring.Category</span></dd>
                         </div>
                         @if (audience is { Count: > 0 })
                         {
                             <div class="scoring-meta-item">
-                                <dt>対象</dt>
+                                <dt>@L["CommitDetail.Audience"]</dt>
                                 <dd class="audience-chips" data-testid="commit-detail-audience">
                                     @foreach (var item in audience)
                                     {
@@ -80,17 +80,17 @@
                 </div>
                 <dl class="scoring-notes">
                     <div class="scoring-note">
-                        <dt>要約</dt>
+                        <dt>@L["CommitDetail.Summary"]</dt>
                         <dd data-testid="commit-detail-summary">@scoring.SummaryJa</dd>
                     </div>
                     <div class="scoring-note">
-                        <dt>理由</dt>
+                        <dt>@L["CommitDetail.Why"]</dt>
                         <dd data-testid="commit-detail-why">@scoring.WhyJa</dd>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(scoring.DetailsJa))
                     {
                         <div class="scoring-note scoring-detail-note">
-                            <dt>詳細分析</dt>
+                            <dt>@L["CommitDetail.DetailedAnalysis"]</dt>
                             <dd class="analysis-detail" data-testid="commit-detail-details">@scoring.DetailsJa</dd>
                         </div>
                     }
@@ -99,41 +99,41 @@
         }
         else
         {
-            <p class="unscored" data-testid="commit-detail-unscored">未スコアリング (Triage 未実行)</p>
+            <p class="unscored" data-testid="commit-detail-unscored">@L["CommitDetail.Unscored"]</p>
         }
         <div class="files-toolbar" data-testid="commit-detail-preview-toolbar">
             <div class="files-heading">
-                <span class="files-heading-label">ファイル</span>
+                <span class="files-heading-label">@L["CommitDetail.Files"]</span>
                 <span class="files-heading-count">@BuildPreviewableFileCountLabel()</span>
             </div>
             <div class="preview-cleanup-control">
                 <button type="button"
                         data-testid="commit-detail-preview-cleanup-button"
                         class="toolbar-button secondary preview-cleanup"
-                        title="キャッシュされた docs worktree をすべて削除します"
+                        title="@L["CommitDetail.CleanupCacheTitle"]"
                         disabled="@IsPreviewOperationBusy"
-                        @onclick="CleanupPreviewCacheAsync">キャッシュ削除</button>
+                        @onclick="CleanupPreviewCacheAsync">@L["CommitDetail.CleanupCache"]</button>
                 @if (_previewCleanupBusy)
                 {
                     <div class="preview-progress preview-cleanup-progress" data-testid="commit-detail-preview-cleanup-progress">
                         <div class="preview-progress-row">
                             <span class="preview-spinner" aria-hidden="true"></span>
                             <span class="preview-progress-text progress-phase" data-testid="commit-detail-preview-cleanup-progress-text">
-                                @(_previewStatus ?? "キャッシュをクリーンアップ中…")
+                                @(_previewStatus ?? L["CommitDetail.CleanupInProgress"])
                             </span>
                             <span class="progress-metric progress-metric-elapsed" data-testid="commit-detail-preview-cleanup-progress-elapsed">
-                                <span class="progress-metric-label">経過</span>
-                                <span class="progress-metric-value">@_previewElapsedSec 秒</span>
+                                <span class="progress-metric-label">@L["Common.Elapsed"]</span>
+                                <span class="progress-metric-value">@L["Common.Seconds", _previewElapsedSec]</span>
                             </span>
                             <span class="progress-metric" data-testid="commit-detail-preview-cleanup-progress-timeout">
-                                <span class="progress-metric-label">上限</span>
-                                <span class="progress-metric-value">@_previewTimeoutSec 秒</span>
+                                <span class="progress-metric-label">@L["Common.Limit"]</span>
+                                <span class="progress-metric-value">@L["Common.Seconds", _previewTimeoutSec]</span>
                             </span>
                             <button type="button"
                                     data-testid="commit-detail-preview-cleanup-cancel-button"
                                     class="preview-cancel"
                                     disabled="@_previewCanceling"
-                                    @onclick="CancelPreviewAsync">@(_previewCanceling ? "中止中…" : "中止")</button>
+                                    @onclick="CancelPreviewAsync">@(_previewCanceling ? L["Common.Canceling"] : L["Common.Cancel"])</button>
                         </div>
                     </div>
                 }
@@ -154,12 +154,12 @@
                     <span class="file-main">
                         @if (previewPosition.Ordinal > 0)
                         {
-                            <span class="preview-file-index" title="プレビュー対象 @previewPosition.Ordinal / @previewPosition.Total">@previewPosition.Ordinal</span>
+                            <span class="preview-file-index" title="@L["CommitDetail.PreviewPosition", previewPosition.Ordinal, previewPosition.Total]">@previewPosition.Ordinal</span>
                         }
                         <span class="path">@file.Path</span>
                         @if (isActivePreview)
                         {
-                            <span class="preview-active-badge">表示中</span>
+                            <span class="preview-active-badge">@L["CommitDetail.Showing"]</span>
                         }
                     </span>
                     <span class="stats"
@@ -180,15 +180,15 @@
                                     <div class="preview-progress-row">
                                         <span class="preview-spinner" aria-hidden="true"></span>
                                         <span class="preview-progress-text progress-phase" data-testid="commit-detail-preview-progress-text">
-                                            @(_previewStatus ?? "起動中…")
+                                            @(_previewStatus ?? L["CommitDetail.Starting"])
                                         </span>
                                         <span class="progress-metric progress-metric-elapsed" data-testid="commit-detail-preview-progress-elapsed">
-                                            <span class="progress-metric-label">経過</span>
-                                            <span class="progress-metric-value">@_previewElapsedSec 秒</span>
+                                            <span class="progress-metric-label">@L["Common.Elapsed"]</span>
+                                            <span class="progress-metric-value">@L["Common.Seconds", _previewElapsedSec]</span>
                                         </span>
                                         <span class="progress-metric" data-testid="commit-detail-preview-progress-timeout">
-                                            <span class="progress-metric-label">上限</span>
-                                            <span class="progress-metric-value">@_previewTimeoutSec 秒</span>
+                                            <span class="progress-metric-label">@L["Common.Limit"]</span>
+                                            <span class="progress-metric-value">@L["Common.Seconds", _previewTimeoutSec]</span>
                                         </span>
                                         @if (_previewPid is { } pid)
                                         {
@@ -201,7 +201,7 @@
                                                 data-testid="commit-detail-preview-cancel-button"
                                                 class="preview-cancel"
                                                 disabled="@_previewCanceling"
-                                                @onclick="CancelPreviewAsync">@(_previewCanceling ? "中止中…" : "中止")</button>
+                                                @onclick="CancelPreviewAsync">@(_previewCanceling ? L["Common.Canceling"] : L["Common.Cancel"])</button>
                                     </div>
                                     @if (_previewStdoutTail.Count > 0)
                                     {
@@ -238,11 +238,13 @@
 </section>
 
 @code {
-    private const string PreviewButtonLabel = "WebView2 で開く";
     private const int MaxLogTailLines = 10;
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
     [Parameter] public Commit? Commit { get; set; }
 
@@ -438,21 +440,21 @@
     {
         if (IsPreviewMappable(file))
         {
-            return "変更前コミットと PR HEAD のローカルプレビューを並べて、このファイルを WebView2 で開きます";
+            return L["CommitDetail.PreviewTitle.LocalComparison"];
         }
         if (IsMarkdownPreviewable(file))
         {
-            return "Markdown をレンダリングして変更前コミットと PR HEAD の差分を WebView2 で開きます";
+            return L["CommitDetail.PreviewTitle.MarkdownComparison"];
         }
-        return currentTarget?.AbsoluteUri ?? "公式ドキュメントを WebView2 で開きます";
+        return currentTarget?.AbsoluteUri ?? L["CommitDetail.PreviewTitle.Official"];
     }
 
     private string BuildPreviewButtonLabel(CommitFile file)
         => IsPreviewBusyFile(file)
-            ? "起動中…"
+            ? L["CommitDetail.Starting"]
             : IsActivePreviewFile(file)
-                ? "表示中"
-            : PreviewButtonLabel;
+                ? L["CommitDetail.Showing"]
+            : L["CommitDetail.OpenInWebView"];
 
     private string BuildFileRowClass(CommitFile file)
     {
@@ -512,8 +514,8 @@
     {
         var count = CountLocalComparisonPreviewableFiles();
         return count > 0
-            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{count} 件を比較可能")
-            : "比較可能なファイルなし";
+            ? L["CommitDetail.PreviewableCount", count]
+            : L["CommitDetail.NoPreviewableFiles"];
     }
 
     private int CountLocalComparisonPreviewableFiles()
@@ -533,7 +535,7 @@
         navigator.Publish(uri);
         _activePreviewPath = null;
         _activeVersion = null;
-        _previewStatus = $"PR #{Commit?.PrNumber.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty} のコミット差分を右ペインで開きました";
+        _previewStatus = L["CommitDetail.OpenedPrInPane", Commit?.PrNumber.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty];
         return Task.CompletedTask;
     }
 
@@ -553,7 +555,7 @@
             // Step 19.7: Markdown ファイルは下の Markdig 経路に流す。ここに来るのは
             // content/ 配下で .md/.markdown 以外の公開対象 (現状は事実上存在しない)
             // のみで、将来 YAML データファイル等を公開した場合の保険として残す。
-            var operation = StartPreviewOperation(commit.Sha, file.Path, $"{file.Path} のローカルプレビューを準備中…", "プレビュー起動");
+            var operation = StartPreviewOperation(commit.Sha, file.Path, L["CommitDetail.LocalPreviewPreparing", file.Path], L["CommitDetail.PreviewStartup"]);
             var token = operation.Cancellation.Token;
             var host = Services.GetService<PreviewServerHost>();
             operation.PollTask = Task.Run(
@@ -586,18 +588,18 @@
                     navigator.PublishComparison(new PreviewComparisonRequest(
                         link.BeforeUrl,
                         link.AfterUrl,
-                        $"変更前 {ShortSha(link.BeforeSha)} localhost",
+                        L["CommitDetail.BeforeLabel", ShortSha(link.BeforeSha), "localhost"],
                         $"PR HEAD {ShortSha(link.AfterSha)} localhost",
                         file.Path,
                         previewPosition.Ordinal,
                         previewPosition.Total));
                     _activePreviewPath = file.Path;
-                    _previewStatus = $"{file.Path} を変更前 / PR HEAD で比較表示しました";
+                    _previewStatus = L["CommitDetail.ComparisonOpened", file.Path];
                     return;
                 }
                 if (CanUpdatePreviewFeedback(operation))
                 {
-                    _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                    _previewStatus = L["CommitDetail.PreviewDisabled"];
                 }
                 return;
             }
@@ -626,7 +628,7 @@
         if (commit is not null && IsMarkdownPreviewable(file)
             && Services.GetService<IPreviewCoordinator>() is { } markdownCoordinator)
         {
-            var operation = StartPreviewOperation(commit.Sha, file.Path, $"{file.Path} を Markdown として比較準備中…", "プレビュー起動");
+            var operation = StartPreviewOperation(commit.Sha, file.Path, L["CommitDetail.MarkdownPreviewPreparing", file.Path], L["CommitDetail.PreviewStartup"]);
             var token = operation.Cancellation.Token;
             var host = Services.GetService<PreviewServerHost>();
             operation.PollTask = Task.Run(
@@ -660,7 +662,7 @@
                     navigator.PublishComparison(new PreviewComparisonRequest(
                         link.BeforeUrl,
                         link.AfterUrl,
-                        $"変更前 {ShortSha(link.BeforeSha)} Markdown",
+                        L["CommitDetail.BeforeLabel", ShortSha(link.BeforeSha), "Markdown"],
                         $"PR HEAD {ShortSha(link.AfterSha)} Markdown",
                         file.Path,
                         previewPosition.Ordinal,
@@ -670,12 +672,12 @@
                         SourceChangeCount: link.SourceChangeCount));
                     _activePreviewPath = file.Path;
                     _activeVersion = link.CurrentVersion;
-                    _previewStatus = $"{file.Path} を Markdown として変更前 / PR HEAD で比較表示しました";
+                    _previewStatus = L["CommitDetail.MarkdownComparisonOpened", file.Path];
                     return;
                 }
                 if (CanUpdatePreviewFeedback(operation))
                 {
-                    _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                    _previewStatus = L["CommitDetail.PreviewDisabled"];
                 }
                 return;
             }
@@ -721,7 +723,7 @@
             return;
         }
 
-        _previewStatus = "このファイルは公開ドキュメント URL に対応していません";
+        _previewStatus = L["CommitDetail.NoPublishableUrl"];
         _previewStatusIsCleanup = false;
         _previewStatusPath = file.Path;
     }
@@ -811,7 +813,7 @@
         {
             return;
         }
-        var operation = StartPreviewOperation(sha: null, busyPath: null, "キャッシュをクリーンアップ中…", "キャッシュ削除");
+        var operation = StartPreviewOperation(sha: null, busyPath: null, L["CommitDetail.CleanupInProgress"], L["CommitDetail.CleanupCache"]);
         var token = operation.Cancellation.Token;
         operation.PollTask = Task.Run(
             () => PollPreviewProgressAsync(host: null, includePreviewServerState: false, token),
@@ -820,11 +822,11 @@
         {
             if (Services.GetService<IPreviewCoordinator>() is not { } coordinator)
             {
-                _previewStatus = "プレビュー機能は無効です (DocsRepository 未設定)";
+                _previewStatus = L["CommitDetail.PreviewDisabled"];
                 return;
             }
             var removed = await coordinator.CleanupCacheAsync(token);
-            _previewStatus = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{removed} 件の worktree を削除しました");
+            _previewStatus = L["CommitDetail.CleanupRemoved", removed];
         }
         catch (OperationCanceledException)
         {
@@ -867,8 +869,8 @@
 
     private string BuildPreviewCancellationStatus(PreviewOperation operation)
         => _previewCanceling
-            ? $"{operation.CancellationSubject}を中止しました"
-            : $"{operation.CancellationSubject}が上限 {_previewTimeoutSec} 秒を超えたため中止しました";
+            ? L["CommitDetail.OperationCanceled", operation.CancellationSubject]
+            : L["CommitDetail.OperationTimedOut", operation.CancellationSubject, _previewTimeoutSec];
 
     private async Task PollPreviewProgressAsync(PreviewServerHost? host, bool includePreviewServerState, CancellationToken token)
     {

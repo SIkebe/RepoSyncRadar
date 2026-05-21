@@ -22,7 +22,29 @@ public sealed class FileAppUserSettingsStoreTests : IDisposable
         var settings = await store.LoadAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(DocsThemeMode.Dark, settings.DefaultDocsTheme);
+        Assert.Equal("ja", settings.DisplayCulture);
         Assert.Equal(DocsThemeMode.Dark, store.Current.DefaultDocsTheme);
+        Assert.Equal("ja", store.Current.DisplayCulture);
+    }
+
+    [Fact]
+    public async Task SaveDisplayCultureAsync_Persists_Culture_And_Raises_Changed()
+    {
+        var path = Path.Combine(_tempRoot, "settings.json");
+        using var store = new FileAppUserSettingsStore(path);
+        var events = new List<AppUserSettings>();
+        store.SettingsChanged += events.Add;
+
+        await store.SaveDisplayCultureAsync("en-US", TestContext.Current.CancellationToken);
+
+        Assert.Equal("en", store.Current.DisplayCulture);
+        Assert.Single(events);
+        Assert.Equal("en", events[0].DisplayCulture);
+        var json = await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken);
+        Assert.Contains("\"displayCulture\": \"en\"", json, StringComparison.Ordinal);
+
+        using var reloaded = new FileAppUserSettingsStore(path);
+        Assert.Equal("en", reloaded.Current.DisplayCulture);
     }
 
     [Fact]
@@ -54,6 +76,7 @@ public sealed class FileAppUserSettingsStoreTests : IDisposable
         var store = new FileAppUserSettingsStore(path);
 
         Assert.Equal(DocsThemeMode.Dark, store.Current.DefaultDocsTheme);
+        Assert.Equal("ja", store.Current.DisplayCulture);
     }
 
     public void Dispose()

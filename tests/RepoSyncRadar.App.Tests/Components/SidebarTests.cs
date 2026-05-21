@@ -13,6 +13,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 /// <see cref="IServiceProvider"/> set by <c>Workbench</c>, so tests build a small DI
 /// container around an NSubstitute repository and pass it as a cascading value.
 /// </summary>
+[Collection("Localization")]
 public class SidebarTests
 {
     [Fact]
@@ -33,6 +34,8 @@ public class SidebarTests
                 }));
 
         var sp = new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
             .AddSingleton(repo)
             .BuildServiceProvider();
 
@@ -68,6 +71,8 @@ public class SidebarTests
                 }));
 
         var sp = new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
             .AddSingleton(repo)
             .BuildServiceProvider();
 

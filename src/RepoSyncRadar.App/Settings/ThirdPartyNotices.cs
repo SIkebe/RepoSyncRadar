@@ -31,6 +31,7 @@ public static class ThirdPartyNotices
         MicrosoftMit("Microsoft.Extensions.Hosting", "10.0.8", "https://dot.net/"),
         MicrosoftMit("Microsoft.Extensions.Hosting.Abstractions", "10.0.8", "https://dot.net/"),
         MicrosoftMit("Microsoft.Extensions.Http", "10.0.8", "https://dot.net/"),
+        MicrosoftMit("Microsoft.Extensions.Localization", "10.0.8", "https://dot.net/"),
         MicrosoftMit("Microsoft.Extensions.Logging", "10.0.8", "https://dot.net/"),
         MicrosoftMit("Microsoft.Extensions.Logging.Debug", "10.0.8", "https://dot.net/"),
         MicrosoftMit("Microsoft.Extensions.Options", "10.0.8", "https://dot.net/"),

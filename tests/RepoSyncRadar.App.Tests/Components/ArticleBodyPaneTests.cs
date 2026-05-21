@@ -64,6 +64,8 @@ public class ArticleBodyPaneTests
     {
         var sp = new ServiceCollection()
             .AddSingleton(apiClient)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
             .BuildServiceProvider();
 
         var ctx = new Bunit.BunitContext();

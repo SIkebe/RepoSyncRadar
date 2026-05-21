@@ -94,6 +94,8 @@ public sealed class LocalAppSettingsEditorTests
     private static ServiceProvider BuildServices(ILocalAppSettingsStore store)
         => new ServiceCollection()
             .AddSingleton(store)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
             .BuildServiceProvider();
 
     private sealed class FakeLocalAppSettingsStore(LocalAppSettings initial) : ILocalAppSettingsStore

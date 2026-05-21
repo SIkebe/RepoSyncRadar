@@ -11,7 +11,10 @@ public sealed class FileAppUserSettingsStore : IAppUserSettingsStore, IDisposabl
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter<DocsThemeMode>() },
+        Converters =
+        {
+            new JsonStringEnumConverter<DocsThemeMode>(),
+        },
     };
 
     private readonly string _settingsPath;
@@ -76,6 +79,46 @@ public sealed class FileAppUserSettingsStore : IAppUserSettingsStore, IDisposabl
         }
     }
 
+    public async Task SaveDisplayCultureAsync(string cultureName, CancellationToken cancellationToken = default)
+    {
+        var normalizedCulture = AppDisplayCulture.NormalizeCultureName(cultureName);
+        var previous = Current;
+        AppUserSettings next;
+        bool changed;
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            next = Current with { DisplayCulture = normalizedCulture };
+            changed = !EqualityComparer<AppUserSettings>.Default.Equals(Current, next);
+            Current = next;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        if (changed)
+        {
+            SettingsChanged?.Invoke(next);
+        }
+
+        try
+        {
+            await SaveToDiskAsync(_settingsPath, next, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            if (changed)
+            {
+                Current = previous;
+                SettingsChanged?.Invoke(previous);
+            }
+
+            throw;
+        }
+    }
+
     public void Dispose()
         => _gate.Dispose();
 
@@ -116,7 +159,11 @@ public sealed class FileAppUserSettingsStore : IAppUserSettingsStore, IDisposabl
     private static AppUserSettings Normalize(AppUserSettings? settings)
         => settings is null
             ? AppUserSettings.Default
-            : settings with { DefaultDocsTheme = NormalizeTheme(settings.DefaultDocsTheme) };
+            : settings with
+            {
+                DefaultDocsTheme = NormalizeTheme(settings.DefaultDocsTheme),
+                DisplayCulture = AppDisplayCulture.NormalizeCultureName(settings.DisplayCulture),
+            };
 
     private static DocsThemeMode NormalizeTheme(DocsThemeMode theme)
         => Enum.IsDefined(theme) ? theme : DocsThemeMode.Dark;

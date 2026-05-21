@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AppHeader.ConfigHint" xml:space="preserve"><value>配布用 OAuth Client ID が見つかりません。独自 OAuth App を使う場合は設定画面または appsettings.local.json で上書きしてください (docs/USAGE.md)</value></data>
+  <data name="AppHeader.LastTriage" xml:space="preserve"><value>直近 Triage: 取得 {0} / 新規 {1} / スキップ {2}</value></data>
+  <data name="AppHeader.NotConfigured" xml:space="preserve"><value>⚠ OAuth Client Id 未設定</value></data>
+  <data name="AppHeader.NotSignedIn" xml:space="preserve"><value>○ 未サインイン</value></data>
+  <data name="AppHeader.SignedIn" xml:space="preserve"><value>● サインイン済み</value></data>
+  <data name="AppHeader.Triaging" xml:space="preserve"><value>Triage 中…</value></data>
+  <data name="AppHeader.SignInFailed" xml:space="preserve"><value>サインイン失敗</value></data>
+  <data name="AppHeader.SignOutFailed" xml:space="preserve"><value>サインアウト失敗</value></data>
+  <data name="AppHeader.TriageCompleted" xml:space="preserve"><value>Triage 完了</value></data>
+  <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage 失敗</value></data>
+  <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage は失敗しました。詳細はエラーを確認してください。</value></data>
+  <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Triage を開始しています…</value></data>
+  <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>記事の取得に失敗しました ({0}): {1}</value></data>
+  <data name="ArticleBody.NotFound" xml:space="preserve"><value>記事が見つかりません (404): {0}</value></data>
+  <data name="AskPalette.Busy" xml:space="preserve"><value>問い合わせ中…</value></data>
+  <data name="AskPalette.Placeholder" xml:space="preserve"><value>質問を入力 (Ctrl+Enter で実行)</value></data>
+  <data name="AskPalette.SessionNotRegistered" xml:space="preserve"><value>AskSession が DI に登録されていません。</value></data>
+  <data name="AskPalette.ShowSql" xml:space="preserve"><value>SQL を表示 (debug)</value></data>
+  <data name="CommitList.Empty.ArchiveHint" xml:space="preserve"><value>アクティブな確認対象から外した候補がここに表示されます。</value></data>
+  <data name="CommitList.Empty.ArchiveTitle" xml:space="preserve"><value>アーカイブは空です。</value></data>
+  <data name="CommitList.Empty.DefaultHint" xml:space="preserve"><value>キューや検索条件を変えて確認してください。</value></data>
+  <data name="CommitList.Empty.DefaultTitle" xml:space="preserve"><value>表示するコミットがありません。</value></data>
+  <data name="CommitList.Empty.LaterHint" xml:space="preserve"><value>判断を保留した候補がここに表示されます。</value></data>
+  <data name="CommitList.Empty.LaterTitle" xml:space="preserve"><value>保留キューは空です。</value></data>
+  <data name="CommitList.Empty.RejectedHint" xml:space="preserve"><value>低優先度として見送った候補がここに表示されます。</value></data>
+  <data name="CommitList.Empty.RejectedTitle" xml:space="preserve"><value>見送り候補は空です。</value></data>
+  <data name="CommitList.Empty.SearchHint" xml:space="preserve"><value>検索語を変えるか、別のキューを選んでください。</value></data>
+  <data name="CommitList.Empty.SearchTitle" xml:space="preserve"><value>検索条件に一致するコミットはありません。</value></data>
+  <data name="CommitList.Empty.UnseenHint" xml:space="preserve"><value>新しい候補を取得するには、上部の Triage ボタンを押してください。</value></data>
+  <data name="CommitList.Empty.UnseenTitle" xml:space="preserve"><value>未確認キューは空です。</value></data>
+  <data name="CommitList.Empty.WatchHint" xml:space="preserve"><value>追い続けたい候補を注目へ移動するとここに表示されます。</value></data>
+  <data name="CommitList.Empty.WatchTitle" xml:space="preserve"><value>注目キューは空です。</value></data>
+  <data name="CommitList.ScoreTitle" xml:space="preserve"><value>スコア {0}</value></data>
+  <data name="CommitList.SelectCommitAriaLabel" xml:space="preserve"><value>{0} を選択</value></data>
+  <data name="CommitList.Unscored" xml:space="preserve"><value>未採点</value></data>
+  <data name="CommitList.UnscoredTitle" xml:space="preserve"><value>未スコアリング</value></data>
+  <data name="CommitDetail.Audience" xml:space="preserve"><value>対象</value></data>
+  <data name="CommitDetail.BeforeLabel" xml:space="preserve"><value>変更前 {0} {1}</value></data>
+  <data name="CommitDetail.Category" xml:space="preserve"><value>カテゴリ</value></data>
+  <data name="CommitDetail.CleanupCache" xml:space="preserve"><value>キャッシュ削除</value></data>
+  <data name="CommitDetail.CleanupCacheTitle" xml:space="preserve"><value>キャッシュされた docs worktree をすべて削除します</value></data>
+  <data name="CommitDetail.CleanupInProgress" xml:space="preserve"><value>キャッシュをクリーンアップ中…</value></data>
+  <data name="CommitDetail.CleanupRemoved" xml:space="preserve"><value>{0} 件の worktree を削除しました</value></data>
+  <data name="CommitDetail.ComparisonOpened" xml:space="preserve"><value>{0} を変更前 / PR HEAD で比較表示しました</value></data>
+  <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>詳細分析</value></data>
+  <data name="CommitDetail.Empty" xml:space="preserve"><value>コミットを選択してください。</value></data>
+  <data name="CommitDetail.Files" xml:space="preserve"><value>ファイル</value></data>
+  <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>{0} のローカルプレビューを準備中…</value></data>
+  <data name="CommitDetail.MarkdownComparisonOpened" xml:space="preserve"><value>{0} を Markdown として変更前 / PR HEAD で比較表示しました</value></data>
+  <data name="CommitDetail.MarkdownPreviewPreparing" xml:space="preserve"><value>{0} を Markdown として比較準備中…</value></data>
+  <data name="CommitDetail.NoPreviewableFiles" xml:space="preserve"><value>比較可能なファイルなし</value></data>
+  <data name="CommitDetail.NoPublishableUrl" xml:space="preserve"><value>このファイルは公開ドキュメント URL に対応していません</value></data>
+  <data name="CommitDetail.OperationCanceled" xml:space="preserve"><value>{0}を中止しました</value></data>
+  <data name="CommitDetail.OperationTimedOut" xml:space="preserve"><value>{0}が上限 {1} 秒を超えたため中止しました</value></data>
+  <data name="CommitDetail.OpenedPrInPane" xml:space="preserve"><value>PR #{0} のコミット差分を右ペインで開きました</value></data>
+  <data name="CommitDetail.OpenInWebView" xml:space="preserve"><value>WebView2 で開く</value></data>
+  <data name="CommitDetail.OpenPrExternalTitle" xml:space="preserve"><value>既定ブラウザーで PR #{0} のコミット差分を開きます</value></data>
+  <data name="CommitDetail.OpenPrInPaneTitle" xml:space="preserve"><value>右ペインで PR #{0} のコミット差分を開きます</value></data>
+  <data name="CommitDetail.PreviewableCount" xml:space="preserve"><value>{0} 件を比較可能</value></data>
+  <data name="CommitDetail.PreviewPosition" xml:space="preserve"><value>プレビュー対象 {0} / {1}</value></data>
+  <data name="CommitDetail.PreviewTitle.LocalComparison" xml:space="preserve"><value>変更前コミットと PR HEAD のローカルプレビューを並べて、このファイルを WebView2 で開きます</value></data>
+  <data name="CommitDetail.PreviewTitle.MarkdownComparison" xml:space="preserve"><value>Markdown をレンダリングして変更前コミットと PR HEAD の差分を WebView2 で開きます</value></data>
+  <data name="CommitDetail.PreviewTitle.Official" xml:space="preserve"><value>公式ドキュメントを WebView2 で開きます</value></data>
+  <data name="CommitDetail.PreviewDisabled" xml:space="preserve"><value>プレビュー機能は無効です (DocsRepository 未設定)</value></data>
+  <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>プレビュー起動</value></data>
+  <data name="CommitDetail.Score" xml:space="preserve"><value>スコア</value></data>
+  <data name="CommitDetail.Showing" xml:space="preserve"><value>表示中</value></data>
+  <data name="CommitDetail.Starting" xml:space="preserve"><value>起動中…</value></data>
+  <data name="CommitDetail.Summary" xml:space="preserve"><value>要約</value></data>
+  <data name="CommitDetail.Unscored" xml:space="preserve"><value>未スコアリング (Triage 未実行)</value></data>
+  <data name="CommitDetail.Why" xml:space="preserve"><value>理由</value></data>
+  <data name="Common.CacheRead" xml:space="preserve"><value>キャッシュ読込</value></data>
+  <data name="Common.CacheWrite" xml:space="preserve"><value>キャッシュ書込</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>中止</value></data>
+  <data name="Common.Canceling" xml:space="preserve"><value>中止中…</value></data>
+  <data name="Common.Clear" xml:space="preserve"><value>クリア</value></data>
+  <data name="Common.ClearAll" xml:space="preserve"><value>全解除</value></data>
+  <data name="Common.Copy" xml:space="preserve"><value>コピー</value></data>
+  <data name="Common.Delete" xml:space="preserve"><value>削除</value></data>
+  <data name="Common.DeleteSelected" xml:space="preserve"><value>選択を削除</value></data>
+  <data name="Common.Elapsed" xml:space="preserve"><value>経過</value></data>
+  <data name="Common.AgentNotRegistered" xml:space="preserve"><value>ICopilotAgent が DI に登録されていません。</value></data>
+  <data name="Common.Input" xml:space="preserve"><value>入力</value></data>
+  <data name="Common.Error" xml:space="preserve"><value>エラー</value></data>
+  <data name="Common.Last" xml:space="preserve"><value>直近</value></data>
+  <data name="Common.Limit" xml:space="preserve"><value>上限</value></data>
+  <data name="Common.Loading" xml:space="preserve"><value>読み込み中…</value></data>
+  <data name="Common.Output" xml:space="preserve"><value>出力</value></data>
+  <data name="Common.Reasoning" xml:space="preserve"><value>推論</value></data>
+  <data name="Common.Refresh" xml:space="preserve"><value>更新</value></data>
+  <data name="Common.Reload" xml:space="preserve"><value>再読み込み</value></data>
+  <data name="Common.Reset" xml:space="preserve"><value>リセット</value></data>
+  <data name="Common.Saved" xml:space="preserve"><value>保存しました</value></data>
+  <data name="Common.Search" xml:space="preserve"><value>検索</value></data>
+  <data name="Common.Seconds" xml:space="preserve"><value>{0} 秒</value></data>
+  <data name="Common.Run" xml:space="preserve"><value>実行</value></data>
+  <data name="Common.Save" xml:space="preserve"><value>保存</value></data>
+  <data name="Common.SelectAll" xml:space="preserve"><value>全選択</value></data>
+  <data name="Common.SelectedCount" xml:space="preserve"><value>{0} 件選択中</value></data>
+  <data name="Common.Settings" xml:space="preserve"><value>設定</value></data>
+  <data name="Common.Total" xml:space="preserve"><value>合計</value></data>
+  <data name="Common.Unreported" xml:space="preserve"><value>未報告</value></data>
+  <data name="Common.Work" xml:space="preserve"><value>作業</value></data>
+  <data name="CopilotUsage.AiCreditsUnreported" xml:space="preserve"><value>AI Credits 未報告 / {0} tokens</value></data>
+  <data name="CopilotUsage.BillingSource.Mixed" xml:space="preserve"><value>算出元: SDK 報告値と推定値の混在</value></data>
+  <data name="CopilotUsage.BillingSource.OfficialPricingTable" xml:space="preserve"><value>算出元: GitHub Docs 価格表から推定</value></data>
+  <data name="CopilotUsage.BillingSource.SdkReported" xml:space="preserve"><value>算出元: SDK 報告値</value></data>
+  <data name="CopilotUsage.BillingSource.SdkTokenDetails" xml:space="preserve"><value>算出元: SDK token detail から推定</value></data>
+  <data name="CopilotUsage.BillingSource.Unknown" xml:space="preserve"><value>算出元: 不明</value></data>
+  <data name="CopilotUsage.EstimatedSuffix" xml:space="preserve"><value> (推定)</value></data>
+  <data name="Drafts.BusyHint" xml:space="preserve"><value>完了すると差分解説、Twitter、Teams、顧客向けの各欄を更新します。</value></data>
+  <data name="Drafts.Channel.Customer" xml:space="preserve"><value>顧客向け</value></data>
+  <data name="Drafts.Channel.Explanation" xml:space="preserve"><value>差分解説</value></data>
+  <data name="Drafts.ChannelEmpty" xml:space="preserve"><value>まだ生成されていません。上部の再生成ボタンで作成できます。</value></data>
+  <data name="Drafts.ClipboardUnavailable" xml:space="preserve"><value>クリップボードが利用できません。</value></data>
+  <data name="Drafts.Copied" xml:space="preserve"><value>{0} の本文をコピーしました。</value></data>
+  <data name="Drafts.Description" xml:space="preserve"><value>注目した通知の差分解説と、媒体ごとの文案を確認・コピーします。</value></data>
+  <data name="Drafts.Empty" xml:space="preserve"><value>注目コミットを選択してください。</value></data>
+  <data name="Drafts.Progress" xml:space="preserve"><value>Copilot が差分解説と共有文案を作成中…</value></data>
+  <data name="Drafts.NonJsonResponse" xml:space="preserve"><value>Copilot の応答を文案として読み取れませんでした。もう一度再生成してください。</value></data>
+  <data name="Drafts.Regenerate" xml:space="preserve"><value>解説と文案を再生成</value></data>
+  <data name="Drafts.RegenerateCanceled" xml:space="preserve"><value>再生成を中止しました。</value></data>
+  <data name="Drafts.RegenerateFailed" xml:space="preserve"><value>再生成に失敗しました</value></data>
+  <data name="Drafts.Title" xml:space="preserve"><value>差分解説と共有文案</value></data>
+  <data name="LocalSettings.LoadFailed" xml:space="preserve"><value>アプリ設定の読み込みに失敗しました</value></data>
+  <data name="LocalSettings.OAuthClientIdHint" xml:space="preserve"><value>通常は配布版に同梱された公式 Client ID を使います。組織管理の OAuth App や独自ビルドだけ上書きしてください。</value></data>
+  <data name="LocalSettings.RestartHint" xml:space="preserve"><value>保存後は次回起動で確実に反映されます。</value></data>
+  <data name="LocalSettings.SaveFailed" xml:space="preserve"><value>アプリ設定の保存に失敗しました</value></data>
+  <data name="LocalSettings.Saved" xml:space="preserve"><value>appsettings.local.json を保存しました</value></data>
+  <data name="LocalSettings.Title" xml:space="preserve"><value>アプリ設定</value></data>
+  <data name="Settings.CopilotUsage" xml:space="preserve"><value>Copilot 使用量</value></data>
+  <data name="Settings.CopilotUsage.Empty" xml:space="preserve"><value>まだ Copilot SDK の使用量は記録されていません。</value></data>
+  <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits と Premium Request cost は SDK の usage event / session metrics を優先し、SDK が AI Credits を返さない場合は GitHub Docs のモデル別価格表から概算します。プロンプト本文は保存しません。</value></data>
+  <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>セッション metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
+  <data name="Settings.DefaultTheme" xml:space="preserve"><value>既定テーマ</value></data>
+  <data name="Settings.Description" xml:space="preserve"><value>表示言語、既定テーマ、アプリ設定、ライセンス、無視リストを確認できます。</value></data>
+  <data name="Settings.DisplayLanguage" xml:space="preserve"><value>表示言語</value></data>
+  <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>表示言語を切り替えています…</value></data>
+  <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>表示言語を {0} に設定しました</value></data>
+  <data name="Settings.DisplayLanguage.SaveFailed" xml:space="preserve"><value>表示言語の保存に失敗しました</value></data>
+  <data name="Settings.IgnoreList" xml:space="preserve"><value>無視リスト</value></data>
+  <data name="Settings.IgnoreList.DeleteFailed" xml:space="preserve"><value>無視リストの削除に失敗しました</value></data>
+  <data name="Settings.IgnoreList.Deleted" xml:space="preserve"><value>{0} 件の無視リストを削除しました</value></data>
+  <data name="Settings.IgnoreList.Empty" xml:space="preserve"><value>無視リストはまだ設定されていません。</value></data>
+  <data name="Settings.IgnoreList.LoadFailed" xml:space="preserve"><value>無視リストの読み込みに失敗しました</value></data>
+  <data name="Settings.Theme.Dark" xml:space="preserve"><value>ダーク</value></data>
+  <data name="Settings.Theme.Light" xml:space="preserve"><value>ライト</value></data>
+  <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>テーマ設定の読み込みに失敗しました</value></data>
+  <data name="Settings.Theme.SaveFailed" xml:space="preserve"><value>テーマ設定の保存に失敗しました</value></data>
+  <data name="Sidebar.Archive.Description" xml:space="preserve"><value>アクティブな確認対象から外した候補</value></data>
+  <data name="Sidebar.Archive.Label" xml:space="preserve"><value>アーカイブ</value></data>
+  <data name="Sidebar.Later.Description" xml:space="preserve"><value>判断をいったん保留している候補</value></data>
+  <data name="Sidebar.Later.Label" xml:space="preserve"><value>保留</value></data>
+  <data name="Sidebar.Rejected.Description" xml:space="preserve"><value>Triage や無視ルールが低優先度と見なした候補</value></data>
+  <data name="Sidebar.Rejected.Label" xml:space="preserve"><value>見送り候補</value></data>
+  <data name="Sidebar.Unseen.Description" xml:space="preserve"><value>Triage 後、まだ人が判断していない候補</value></data>
+  <data name="Sidebar.Unseen.Label" xml:space="preserve"><value>未確認</value></data>
+  <data name="Sidebar.Watch.Description" xml:space="preserve"><value>見逃さず追いたい候補</value></data>
+  <data name="Sidebar.Watch.Label" xml:space="preserve"><value>注目</value></data>
+  <data name="ThirdParty.Description" xml:space="preserve"><value>このアプリが直接参照している NuGet パッケージの著作権 notice とライセンス本文です。</value></data>
+  <data name="ThirdParty.LicenseSource" xml:space="preserve"><value>ライセンス元</value></data>
+  <data name="ThirdParty.LicenseText" xml:space="preserve"><value>ライセンス本文</value></data>
+  <data name="ThirdParty.Project" xml:space="preserve"><value>プロジェクト</value></data>
+  <data name="ThirdParty.Title" xml:space="preserve"><value>サードパーティ ライセンス</value></data>
+  <data name="TriageProgress.Analyzed" xml:space="preserve"><value>分析済み</value></data>
+  <data name="TriageProgress.AriaWithMetrics" xml:space="preserve"><value>{0}。{1}、経過 {2}</value></data>
+  <data name="TriageProgress.AriaWithoutMetrics" xml:space="preserve"><value>{0}。経過 {1}</value></data>
+  <data name="TriageProgress.Commit" xml:space="preserve"><value>コミット</value></data>
+  <data name="TriageProgress.CurrentAnalyzing" xml:space="preserve"><value>Copilot が {0} / {1} 件目を分析中</value></data>
+  <data name="TriageProgress.CurrentApplyingScores" xml:space="preserve"><value>スコアリング結果を反映中</value></data>
+  <data name="TriageProgress.CurrentFetching" xml:space="preserve"><value>Repo sync PR を取得中</value></data>
+  <data name="TriageProgress.CurrentIngesting" xml:space="preserve"><value>未確認コミットを取り込み中</value></data>
+  <data name="TriageProgress.CurrentPreparingCopilot" xml:space="preserve"><value>Copilot セッションを準備中</value></data>
+  <data name="TriageProgress.CurrentSavingScores" xml:space="preserve"><value>Copilot の判定結果を保存中</value></data>
+  <data name="TriageProgress.CurrentScoring" xml:space="preserve"><value>Copilot が重要度を判定中</value></data>
+  <data name="TriageProgress.CurrentStartingScoring" xml:space="preserve"><value>スコアリングを開始中</value></data>
+  <data name="TriageProgress.Fetched" xml:space="preserve"><value>取得</value></data>
+  <data name="TriageProgress.Inserted" xml:space="preserve"><value>新規</value></data>
+  <data name="TriageProgress.Saved" xml:space="preserve"><value>保存済み</value></data>
+  <data name="TriageProgress.Skipped" xml:space="preserve"><value>スキップ</value></data>
+  <data name="TriageProgress.Target" xml:space="preserve"><value>対象</value></data>
+  <data name="Workbench.Archive" xml:space="preserve"><value>アーカイブへ</value></data>
+  <data name="Workbench.BackToUnseen" xml:space="preserve"><value>未確認へ戻す</value></data>
+  <data name="Workbench.BatchExplanationDescription" xml:space="preserve"><value>選択した注目コミットごとに差分解説と共有文案を生成します。</value></data>
+  <data name="Workbench.BatchExplanationProgress" xml:space="preserve"><value>Copilot が注目コミットの解説を個別生成中…</value></data>
+  <data name="Workbench.BatchExplanationTitle" xml:space="preserve"><value>注目コミットの個別解説</value></data>
+  <data name="Workbench.BatchExplanationCanceled" xml:space="preserve"><value>個別解説の生成を中止しました。</value></data>
+  <data name="Workbench.BatchExplanationFailed" xml:space="preserve"><value>個別解説の生成に失敗しました</value></data>
+  <data name="Workbench.BatchExplanationGenerated" xml:space="preserve"><value>{0} 件の注目コミットの個別解説を生成しました。コミットを開くと差分解説欄で確認できます。</value></data>
+  <data name="Workbench.BulkMoved" xml:space="preserve"><value>{0} 件を{1}に移動しました</value></data>
+  <data name="Workbench.BulkReviewHint" xml:space="preserve"><value>チェックしたコミットをまとめて移動します。詳細は行をクリックします。</value></data>
+  <data name="Workbench.CommitSearchPlaceholder" xml:space="preserve"><value>SHA / PR / タイトル</value></data>
+  <data name="Workbench.DeleteAndRescore" xml:space="preserve"><value>削除して再スコアリングへ</value></data>
+  <data name="Workbench.DeletedAndCanRescore" xml:space="preserve"><value>{0} 件をローカル DB から削除しました。次回 Triage で再取得できます</value></data>
+  <data name="Workbench.GenerateExplanations" xml:space="preserve"><value>個別に解説生成</value></data>
+  <data name="Workbench.GoToExplanations" xml:space="preserve"><value>差分解説へ</value></data>
+  <data name="Workbench.MoveToLater" xml:space="preserve"><value>保留へ</value></data>
+  <data name="Workbench.MoveToWatch" xml:space="preserve"><value>注目へ</value></data>
+  <data name="Workbench.Queues" xml:space="preserve"><value>キュー</value></data>
+  <data name="Workbench.SidebarResizeLabel" xml:space="preserve"><value>サイドバーと作業ペインの幅を変更</value></data>
+</root>

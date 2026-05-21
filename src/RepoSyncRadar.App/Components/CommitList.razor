@@ -12,7 +12,7 @@
 <section class="radar-commit-list" data-testid="commit-list">
     @if (_commits is null)
     {
-        <p class="loading" data-testid="commit-list-loading">読み込み中…</p>
+        <p class="loading" data-testid="commit-list-loading">@L["Common.Loading"]</p>
     }
     else if (_commits.Count == 0)
     {
@@ -31,7 +31,7 @@
                     data-testid="commit-list-select-all"
                     @onclick="ToggleAllVisibleAsync">@BuildSelectAllLabel()</button>
             <span class="commit-list-selection-count" data-testid="commit-list-selected-count">
-                @CountSelectedVisible() 件選択中
+                @L["Common.SelectedCount", CountSelectedVisible()]
             </span>
         </div>
         <ul class="commit-rows">
@@ -45,7 +45,7 @@
                            class="commit-row-select"
                            data-testid="commit-select"
                            data-sha="@commit.Sha"
-                           aria-label="@($"{FirstLine(commit.Message)} を選択")"
+                           aria-label="@BuildSelectCommitAriaLabel(commit)"
                            checked="@IsSelected(commit.Sha)"
                            @onclick:stopPropagation="true"
                            @onchange="() => ToggleSelectionAsync(commit.Sha)" />
@@ -65,6 +65,9 @@
 
 @code {
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
     [Parameter] public CommitQueryFilter? Filter { get; set; }
 
@@ -129,7 +132,7 @@
     }
 
     private string BuildSelectAllLabel()
-        => AreAllVisibleSelected() ? "全解除" : "全選択";
+        => AreAllVisibleSelected() ? L["Common.ClearAll"] : L["Common.SelectAll"];
 
     private bool AreAllVisibleSelected()
         => _commits is { Count: > 0 } && _commits.All(commit => IsSelected(commit.Sha));
@@ -143,13 +146,13 @@
     private static string BuildScoreClass(Commit commit)
         => commit.Scoring is null ? "score unscored" : "score";
 
-    private static string BuildScoreTitle(Commit commit)
+    private string BuildScoreTitle(Commit commit)
         => commit.Scoring is { } scoring
-            ? $"スコア {FormatScore(scoring.Score)}"
-            : "未スコアリング";
+            ? L["CommitList.ScoreTitle", FormatScore(scoring.Score)]
+            : L["CommitList.UnscoredTitle"];
 
-    private static string FormatScore(Commit commit)
-        => commit.Scoring is { } scoring ? FormatScore(scoring.Score) : "未採点";
+    private string FormatScore(Commit commit)
+        => commit.Scoring is { } scoring ? FormatScore(scoring.Score) : L["CommitList.Unscored"];
 
     private static string FormatScore(double score)
         => score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
@@ -158,17 +161,17 @@
     {
         if (!string.IsNullOrWhiteSpace(Filter?.ShaQuery))
         {
-            return "検索条件に一致するコミットはありません。";
+            return L["CommitList.Empty.SearchTitle"];
         }
 
         return Filter?.Status switch
         {
-            ReviewStatus.Unseen => "未確認キューは空です。",
-            ReviewStatus.Adopted => "注目キューは空です。",
-            ReviewStatus.Later => "保留キューは空です。",
-            ReviewStatus.Rejected => "見送り候補は空です。",
-            ReviewStatus.Archived => "アーカイブは空です。",
-            _ => "表示するコミットがありません。",
+            ReviewStatus.Unseen => L["CommitList.Empty.UnseenTitle"],
+            ReviewStatus.Adopted => L["CommitList.Empty.WatchTitle"],
+            ReviewStatus.Later => L["CommitList.Empty.LaterTitle"],
+            ReviewStatus.Rejected => L["CommitList.Empty.RejectedTitle"],
+            ReviewStatus.Archived => L["CommitList.Empty.ArchiveTitle"],
+            _ => L["CommitList.Empty.DefaultTitle"],
         };
     }
 
@@ -176,17 +179,17 @@
     {
         if (!string.IsNullOrWhiteSpace(Filter?.ShaQuery))
         {
-            return "検索語を変えるか、別のキューを選んでください。";
+            return L["CommitList.Empty.SearchHint"];
         }
 
         return Filter?.Status switch
         {
-            ReviewStatus.Unseen => "新しい候補を取得するには、上部の Triage ボタンを押してください。",
-            ReviewStatus.Adopted => "追い続けたい候補を注目へ移動するとここに表示されます。",
-            ReviewStatus.Later => "判断を保留した候補がここに表示されます。",
-            ReviewStatus.Rejected => "低優先度として見送った候補がここに表示されます。",
-            ReviewStatus.Archived => "アクティブな確認対象から外した候補がここに表示されます。",
-            _ => "キューや検索条件を変えて確認してください。",
+            ReviewStatus.Unseen => L["CommitList.Empty.UnseenHint"],
+            ReviewStatus.Adopted => L["CommitList.Empty.WatchHint"],
+            ReviewStatus.Later => L["CommitList.Empty.LaterHint"],
+            ReviewStatus.Rejected => L["CommitList.Empty.RejectedHint"],
+            ReviewStatus.Archived => L["CommitList.Empty.ArchiveHint"],
+            _ => L["CommitList.Empty.DefaultHint"],
         };
     }
 
@@ -202,4 +205,7 @@
         var newline = message.IndexOf('\n');
         return newline < 0 ? message : message[..newline];
     }
+
+    private string BuildSelectCommitAriaLabel(Commit commit)
+        => L["CommitList.SelectCommitAriaLabel", FirstLine(commit.Message)];
 }

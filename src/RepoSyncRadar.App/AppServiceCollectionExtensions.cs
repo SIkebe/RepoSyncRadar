@@ -20,6 +20,7 @@ public static class AppServiceCollectionExtensions
 {
     public static IServiceCollection AddRepoSyncRadarApp(this IServiceCollection services)
     {
+        services.AddLocalization(options => options.ResourcesPath = "Resources");
         services.TryAddSingleton<RepoSyncRadar.App.Copilot.UrlAllowList>();
         services.TryAddSingleton<IPermissionPrompt, WpfPermissionPrompt>();
         services.TryAddSingleton<RadarPermissionPolicy>();

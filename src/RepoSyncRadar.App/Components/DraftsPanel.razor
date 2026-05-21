@@ -14,8 +14,8 @@
 <div id="drafts-panel" class="drafts-panel action-panel" data-testid="drafts-panel">
     <header class="action-panel-header">
         <div>
-            <h3>差分解説と共有文案</h3>
-            <p>注目した通知の差分解説と、媒体ごとの文案を確認・コピーします。</p>
+            <h3>@L["Drafts.Title"]</h3>
+            <p>@L["Drafts.Description"]</p>
         </div>
         @if (!string.IsNullOrEmpty(Sha) && !_busy)
         {
@@ -23,13 +23,13 @@
                     class="toolbar-button secondary"
                     data-testid="drafts-regenerate"
                     disabled="@_busy"
-                    @onclick="RegenerateAsync">解説と文案を再生成</button>
+                    @onclick="RegenerateAsync">@L["Drafts.Regenerate"]</button>
         }
     </header>
 
     @if (string.IsNullOrEmpty(Sha))
     {
-        <p class="drafts-empty">注目コミットを選択してください。</p>
+        <p class="drafts-empty">@L["Drafts.Empty"]</p>
     }
     else if (_busy)
     {
@@ -37,27 +37,27 @@
             <div class="preview-progress-row">
                 <span class="preview-spinner" aria-hidden="true"></span>
                 <span class="preview-progress-text progress-phase" data-testid="drafts-progress-text">
-                    Copilot が差分解説と共有文案を作成中…
+                    @L["Drafts.Progress"]
                 </span>
                 <span class="progress-metric progress-metric-elapsed" data-testid="drafts-progress-elapsed">
-                    <span class="progress-metric-label">経過</span>
+                    <span class="progress-metric-label">@L["Common.Elapsed"]</span>
                     <span class="progress-metric-value">@FormatElapsed(_elapsed)</span>
                 </span>
                 <button type="button"
                         class="preview-cancel"
                         data-testid="drafts-cancel"
                         disabled="@_canceling"
-                        @onclick="CancelAsync">@(_canceling ? "中止中…" : "中止")</button>
+                        @onclick="CancelAsync">@(_canceling ? L["Common.Canceling"] : L["Common.Cancel"])</button>
             </div>
-            <p class="drafts-busy" data-testid="drafts-busy">完了すると差分解説、Twitter、Teams、顧客向けの各欄を更新します。</p>
+            <p class="drafts-busy" data-testid="drafts-busy">@L["Drafts.BusyHint"]</p>
         </div>
     }
     else
     {
-        @RenderChannel("explanation", "差分解説", _bundle?.ExplanationJa, large: true)
+        @RenderChannel("explanation", L["Drafts.Channel.Explanation"], _bundle?.ExplanationJa, large: true)
         @RenderChannel("twitter", "Twitter", _bundle?.TwitterJa)
         @RenderChannel("teams", "Teams", _bundle?.TeamsJa)
-        @RenderChannel("customer", "顧客向け", _bundle?.CustomerJa)
+        @RenderChannel("customer", L["Drafts.Channel.Customer"], _bundle?.CustomerJa)
         @if (!string.IsNullOrEmpty(_status))
         {
             <p class="drafts-status" data-testid="drafts-status">@_status</p>
@@ -69,6 +69,9 @@
     [Parameter] public string? Sha { get; set; }
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
     private DraftBundle? _bundle;
     private string? _lastLoadedSha;
@@ -163,7 +166,7 @@
         var agent = Services.GetService<ICopilotAgent>();
         if (agent is null)
         {
-            _status = "ICopilotAgent が DI に登録されていません。";
+            _status = L["Common.AgentNotRegistered"];
             return;
         }
         StartProgress();
@@ -176,11 +179,11 @@
         }
         catch (OperationCanceledException)
         {
-            _status = "再生成を中止しました。";
+            _status = L["Drafts.RegenerateCanceled"];
         }
         catch (Exception ex)
         {
-            _status = $"再生成に失敗しました: {BuildFriendlyErrorMessage(ex)}";
+            _status = $"{L["Drafts.RegenerateFailed"]}: {BuildFriendlyErrorMessage(ex)}";
         }
         finally
         {
@@ -252,10 +255,10 @@
             ? $"{(int)elapsed.TotalHours}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}"
             : $"{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
 
-    private static string BuildFriendlyErrorMessage(Exception ex)
+    private string BuildFriendlyErrorMessage(Exception ex)
         => ex.Message.Contains("non-JSON", StringComparison.OrdinalIgnoreCase)
             || ex.Message.Contains("JSON", StringComparison.OrdinalIgnoreCase)
-            ? "Copilot の応答を文案として読み取れませんでした。もう一度再生成してください。"
+            ? L["Drafts.NonJsonResponse"]
             : ex.Message;
 
     private async Task CopyAsync(string? text, string channel)
@@ -267,11 +270,11 @@
         var clipboard = Services.GetService<IClipboard>();
         if (clipboard is null)
         {
-            _status = "クリップボードが利用できません。";
+            _status = L["Drafts.ClipboardUnavailable"];
             return;
         }
         await clipboard.SetTextAsync(text);
-        _status = $"{channel} の本文をコピーしました。";
+        _status = L["Drafts.Copied", channel];
     }
 
     private RenderFragment RenderChannel(string channel, string label, string? body, bool large = false) => builder =>
@@ -291,7 +294,7 @@
         builder.AddAttribute(10, "disabled", string.IsNullOrEmpty(body));
         builder.AddAttribute(11, "onclick",
             Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => CopyAsync(body, label)));
-        builder.AddContent(12, "コピー");
+        builder.AddContent(12, L["Common.Copy"]);
         builder.CloseElement();
         builder.CloseElement();
 
@@ -300,7 +303,7 @@
             builder.OpenElement(13, "p");
             builder.AddAttribute(14, "class", "drafts-placeholder");
             builder.AddAttribute(15, "data-testid", $"drafts-empty-{channel}");
-            builder.AddContent(16, "まだ生成されていません。上部の再生成ボタンで作成できます。");
+            builder.AddContent(16, L["Drafts.ChannelEmpty"]);
             builder.CloseElement();
         }
         else

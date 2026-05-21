@@ -5,10 +5,13 @@
 
 @inject IServiceProvider Services
 @inject IJSRuntime JS
+@inject IStringLocalizer<SharedResource> L
 @implements IDisposable
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.JSInterop
 @using RepoSyncRadar.App.Settings
+
+@{ ApplyDisplayCultureForRender(); }
 
 <MudThemeProvider IsDarkMode="@(_theme == DocsThemeMode.Dark)" />
 <MudPopoverProvider />
@@ -16,9 +19,10 @@
 <MudSnackbarProvider />
 
 <CascadingValue Value="Services" IsFixed="true">
+<CascadingValue Value="_displayCulture">
     <div class="@BuildShellClass(_theme)" data-theme="@BuildThemeName(_theme)" data-testid="radar-shell">
         <aside class="radar-sidebar-pane">
-            <MudText Typo="Typo.h6" Class="mb-2">キュー</MudText>
+            <MudText Typo="Typo.h6" Class="mb-2">@L["Workbench.Queues"]</MudText>
             <Sidebar Selected="_selectedStatus"
                      SelectedChanged="HandleStatusChanged" />
         </aside>
@@ -26,7 +30,7 @@
         <div class="radar-sidebar-resizer"
              role="separator"
              aria-orientation="vertical"
-             aria-label="サイドバーと作業ペインの幅を変更"
+             aria-label="@SidebarResizeLabel"
              tabindex="0"
              data-testid="radar-sidebar-resizer"></div>
 
@@ -49,29 +53,29 @@
 
             <MudPaper Elevation="0" Class="pa-2">
                 <div class="commit-search-toolbar" data-testid="commit-search-toolbar">
-                    <label class="commit-search-label" for="commit-hash-search">検索</label>
+                    <label class="commit-search-label" for="commit-hash-search">@L["Common.Search"]</label>
                     <input id="commit-hash-search"
                            class="commit-search-input"
                            data-testid="commit-hash-search"
                            type="search"
                            autocomplete="off"
                            spellcheck="false"
-                           placeholder="SHA / PR / タイトル"
+                           placeholder="@CommitSearchPlaceholder"
                            value="@_commitHashQuery"
                            @oninput="HandleCommitHashSearchChanged" />
                     <button type="button"
                             class="commit-search-clear"
                             data-testid="commit-hash-search-clear"
                             disabled="@string.IsNullOrWhiteSpace(_commitHashQuery)"
-                            @onclick="ClearCommitHashSearchAsync">クリア</button>
+                            @onclick="ClearCommitHashSearchAsync">@L["Common.Clear"]</button>
                 </div>
                 @if (_selectedCommitShas.Count > 0 || !string.IsNullOrWhiteSpace(_bulkReviewStatus))
                 {
                     <div class="bulk-review-toolbar" data-testid="bulk-review-toolbar">
                     @if (_selectedCommitShas.Count > 0)
                     {
-                        <span class="bulk-review-count" data-testid="bulk-review-count">@_selectedCommitShas.Count 件選択中</span>
-                        <span class="bulk-review-hint" data-testid="bulk-review-hint">チェックしたコミットをまとめて移動します。詳細は行をクリックします。</span>
+                        <span class="bulk-review-count" data-testid="bulk-review-count">@L["Common.SelectedCount", _selectedCommitShas.Count]</span>
+                        <span class="bulk-review-hint" data-testid="bulk-review-hint">@L["Workbench.BulkReviewHint"]</span>
                         <div class="bulk-review-buttons">
                         @if (CanShowBulkMoveButton(ReviewStatus.Adopted))
                         {
@@ -79,7 +83,7 @@
                             class="bulk-review-button adopt"
                             data-testid="bulk-review-adopted"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Adopted)"
-                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Adopted)">注目へ</button>
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Adopted)">@L["Workbench.MoveToWatch"]</button>
                         }
                         @if (CanShowBulkMoveButton(ReviewStatus.Later))
                         {
@@ -87,7 +91,7 @@
                             class="bulk-review-button later"
                             data-testid="bulk-review-later"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Later)"
-                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Later)">保留へ</button>
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Later)">@L["Workbench.MoveToLater"]</button>
                         }
                         @if (CanShowBulkMoveButton(ReviewStatus.Archived))
                         {
@@ -95,7 +99,7 @@
                             class="bulk-review-button archive"
                             data-testid="bulk-review-archived"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Archived)"
-                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Archived)">アーカイブへ</button>
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Archived)">@L["Workbench.Archive"]</button>
                         }
                         @if (CanShowBulkMoveButton(ReviewStatus.Unseen))
                         {
@@ -103,20 +107,20 @@
                             class="bulk-review-button unseen"
                             data-testid="bulk-review-unseen"
                             disabled="@IsBulkMoveDisabled(ReviewStatus.Unseen)"
-                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Unseen)">未確認へ戻す</button>
+                            @onclick="() => MoveSelectedCommitsAsync(ReviewStatus.Unseen)">@L["Workbench.BackToUnseen"]</button>
                         }
                         <button type="button"
                             class="bulk-review-button delete"
                             data-testid="bulk-delete-unseen"
                             disabled="@IsBulkDeleteDisabled()"
-                            @onclick="DeleteSelectedUnseenCommitsAsync">削除して再スコアリングへ</button>
+                            @onclick="DeleteSelectedUnseenCommitsAsync">@L["Workbench.DeleteAndRescore"]</button>
                         @if (CanShowBatchExplanationButton())
                         {
                         <button type="button"
                             class="bulk-review-button explain"
                             data-testid="bulk-explain-adopted"
                             disabled="@IsBatchExplanationDisabled()"
-                            @onclick="GenerateSelectedExplanationAsync">個別に解説生成</button>
+                            @onclick="GenerateSelectedExplanationAsync">@L["Workbench.GenerateExplanations"]</button>
                         }
                         </div>
                     }
@@ -131,8 +135,8 @@
                     <div class="batch-explanation-panel" data-testid="batch-explanation-panel">
                         <header class="batch-explanation-header">
                             <div>
-                                <h3>注目コミットの個別解説</h3>
-                                <p>選択した注目コミットごとに差分解説と共有文案を生成します。</p>
+                                <h3>@L["Workbench.BatchExplanationTitle"]</h3>
+                                <p>@L["Workbench.BatchExplanationDescription"]</p>
                             </div>
                             <div class="batch-explanation-actions">
                                 @if (_batchExplanationBusy)
@@ -141,7 +145,7 @@
                                             class="toolbar-button secondary compact"
                                             data-testid="batch-explanation-cancel"
                                             disabled="@_batchExplanationCanceling"
-                                            @onclick="CancelBatchExplanationAsync">@(_batchExplanationCanceling ? "中止中…" : "中止")</button>
+                                            @onclick="CancelBatchExplanationAsync">@(_batchExplanationCanceling ? L["Common.Canceling"] : L["Common.Cancel"])</button>
                                 }
                             </div>
                         </header>
@@ -151,10 +155,10 @@
                                 <div class="preview-progress-row">
                                     <span class="preview-spinner" aria-hidden="true"></span>
                                     <span class="preview-progress-text progress-phase" data-testid="batch-explanation-progress-text">
-                                        Copilot が注目コミットの解説を個別生成中…
+                                        @L["Workbench.BatchExplanationProgress"]
                                     </span>
                                     <span class="progress-metric progress-metric-elapsed" data-testid="batch-explanation-progress-elapsed">
-                                        <span class="progress-metric-label">経過</span>
+                                        <span class="progress-metric-label">@L["Common.Elapsed"]</span>
                                         <span class="progress-metric-value">@FormatElapsed(_batchExplanationElapsed)</span>
                                     </span>
                                 </div>
@@ -182,7 +186,7 @@
                     @if (CanShowDrafts(_selectedCommit))
                     {
                         <div class="drafts-jump-row" data-testid="drafts-jump-row">
-                            <a class="drafts-jump-link" data-testid="drafts-jump-link" href="#drafts-panel">差分解説へ</a>
+                            <a class="drafts-jump-link" data-testid="drafts-jump-link" href="#drafts-panel">@L["Workbench.GoToExplanations"]</a>
                         </div>
                     }
                     <ReviewActions Sha="@_selectedCommit.Sha"
@@ -200,6 +204,7 @@
             </MudPaper>
         </main>
     </div>
+</CascadingValue>
 </CascadingValue>
 
 @code {
@@ -222,6 +227,10 @@
     private IReviewBroadcaster? _broadcaster;
     private IAppUserSettingsStore? _settingsStore;
     private DocsThemeMode _theme = AppUserSettings.Default.DefaultDocsTheme;
+    private string _displayCulture = AppUserSettings.Default.DisplayCulture;
+
+    private void ApplyDisplayCultureForRender()
+        => AppDisplayCulture.Apply(_displayCulture);
 
     protected override void OnInitialized()
     {
@@ -229,6 +238,7 @@
         if (_settingsStore is not null)
         {
             _theme = _settingsStore.Current.DefaultDocsTheme;
+            _displayCulture = AppDisplayCulture.Apply(_settingsStore.Current.DisplayCulture).Name;
             _settingsStore.SettingsChanged += OnSettingsChanged;
         }
 
@@ -246,6 +256,7 @@
             await InvokeAsync(() =>
             {
                 _theme = settings.DefaultDocsTheme;
+                _displayCulture = AppDisplayCulture.Apply(settings.DisplayCulture).Name;
                 StateHasChanged();
             });
         }
@@ -311,6 +322,12 @@
 
     internal static string BuildThemeName(DocsThemeMode theme)
         => theme == DocsThemeMode.Light ? "light" : "dark";
+
+    private string SidebarResizeLabel
+        => L["Workbench.SidebarResizeLabel"];
+
+    private string CommitSearchPlaceholder
+        => L["Workbench.CommitSearchPlaceholder"];
 
     private Task HandleStatusChanged(ReviewStatus? status)
     {
@@ -452,7 +469,7 @@
             ClearBatchExplanation();
             _bulkReviewStatus = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
-                $"{shas.Length} 件を{BuildStatusDestinationLabel(status)}に移動しました");
+                $"{L["Workbench.BulkMoved", shas.Length, BuildStatusDestinationLabel(status)]}");
             Services.GetRequiredService<IReviewBroadcaster>().Publish();
         }
         finally
@@ -485,7 +502,7 @@
             ClearBatchExplanation();
             _bulkReviewStatus = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
-                $"{deleted} 件をローカル DB から削除しました。次回 Triage で再取得できます");
+                $"{L["Workbench.DeletedAndCanRescore", deleted]}");
             Services.GetRequiredService<IReviewBroadcaster>().Publish();
         }
         finally
@@ -494,14 +511,14 @@
         }
     }
 
-    private static string BuildStatusDestinationLabel(ReviewStatus status)
+    private string BuildStatusDestinationLabel(ReviewStatus status)
         => status switch
         {
-            ReviewStatus.Unseen => "未確認",
-            ReviewStatus.Adopted => "注目",
-            ReviewStatus.Later => "保留",
-            ReviewStatus.Rejected => "見送り候補",
-            ReviewStatus.Archived => "アーカイブ",
+            ReviewStatus.Unseen => L["Sidebar.Unseen.Label"],
+            ReviewStatus.Adopted => L["Sidebar.Watch.Label"],
+            ReviewStatus.Later => L["Sidebar.Later.Label"],
+            ReviewStatus.Rejected => L["Sidebar.Rejected.Label"],
+            ReviewStatus.Archived => L["Sidebar.Archive.Label"],
             _ => status.ToString(),
         };
 
@@ -518,7 +535,7 @@
         var agent = Services.GetService<ICopilotAgent>();
         if (agent is null)
         {
-            _batchExplanationStatus = "ICopilotAgent が DI に登録されていません。";
+            _batchExplanationStatus = L["Common.AgentNotRegistered"];
             return;
         }
 
@@ -531,16 +548,16 @@
             var generated = await agent.GenerateBatchExplanationAsync(shas, _batchExplanationCts!.Token);
             _batchExplanationStatus = string.Create(
                 System.Globalization.CultureInfo.InvariantCulture,
-                $"{generated} 件の注目コミットの個別解説を生成しました。コミットを開くと差分解説欄で確認できます。");
+                $"{L["Workbench.BatchExplanationGenerated", generated]}");
             Services.GetService<IReviewBroadcaster>()?.Publish();
         }
         catch (OperationCanceledException)
         {
-            _batchExplanationStatus = "個別解説の生成を中止しました。";
+            _batchExplanationStatus = L["Workbench.BatchExplanationCanceled"];
         }
         catch (Exception ex)
         {
-            _batchExplanationStatus = $"個別解説の生成に失敗しました: {BuildFriendlyBatchErrorMessage(ex)}";
+            _batchExplanationStatus = $"{L["Workbench.BatchExplanationFailed"]}: {BuildFriendlyBatchErrorMessage(ex)}";
         }
         finally
         {
@@ -634,7 +651,7 @@
         _filter = BuildCurrentFilter();
         _selectedCommit = null;
         _selectedCommitShas.Clear();
-        _bulkReviewStatus = $"1 件を{BuildStatusDestinationLabel(status)}に移動しました";
+        _bulkReviewStatus = L["Workbench.BulkMoved", 1, BuildStatusDestinationLabel(status)];
         ClearBatchExplanation();
         _listRefreshVersion++;
         return Task.CompletedTask;

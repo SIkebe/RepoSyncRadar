@@ -344,6 +344,8 @@ public sealed class ReviewActionsTests
     private static ServiceProvider BuildServices(IRadarRepository repo, IReviewBroadcaster broadcaster)
     {
         return new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
             .AddSingleton(repo)
             .AddSingleton(broadcaster)
             .BuildServiceProvider();

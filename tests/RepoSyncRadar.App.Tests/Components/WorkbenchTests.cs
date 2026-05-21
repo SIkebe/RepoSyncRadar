@@ -18,6 +18,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 /// bUnit coverage for Workbench-level selection and queue behavior that spans
 /// Sidebar, CommitList, CommitDetail, and ReviewActions.
 /// </summary>
+[Collection("Localization")]
 public sealed class WorkbenchTests
 {
     [Theory]
@@ -57,6 +58,38 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
+    public async Task Workbench_ReRenders_Text_When_DisplayCulture_Changes()
+    {
+        try
+        {
+            var repo = Substitute.For<IRadarRepository>();
+            repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(CountsFor(ReviewStatus.Unseen)));
+            repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<IReadOnlyList<Commit>>([]));
+            var settingsStore = new TestAppUserSettingsStore(new AppUserSettings { DisplayCulture = "ja" });
+
+            await using var ctx = CreateWorkbenchTestContext(repo, out _, settingsStore);
+            var cut = ctx.Render<Workbench>();
+
+            cut.WaitForAssertion(() => Assert.Contains("キュー", cut.Find("[data-testid=\"radar-shell\"]").TextContent, StringComparison.Ordinal));
+
+            settingsStore.Set(new AppUserSettings { DisplayCulture = "en" });
+
+            cut.WaitForAssertion(() =>
+            {
+                var shellText = cut.Find("[data-testid=\"radar-shell\"]").TextContent;
+                Assert.Contains("Queues", shellText, StringComparison.Ordinal);
+                Assert.DoesNotContain("キュー", shellText, StringComparison.Ordinal);
+            });
+        }
+        finally
+        {
+            AppDisplayCulture.Apply(AppDisplayCulture.DefaultCultureName);
+        }
+    }
+
+    [Fact]
     public async Task Workbench_Renders_Resizable_Three_Column_Shell()
     {
         var repo = Substitute.For<IRadarRepository>();
@@ -73,6 +106,8 @@ public sealed class WorkbenchTests
         await using var ctx = new Bunit.BunitContext();
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         ctx.Services.AddMudServices();
+        ctx.Services.AddLogging();
+        ctx.Services.AddLocalization(options => options.ResourcesPath = "Resources");
         ctx.Services
             .AddSingleton(repo)
             .AddSingleton<IReviewBroadcaster>(broadcaster)
@@ -162,6 +197,8 @@ public sealed class WorkbenchTests
         await using var ctx = new Bunit.BunitContext();
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         ctx.Services.AddMudServices();
+        ctx.Services.AddLogging();
+        ctx.Services.AddLocalization(options => options.ResourcesPath = "Resources");
         ctx.Services
             .AddSingleton(repo)
             .AddSingleton<IReviewBroadcaster>(broadcaster)
@@ -232,6 +269,8 @@ public sealed class WorkbenchTests
         await using var ctx = new Bunit.BunitContext();
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         ctx.Services.AddMudServices();
+        ctx.Services.AddLogging();
+        ctx.Services.AddLocalization(options => options.ResourcesPath = "Resources");
         ctx.Services
             .AddSingleton(repo)
             .AddSingleton<IReviewBroadcaster>(broadcaster)
@@ -988,6 +1027,8 @@ public sealed class WorkbenchTests
         var ctx = new Bunit.BunitContext();
         ctx.JSInterop.Mode = JSRuntimeMode.Loose;
         ctx.Services.AddMudServices();
+        ctx.Services.AddLogging();
+        ctx.Services.AddLocalization(options => options.ResourcesPath = "Resources");
         ctx.Services
             .AddSingleton(repo)
             .AddSingleton<IReviewBroadcaster>(broadcaster)
@@ -1131,6 +1172,34 @@ public sealed class WorkbenchTests
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(status), status, "Unsupported manual review status.");
+        }
+    }
+
+    private sealed class TestAppUserSettingsStore(AppUserSettings initial) : IAppUserSettingsStore
+    {
+        public AppUserSettings Current { get; private set; } = initial;
+
+        public event Action<AppUserSettings>? SettingsChanged;
+
+        public Task<AppUserSettings> LoadAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(Current);
+
+        public Task SaveDefaultDocsThemeAsync(DocsThemeMode theme, CancellationToken cancellationToken = default)
+        {
+            Set(Current with { DefaultDocsTheme = theme });
+            return Task.CompletedTask;
+        }
+
+        public Task SaveDisplayCultureAsync(string cultureName, CancellationToken cancellationToken = default)
+        {
+            Set(Current with { DisplayCulture = AppDisplayCulture.NormalizeCultureName(cultureName) });
+            return Task.CompletedTask;
+        }
+
+        public void Set(AppUserSettings settings)
+        {
+            Current = settings;
+            SettingsChanged?.Invoke(Current);
         }
     }
 

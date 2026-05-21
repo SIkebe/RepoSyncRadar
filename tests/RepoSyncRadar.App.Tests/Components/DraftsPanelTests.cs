@@ -40,7 +40,9 @@ public sealed class DraftsPanelTests
         ctx.Services
             .AddSingleton(harness.DbFactory)
             .AddSingleton(clipboard)
-            .AddSingleton(agent);
+            .AddSingleton(agent)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
 
         var sp = ctx.Services.BuildServiceProvider();
         var cut = ctx.Render<DraftsPanel>(p => p
@@ -73,7 +75,9 @@ public sealed class DraftsPanelTests
         ctx.Services
             .AddSingleton(harness.DbFactory)
             .AddSingleton(clipboard)
-            .AddSingleton(agent);
+            .AddSingleton(agent)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
 
         var sp = ctx.Services.BuildServiceProvider();
         var cut = ctx.Render<DraftsPanel>(p => p
@@ -108,7 +112,9 @@ public sealed class DraftsPanelTests
         ctx.Services
             .AddSingleton(harness.DbFactory)
             .AddSingleton(clipboard)
-            .AddSingleton(agent);
+            .AddSingleton(agent)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
 
         var sp = ctx.Services.BuildServiceProvider();
         var cut = ctx.Render<DraftsPanel>(p => p
@@ -140,7 +146,9 @@ public sealed class DraftsPanelTests
         ctx.Services
             .AddSingleton(harness.DbFactory)
             .AddSingleton(clipboard)
-            .AddSingleton(agent);
+            .AddSingleton(agent)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
 
         var sp = ctx.Services.BuildServiceProvider();
         var cut = ctx.Render<DraftsPanel>(p => p
@@ -182,7 +190,9 @@ public sealed class DraftsPanelTests
         ctx.Services
             .AddSingleton(harness.DbFactory)
             .AddSingleton(clipboard)
-            .AddSingleton(agent);
+            .AddSingleton(agent)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
 
         var sp = ctx.Services.BuildServiceProvider();
         var cut = ctx.Render<DraftsPanel>(p => p
@@ -216,7 +226,9 @@ public sealed class DraftsPanelTests
         ctx.Services
             .AddSingleton(harness.DbFactory)
             .AddSingleton(clipboard)
-            .AddSingleton(agent);
+            .AddSingleton(agent)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
 
         var sp = ctx.Services.BuildServiceProvider();
         var cut = ctx.Render<DraftsPanel>(p => p
@@ -262,7 +274,9 @@ public sealed class DraftsPanelTests
         ctx.Services
             .AddSingleton(harness.DbFactory)
             .AddSingleton(clipboard)
-            .AddSingleton(agent);
+            .AddSingleton(agent)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
 
         var sp = ctx.Services.BuildServiceProvider();
         var cut = ctx.Render<DraftsPanel>(p => p
@@ -298,7 +312,9 @@ public sealed class DraftsPanelTests
         ctx.Services
             .AddSingleton(harness.DbFactory)
             .AddSingleton(clipboard)
-            .AddSingleton(agent);
+            .AddSingleton(agent)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
 
         var sp = ctx.Services.BuildServiceProvider();
         var cut = ctx.Render<DraftsPanel>(p => p

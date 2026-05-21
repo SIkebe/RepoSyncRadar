@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="AppHeader.ConfigHint" xml:space="preserve"><value>The packaged OAuth Client ID was not found. Override it in settings or appsettings.local.json only when using a custom OAuth App (docs/USAGE.md).</value></data>
+  <data name="AppHeader.LastTriage" xml:space="preserve"><value>Last triage: fetched {0} / new {1} / skipped {2}</value></data>
+  <data name="AppHeader.NotConfigured" xml:space="preserve"><value>⚠ OAuth Client Id not configured</value></data>
+  <data name="AppHeader.NotSignedIn" xml:space="preserve"><value>○ Not signed in</value></data>
+  <data name="AppHeader.SignedIn" xml:space="preserve"><value>● Signed in</value></data>
+  <data name="AppHeader.Triaging" xml:space="preserve"><value>Triaging...</value></data>
+  <data name="AppHeader.SignInFailed" xml:space="preserve"><value>Sign-in failed</value></data>
+  <data name="AppHeader.SignOutFailed" xml:space="preserve"><value>Sign-out failed</value></data>
+  <data name="AppHeader.TriageCompleted" xml:space="preserve"><value>Triage completed</value></data>
+  <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage failed</value></data>
+  <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage failed. Check the error details.</value></data>
+  <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Starting triage...</value></data>
+  <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>Failed to fetch article ({0}): {1}</value></data>
+  <data name="ArticleBody.NotFound" xml:space="preserve"><value>Article not found (404): {0}</value></data>
+  <data name="AskPalette.Busy" xml:space="preserve"><value>Asking...</value></data>
+  <data name="AskPalette.Placeholder" xml:space="preserve"><value>Ask a question (Ctrl+Enter to run)</value></data>
+  <data name="AskPalette.SessionNotRegistered" xml:space="preserve"><value>AskSession is not registered in DI.</value></data>
+  <data name="AskPalette.ShowSql" xml:space="preserve"><value>Show SQL (debug)</value></data>
+  <data name="CommitList.Empty.ArchiveHint" xml:space="preserve"><value>Candidates removed from active review appear here.</value></data>
+  <data name="CommitList.Empty.ArchiveTitle" xml:space="preserve"><value>The archive is empty.</value></data>
+  <data name="CommitList.Empty.DefaultHint" xml:space="preserve"><value>Try a different queue or search filter.</value></data>
+  <data name="CommitList.Empty.DefaultTitle" xml:space="preserve"><value>There are no commits to show.</value></data>
+  <data name="CommitList.Empty.LaterHint" xml:space="preserve"><value>Deferred candidates appear here.</value></data>
+  <data name="CommitList.Empty.LaterTitle" xml:space="preserve"><value>The later queue is empty.</value></data>
+  <data name="CommitList.Empty.RejectedHint" xml:space="preserve"><value>Low-priority candidates appear here.</value></data>
+  <data name="CommitList.Empty.RejectedTitle" xml:space="preserve"><value>The rejected queue is empty.</value></data>
+  <data name="CommitList.Empty.SearchHint" xml:space="preserve"><value>Try a different search term or queue.</value></data>
+  <data name="CommitList.Empty.SearchTitle" xml:space="preserve"><value>No commits match the search.</value></data>
+  <data name="CommitList.Empty.UnseenHint" xml:space="preserve"><value>Press the Triage button above to fetch new candidates.</value></data>
+  <data name="CommitList.Empty.UnseenTitle" xml:space="preserve"><value>The unseen queue is empty.</value></data>
+  <data name="CommitList.Empty.WatchHint" xml:space="preserve"><value>Move candidates you want to track into Watch to see them here.</value></data>
+  <data name="CommitList.Empty.WatchTitle" xml:space="preserve"><value>The watch queue is empty.</value></data>
+  <data name="CommitList.ScoreTitle" xml:space="preserve"><value>Score {0}</value></data>
+  <data name="CommitList.SelectCommitAriaLabel" xml:space="preserve"><value>Select {0}</value></data>
+  <data name="CommitList.Unscored" xml:space="preserve"><value>Unscored</value></data>
+  <data name="CommitList.UnscoredTitle" xml:space="preserve"><value>Unscored</value></data>
+  <data name="CommitDetail.Audience" xml:space="preserve"><value>Audience</value></data>
+  <data name="CommitDetail.BeforeLabel" xml:space="preserve"><value>Before {0} {1}</value></data>
+  <data name="CommitDetail.Category" xml:space="preserve"><value>Category</value></data>
+  <data name="CommitDetail.CleanupCache" xml:space="preserve"><value>Clear cache</value></data>
+  <data name="CommitDetail.CleanupCacheTitle" xml:space="preserve"><value>Delete all cached docs worktrees</value></data>
+  <data name="CommitDetail.CleanupInProgress" xml:space="preserve"><value>Cleaning up cache...</value></data>
+  <data name="CommitDetail.CleanupRemoved" xml:space="preserve"><value>Removed {0} worktrees</value></data>
+  <data name="CommitDetail.ComparisonOpened" xml:space="preserve"><value>Opened {0} for parent / PR HEAD comparison</value></data>
+  <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>Detailed analysis</value></data>
+  <data name="CommitDetail.Empty" xml:space="preserve"><value>Select a commit.</value></data>
+  <data name="CommitDetail.Files" xml:space="preserve"><value>Files</value></data>
+  <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>Preparing local preview for {0}...</value></data>
+  <data name="CommitDetail.MarkdownComparisonOpened" xml:space="preserve"><value>Opened {0} as a Markdown parent / PR HEAD comparison</value></data>
+  <data name="CommitDetail.MarkdownPreviewPreparing" xml:space="preserve"><value>Preparing Markdown comparison for {0}...</value></data>
+  <data name="CommitDetail.NoPreviewableFiles" xml:space="preserve"><value>No comparable files</value></data>
+  <data name="CommitDetail.NoPublishableUrl" xml:space="preserve"><value>This file does not map to a published docs URL</value></data>
+  <data name="CommitDetail.OperationCanceled" xml:space="preserve"><value>{0} was canceled</value></data>
+  <data name="CommitDetail.OperationTimedOut" xml:space="preserve"><value>{0} was canceled because it exceeded the {1} sec limit</value></data>
+  <data name="CommitDetail.OpenedPrInPane" xml:space="preserve"><value>Opened PR #{0} commit diff in the right pane</value></data>
+  <data name="CommitDetail.OpenInWebView" xml:space="preserve"><value>Open in WebView2</value></data>
+  <data name="CommitDetail.OpenPrExternalTitle" xml:space="preserve"><value>Open the PR #{0} commit diff in the default browser</value></data>
+  <data name="CommitDetail.OpenPrInPaneTitle" xml:space="preserve"><value>Open the PR #{0} commit diff in the right pane</value></data>
+  <data name="CommitDetail.PreviewableCount" xml:space="preserve"><value>{0} comparable</value></data>
+  <data name="CommitDetail.PreviewPosition" xml:space="preserve"><value>Preview target {0} / {1}</value></data>
+  <data name="CommitDetail.PreviewTitle.LocalComparison" xml:space="preserve"><value>Open this file in WebView2 with local previews for the parent commit and PR HEAD side by side</value></data>
+  <data name="CommitDetail.PreviewTitle.MarkdownComparison" xml:space="preserve"><value>Render Markdown and open the parent commit vs PR HEAD diff in WebView2</value></data>
+  <data name="CommitDetail.PreviewTitle.Official" xml:space="preserve"><value>Open the official docs page in WebView2</value></data>
+  <data name="CommitDetail.PreviewDisabled" xml:space="preserve"><value>Preview is disabled (DocsRepository is not configured)</value></data>
+  <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>Preview startup</value></data>
+  <data name="CommitDetail.Score" xml:space="preserve"><value>Score</value></data>
+  <data name="CommitDetail.Showing" xml:space="preserve"><value>Showing</value></data>
+  <data name="CommitDetail.Starting" xml:space="preserve"><value>Starting...</value></data>
+  <data name="CommitDetail.Summary" xml:space="preserve"><value>Summary</value></data>
+  <data name="CommitDetail.Unscored" xml:space="preserve"><value>Unscored (triage has not run)</value></data>
+  <data name="CommitDetail.Why" xml:space="preserve"><value>Why</value></data>
+  <data name="Common.CacheRead" xml:space="preserve"><value>Cache read</value></data>
+  <data name="Common.CacheWrite" xml:space="preserve"><value>Cache write</value></data>
+  <data name="Common.Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Common.Canceling" xml:space="preserve"><value>Canceling...</value></data>
+  <data name="Common.Clear" xml:space="preserve"><value>Clear</value></data>
+  <data name="Common.ClearAll" xml:space="preserve"><value>Clear all</value></data>
+  <data name="Common.Copy" xml:space="preserve"><value>Copy</value></data>
+  <data name="Common.Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="Common.DeleteSelected" xml:space="preserve"><value>Delete selected</value></data>
+  <data name="Common.Elapsed" xml:space="preserve"><value>Elapsed</value></data>
+  <data name="Common.AgentNotRegistered" xml:space="preserve"><value>ICopilotAgent is not registered in DI.</value></data>
+  <data name="Common.Input" xml:space="preserve"><value>Input</value></data>
+  <data name="Common.Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Common.Last" xml:space="preserve"><value>Last</value></data>
+  <data name="Common.Limit" xml:space="preserve"><value>Limit</value></data>
+  <data name="Common.Loading" xml:space="preserve"><value>Loading...</value></data>
+  <data name="Common.Output" xml:space="preserve"><value>Output</value></data>
+  <data name="Common.Reasoning" xml:space="preserve"><value>Reasoning</value></data>
+  <data name="Common.Refresh" xml:space="preserve"><value>Refresh</value></data>
+  <data name="Common.Reload" xml:space="preserve"><value>Reload</value></data>
+  <data name="Common.Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="Common.Saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="Common.Search" xml:space="preserve"><value>Search</value></data>
+  <data name="Common.Seconds" xml:space="preserve"><value>{0} sec</value></data>
+  <data name="Common.Run" xml:space="preserve"><value>Run</value></data>
+  <data name="Common.Save" xml:space="preserve"><value>Save</value></data>
+  <data name="Common.SelectAll" xml:space="preserve"><value>Select all</value></data>
+  <data name="Common.SelectedCount" xml:space="preserve"><value>{0} selected</value></data>
+  <data name="Common.Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="Common.Total" xml:space="preserve"><value>Total</value></data>
+  <data name="Common.Unreported" xml:space="preserve"><value>Unreported</value></data>
+  <data name="Common.Work" xml:space="preserve"><value>Work</value></data>
+  <data name="CopilotUsage.AiCreditsUnreported" xml:space="preserve"><value>AI Credits unreported / {0} tokens</value></data>
+  <data name="CopilotUsage.BillingSource.Mixed" xml:space="preserve"><value>Source: mixed SDK-reported and estimated values</value></data>
+  <data name="CopilotUsage.BillingSource.OfficialPricingTable" xml:space="preserve"><value>Source: estimated from GitHub Docs pricing table</value></data>
+  <data name="CopilotUsage.BillingSource.SdkReported" xml:space="preserve"><value>Source: SDK-reported values</value></data>
+  <data name="CopilotUsage.BillingSource.SdkTokenDetails" xml:space="preserve"><value>Source: estimated from SDK token details</value></data>
+  <data name="CopilotUsage.BillingSource.Unknown" xml:space="preserve"><value>Source: unknown</value></data>
+  <data name="CopilotUsage.EstimatedSuffix" xml:space="preserve"><value> (estimated)</value></data>
+  <data name="Drafts.BusyHint" xml:space="preserve"><value>When complete, the explanation, Twitter, Teams, and customer-facing fields will be updated.</value></data>
+  <data name="Drafts.Channel.Customer" xml:space="preserve"><value>Customer-facing</value></data>
+  <data name="Drafts.Channel.Explanation" xml:space="preserve"><value>Diff explanation</value></data>
+  <data name="Drafts.ChannelEmpty" xml:space="preserve"><value>Not generated yet. Use the regenerate button above to create it.</value></data>
+  <data name="Drafts.ClipboardUnavailable" xml:space="preserve"><value>Clipboard is unavailable.</value></data>
+  <data name="Drafts.Copied" xml:space="preserve"><value>Copied the {0} text.</value></data>
+  <data name="Drafts.Description" xml:space="preserve"><value>Review and copy the diff explanation and channel-specific sharing drafts for watched items.</value></data>
+  <data name="Drafts.Empty" xml:space="preserve"><value>Select a watch commit.</value></data>
+  <data name="Drafts.Progress" xml:space="preserve"><value>Copilot is creating the diff explanation and sharing drafts...</value></data>
+  <data name="Drafts.NonJsonResponse" xml:space="preserve"><value>Copilot's response could not be read as drafts. Regenerate and try again.</value></data>
+  <data name="Drafts.Regenerate" xml:space="preserve"><value>Regenerate explanation and drafts</value></data>
+  <data name="Drafts.RegenerateCanceled" xml:space="preserve"><value>Regeneration was canceled.</value></data>
+  <data name="Drafts.RegenerateFailed" xml:space="preserve"><value>Regeneration failed</value></data>
+  <data name="Drafts.Title" xml:space="preserve"><value>Diff Explanation and Drafts</value></data>
+  <data name="LocalSettings.LoadFailed" xml:space="preserve"><value>Failed to load app settings</value></data>
+  <data name="LocalSettings.OAuthClientIdHint" xml:space="preserve"><value>Usually, use the official Client ID packaged with the release build. Override this only for organization-managed OAuth Apps or custom builds.</value></data>
+  <data name="LocalSettings.RestartHint" xml:space="preserve"><value>Saved changes are guaranteed to apply on the next launch.</value></data>
+  <data name="LocalSettings.SaveFailed" xml:space="preserve"><value>Failed to save app settings</value></data>
+  <data name="LocalSettings.Saved" xml:space="preserve"><value>Saved appsettings.local.json</value></data>
+  <data name="LocalSettings.Title" xml:space="preserve"><value>App Settings</value></data>
+  <data name="Settings.CopilotUsage" xml:space="preserve"><value>Copilot Usage</value></data>
+  <data name="Settings.CopilotUsage.Empty" xml:space="preserve"><value>No Copilot SDK usage has been recorded yet.</value></data>
+  <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits and Premium Request cost prefer SDK usage events and session metrics. If the SDK does not report AI Credits, estimates use the GitHub Docs model pricing table. Prompt text is not stored.</value></data>
+  <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>Session metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
+  <data name="Settings.DefaultTheme" xml:space="preserve"><value>Default Theme</value></data>
+  <data name="Settings.Description" xml:space="preserve"><value>Review display language, default theme, app settings, licenses, and ignore rules.</value></data>
+  <data name="Settings.DisplayLanguage" xml:space="preserve"><value>Display Language</value></data>
+  <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>Switching display language...</value></data>
+  <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>Display language set to {0}</value></data>
+  <data name="Settings.DisplayLanguage.SaveFailed" xml:space="preserve"><value>Failed to save display language</value></data>
+  <data name="Settings.IgnoreList" xml:space="preserve"><value>Ignore List</value></data>
+  <data name="Settings.IgnoreList.DeleteFailed" xml:space="preserve"><value>Failed to delete ignore rules</value></data>
+  <data name="Settings.IgnoreList.Deleted" xml:space="preserve"><value>Deleted {0} ignore rule(s)</value></data>
+  <data name="Settings.IgnoreList.Empty" xml:space="preserve"><value>No ignore rules have been configured yet.</value></data>
+  <data name="Settings.IgnoreList.LoadFailed" xml:space="preserve"><value>Failed to load ignore rules</value></data>
+  <data name="Settings.Theme.Dark" xml:space="preserve"><value>Dark</value></data>
+  <data name="Settings.Theme.Light" xml:space="preserve"><value>Light</value></data>
+  <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>Failed to load theme settings</value></data>
+  <data name="Settings.Theme.SaveFailed" xml:space="preserve"><value>Failed to save theme settings</value></data>
+  <data name="Sidebar.Archive.Description" xml:space="preserve"><value>Candidates removed from active review</value></data>
+  <data name="Sidebar.Archive.Label" xml:space="preserve"><value>Archive</value></data>
+  <data name="Sidebar.Later.Description" xml:space="preserve"><value>Candidates deferred for later review</value></data>
+  <data name="Sidebar.Later.Label" xml:space="preserve"><value>Later</value></data>
+  <data name="Sidebar.Rejected.Description" xml:space="preserve"><value>Candidates triage or ignore rules marked as low priority</value></data>
+  <data name="Sidebar.Rejected.Label" xml:space="preserve"><value>Rejected</value></data>
+  <data name="Sidebar.Unseen.Description" xml:space="preserve"><value>Candidates not yet reviewed by a person after triage</value></data>
+  <data name="Sidebar.Unseen.Label" xml:space="preserve"><value>Unseen</value></data>
+  <data name="Sidebar.Watch.Description" xml:space="preserve"><value>Candidates worth tracking closely</value></data>
+  <data name="Sidebar.Watch.Label" xml:space="preserve"><value>Watch</value></data>
+  <data name="ThirdParty.Description" xml:space="preserve"><value>Copyright notices and license text for NuGet packages directly referenced by this app.</value></data>
+  <data name="ThirdParty.LicenseSource" xml:space="preserve"><value>License source</value></data>
+  <data name="ThirdParty.LicenseText" xml:space="preserve"><value>License text</value></data>
+  <data name="ThirdParty.Project" xml:space="preserve"><value>Project</value></data>
+  <data name="ThirdParty.Title" xml:space="preserve"><value>Third-Party Licenses</value></data>
+  <data name="TriageProgress.Analyzed" xml:space="preserve"><value>Analyzed</value></data>
+  <data name="TriageProgress.AriaWithMetrics" xml:space="preserve"><value>{0}. {1}, elapsed {2}</value></data>
+  <data name="TriageProgress.AriaWithoutMetrics" xml:space="preserve"><value>{0}. Elapsed {1}</value></data>
+  <data name="TriageProgress.Commit" xml:space="preserve"><value>Commit</value></data>
+  <data name="TriageProgress.CurrentAnalyzing" xml:space="preserve"><value>Copilot is analyzing item {0} / {1}</value></data>
+  <data name="TriageProgress.CurrentApplyingScores" xml:space="preserve"><value>Applying scoring results</value></data>
+  <data name="TriageProgress.CurrentFetching" xml:space="preserve"><value>Fetching Repo sync PRs</value></data>
+  <data name="TriageProgress.CurrentIngesting" xml:space="preserve"><value>Importing unseen commits</value></data>
+  <data name="TriageProgress.CurrentPreparingCopilot" xml:space="preserve"><value>Preparing Copilot session</value></data>
+  <data name="TriageProgress.CurrentSavingScores" xml:space="preserve"><value>Saving Copilot judgments</value></data>
+  <data name="TriageProgress.CurrentScoring" xml:space="preserve"><value>Copilot is judging importance</value></data>
+  <data name="TriageProgress.CurrentStartingScoring" xml:space="preserve"><value>Starting scoring</value></data>
+  <data name="TriageProgress.Fetched" xml:space="preserve"><value>Fetched</value></data>
+  <data name="TriageProgress.Inserted" xml:space="preserve"><value>New</value></data>
+  <data name="TriageProgress.Saved" xml:space="preserve"><value>Saved</value></data>
+  <data name="TriageProgress.Skipped" xml:space="preserve"><value>Skipped</value></data>
+  <data name="TriageProgress.Target" xml:space="preserve"><value>Target</value></data>
+  <data name="Workbench.Archive" xml:space="preserve"><value>Archive</value></data>
+  <data name="Workbench.BackToUnseen" xml:space="preserve"><value>Back to Unseen</value></data>
+  <data name="Workbench.BatchExplanationDescription" xml:space="preserve"><value>Generate a diff explanation and sharing drafts for each selected watch commit.</value></data>
+  <data name="Workbench.BatchExplanationProgress" xml:space="preserve"><value>Copilot is generating explanations for watch commits...</value></data>
+  <data name="Workbench.BatchExplanationTitle" xml:space="preserve"><value>Watch Commit Explanations</value></data>
+  <data name="Workbench.BatchExplanationCanceled" xml:space="preserve"><value>Explanation generation was canceled.</value></data>
+  <data name="Workbench.BatchExplanationFailed" xml:space="preserve"><value>Explanation generation failed</value></data>
+  <data name="Workbench.BatchExplanationGenerated" xml:space="preserve"><value>Generated explanations for {0} watch commits. Open a commit to review them in the diff explanation panel.</value></data>
+  <data name="Workbench.BulkMoved" xml:space="preserve"><value>Moved {0} item(s) to {1}</value></data>
+  <data name="Workbench.BulkReviewHint" xml:space="preserve"><value>Move checked commits together. Click a row for details.</value></data>
+  <data name="Workbench.CommitSearchPlaceholder" xml:space="preserve"><value>SHA / PR / title</value></data>
+  <data name="Workbench.DeleteAndRescore" xml:space="preserve"><value>Delete and rescore</value></data>
+  <data name="Workbench.DeletedAndCanRescore" xml:space="preserve"><value>Deleted {0} item(s) from the local DB. They can be fetched again during the next triage.</value></data>
+  <data name="Workbench.GenerateExplanations" xml:space="preserve"><value>Generate explanations</value></data>
+  <data name="Workbench.GoToExplanations" xml:space="preserve"><value>Go to explanations</value></data>
+  <data name="Workbench.MoveToLater" xml:space="preserve"><value>Move to Later</value></data>
+  <data name="Workbench.MoveToWatch" xml:space="preserve"><value>Move to Watch</value></data>
+  <data name="Workbench.Queues" xml:space="preserve"><value>Queues</value></data>
+  <data name="Workbench.SidebarResizeLabel" xml:space="preserve"><value>Resize the sidebar and work pane</value></data>
+</root>

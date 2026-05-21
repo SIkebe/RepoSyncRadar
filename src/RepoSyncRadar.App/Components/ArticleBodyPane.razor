@@ -32,12 +32,15 @@
     else if (_loading)
     {
         <p class="article-body-loading"
-           data-testid="article-body-loading">読み込み中…</p>
+              data-testid="article-body-loading">@L["Common.Loading"]</p>
     }
 </section>
 
 @code {
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
     [Parameter] public string? Pathname { get; set; }
 
@@ -84,11 +87,11 @@
         }
         catch (DocsArticleNotFoundException)
         {
-            _errorMessage = $"記事が見つかりません (404): {Pathname}";
+            _errorMessage = L["ArticleBody.NotFound", Pathname];
         }
         catch (DocsApiException ex)
         {
-            _errorMessage = $"記事の取得に失敗しました ({(int)ex.StatusCode}): {Pathname}";
+            _errorMessage = L["ArticleBody.FetchFailed", (int)ex.StatusCode, Pathname];
         }
         finally
         {

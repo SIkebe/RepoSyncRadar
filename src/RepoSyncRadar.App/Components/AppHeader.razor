@@ -23,7 +23,7 @@
             case GitHubAuthState.SignedIn:
                 <span data-testid="app-header-state"
                       data-state="SignedIn"
-                      style="color:#22c55e; font-weight:600;">● サインイン済み</span>
+                      style="color:#22c55e; font-weight:600;">@L["AppHeader.SignedIn"]</span>
                 @if (!string.IsNullOrEmpty(_login))
                 {
                     <span data-testid="app-header-login"
@@ -38,7 +38,7 @@
             case GitHubAuthState.NotSignedIn:
                 <span data-testid="app-header-state"
                       data-state="NotSignedIn"
-                      style="color:#fbbf24; font-weight:600;">○ 未サインイン</span>
+                      style="color:#fbbf24; font-weight:600;">@L["AppHeader.NotSignedIn"]</span>
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
                            Size="Size.Small"
@@ -49,9 +49,9 @@
             case GitHubAuthState.NotConfigured:
                 <span data-testid="app-header-state"
                       data-state="NotConfigured"
-                      style="color:#ef4444; font-weight:600;">⚠ OAuth Client Id 未設定</span>
+                                            style="color:#ef4444; font-weight:600;">@L["AppHeader.NotConfigured"]</span>
                 <span data-testid="app-header-config-hint"
-                    style="font-size:0.85em; opacity:0.8;">配布用 OAuth Client ID が見つかりません。独自 OAuth App を使う場合は設定画面または appsettings.local.json で上書きしてください (docs/USAGE.md)</span>
+                                        style="font-size:0.85em; opacity:0.8;">@L["AppHeader.ConfigHint"]</span>
                 break;
         }
     </div>
@@ -60,7 +60,7 @@
         @if (_lastReport is { } report)
         {
             <span data-testid="app-header-last-sync" style="font-size:0.85em; opacity:0.8;">
-                直近 Triage: 取得 @report.Total / 新規 @report.Inserted / スキップ @report.Skipped
+                @L["AppHeader.LastTriage", report.Total, report.Inserted, report.Skipped]
             </span>
         }
         @if (_lastError is not null)
@@ -75,11 +75,11 @@
                       class="progress-metric-list app-header-triage-progress"
                       aria-label="@triageProgress.AriaLabel">
                     <span class="progress-metric progress-metric-current" data-testid="app-header-triage-current">
-                        <span class="progress-metric-label">作業</span>
+                        <span class="progress-metric-label">@L["Common.Work"]</span>
                         <span class="progress-metric-value">@triageProgress.CurrentWork</span>
                     </span>
                     <span class="progress-metric progress-metric-elapsed" data-testid="app-header-triage-elapsed">
-                        <span class="progress-metric-label">経過</span>
+                        <span class="progress-metric-label">@L["Common.Elapsed"]</span>
                         <span class="progress-metric-value">@FormatElapsed(_triageElapsed)</span>
                     </span>
                     @foreach (var metric in triageProgress.Metrics)
@@ -109,12 +109,12 @@
                    OnClick="OnTriageAsync"
                    Disabled="@(_busy || _state != GitHubAuthState.SignedIn)"
                    data-testid="app-header-sync">
-            @(_busy ? "Triage 中…" : "Triage")
+            @(_busy ? L["AppHeader.Triaging"] : "Triage")
         </MudButton>
         <MudButton Variant="Variant.Outlined"
                    Size="Size.Small"
                    OnClick="ToggleSettingsAsync"
-                   data-testid="app-header-settings">設定</MudButton>
+                   data-testid="app-header-settings">@L["Common.Settings"]</MudButton>
     </div>
     </header>
 
@@ -123,31 +123,54 @@
         <section class="app-settings-panel" data-testid="settings-panel">
             <header class="app-settings-header">
                 <div>
-                    <h2>設定</h2>
-                    <p>既定テーマ、アプリ設定、ライセンス、無視リストを確認できます。</p>
+                    <h2>@L["Common.Settings"]</h2>
+                    <p>@L["Settings.Description"]</p>
                 </div>
                 <button type="button"
                         class="toolbar-button compact secondary"
                         data-testid="settings-refresh-ignore-rules"
                         disabled="@_settingsLoading"
-                        @onclick="LoadIgnoreRulesAsync">更新</button>
+                        @onclick="LoadIgnoreRulesAsync">@L["Common.Refresh"]</button>
             </header>
 
+            <section class="settings-section" data-testid="settings-display-language-section">
+                <h3>@L["Settings.DisplayLanguage"]</h3>
+                <div class="settings-theme-options" data-testid="settings-display-language" role="group" aria-label="@DisplayLanguageLabel">
+                    @foreach (var culture in AppDisplayCulture.SupportedCultures)
+                    {
+                        <button type="button"
+                                class="@BuildDisplayCultureOptionClass(culture.CultureName)"
+                                data-testid="settings-display-language-@culture.CultureName"
+                                aria-pressed="@BuildDisplayCultureOptionPressed(culture.CultureName)"
+                                disabled="@_settingsDisplayCultureSaving"
+                                @onclick="() => SaveDisplayCultureAsync(culture.CultureName)">@culture.NativeLabel</button>
+                    }
+                </div>
+                @if (!string.IsNullOrEmpty(_settingsDisplayCultureStatus))
+                {
+                    <p class="settings-muted" data-testid="settings-display-language-status">@_settingsDisplayCultureStatus</p>
+                }
+                @if (!string.IsNullOrEmpty(_settingsDisplayCultureError))
+                {
+                    <p class="settings-error" data-testid="settings-display-language-error">@_settingsDisplayCultureError</p>
+                }
+            </section>
+
             <section class="settings-section" data-testid="settings-default-theme-section">
-                <h3>既定テーマ</h3>
-                <div class="settings-theme-options" data-testid="settings-default-theme" role="group" aria-label="既定テーマ">
+                <h3>@L["Settings.DefaultTheme"]</h3>
+                <div class="settings-theme-options" data-testid="settings-default-theme" role="group" aria-label="@DefaultThemeLabel">
                     <button type="button"
                             class="@BuildThemeOptionClass(DocsThemeMode.Dark)"
                             data-testid="settings-default-theme-dark"
                             aria-pressed="@BuildThemeOptionPressed(DocsThemeMode.Dark)"
                             disabled="@_settingsThemeSaving"
-                            @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Dark)">ダーク</button>
+                            @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Dark)">@L["Settings.Theme.Dark"]</button>
                     <button type="button"
                             class="@BuildThemeOptionClass(DocsThemeMode.Light)"
                             data-testid="settings-default-theme-light"
                             aria-pressed="@BuildThemeOptionPressed(DocsThemeMode.Light)"
                             disabled="@_settingsThemeSaving"
-                            @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Light)">ライト</button>
+                            @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Light)">@L["Settings.Theme.Light"]</button>
                 </div>
                 @if (!string.IsNullOrEmpty(_settingsThemeStatus))
                 {
@@ -162,10 +185,10 @@
             <LocalAppSettingsEditor />
 
             <section class="settings-section" data-testid="settings-copilot-usage">
-                <h3>Copilot 使用量</h3>
+                <h3>@L["Settings.CopilotUsage"]</h3>
                 @if (!HasCopilotUsage(_copilotUsage))
                 {
-                    <p class="settings-muted" data-testid="settings-copilot-usage-empty">まだ Copilot SDK の使用量は記録されていません。</p>
+                    <p class="settings-muted" data-testid="settings-copilot-usage-empty">@L["Settings.CopilotUsage.Empty"]</p>
                 }
                 else
                 {
@@ -173,23 +196,23 @@
                         <div><span>AI Credits</span><strong>@FormatSnapshotAiCreditsWithUnit(_copilotUsage)</strong></div>
                         <div><span>Premium Request cost</span><strong>@FormatNullablePremiumRequestCost(_copilotUsage.Cost)</strong></div>
                         <div><span>Premium Requests</span><strong>@FormatPremiumRequests(_copilotUsage)</strong></div>
-                        <div><span>合計</span><strong>@FormatTokensWithUnit(_copilotUsage.TotalTokens)</strong></div>
-                        <div><span>入力</span><strong>@FormatTokensWithUnit(_copilotUsage.InputTokens)</strong></div>
-                        <div><span>出力</span><strong>@FormatTokensWithUnit(_copilotUsage.OutputTokens)</strong></div>
-                        <div><span>推論</span><strong>@FormatTokensWithUnit(_copilotUsage.ReasoningTokens)</strong></div>
-                        <div><span>キャッシュ読込</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheReadTokens)</strong></div>
-                        <div><span>キャッシュ書込</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheWriteTokens)</strong></div>
+                        <div><span>@L["Common.Total"]</span><strong>@FormatTokensWithUnit(_copilotUsage.TotalTokens)</strong></div>
+                        <div><span>@L["Common.Input"]</span><strong>@FormatTokensWithUnit(_copilotUsage.InputTokens)</strong></div>
+                        <div><span>@L["Common.Output"]</span><strong>@FormatTokensWithUnit(_copilotUsage.OutputTokens)</strong></div>
+                        <div><span>@L["Common.Reasoning"]</span><strong>@FormatTokensWithUnit(_copilotUsage.ReasoningTokens)</strong></div>
+                        <div><span>@L["Common.CacheRead"]</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheReadTokens)</strong></div>
+                        <div><span>@L["Common.CacheWrite"]</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheWriteTokens)</strong></div>
                     </div>
                     @if (_copilotUsage.LastTurn is { } lastTurn)
                     {
                         <p class="settings-muted" data-testid="settings-copilot-usage-last">
-                            直近: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? "model unknown") / @FormatTurnAiCreditsWithUnit(lastTurn) / @FormatTokensWithUnit(lastTurn.TotalTokens())
+                            @L["Common.Last"]: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? "model unknown") / @FormatTurnAiCreditsWithUnit(lastTurn) / @FormatTokensWithUnit(lastTurn.TotalTokens())
                         </p>
                     }
                     @if (_copilotUsage.SessionMetrics.FirstOrDefault() is { } sessionMetrics)
                     {
                         <p class="settings-muted" data-testid="settings-copilot-usage-session-metrics">
-                            セッション metrics: @(sessionMetrics.CurrentModel ?? "model unknown") / @FormatNumber(sessionMetrics.TotalUserRequests) requests / last call @FormatTokensWithUnit(sessionMetrics.LastCallInputTokens) in, @FormatTokensWithUnit(sessionMetrics.LastCallOutputTokens) out
+                            @L["Settings.CopilotUsage.SessionMetrics", sessionMetrics.CurrentModel ?? "model unknown", FormatNumber(sessionMetrics.TotalUserRequests), FormatTokensWithUnit(sessionMetrics.LastCallInputTokens), FormatTokensWithUnit(sessionMetrics.LastCallOutputTokens)]
                         </p>
                     }
                     @if (_copilotUsage.TotalNanoAiu is { } totalNanoAiu)
@@ -199,18 +222,18 @@
                     <button type="button"
                             class="toolbar-button compact secondary"
                             data-testid="settings-copilot-usage-reset"
-                            @onclick="ResetCopilotUsage">リセット</button>
+                            @onclick="ResetCopilotUsage">@L["Common.Reset"]</button>
                 }
-                <p class="settings-muted" data-testid="settings-copilot-usage-privacy">AI Credits と Premium Request cost は SDK の usage event / session metrics を優先し、SDK が AI Credits を返さない場合は GitHub Docs のモデル別価格表から概算します。プロンプト本文は保存しません。</p>
+                <p class="settings-muted" data-testid="settings-copilot-usage-privacy">@L["Settings.CopilotUsage.Privacy"]</p>
             </section>
 
             <ThirdPartyNoticesPanel />
 
             <section class="settings-section" data-testid="settings-ignore-rules">
-                <h3>無視リスト</h3>
+                <h3>@L["Settings.IgnoreList"]</h3>
                 @if (_settingsLoading)
                 {
-                    <p class="settings-muted" data-testid="settings-ignore-rules-loading">読み込み中…</p>
+                    <p class="settings-muted" data-testid="settings-ignore-rules-loading">@L["Common.Loading"]</p>
                 }
                 else if (!string.IsNullOrEmpty(_settingsError))
                 {
@@ -218,7 +241,7 @@
                 }
                 else if (_ignoreRules.Count == 0)
                 {
-                    <p class="settings-muted" data-testid="settings-ignore-rules-empty">無視リストはまだ設定されていません。</p>
+                    <p class="settings-muted" data-testid="settings-ignore-rules-empty">@L["Settings.IgnoreList.Empty"]</p>
                 }
                 else
                 {
@@ -228,12 +251,12 @@
                                 data-testid="settings-ignore-rules-select-all"
                                 disabled="@_settingsDeleteBusy"
                                 @onclick="ToggleAllIgnoreRulesAsync">@BuildIgnoreRuleSelectAllLabel()</button>
-                        <span class="settings-muted" data-testid="settings-ignore-rules-selected-count">@_selectedIgnoreRulePatterns.Count 件選択中</span>
+                        <span class="settings-muted" data-testid="settings-ignore-rules-selected-count">@L["Common.SelectedCount", _selectedIgnoreRulePatterns.Count]</span>
                         <button type="button"
                                 class="toolbar-button compact danger"
                                 data-testid="settings-delete-selected-ignore-rules"
                                 disabled="@IsDeleteSelectedIgnoreRulesDisabled()"
-                                @onclick="DeleteSelectedIgnoreRulesAsync">選択を削除</button>
+                                @onclick="DeleteSelectedIgnoreRulesAsync">@L["Common.DeleteSelected"]</button>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(_settingsDeleteStatus))
                     {
@@ -262,7 +285,7 @@
                                             class="toolbar-button compact danger"
                                             data-testid="settings-delete-ignore-rule"
                                             disabled="@_settingsDeleteBusy"
-                                            @onclick="() => DeleteIgnoreRulesAsync([rule.Pattern])">削除</button>
+                                            @onclick="() => DeleteIgnoreRulesAsync([rule.Pattern])">@L["Common.Delete"]</button>
                                 </div>
                             </article>
                         }
@@ -275,6 +298,11 @@
 
 @code {
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    [CascadingParameter] public string DisplayCulture { get; set; } = AppDisplayCulture.DefaultCultureName;
+
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
     private GitHubAuthState _state = GitHubAuthState.NotSignedIn;
     private string? _login;
@@ -292,9 +320,13 @@
     private bool _settingsLoading;
     private string? _settingsError;
     private DocsThemeMode _defaultDocsTheme = DocsThemeMode.Dark;
+    private string _displayCulture = AppUserSettings.Default.DisplayCulture;
     private bool _settingsThemeSaving;
     private string? _settingsThemeError;
     private string? _settingsThemeStatus;
+    private bool _settingsDisplayCultureSaving;
+    private string? _settingsDisplayCultureError;
+    private string? _settingsDisplayCultureStatus;
     private IReadOnlyList<IgnoreRule> _ignoreRules = [];
     private readonly HashSet<string> _selectedIgnoreRulePatterns = new(StringComparer.Ordinal);
     private bool _settingsDeleteBusy;
@@ -304,6 +336,7 @@
     {
         _broadcaster = Services.GetService<IReviewBroadcaster>();
         _usageTracker = Services.GetService<ICopilotUsageTracker>();
+        _displayCulture = AppDisplayCulture.Apply(DisplayCulture).Name;
         if (_usageTracker is not null)
         {
             _copilotUsage = _usageTracker.GetSnapshot();
@@ -370,7 +403,7 @@
         }
         catch (Exception ex)
         {
-            _lastError = $"サインイン失敗: {ex.Message}";
+            _lastError = $"{L["AppHeader.SignInFailed"]}: {ex.Message}";
         }
         finally
         {
@@ -391,7 +424,7 @@
         }
         catch (Exception ex)
         {
-            _lastError = $"サインアウト失敗: {ex.Message}";
+            _lastError = $"{L["AppHeader.SignOutFailed"]}: {ex.Message}";
         }
         finally
         {
@@ -406,7 +439,7 @@
         _lastReport = null;
         _triageStartedAt = DateTimeOffset.UtcNow;
         _triageElapsed = TimeSpan.Zero;
-        _triageStatus = "Triage を開始しています…";
+        _triageStatus = L["AppHeader.TriageStarting"];
         StartTriageTimer();
         StateHasChanged();
         try
@@ -422,12 +455,12 @@
             // data the moment Triage finishes. The broadcaster is a no-op
             // pub/sub so we can publish freely without coupling to a triage-specific bus.
             _broadcaster?.Publish();
-            _triageStatus = "Triage 完了";
+            _triageStatus = L["AppHeader.TriageCompleted"];
         }
         catch (Exception ex)
         {
-            _lastError = $"Triage 失敗: {ex.Message}";
-            _triageStatus = "Triage は失敗しました。詳細はエラーを確認してください。";
+            _lastError = $"{L["AppHeader.TriageFailed"]}: {ex.Message}";
+            _triageStatus = L["AppHeader.TriageFailedStatus"];
         }
         finally
         {
@@ -450,15 +483,48 @@
     {
         _settingsThemeError = null;
         _settingsThemeStatus = null;
+        _settingsDisplayCultureError = null;
+        _settingsDisplayCultureStatus = null;
         try
         {
             var store = Services.GetRequiredService<IAppUserSettingsStore>();
             var settings = await store.LoadAsync(CancellationToken.None);
             _defaultDocsTheme = settings.DefaultDocsTheme;
+            _displayCulture = AppDisplayCulture.Apply(settings.DisplayCulture).Name;
         }
         catch (Exception ex)
         {
-            _settingsThemeError = $"テーマ設定の読み込みに失敗しました: {ex.Message}";
+            _settingsThemeError = $"{L["Settings.Theme.LoadFailed"]}: {ex.Message}";
+        }
+    }
+
+    private async Task SaveDisplayCultureAsync(string cultureName)
+    {
+        if (_settingsDisplayCultureSaving)
+        {
+            return;
+        }
+
+        var normalizedCulture = AppDisplayCulture.NormalizeCultureName(cultureName);
+        _settingsDisplayCultureSaving = true;
+        _settingsDisplayCultureError = null;
+        _displayCulture = AppDisplayCulture.Apply(normalizedCulture).Name;
+        _settingsDisplayCultureStatus = L["Settings.DisplayLanguage.Applying"];
+        StateHasChanged();
+        try
+        {
+            var store = Services.GetRequiredService<IAppUserSettingsStore>();
+            await store.SaveDisplayCultureAsync(normalizedCulture, CancellationToken.None);
+            _displayCulture = AppDisplayCulture.Apply(normalizedCulture).Name;
+            _settingsDisplayCultureStatus = L["Settings.DisplayLanguage.Saved", GetDisplayCultureLabel(normalizedCulture)];
+        }
+        catch (Exception ex)
+        {
+            _settingsDisplayCultureError = $"{L["Settings.DisplayLanguage.SaveFailed"]}: {ex.Message}";
+        }
+        finally
+        {
+            _settingsDisplayCultureSaving = false;
         }
     }
 
@@ -478,11 +544,11 @@
             var store = Services.GetRequiredService<IAppUserSettingsStore>();
             await store.SaveDefaultDocsThemeAsync(theme, CancellationToken.None);
             _defaultDocsTheme = theme;
-            _settingsThemeStatus = "保存しました";
+            _settingsThemeStatus = L["Common.Saved"];
         }
         catch (Exception ex)
         {
-            _settingsThemeError = $"テーマ設定の保存に失敗しました: {ex.Message}";
+            _settingsThemeError = $"{L["Settings.Theme.SaveFailed"]}: {ex.Message}";
         }
         finally
         {
@@ -506,7 +572,7 @@
         {
             _ignoreRules = [];
             _selectedIgnoreRulePatterns.Clear();
-            _settingsError = $"無視リストの読み込みに失敗しました: {ex.Message}";
+            _settingsError = $"{L["Settings.IgnoreList.LoadFailed"]}: {ex.Message}";
         }
         finally
         {
@@ -579,13 +645,11 @@
             var deleted = await repo.DeleteIgnoreRulesAsync(patterns, CancellationToken.None);
             _ignoreRules = await repo.GetIgnoreRulesAsync(CancellationToken.None);
             RemoveSelectionsNotInIgnoreRules();
-            _settingsDeleteStatus = string.Create(
-                System.Globalization.CultureInfo.InvariantCulture,
-                $"{deleted} 件の無視リストを削除しました");
+            _settingsDeleteStatus = L["Settings.IgnoreList.Deleted", deleted];
         }
         catch (Exception ex)
         {
-            _settingsError = $"無視リストの削除に失敗しました: {ex.Message}";
+            _settingsError = $"{L["Settings.IgnoreList.DeleteFailed"]}: {ex.Message}";
         }
         finally
         {
@@ -607,8 +671,8 @@
 
     private string BuildIgnoreRuleSelectAllLabel()
         => _ignoreRules.Count > 0 && _selectedIgnoreRulePatterns.Count == _ignoreRules.Count
-            ? "全解除"
-            : "全選択";
+            ? L["Common.ClearAll"]
+            : L["Common.SelectAll"];
 
     private void StartTriageTimer()
     {
@@ -695,16 +759,16 @@
         var currentWork = BuildScoringCurrentWork(sourcePhase, analyzedCount, savedCount, totalCount);
         var metrics = new List<TriageProgressMetric>
         {
-            new("target", "対象", FormatCount(targetCount)),
-            new("analyzed", "分析済み", FormatProgressCount(analyzedCount, totalCount)),
-            new("saved", "保存済み", FormatProgressCount(savedCount, totalCount)),
+            new("target", L["TriageProgress.Target"], FormatCount(targetCount)),
+            new("analyzed", L["TriageProgress.Analyzed"], FormatProgressCount(analyzedCount, totalCount)),
+            new("saved", L["TriageProgress.Saved"], FormatProgressCount(savedCount, totalCount)),
         };
         AddReferenceMetricIfPresent(metrics, status);
 
         return new TriageProgressView(
             currentWork,
             metrics,
-            $"{currentWork}。{BuildMetricAriaText(metrics)}、経過 {FormatElapsed(_triageElapsed)}");
+            L["TriageProgress.AriaWithMetrics", currentWork, BuildMetricAriaText(metrics), FormatElapsed(_triageElapsed)]);
     }
 
     private TriageProgressView? BuildTriageIngestionProgressView(string status)
@@ -719,47 +783,47 @@
         var currentWork = BuildTriageCurrentWork(sourcePhase);
         var metrics = new List<TriageProgressMetric>
         {
-            new("inserted", "新規", FormatCount(insertedCount)),
-            new("fetched", "取得", FormatCount(fetchedCount)),
+            new("inserted", L["TriageProgress.Inserted"], FormatCount(insertedCount)),
+            new("fetched", L["TriageProgress.Fetched"], FormatCount(fetchedCount)),
         };
-        AddCountMetricIfPresent(metrics, status, "skipped", "スキップ");
+        AddCountMetricIfPresent(metrics, status, "skipped", "スキップ", L["TriageProgress.Skipped"]);
         AddReferenceMetricIfPresent(metrics, status);
         return new TriageProgressView(
             currentWork,
             metrics,
-            $"{currentWork}。{BuildMetricAriaText(metrics)}、経過 {FormatElapsed(_triageElapsed)}");
+            L["TriageProgress.AriaWithMetrics", currentWork, BuildMetricAriaText(metrics), FormatElapsed(_triageElapsed)]);
     }
 
     private TriageProgressView BuildTriageGenericProgressView(string status)
     {
         var sourcePhase = ExtractTriagePhase(status);
         var metrics = new List<TriageProgressMetric>();
-        AddCountMetricIfPresent(metrics, status, "fetched", "取得");
-        AddCountMetricIfPresent(metrics, status, "inserted", "新規");
-        AddCountMetricIfPresent(metrics, status, "skipped", "スキップ");
+        AddCountMetricIfPresent(metrics, status, "fetched", "取得", L["TriageProgress.Fetched"]);
+        AddCountMetricIfPresent(metrics, status, "inserted", "新規", L["TriageProgress.Inserted"]);
+        AddCountMetricIfPresent(metrics, status, "skipped", "スキップ", L["TriageProgress.Skipped"]);
         AddReferenceMetricIfPresent(metrics, status);
 
         return new TriageProgressView(
             BuildTriageCurrentWork(sourcePhase),
             metrics,
             metrics.Count == 0
-                ? $"{BuildTriageCurrentWork(sourcePhase)}。経過 {FormatElapsed(_triageElapsed)}"
-                : $"{BuildTriageCurrentWork(sourcePhase)}。{BuildMetricAriaText(metrics)}、経過 {FormatElapsed(_triageElapsed)}");
+                ? L["TriageProgress.AriaWithoutMetrics", BuildTriageCurrentWork(sourcePhase), FormatElapsed(_triageElapsed)]
+                : L["TriageProgress.AriaWithMetrics", BuildTriageCurrentWork(sourcePhase), BuildMetricAriaText(metrics), FormatElapsed(_triageElapsed)]);
     }
 
-    private static void AddCountMetricIfPresent(List<TriageProgressMetric> metrics, string status, string testIdSuffix, string label)
+    private static void AddCountMetricIfPresent(List<TriageProgressMetric> metrics, string status, string testIdSuffix, string sourceLabel, string displayLabel)
     {
-        if (TryReadCountAfter(status, label, out var count))
+        if (TryReadCountAfter(status, sourceLabel, out var count))
         {
-            metrics.Add(new TriageProgressMetric(testIdSuffix, label, FormatCount(count)));
+            metrics.Add(new TriageProgressMetric(testIdSuffix, displayLabel, FormatCount(count)));
         }
     }
 
-    private static void AddReferenceMetricIfPresent(List<TriageProgressMetric> metrics, string status)
+    private void AddReferenceMetricIfPresent(List<TriageProgressMetric> metrics, string status)
     {
         if (TryReadTrailingParenthesizedValue(status, out var reference))
         {
-            metrics.Add(new TriageProgressMetric("reference", "コミット", reference));
+            metrics.Add(new TriageProgressMetric("reference", L["TriageProgress.Commit"], reference));
         }
     }
 
@@ -785,57 +849,65 @@
     private static string BuildMetricAriaText(IReadOnlyList<TriageProgressMetric> metrics)
         => string.Join('、', metrics.Select(static metric => $"{metric.Label} {metric.Value}"));
 
-    private static string BuildScoringCurrentWork(string sourcePhase, int analyzedCount, int savedCount, int totalCount)
+    private string BuildScoringCurrentWork(string sourcePhase, int analyzedCount, int savedCount, int totalCount)
     {
         if (sourcePhase.Contains("分析", StringComparison.Ordinal))
         {
             var currentCount = Math.Max(1, Math.Min(analyzedCount, Math.Max(totalCount, 1)));
-            return $"Copilot が {currentCount} / {totalCount} 件目を分析中";
+            return L["TriageProgress.CurrentAnalyzing", currentCount, totalCount];
         }
 
         if (sourcePhase.Contains("完了", StringComparison.Ordinal))
         {
-            return "スコアリング結果を反映中";
+            return L["TriageProgress.CurrentApplyingScores"];
         }
 
         if (savedCount < analyzedCount)
         {
-            return "Copilot の判定結果を保存中";
+            return L["TriageProgress.CurrentSavingScores"];
         }
 
-        return "Copilot が重要度を判定中";
+        return L["TriageProgress.CurrentScoring"];
     }
 
-    private static string BuildTriageCurrentWork(string sourcePhase)
+    private string BuildTriageCurrentWork(string sourcePhase)
     {
         if (sourcePhase.Contains("スコアリング", StringComparison.Ordinal))
         {
-            return "Copilot が重要度を判定中";
+            return L["TriageProgress.CurrentScoring"];
         }
 
         if (sourcePhase.Contains("取り込み", StringComparison.Ordinal))
         {
-            return "未確認コミットを取り込み中";
+            return L["TriageProgress.CurrentIngesting"];
         }
 
         if (sourcePhase.Contains("Repo sync PR", StringComparison.Ordinal) &&
             sourcePhase.Contains("取得", StringComparison.Ordinal))
         {
-            return "Repo sync PR を取得中";
+            return L["TriageProgress.CurrentFetching"];
         }
 
         if (sourcePhase.Contains("Copilot セッション", StringComparison.Ordinal))
         {
-            return "Copilot セッションを準備中";
+            return L["TriageProgress.CurrentPreparingCopilot"];
         }
 
         if (sourcePhase.Contains("スコアリングを開始", StringComparison.Ordinal))
         {
-            return "スコアリングを開始中";
+            return L["TriageProgress.CurrentStartingScoring"];
         }
 
-        return sourcePhase;
+        return LocalizeKnownTriagePhase(sourcePhase);
     }
+
+    private string LocalizeKnownTriagePhase(string sourcePhase)
+        => sourcePhase switch
+        {
+            "Triage を開始しています…" => L["AppHeader.TriageStarting"],
+            "Triage 完了" => L["AppHeader.TriageCompleted"],
+            _ => sourcePhase,
+        };
 
     private static string ExtractTriagePhase(string status)
     {
@@ -947,44 +1019,44 @@
     private static string FormatNumber(double value)
         => value.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
 
-    private static string FormatAiCreditsOrTokens(CopilotUsageSnapshot usage)
+    private string FormatAiCreditsOrTokens(CopilotUsageSnapshot usage)
         => usage.AiCredits() is { } aiCredits
             ? $"AI Credits {FormatAiCredits(aiCredits)} credits{FormatEstimateSuffix(usage.BillingSource)}"
-            : $"AI Credits 未報告 / {FormatTokens(usage.TotalTokens)} tokens";
+            : L["CopilotUsage.AiCreditsUnreported", FormatTokens(usage.TotalTokens)];
 
-    private static string FormatEstimateSuffix(CopilotUsageBillingSource source)
+    private string FormatEstimateSuffix(CopilotUsageBillingSource source)
         => source is CopilotUsageBillingSource.SdkTokenDetails or CopilotUsageBillingSource.OfficialPricingTable or CopilotUsageBillingSource.Mixed
-            ? " (推定)"
+            ? L["CopilotUsage.EstimatedSuffix"]
             : string.Empty;
 
-    private static string FormatBillingSource(CopilotUsageBillingSource source)
+    private string FormatBillingSource(CopilotUsageBillingSource source)
         => source switch
         {
-            CopilotUsageBillingSource.SdkReported => "算出元: SDK 報告値",
-            CopilotUsageBillingSource.SdkTokenDetails => "算出元: SDK token detail から推定",
-            CopilotUsageBillingSource.OfficialPricingTable => "算出元: GitHub Docs 価格表から推定",
-            CopilotUsageBillingSource.Mixed => "算出元: SDK 報告値と推定値の混在",
-            _ => "算出元: 不明",
+            CopilotUsageBillingSource.SdkReported => L["CopilotUsage.BillingSource.SdkReported"],
+            CopilotUsageBillingSource.SdkTokenDetails => L["CopilotUsage.BillingSource.SdkTokenDetails"],
+            CopilotUsageBillingSource.OfficialPricingTable => L["CopilotUsage.BillingSource.OfficialPricingTable"],
+            CopilotUsageBillingSource.Mixed => L["CopilotUsage.BillingSource.Mixed"],
+            _ => L["CopilotUsage.BillingSource.Unknown"],
         };
 
     private static bool HasCopilotUsage(CopilotUsageSnapshot usage)
         => usage.TurnCount > 0 || usage.SessionMetrics.Count > 0;
 
-    private static string FormatPremiumRequests(CopilotUsageSnapshot usage)
+    private string FormatPremiumRequests(CopilotUsageSnapshot usage)
     {
         var requests = usage.SessionMetrics.Sum(static metrics => metrics.TotalUserRequests);
-        return requests > 0 ? $"{FormatNumber(requests)} requests" : "未報告";
+        return requests > 0 ? $"{FormatNumber(requests)} requests" : L["Common.Unreported"];
     }
 
-    private static string FormatSnapshotAiCreditsWithUnit(CopilotUsageSnapshot usage)
+    private string FormatSnapshotAiCreditsWithUnit(CopilotUsageSnapshot usage)
         => usage.AiCredits() is { } value
             ? $"{FormatAiCredits(value)} credits{FormatEstimateSuffix(usage.BillingSource)}"
-            : "未報告";
+            : L["Common.Unreported"];
 
-    private static string FormatTurnAiCreditsWithUnit(CopilotUsageRecord usage)
+    private string FormatTurnAiCreditsWithUnit(CopilotUsageRecord usage)
         => usage.AiCredits() is { } value
             ? $"{FormatAiCredits(value)} credits{FormatEstimateSuffix(usage.BillingSource())}"
-            : "未報告";
+            : L["Common.Unreported"];
 
     private static string FormatAiCredits(double aiCredits)
         => aiCredits switch
@@ -994,11 +1066,11 @@
             _ => aiCredits.ToString("N9", System.Globalization.CultureInfo.CurrentCulture),
         };
 
-    private static string FormatNullableCost(double? cost)
-        => cost is { } value ? FormatCost(value) : "未報告";
+    private string FormatNullableCost(double? cost)
+        => cost is { } value ? FormatCost(value) : L["Common.Unreported"];
 
-    private static string FormatNullablePremiumRequestCost(double? cost)
-        => cost is { } value ? $"{FormatCost(value)} PR" : "未報告";
+    private string FormatNullablePremiumRequestCost(double? cost)
+        => cost is { } value ? $"{FormatCost(value)} PR" : L["Common.Unreported"];
 
     private static string FormatCost(double cost)
         => cost switch
@@ -1015,6 +1087,25 @@
 
     private string BuildThemeOptionPressed(DocsThemeMode theme)
         => _defaultDocsTheme == theme ? "true" : "false";
+
+    private string BuildDisplayCultureOptionClass(string cultureName)
+        => string.Equals(_displayCulture, AppDisplayCulture.NormalizeCultureName(cultureName), StringComparison.OrdinalIgnoreCase)
+            ? "settings-theme-option active"
+            : "settings-theme-option";
+
+    private string BuildDisplayCultureOptionPressed(string cultureName)
+        => string.Equals(_displayCulture, AppDisplayCulture.NormalizeCultureName(cultureName), StringComparison.OrdinalIgnoreCase) ? "true" : "false";
+
+    private static string GetDisplayCultureLabel(string cultureName)
+        => AppDisplayCulture.SupportedCultures.FirstOrDefault(
+                culture => string.Equals(culture.CultureName, cultureName, StringComparison.OrdinalIgnoreCase))
+            ?.NativeLabel ?? cultureName;
+
+    private string DisplayLanguageLabel
+        => L["Settings.DisplayLanguage"];
+
+    private string DefaultThemeLabel
+        => L["Settings.DefaultTheme"];
 
     public void Dispose()
     {

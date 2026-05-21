@@ -19,6 +19,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 /// <see cref="ICopilotAgent.RunMorningTriageAsync"/> + republishes through
 /// <see cref="IReviewBroadcaster"/> so Sidebar / CommitList refresh themselves.
 /// </summary>
+[Collection("Localization")]
 public sealed class AppHeaderTests
 {
     [Fact]
@@ -841,6 +842,51 @@ public sealed class AppHeaderTests
         });
     }
 
+    [Fact]
+    public void Settings_DisplayLanguage_Selection_Is_Rendered_And_Saved()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+        var settingsStore = Substitute.For<IAppUserSettingsStore>();
+        settingsStore.Current.Returns(new AppUserSettings { DisplayCulture = "en" });
+        settingsStore.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new AppUserSettings { DisplayCulture = "en" }));
+        settingsStore.SaveDisplayCultureAsync("ja", Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sp = BuildServices(session, out _, out _, repo, settingsStore);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("Settings", cut.Find("[data-testid=\"settings-panel\"]").TextContent, StringComparison.Ordinal);
+            Assert.Equal("false", cut.Find("[data-testid=\"settings-display-language-ja\"]").GetAttribute("aria-pressed"));
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-display-language-en\"]").GetAttribute("aria-pressed"));
+        });
+
+        cut.Find("[data-testid=\"settings-display-language-ja\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            settingsStore.Received(1).SaveDisplayCultureAsync("ja", Arg.Any<CancellationToken>());
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-display-language-ja\"]").GetAttribute("aria-pressed"));
+            Assert.Equal("false", cut.Find("[data-testid=\"settings-display-language-en\"]").GetAttribute("aria-pressed"));
+            Assert.Contains("表示言語", cut.Find("[data-testid=\"settings-display-language-status\"]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
     private static ServiceProvider BuildServices(
         IGitHubAuthSession session,
         out ICopilotAgent agent,
@@ -866,8 +912,12 @@ public sealed class AppHeaderTests
                 .Returns(Task.FromResult(AppUserSettings.Default));
             resolvedSettingsStore.SaveDefaultDocsThemeAsync(Arg.Any<DocsThemeMode>(), Arg.Any<CancellationToken>())
                 .Returns(Task.CompletedTask);
+            resolvedSettingsStore.SaveDisplayCultureAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+                .Returns(Task.CompletedTask);
         }
         return new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
             .AddSingleton(session)
             .AddSingleton(agent)
             .AddSingleton(broadcaster)

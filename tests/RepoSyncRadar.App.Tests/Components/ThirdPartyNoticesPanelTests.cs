@@ -1,4 +1,5 @@
 using Bunit;
+using Microsoft.Extensions.DependencyInjection;
 using RepoSyncRadar.App.Components;
 using Xunit;
 
@@ -10,8 +11,12 @@ public sealed class ThirdPartyNoticesPanelTests
     public void Renders_Third_Party_Notices()
     {
         using var ctx = new BunitContext();
+        var sp = new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
+            .BuildServiceProvider();
 
-        var cut = ctx.Render<ThirdPartyNoticesPanel>();
+        var cut = ctx.Render<ThirdPartyNoticesPanel>(parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
 
         Assert.Contains("サードパーティ ライセンス", cut.Markup, StringComparison.Ordinal);
         var packages = cut.FindAll("[data-testid=\"settings-third-party-package\"]")

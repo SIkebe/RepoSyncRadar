@@ -1,10 +1,11 @@
 @using RepoSyncRadar.App.Settings
+@using Microsoft.Extensions.DependencyInjection
 
 <section class="settings-section third-party-notices" data-testid="settings-third-party-notices">
     <header class="settings-subheader">
         <div>
-            <h3>サードパーティ ライセンス</h3>
-            <p class="settings-muted">このアプリが直接参照している NuGet パッケージの著作権 notice とライセンス本文です。</p>
+            <h3>@L["ThirdParty.Title"]</h3>
+            <p class="settings-muted">@L["ThirdParty.Description"]</p>
         </div>
     </header>
 
@@ -18,14 +19,21 @@
                 </div>
                 <div class="third-party-notice-meta">
                     <span class="third-party-license" data-testid="settings-third-party-license">@notice.License</span>
-                    <a href="@notice.ProjectUrl" target="_blank" rel="noopener noreferrer">Project</a>
-                    <a href="@notice.LicenseUrl" target="_blank" rel="noopener noreferrer">License source</a>
+                    <a href="@notice.ProjectUrl" target="_blank" rel="noopener noreferrer">@L["ThirdParty.Project"]</a>
+                    <a href="@notice.LicenseUrl" target="_blank" rel="noopener noreferrer">@L["ThirdParty.LicenseSource"]</a>
                 </div>
                 <details class="third-party-notice-details">
-                    <summary>ライセンス本文</summary>
+                    <summary>@L["ThirdParty.LicenseText"]</summary>
                     <pre data-testid="settings-third-party-license-text">@notice.LicenseText</pre>
                 </details>
             </article>
         }
     </div>
 </section>
+
+@code {
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
+}

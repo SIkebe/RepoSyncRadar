@@ -12,7 +12,7 @@
 <nav class="radar-sidebar" data-testid="sidebar">
     @if (_counts is null)
     {
-        <p class="loading" data-testid="sidebar-loading">読み込み中…</p>
+        <p class="loading" data-testid="sidebar-loading">@L["Common.Loading"]</p>
     }
     else
     {
@@ -22,11 +22,11 @@
                     class="sidebar-item @(Selected == entry.Status ? "active" : null)"
                     data-status="@entry.Status"
                     data-testid="sidebar-item-@entry.Status"
-                    aria-label="@entry.AriaLabel"
+                    aria-label="@BuildAriaLabel(entry)"
                     @onclick="() => OnSelectAsync(entry.Status)">
                 <span class="sidebar-copy">
-                    <span class="label">@entry.Label</span>
-                    <span class="description" data-testid="sidebar-description-@entry.Status">@entry.Description</span>
+                    <span class="label">@BuildLabel(entry)</span>
+                    <span class="description" data-testid="sidebar-description-@entry.Status">@BuildDescription(entry)</span>
                 </span>
                 <span class="count" data-testid="sidebar-count-@entry.Status">@CountFor(entry.Status)</span>
             </button>
@@ -37,19 +37,19 @@
 @code {
     private static readonly SidebarEntry[] Entries =
     {
-        new(ReviewStatus.Unseen, "未確認", "Triage 後、まだ人が判断していない候補"),
-        new(ReviewStatus.Adopted, "注目", "見逃さず追いたい候補"),
-        new(ReviewStatus.Later, "保留", "判断をいったん保留している候補"),
-        new(ReviewStatus.Rejected, "見送り候補", "Triage や無視ルールが低優先度と見なした候補"),
-        new(ReviewStatus.Archived, "アーカイブ", "アクティブな確認対象から外した候補"),
+        new(ReviewStatus.Unseen, "Sidebar.Unseen.Label", "Sidebar.Unseen.Description"),
+        new(ReviewStatus.Adopted, "Sidebar.Watch.Label", "Sidebar.Watch.Description"),
+        new(ReviewStatus.Later, "Sidebar.Later.Label", "Sidebar.Later.Description"),
+        new(ReviewStatus.Rejected, "Sidebar.Rejected.Label", "Sidebar.Rejected.Description"),
+        new(ReviewStatus.Archived, "Sidebar.Archive.Label", "Sidebar.Archive.Description"),
     };
 
-    private sealed record SidebarEntry(ReviewStatus Status, string Label, string Description)
-    {
-        public string AriaLabel => $"{Label}: {Description}";
-    }
+    private sealed record SidebarEntry(ReviewStatus Status, string LabelKey, string DescriptionKey);
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
     [Parameter] public ReviewStatus? Selected { get; set; }
 
@@ -105,4 +105,13 @@
 
     private int CountFor(ReviewStatus status)
         => _counts is not null && _counts.TryGetValue(status, out var count) ? count : 0;
+
+    private string BuildLabel(SidebarEntry entry)
+        => L[entry.LabelKey];
+
+    private string BuildDescription(SidebarEntry entry)
+        => L[entry.DescriptionKey];
+
+    private string BuildAriaLabel(SidebarEntry entry)
+        => $"{BuildLabel(entry)}: {BuildDescription(entry)}";
 }

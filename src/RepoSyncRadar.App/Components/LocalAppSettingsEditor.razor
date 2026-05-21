@@ -4,7 +4,7 @@
 <section class="settings-section local-appsettings-section" data-testid="settings-local-appsettings">
     <header class="settings-subheader">
         <div>
-            <h3>アプリ設定</h3>
+            <h3>@L["LocalSettings.Title"]</h3>
             @if (!string.IsNullOrWhiteSpace(_settingsPath))
             {
                 <p class="settings-muted" data-testid="settings-local-appsettings-path">@_settingsPath</p>
@@ -15,22 +15,22 @@
                     class="toolbar-button compact secondary"
                     data-testid="settings-local-appsettings-reload"
                     disabled="@(_loading || _saving)"
-                    @onclick="LoadAsync">再読み込み</button>
+                    @onclick="LoadAsync">@L["Common.Reload"]</button>
             <button type="button"
                     class="toolbar-button compact primary"
                     data-testid="settings-local-appsettings-save"
                     disabled="@(_loading || _saving)"
-                    @onclick="SaveAsync">保存</button>
+                    @onclick="SaveAsync">@L["Common.Save"]</button>
         </div>
     </header>
 
     @if (_loading)
     {
-        <p class="settings-muted" data-testid="settings-local-appsettings-loading">読み込み中…</p>
+        <p class="settings-muted" data-testid="settings-local-appsettings-loading">@L["Common.Loading"]</p>
     }
     else if (_settings is { } settings)
     {
-        <p class="settings-muted">保存後は次回起動で確実に反映されます。</p>
+        <p class="settings-muted">@L["LocalSettings.RestartHint"]</p>
 
         @if (!string.IsNullOrWhiteSpace(_status))
         {
@@ -119,7 +119,7 @@
                 <label class="local-settings-field wide">
                     <span>OAuthClientId</span>
                     <input data-testid="settings-copilot-oauth-client-id" value="@settings.Copilot.OAuthClientId" disabled="@_saving" @oninput="e => settings.Copilot.OAuthClientId = NullableStringValue(e)" />
-                    <small class="settings-muted">通常は配布版に同梱された公式 Client ID を使います。組織管理の OAuth App や独自ビルドだけ上書きしてください。</small>
+                    <small class="settings-muted">@L["LocalSettings.OAuthClientIdHint"]</small>
                 </label>
                 <label class="local-settings-field wide">
                     <span>AllowedUrlHosts</span>
@@ -201,6 +201,9 @@
 @code {
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
+
     private LocalAppSettings? _settings;
     private string? _settingsPath;
     private bool _loading = true;
@@ -230,7 +233,7 @@
         catch (Exception ex)
         {
             _settings = null;
-            _error = $"アプリ設定の読み込みに失敗しました: {ex.Message}";
+            _error = $"{L["LocalSettings.LoadFailed"]}: {ex.Message}";
         }
         finally
         {
@@ -260,7 +263,7 @@
             await store.SaveAsync(next, CancellationToken.None);
             _settings = store.Current.Clone();
             UpdateTextFields(_settings);
-            _status = "appsettings.local.json を保存しました";
+            _status = L["LocalSettings.Saved"];
         }
         catch (LocalAppSettingsValidationException ex)
         {
@@ -272,7 +275,7 @@
         }
         catch (Exception ex)
         {
-            _error = $"アプリ設定の保存に失敗しました: {ex.Message}";
+            _error = $"{L["LocalSettings.SaveFailed"]}: {ex.Message}";
         }
         finally
         {
