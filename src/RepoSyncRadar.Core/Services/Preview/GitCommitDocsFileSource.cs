@@ -21,4 +21,11 @@ internal sealed class GitCommitDocsFileSource : IDocsFileSource
         string extension,
         CancellationToken cancellationToken)
         => await _worktree.ListFilesAsync(_commitSha, repoDirectory, extension, cancellationToken).ConfigureAwait(false);
+
+    public async Task<IReadOnlyList<string>> FindFilesContainingAsync(
+        string repoDirectory,
+        string text,
+        string extension,
+        CancellationToken cancellationToken)
+        => await _worktree.FindFilesContainingAsync(_commitSha, repoDirectory, text, extension, cancellationToken).ConfigureAwait(false);
 }

@@ -276,7 +276,8 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Equal("Evaluate expressions", context.PageTitles["actions/reference/evaluate-expressions-in-workflows-and-actions"]);
-        Assert.Equal(["content/actions/reference"], source.EnumeratedDirectories);
+        Assert.Empty(source.EnumeratedDirectories);
+        Assert.Equal(["content/actions/reference"], source.SearchDirectories);
     }
 
     [Fact]
@@ -307,7 +308,8 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
             TestContext.Current.CancellationToken);
 
         Assert.Equal("Preventing data leaks", context.PageTitles["code-security/getting-started/best-practices-for-preventing-data-leaks-in-your-organization"]);
-        Assert.Contains("content/code-security", source.EnumeratedDirectories);
+        Assert.Empty(source.EnumeratedDirectories);
+        Assert.Contains("content/code-security", source.SearchDirectories);
         Assert.Contains(
             "content/code-security/tutorials/secure-your-organization/best-practices-for-preventing-data-leaks-in-your-organization.md",
             source.ReadPaths);
@@ -338,6 +340,8 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
 
         public List<string> EnumeratedDirectories { get; } = [];
 
+        public List<string> SearchDirectories { get; } = [];
+
         public List<string> ReadPaths { get; } = [];
 
         public void Add(string repoPath, string content)
@@ -362,6 +366,24 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
             IReadOnlyList<string> files = _files.Keys
                 .Where(path => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
                     && path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return Task.FromResult(files);
+        }
+
+        public Task<IReadOnlyList<string>> FindFilesContainingAsync(
+            string repoDirectory,
+            string text,
+            string extension,
+            CancellationToken cancellationToken)
+        {
+            SearchDirectories.Add(repoDirectory);
+            var prefix = repoDirectory.TrimEnd('/') + "/";
+            IReadOnlyList<string> files = _files
+                .Where(pair => pair.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    && pair.Key.EndsWith(extension, StringComparison.OrdinalIgnoreCase)
+                    && pair.Value.Contains(text, StringComparison.OrdinalIgnoreCase))
+                .Select(static pair => pair.Key)
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             return Task.FromResult(files);

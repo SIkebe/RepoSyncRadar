@@ -1735,8 +1735,16 @@ html, body {
 
 .preview-progress-text {
     flex: 1 1 auto;
+    min-width: 0;
     font-size: 0.9rem;
     color: #333;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.preview-progress-text.progress-phase {
+    margin-right: 0;
+    white-space: normal;
 }
 
 .preview-progress-elapsed {

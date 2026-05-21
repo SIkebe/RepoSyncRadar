@@ -318,6 +318,52 @@ public sealed partial class DocsWorktreeManager
             .ToArray();
     }
 
+    public async Task<IReadOnlyList<string>> FindFilesContainingAsync(
+        string commitSha,
+        string repoDirectory,
+        string text,
+        string extension,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(commitSha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(repoDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        ArgumentException.ThrowIfNullOrWhiteSpace(extension);
+        if (!IsEnabled)
+        {
+            return Array.Empty<string>();
+        }
+
+        var normalizedDirectory = NormalizeRepoPath(repoDirectory);
+        var args = string.Create(
+            CultureInfo.InvariantCulture,
+            $"grep -l -F -- {QuoteGitArgument(text)} {commitSha} -- {normalizedDirectory}");
+        var result = await _runner.RunAsync(
+                "git",
+                args,
+                _options.BareCloneDir,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (result.ExitCode != 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        return result.StandardOutput
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(path => StripGitGrepTreePrefix(path.TrimEnd('\r'), commitSha))
+            .Where(path => path.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+    }
+
+    private static string StripGitGrepTreePrefix(string path, string commitSha)
+        => path.StartsWith(commitSha + ":", StringComparison.Ordinal)
+            ? path[(commitSha.Length + 1)..]
+            : path;
+
+    private static string QuoteGitArgument(string value)
+        => '"' + value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + '"';
+
     public async Task<IReadOnlyList<string>> MaterializeFilesAsync(
         string commitSha,
         IEnumerable<string> repoPaths,

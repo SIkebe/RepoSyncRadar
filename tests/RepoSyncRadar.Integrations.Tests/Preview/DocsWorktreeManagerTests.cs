@@ -864,6 +864,25 @@ public sealed class DocsWorktreeManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task FindFilesContainingAsync_Strips_Treeish_Prefix_From_GitGrep_Output()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        Directory.CreateDirectory(bare);
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync("git", "grep -l -F -- \"old-route\" abc123 -- content", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(
+                0,
+                "abc123:content/a.md\nabc123:content/b.yml\nabc123:content/nested/c.md\n",
+                string.Empty)));
+        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git", Path.Combine(_tempRoot, "wt"));
+
+        var files = await sut.FindFilesContainingAsync("abc123", "content", "old-route", ".md", ct);
+
+        Assert.Equal(["content/a.md", "content/nested/c.md"], files);
+    }
+
+    [Fact]
     public async Task PruneAllAsync_Ignores_Already_Detached_Worktree_Metadata()
     {
         var ct = TestContext.Current.CancellationToken;

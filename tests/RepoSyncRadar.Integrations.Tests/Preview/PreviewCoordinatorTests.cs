@@ -1194,6 +1194,35 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
         runner.RunAsync(
                 "git",
+                Arg.Is<string>(a => a.StartsWith("grep -l -F -- ", StringComparison.Ordinal)),
+                bareCloneDir,
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var args = call.ArgAt<string>(1);
+                if (!TryParseGrepArguments(args, out var text, out var sha, out var repoDirectory))
+                {
+                    return Task.FromResult(new ProcessRunResult(128, string.Empty, "invalid grep arguments"));
+                }
+
+                MaterializeObjectSource(sha);
+                var root = Path.Combine(objectSourceRoot, sha);
+                var directory = Path.Combine(root, repoDirectory.Replace('/', Path.DirectorySeparatorChar));
+                if (!Directory.Exists(directory))
+                {
+                    return Task.FromResult(new ProcessRunResult(1, string.Empty, string.Empty));
+                }
+
+                var output = string.Join(
+                    '\n',
+                    Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+                        .Where(path => File.ReadAllText(path).Contains(text, StringComparison.OrdinalIgnoreCase))
+                        .Select(path => Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/')));
+                return Task.FromResult(new ProcessRunResult(string.IsNullOrEmpty(output) ? 1 : 0, output, string.Empty));
+            });
+
+        runner.RunAsync(
+                "git",
                 Arg.Is<string>(a => a.StartsWith("cat-file -e ", StringComparison.Ordinal)
                     && a.Contains(':', StringComparison.Ordinal)),
                 bareCloneDir,
@@ -1373,6 +1402,39 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
         repoPaths = paths;
         return true;
+    }
+
+    private static bool TryParseGrepArguments(
+        string args,
+        out string text,
+        out string sha,
+        out string repoDirectory)
+    {
+        text = string.Empty;
+        sha = string.Empty;
+        repoDirectory = string.Empty;
+        const string prefix = "grep -l -F -- ";
+        if (!args.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var remainder = args[prefix.Length..];
+        if (!TryReadSingleQuotedArgument(remainder, out text, out var consumed))
+        {
+            return false;
+        }
+
+        remainder = remainder[consumed..].TrimStart();
+        var split = remainder.Split(" -- ", 2, StringSplitOptions.None);
+        if (split.Length != 2)
+        {
+            return false;
+        }
+
+        sha = split[0].Trim();
+        repoDirectory = split[1].Trim('/');
+        return sha.Length > 0 && repoDirectory.Length > 0;
     }
 
     private static bool TryReadSingleQuotedArgument(string input, out string value)

@@ -427,41 +427,44 @@ internal static partial class DocsLiquidContextLoader
         }
 
         var seenFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var fileNameHints = BuildRedirectFileNameHints(unresolved);
         foreach (var directory in BuildRedirectScanDirectories(unresolved))
         {
-            var files = await source.EnumerateFilesAsync(directory, ".md", cancellationToken).ConfigureAwait(false);
-            foreach (var file in PrioritizeRedirectScanFiles(files, fileNameHints))
+            foreach (var route in unresolved.ToArray())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!seenFiles.Add(file))
+                var files = await source.FindFilesContainingAsync(directory, route, ".md", cancellationToken).ConfigureAwait(false);
+                foreach (var file in files)
                 {
-                    continue;
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!seenFiles.Add(file))
+                    {
+                        continue;
+                    }
 
-                var content = await source.ReadTextAsync(file, cancellationToken).ConfigureAwait(false);
-                if (content is null)
-                {
-                    continue;
-                }
-                var frontmatter = ExtractLeadingFrontmatter(content);
+                    var content = await source.ReadTextAsync(file, cancellationToken).ConfigureAwait(false);
+                    if (content is null)
+                    {
+                        continue;
+                    }
+                    var frontmatter = ExtractLeadingFrontmatter(content);
 
-                var redirects = ExtractFrontmatterSequence(frontmatter, "redirect_from")
-                    .Select(NormalizeRouteAlias)
-                    .ToArray();
-                if (!redirects.Any(redirect => unresolved.Contains(redirect)))
-                {
-                    continue;
-                }
+                    var redirects = ExtractFrontmatterSequence(frontmatter, "redirect_from")
+                        .Select(NormalizeRouteAlias)
+                        .ToArray();
+                    if (!redirects.Any(redirect => unresolved.Contains(redirect)))
+                    {
+                        continue;
+                    }
 
-                AddPageTitleFromContent(file, content, result);
-                foreach (var redirect in redirects)
-                {
-                    unresolved.Remove(redirect);
-                }
-                if (unresolved.Count == 0)
-                {
-                    return;
+                    AddPageTitleFromContent(file, content, result);
+                    foreach (var redirect in redirects)
+                    {
+                        unresolved.Remove(redirect);
+                    }
+                    if (unresolved.Count == 0)
+                    {
+                        return;
+                    }
                 }
             }
         }
@@ -1247,42 +1250,6 @@ internal static partial class DocsLiquidContextLoader
         return result.ToArray();
     }
 
-    private static HashSet<string> BuildRedirectFileNameHints(IEnumerable<string> unresolvedRoutes)
-    {
-        var hints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var route in unresolvedRoutes)
-        {
-            var normalized = route.Replace('\\', '/').Trim('/');
-            if (normalized.Length == 0)
-            {
-                continue;
-            }
-
-            var lastSlash = normalized.LastIndexOf('/');
-            var leaf = lastSlash < 0 ? normalized : normalized[(lastSlash + 1)..];
-            if (leaf.Length == 0 || leaf.Contains('@', StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            hints.Add(leaf.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? leaf : leaf + ".md");
-        }
-        return hints;
-    }
-
-    private static IEnumerable<string> PrioritizeRedirectScanFiles(
-        IReadOnlyList<string> files,
-        HashSet<string> fileNameHints)
-    {
-        if (fileNameHints.Count == 0)
-        {
-            return files;
-        }
-
-        return files
-            .OrderByDescending(file => fileNameHints.Contains(Path.GetFileName(file.Replace('/', Path.DirectorySeparatorChar))));
-    }
-
     private sealed class WorktreeDocsFileSource(string rootPath) : IDocsFileSource
     {
         public async Task<string?> ReadTextAsync(string repoPath, CancellationToken cancellationToken)
@@ -1326,6 +1293,31 @@ internal static partial class DocsLiquidContextLoader
                 return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
             }
         }
+
+        public async Task<IReadOnlyList<string>> FindFilesContainingAsync(
+            string repoDirectory,
+            string text,
+            string extension,
+            CancellationToken cancellationToken)
+        {
+            var files = await EnumerateFilesAsync(repoDirectory, extension, cancellationToken).ConfigureAwait(false);
+            if (files.Count == 0 || string.IsNullOrEmpty(text))
+            {
+                return Array.Empty<string>();
+            }
+
+            var result = new List<string>();
+            foreach (var file in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var content = await ReadTextAsync(file, cancellationToken).ConfigureAwait(false);
+                if (content?.Contains(text, StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    result.Add(file);
+                }
+            }
+            return result;
+        }
     }
 }
 
@@ -1335,6 +1327,12 @@ internal interface IDocsFileSource
 
     Task<IReadOnlyList<string>> EnumerateFilesAsync(
         string repoDirectory,
+        string extension,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<string>> FindFilesContainingAsync(
+        string repoDirectory,
+        string text,
         string extension,
         CancellationToken cancellationToken);
 }
