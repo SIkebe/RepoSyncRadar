@@ -27,7 +27,7 @@
 | .NET SDK | .NET 10 SDK 以降([global.json](../global.json) で固定) |
 | GitHub Copilot | アクティブな Copilot サブスクリプション(初回起動時に Copilot CLI が自動取得される) |
 | GitHub アカウント | Copilot を有効化したアカウント(初回起動時にデバイスフローでサインイン) |
-| GitHub OAuth App | **コントリビューターが用意する OAuth App(後述 2.2)。Device Flow 有効化必須** |
+| GitHub OAuth App | 通常は配布版に同梱された RepoSyncRadar 公式 OAuth App を使用。組織管理や fork では任意で上書き可能 |
 
 ---
 
@@ -42,9 +42,13 @@ dotnet restore
 dotnet build
 ```
 
-### 2.2 GitHub OAuth App を作成して Device Flow を有効化
+### 2.2 OAuth 設定
 
-RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザーアカウントの OAuth トークン** を Copilot SDK に渡します(PAT は使いません)。最初に一度だけ OAuth App を用意してください。
+RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザーアカウントの OAuth トークン** を Copilot SDK に渡します(PAT は使いません)。一般配布版には RepoSyncRadar 公式 OAuth App の **Client ID** が同梱されているため、通常は GitHub OAuth App を自分で作成する必要はありません。
+
+`OAuthClientId` は公開識別子であり、トークンや client secret ではありません。配布物に含めても認証情報の漏えいにはあたりません。取得後の OAuth アクセストークンだけが秘密情報で、DPAPI でローカル保存されます。
+
+組織ポリシー、社内配布、fork、検証環境などで独自 OAuth App を使いたい場合だけ、以下の手順で上書きしてください。
 
 1. https://github.com/settings/developers → **OAuth Apps** → **New OAuth App**
 2. 必須フィールドを埋める(Application name は任意 / Homepage URL は任意の URL / Authorization callback URL は `http://localhost/` でよい — Device Flow では使われない)
@@ -54,7 +58,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 
 ### 2.3 設定ファイルを書く
 
-[src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。OAuth App の Client ID など環境固有の値は、同フォルダに `appsettings.local.json` を作って追記します(`.gitignore` 済み)。
+[src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。一般配布版ではそのまま起動できます。環境固有の値や独自 OAuth App の Client ID だけ、同フォルダに `appsettings.local.json` を作って追記します(`.gitignore` 済み)。
 
 ```jsonc
 {
@@ -70,7 +74,8 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
       "TelemetryFilePath": "",
       "CaptureContent": false,
     "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ],
-    "OAuthClientId": "Iv23liXXXXXXXXXXXXXX",
+      // 任意: 公式配布 Client ID を使う場合は省略。独自 OAuth App の場合だけ指定。
+      "OAuthClientId": "Iv23liXXXXXXXXXXXXXX",
     "OAuthScopes": [ "public_repo" ]
   },
   // Step 19 を使う場合のみ。空ならローカルプレビュー機能はオフ。
@@ -91,7 +96,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 }
 ```
 
-> `Copilot.OAuthClientId` は GitHub Copilot SDK にも、`github/docs` の PR を読む Octokit にも **同じ OAuth ユーザートークン** を渡すために使います。PAT (`ghp_...`) の設定はもう不要です。
+> `Copilot.OAuthClientId` は GitHub Copilot SDK にも、`github/docs` の PR を読む Octokit にも **同じ OAuth ユーザートークン** を渡すために使います。PAT (`ghp_...`) の設定はもう不要です。一般配布版では公式 Client ID が既定値です。独自 OAuth App を使う場合だけ `appsettings.local.json` または環境変数 `RADAR_Copilot__OAuthClientId` で上書きしてください。
 >
 > `OAuthScopes` には `public_repo` を指定してください — Copilot SDK の認証(ユーザー識別)と Octokit の `github/docs` 読み取りの両方を 1 つのトークンでまかなえます。
 >

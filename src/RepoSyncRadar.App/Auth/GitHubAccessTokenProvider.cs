@@ -85,7 +85,8 @@ public sealed partial class GitHubAccessTokenProvider : IGitHubAccessTokenProvid
             {
                 throw new InvalidOperationException(
                     "Copilot:OAuthClientId is not configured and no token is available. " +
-                    "Set the OAuth App client id in appsettings.json or provide COPILOT_GITHUB_TOKEN.");
+                    "Restore the bundled appsettings.json value, set a custom client id in appsettings.local.json, " +
+                    "or provide COPILOT_GITHUB_TOKEN for debug use.");
             }
 
             LogStartingDeviceFlow(_logger);

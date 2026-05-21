@@ -28,8 +28,8 @@ public partial class App : Application
     /// <c>internal</c> so the test project can assert against the exact text.
     /// </summary>
     internal const string MissingClientIdWarning =
-        "GitHub OAuth Client Id (Copilot:OAuthClientId) \u304c appsettings.json \u306b\u8a2d\u5b9a\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002\n" +
-        "OAuth App \u3092\u767b\u9332\u3057\u3066 Client Id \u3092\u8a2d\u5b9a\u3059\u308b\u307e\u3067\u3001Copilot \u6a5f\u80fd\u3068 Sync \u306f\u4f7f\u3048\u307e\u305b\u3093\u3002\n" +
+        "GitHub OAuth Client Id (Copilot:OAuthClientId) \u304c\u8a2d\u5b9a\u3055\u308c\u3066\u3044\u307e\u305b\u3093\u3002\n" +
+        "\u901a\u5e38\u306e\u914d\u5e03\u7248\u3067\u306f\u516c\u5f0f Client ID \u304c\u540c\u68b1\u3055\u308c\u307e\u3059\u3002\u72ec\u81ea\u30d3\u30eb\u30c9\u3084\u7d44\u7e54\u7528 OAuth App \u3092\u4f7f\u3046\u5834\u5408\u306f\u3001appsettings.local.json \u307e\u305f\u306f RADAR_Copilot__OAuthClientId \u3067 Client ID \u3092\u4e0a\u66f8\u304d\u3057\u3066\u304f\u3060\u3055\u3044\u3002\n" +
         "\u624b\u9806\u306f docs/USAGE.md \u3092\u53c2\u7167\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
 
     private IHost? _host;

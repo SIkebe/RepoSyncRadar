@@ -33,6 +33,7 @@ public sealed class LocalAppSettingsEditorTests
             Assert.Contains("api.github.com", cut.Find("[data-testid=\"settings-copilot-allowed-hosts\"]").GetAttribute("value"), StringComparison.Ordinal);
             Assert.Contains("github.com", cut.Find("[data-testid=\"settings-webview-allowed-hosts\"]").GetAttribute("value"), StringComparison.Ordinal);
             Assert.Contains("PORT={port}", cut.Find("[data-testid=\"settings-docsrepo-preview-environment\"]").GetAttribute("value"), StringComparison.Ordinal);
+            Assert.Contains("通常は配布版に同梱", cut.Find("[data-testid=\"settings-copilot-oauth-client-id\"]").ParentElement!.TextContent, StringComparison.Ordinal);
         });
     }
 

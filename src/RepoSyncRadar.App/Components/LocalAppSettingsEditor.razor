@@ -119,6 +119,7 @@
                 <label class="local-settings-field wide">
                     <span>OAuthClientId</span>
                     <input data-testid="settings-copilot-oauth-client-id" value="@settings.Copilot.OAuthClientId" disabled="@_saving" @oninput="e => settings.Copilot.OAuthClientId = NullableStringValue(e)" />
+                    <small class="settings-muted">通常は配布版に同梱された公式 Client ID を使います。組織管理の OAuth App や独自ビルドだけ上書きしてください。</small>
                 </label>
                 <label class="local-settings-field wide">
                     <span>AllowedUrlHosts</span>

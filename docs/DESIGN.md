@@ -210,7 +210,7 @@
 - **Telemetry** — OpenTelemetry / file exporter。`System.Diagnostics.Activity` を活用、`traceparent` 自動伝搬。
 - **Infinite Sessions** — デフォルト ON。context 上限を自動 compaction + workspace ディレクトリに永続化。`SessionCompactionStartEvent` / `SessionCompactionCompleteEvent` で観測可能。
 - **BYOK** — `ProviderConfig` で `Type` / `BaseUrl` / `ApiKey` 指定。Entra ID / Managed Identity は不可、API キーのみ。
-- **認証** — Copilot CLI のログイン状態 / OAuth App / 環境変数 (`COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`) / BYOK。
+- **認証** — アプリ同梱の公開 OAuth Client ID + Device Flow / DPAPI 保存トークン / デバッグ用環境変数 (`COPILOT_GITHUB_TOKEN`) / BYOK。
 
 ### 5.3 必須事項チェックリスト
 

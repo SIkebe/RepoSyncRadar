@@ -48,10 +48,11 @@ public sealed class CopilotOptions
 
     /// <summary>
     /// Client ID of the GitHub OAuth (or GitHub) App used for the in-app sign-in device
-    /// flow. The app must have <em>Device flow</em> enabled on github.com. When this is
-    /// null or whitespace the device flow is disabled and the session factory falls back
-    /// to the optional <c>COPILOT_GITHUB_TOKEN</c> environment variable (intended for
-    /// CI/debug). See <c>docs/USAGE.md</c> for the setup steps.
+    /// flow. Release builds should ship a public, non-secret default client ID; local
+    /// settings or <c>RADAR_Copilot__OAuthClientId</c> may override it for organization
+    /// managed OAuth Apps and forks. When this is null or whitespace the device flow is
+    /// disabled and the session factory falls back to the optional
+    /// <c>COPILOT_GITHUB_TOKEN</c> environment variable (intended for CI/debug).
     /// </summary>
     public string? OAuthClientId { get; set; }
 

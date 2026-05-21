@@ -17,6 +17,20 @@ namespace RepoSyncRadar.App.Tests;
 public class StartupSignInTests
 {
     [Fact]
+    public void Bundled_Appsettings_Contains_Distribution_OAuth_ClientId()
+    {
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false)
+            .Build();
+
+        var clientId = configuration["Copilot:OAuthClientId"];
+
+        Assert.False(string.IsNullOrWhiteSpace(clientId));
+        Assert.StartsWith("Ov", clientId, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ConfigureAppConfiguration_Reads_Explicit_Local_Appsettings_Path()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "rsr-startup-config-tests-" + Guid.NewGuid().ToString("N"));
