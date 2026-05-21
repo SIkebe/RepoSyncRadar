@@ -164,6 +164,46 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Triage_Progress_Is_Structured_When_Agent_Reports_Analysis_Phase()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var gate = new TaskCompletionSource<IngestionReport>();
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                call.Arg<IProgress<string>?>()?.Report("今回の未スコア未確認コミットを分析中: 対象 15 件 / 分析 1 / 15 件 / スコア保存 0 / 15 件 (e4361356)");
+                return gate.Task;
+            });
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = NormalizeText(cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent);
+            Assert.StartsWith("分析中 経過", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("今回の未スコア未確認コミットを分析中", status, StringComparison.Ordinal);
+            Assert.Equal("対象 15 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-target\"]").TextContent));
+            Assert.Equal("分析済み 1 / 15 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-analyzed\"]").TextContent));
+            Assert.Equal("保存済み 0 / 15 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-saved\"]").TextContent));
+        });
+
+        gate.SetResult(new IngestionReport(Total: 1, Inserted: 1, Skipped: 0));
+    }
+
+    [Fact]
     public void Triage_Failure_Shows_Error_Without_Publishing_Broadcaster()
     {
         var session = Substitute.For<IGitHubAuthSession>();

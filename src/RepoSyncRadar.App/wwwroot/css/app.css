@@ -103,6 +103,7 @@ html, body {
     margin-right: 0.15rem;
     color: var(--radar-muted-fg);
     font-weight: 600;
+    white-space: nowrap;
 }
 
 .app-header-triage-metric {
@@ -131,6 +132,11 @@ html, body {
 .app-header-triage-working {
     color: var(--radar-accent-fg);
     font-weight: 700;
+    min-width: 8.75rem;
+}
+
+.app-header-triage-elapsed {
+    min-width: 6.75rem;
 }
 
 .radar-sidebar {
