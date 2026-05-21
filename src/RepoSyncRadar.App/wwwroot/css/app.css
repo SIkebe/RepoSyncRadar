@@ -134,6 +134,11 @@ html, body {
     font-weight: 700;
 }
 
+.progress-metric-current {
+    color: var(--radar-accent-fg);
+    min-width: 13rem;
+}
+
 .progress-metric-working,
 .app-header-triage-working {
     color: var(--radar-accent-fg);

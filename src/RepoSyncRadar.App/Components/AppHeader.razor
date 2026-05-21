@@ -74,7 +74,10 @@
                 <span data-testid="app-header-triage-status"
                       class="progress-metric-list app-header-triage-progress"
                       aria-label="@triageProgress.AriaLabel">
-                    <span class="progress-phase app-header-triage-phase">@triageProgress.Phase</span>
+                    <span class="progress-metric progress-metric-current" data-testid="app-header-triage-current">
+                        <span class="progress-metric-label">作業</span>
+                        <span class="progress-metric-value">@triageProgress.CurrentWork</span>
+                    </span>
                     <span class="progress-metric progress-metric-elapsed" data-testid="app-header-triage-elapsed">
                         <span class="progress-metric-label">経過</span>
                         <span class="progress-metric-value">@FormatElapsed(_triageElapsed)</span>
@@ -84,12 +87,6 @@
                         <span class="progress-metric" data-testid="app-header-triage-@metric.TestIdSuffix">
                             <span class="progress-metric-label">@metric.Label</span>
                             <span class="progress-metric-value">@metric.Value</span>
-                        </span>
-                    }
-                    @if (triageProgress.WorkingLabel is not null)
-                    {
-                        <span class="progress-metric progress-metric-working" data-testid="app-header-triage-working">
-                            @triageProgress.WorkingLabel
                         </span>
                     }
                 </span>
@@ -661,18 +658,7 @@
 
     private string FormatTriageStatus(string status)
     {
-        if (!_busy || !status.Contains("スコアリング", StringComparison.Ordinal))
-        {
-            return status;
-        }
-
-        if (status.Contains("Copilot 分析中", StringComparison.Ordinal))
-        {
-            return status;
-        }
-
-        var dots = ((int)_triageElapsed.TotalSeconds % 3) + 1;
-        return $"{status} / Copilot 分析中{new string('.', dots)}";
+        return status;
     }
 
     private TriageProgressView? BuildTriageProgressView(string status)
@@ -706,16 +692,19 @@
 
         var totalCount = Math.Max(Math.Max(targetCount, analyzedTotalCount), savedTotalCount);
         var sourcePhase = ExtractTriagePhase(status);
-        var phase = BuildTriagePhaseLabel(sourcePhase);
+        var currentWork = BuildScoringCurrentWork(sourcePhase, analyzedCount, savedCount, totalCount);
+        var metrics = new List<TriageProgressMetric>
+        {
+            new("target", "対象", FormatCount(targetCount)),
+            new("analyzed", "分析済み", FormatProgressCount(analyzedCount, totalCount)),
+            new("saved", "保存済み", FormatProgressCount(savedCount, totalCount)),
+        };
+        AddReferenceMetricIfPresent(metrics, status);
+
         return new TriageProgressView(
-            phase,
-            [
-                new TriageProgressMetric("target", "対象", FormatCount(targetCount)),
-                new TriageProgressMetric("analyzed", "分析済み", FormatProgressCount(analyzedCount, totalCount)),
-                new TriageProgressMetric("saved", "保存済み", FormatProgressCount(savedCount, totalCount)),
-            ],
-            BuildCopilotWorkingLabel(),
-            $"{sourcePhase}。対象 {targetCount} 件、分析済み {analyzedCount} / {totalCount} 件、保存済み {savedCount} / {totalCount} 件、{BuildCopilotWorkingLabel()}、経過 {FormatElapsed(_triageElapsed)}");
+            currentWork,
+            metrics,
+            $"{currentWork}。{BuildMetricAriaText(metrics)}、経過 {FormatElapsed(_triageElapsed)}");
     }
 
     private TriageProgressView? BuildTriageIngestionProgressView(string status)
@@ -727,20 +716,18 @@
         }
 
         var sourcePhase = ExtractTriagePhase(status);
-        var phase = sourcePhase.Contains("取り込み", StringComparison.Ordinal)
-            ? "取り込み中"
-            : BuildTriagePhaseLabel(sourcePhase);
+        var currentWork = BuildTriageCurrentWork(sourcePhase);
         var metrics = new List<TriageProgressMetric>
         {
             new("inserted", "新規", FormatCount(insertedCount)),
             new("fetched", "取得", FormatCount(fetchedCount)),
         };
         AddCountMetricIfPresent(metrics, status, "skipped", "スキップ");
+        AddReferenceMetricIfPresent(metrics, status);
         return new TriageProgressView(
-            phase,
+            currentWork,
             metrics,
-            null,
-            $"{sourcePhase}。{BuildMetricAriaText(metrics)}、経過 {FormatElapsed(_triageElapsed)}");
+            $"{currentWork}。{BuildMetricAriaText(metrics)}、経過 {FormatElapsed(_triageElapsed)}");
     }
 
     private TriageProgressView BuildTriageGenericProgressView(string status)
@@ -750,14 +737,14 @@
         AddCountMetricIfPresent(metrics, status, "fetched", "取得");
         AddCountMetricIfPresent(metrics, status, "inserted", "新規");
         AddCountMetricIfPresent(metrics, status, "skipped", "スキップ");
+        AddReferenceMetricIfPresent(metrics, status);
 
         return new TriageProgressView(
-            BuildTriagePhaseLabel(sourcePhase),
+            BuildTriageCurrentWork(sourcePhase),
             metrics,
-            null,
             metrics.Count == 0
-                ? $"{sourcePhase}。経過 {FormatElapsed(_triageElapsed)}"
-                : $"{sourcePhase}。{BuildMetricAriaText(metrics)}、経過 {FormatElapsed(_triageElapsed)}");
+                ? $"{BuildTriageCurrentWork(sourcePhase)}。経過 {FormatElapsed(_triageElapsed)}"
+                : $"{BuildTriageCurrentWork(sourcePhase)}。{BuildMetricAriaText(metrics)}、経過 {FormatElapsed(_triageElapsed)}");
     }
 
     private static void AddCountMetricIfPresent(List<TriageProgressMetric> metrics, string status, string testIdSuffix, string label)
@@ -768,40 +755,83 @@
         }
     }
 
+    private static void AddReferenceMetricIfPresent(List<TriageProgressMetric> metrics, string status)
+    {
+        if (TryReadTrailingParenthesizedValue(status, out var reference))
+        {
+            metrics.Add(new TriageProgressMetric("reference", "コミット", reference));
+        }
+    }
+
+    private static bool TryReadTrailingParenthesizedValue(string status, out string value)
+    {
+        value = string.Empty;
+        var endIndex = status.LastIndexOf(')');
+        if (endIndex != status.Length - 1)
+        {
+            return false;
+        }
+
+        var startIndex = status.LastIndexOf('(');
+        if (startIndex < 0 || startIndex >= endIndex - 1)
+        {
+            return false;
+        }
+
+        value = status[(startIndex + 1)..endIndex].Trim();
+        return value.Length > 0;
+    }
+
     private static string BuildMetricAriaText(IReadOnlyList<TriageProgressMetric> metrics)
         => string.Join('、', metrics.Select(static metric => $"{metric.Label} {metric.Value}"));
 
-    private static string BuildTriagePhaseLabel(string sourcePhase)
+    private static string BuildScoringCurrentWork(string sourcePhase, int analyzedCount, int savedCount, int totalCount)
+    {
+        if (sourcePhase.Contains("分析", StringComparison.Ordinal))
+        {
+            var currentCount = Math.Max(1, Math.Min(analyzedCount, Math.Max(totalCount, 1)));
+            return $"Copilot が {currentCount} / {totalCount} 件目を分析中";
+        }
+
+        if (sourcePhase.Contains("完了", StringComparison.Ordinal))
+        {
+            return "スコアリング結果を反映中";
+        }
+
+        if (savedCount < analyzedCount)
+        {
+            return "Copilot の判定結果を保存中";
+        }
+
+        return "Copilot が重要度を判定中";
+    }
+
+    private static string BuildTriageCurrentWork(string sourcePhase)
     {
         if (sourcePhase.Contains("スコアリング", StringComparison.Ordinal))
         {
-            return "スコアリング中";
-        }
-
-        if (sourcePhase.Contains("分析", StringComparison.Ordinal))
-        {
-            return "進行中";
+            return "Copilot が重要度を判定中";
         }
 
         if (sourcePhase.Contains("取り込み", StringComparison.Ordinal))
         {
-            return "取り込み中";
+            return "未確認コミットを取り込み中";
         }
 
         if (sourcePhase.Contains("Repo sync PR", StringComparison.Ordinal) &&
             sourcePhase.Contains("取得", StringComparison.Ordinal))
         {
-            return "PR 取得中";
+            return "Repo sync PR を取得中";
         }
 
         if (sourcePhase.Contains("Copilot セッション", StringComparison.Ordinal))
         {
-            return "Copilot 準備中";
+            return "Copilot セッションを準備中";
         }
 
         if (sourcePhase.Contains("スコアリングを開始", StringComparison.Ordinal))
         {
-            return "スコアリング準備中";
+            return "スコアリングを開始中";
         }
 
         return sourcePhase;
@@ -813,12 +843,6 @@
         return separatorIndex > 0
             ? status[..separatorIndex].Trim()
             : status.Trim();
-    }
-
-    private string BuildCopilotWorkingLabel()
-    {
-        var dots = ((int)_triageElapsed.TotalSeconds % 3) + 1;
-        return $"Copilot 分析中{new string('.', dots)}";
     }
 
     private static bool TryReadCountAfter(string status, string label, out int count)
@@ -905,9 +929,8 @@
         => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{currentCount} / {totalCount} 件");
 
     private sealed record TriageProgressView(
-        string Phase,
+        string CurrentWork,
         IReadOnlyList<TriageProgressMetric> Metrics,
-        string? WorkingLabel,
         string AriaLabel);
 
     private sealed record TriageProgressMetric(string TestIdSuffix, string Label, string Value);

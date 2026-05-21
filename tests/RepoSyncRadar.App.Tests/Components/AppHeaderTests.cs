@@ -149,12 +149,13 @@ public sealed class AppHeaderTests
         cut.WaitForAssertion(() =>
         {
             var status = cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent;
-            Assert.Contains("スコアリング", status, StringComparison.Ordinal);
             Assert.DoesNotContain("未確認コミットをスコアリング中", status, StringComparison.Ordinal);
+            Assert.Equal("作業 Copilot の判定結果を保存中", NormalizeText(cut.Find("[data-testid=\"app-header-triage-current\"]").TextContent));
             Assert.Equal("対象 5 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-target\"]").TextContent));
             Assert.Equal("分析済み 3 / 5 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-analyzed\"]").TextContent));
             Assert.Equal("保存済み 2 / 5 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-saved\"]").TextContent));
-            Assert.Contains("Copilot 分析中", status, StringComparison.Ordinal);
+            Assert.Equal("コミット abc12345", NormalizeText(cut.Find("[data-testid=\"app-header-triage-reference\"]").TextContent));
+            Assert.DoesNotContain("Copilot 分析中", status, StringComparison.Ordinal);
             Assert.Contains("経過", cut.Find("[data-testid=\"app-header-triage-elapsed\"]").TextContent, StringComparison.Ordinal);
         });
 
@@ -193,12 +194,13 @@ public sealed class AppHeaderTests
         cut.WaitForAssertion(() =>
         {
             var status = NormalizeText(cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent);
-            Assert.StartsWith("進行中 経過", status, StringComparison.Ordinal);
-            Assert.DoesNotContain("分析中 経過", status, StringComparison.Ordinal);
+            Assert.StartsWith("作業 Copilot が 1 / 15 件目を分析中 経過", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("進行中 経過", status, StringComparison.Ordinal);
             Assert.DoesNotContain("今回の未スコア未確認コミットを分析中", status, StringComparison.Ordinal);
             Assert.Equal("対象 15 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-target\"]").TextContent));
             Assert.Equal("分析済み 1 / 15 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-analyzed\"]").TextContent));
             Assert.Equal("保存済み 0 / 15 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-saved\"]").TextContent));
+            Assert.Equal("コミット e4361356", NormalizeText(cut.Find("[data-testid=\"app-header-triage-reference\"]").TextContent));
         });
 
         gate.SetResult(new IngestionReport(Total: 1, Inserted: 1, Skipped: 0));
@@ -234,10 +236,11 @@ public sealed class AppHeaderTests
         cut.WaitForAssertion(() =>
         {
             var status = NormalizeText(cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent);
-            Assert.StartsWith("取り込み中 経過", status, StringComparison.Ordinal);
-            Assert.DoesNotContain("未確認コミットを取り込み中", status, StringComparison.Ordinal);
+            Assert.StartsWith("作業 未確認コミットを取り込み中 経過", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("未確認コミットを取り込み中:", status, StringComparison.Ordinal);
             Assert.Equal("新規 10 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-inserted\"]").TextContent));
             Assert.Equal("取得 12 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-fetched\"]").TextContent));
+            Assert.Equal("コミット e760b391", NormalizeText(cut.Find("[data-testid=\"app-header-triage-reference\"]").TextContent));
         });
 
         gate.SetResult(new IngestionReport(Total: 12, Inserted: 10, Skipped: 0));
@@ -273,13 +276,54 @@ public sealed class AppHeaderTests
         cut.WaitForAssertion(() =>
         {
             var status = NormalizeText(cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent);
-            Assert.StartsWith("取り込み中 経過", status, StringComparison.Ordinal);
+            Assert.StartsWith("作業 未確認コミットを取り込み中 経過", status, StringComparison.Ordinal);
             Assert.Equal("取得 12 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-fetched\"]").TextContent));
             Assert.Equal("新規 10 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-inserted\"]").TextContent));
             Assert.Equal("スキップ 2 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-skipped\"]").TextContent));
         });
 
         gate.SetResult(new IngestionReport(Total: 12, Inserted: 10, Skipped: 2));
+    }
+
+    [Theory]
+    [InlineData("Repo sync PR を取得しています…", "作業 Repo sync PR を取得中 経過")]
+    [InlineData("Copilot セッションを準備しています…", "作業 Copilot セッションを準備中 経過")]
+    public void Triage_Progress_Uses_Current_Work_Label_For_Busy_Status_Without_Counts(
+        string progressMessage,
+        string expectedPrefix)
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var gate = new TaskCompletionSource<IngestionReport>();
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                call.Arg<IProgress<string>?>()?.Report(progressMessage);
+                return gate.Task;
+            });
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = NormalizeText(cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent);
+            Assert.StartsWith(expectedPrefix, status, StringComparison.Ordinal);
+            Assert.DoesNotContain(progressMessage, status, StringComparison.Ordinal);
+        });
+
+        gate.SetResult(new IngestionReport(Total: 0, Inserted: 0, Skipped: 0));
     }
 
     [Fact]
