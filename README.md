@@ -1,22 +1,25 @@
 # RepoSyncRadar
 
-A Windows desktop app that watches Repo sync PRs from [`github/docs`](https://github.com/github/docs) on a daily cadence and reduces the burden of broadcasting an unofficial changelog to social media, internal teams, and external audiences.
+RepoSyncRadar is a Windows desktop app for GitHub Enterprise Cloud administrators who need to watch [`github/docs`](https://github.com/github/docs) repo sync changes and understand whether they may affect the environments they manage. It helps spot product, policy, billing, security, and operational changes that can appear in documentation before, alongside, or without a dedicated GitHub Changelog post.
 
 > [!IMPORTANT]
-> This repository is a scaffold for a personal-use tool. See [`docs/DESIGN.md`](docs/DESIGN.md) for detailed design decisions, history, and the roadmap.
+> This app is aimed at operator review and triage. It does not replace official GitHub release notes, GitHub Changelog posts, or support guidance; it helps administrators notice docs-driven signals that deserve review.
 
 ## Highlights
 
-- **C# / .NET 8+ / WPF + BlazorWebView** — fast startup as a native Windows app
+- **C# / .NET 10 / WPF + BlazorWebView** — fast startup as a native Windows app
 - Driven by the **GitHub Copilot SDK** ([`github/copilot-sdk`](https://github.com/github/copilot-sdk)) at its core
+- Reviews `github/docs` repo sync PRs for changes that may affect GitHub Enterprise Cloud administration and operations
+- Surfaces docs previews and file-path → public-URL mapping so reviewers can inspect the rendered impact
+- Generates operator-facing sharing drafts for Teams, customer notices, and short-form updates
 - Stores Focus / Hold / Rejected / Archive / Ignore / Boost data with **SQLite + EF Core**
-- Hits **`docs.github.com/api/*`** directly to surface the actual rendered look and the file-path → public-URL mapping
-- **No submodules.** The app is a standalone repository; no local clone is needed until Phase 6.
+- Uses GitHub OAuth Device Flow by default; the public OAuth Client ID is bundled, and organizations can override it with their own OAuth App if policy requires it
+- **No submodules.** The app is a standalone repository; no local clone is needed for normal triage.
 
 ## Quick start
 
 > [!NOTE]
-> Requires the .NET 8 SDK or later and Windows 11. The Copilot CLI (bundled with the SDK) is downloaded on first run.
+> Requires Windows 11, the .NET SDK pinned in [`global.json`](global.json), and an active GitHub Copilot subscription. The Copilot CLI used by the SDK is downloaded on first run.
 
 ```powershell
 git clone <this-repo-url> C:\github\RepoSyncRadar
@@ -26,6 +29,14 @@ dotnet build
 dotnet run --project src/RepoSyncRadar.App
 ```
 
+On first launch, RepoSyncRadar signs in with GitHub OAuth Device Flow. Normal distribution builds include the public RepoSyncRadar OAuth Client ID, so users do not need to create their own OAuth App. Organizations that require a managed OAuth App can override `Copilot:OAuthClientId` in `src/RepoSyncRadar.App/appsettings.local.json` or with `RADAR_Copilot__OAuthClientId`.
+
+For the public OAuth App description, use wording like:
+
+> RepoSyncRadar helps GitHub Enterprise Cloud administrators review GitHub Docs updates for product, policy, and operational changes that may affect their managed environments.
+
+Public-release blockers and follow-ups are tracked in [`docs/PUBLIC_RELEASE_READINESS.md`](docs/PUBLIC_RELEASE_READINESS.md).
+
 ## Project layout
 
 ```
@@ -33,14 +44,18 @@ src/
 ├─ RepoSyncRadar.App/    ← WPF + BlazorWebView startup assembly
 └─ RepoSyncRadar.Core/   ← Models / DbContext / options / service interfaces
 docs/
-└─ DESIGN.md             ← Design document (required reading)
+├─ DESIGN.md                    ← Product design and architecture notes
+├─ PUBLIC_RELEASE_READINESS.md  ← Public release blockers and checklist
+└─ USAGE.md                     ← Setup, OAuth, and day-to-day usage
 ```
 
 ## Roadmap
 
+The original phase plan is tracked in [`docs/DESIGN.md`](docs/DESIGN.md) and the implementation checklist in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+
 | Phase | Scope |
 |---|---|
-| 0 | Scaffold + design document (the current state of this repository) |
+| 0 | Scaffold + design document |
 | 1 | Repo sync PR ingestion / commit display / official page embedding |
 | 2 | Copilot SDK integration / Morning Triage session |
 | 3 | Operational UI for Focus / Hold / Rejected / Archive / Ignore |

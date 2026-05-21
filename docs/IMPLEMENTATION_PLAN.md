@@ -474,8 +474,8 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
   - `write` / `shell` → 必ず UI 確認
 - `IPermissionPrompt` を抽象化し、本番は WPF MessageBox、テストは事前回答のスタブ
 - 認証
-  - 環境変数 `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN` のいずれかが立っていれば Copilot CLI に渡す
-  - 立っていない場合、ログイン状態を `CopilotClient.PingAsync` 相当でチェックし、未ログインなら起動を **拒否**
+  - 環境変数 `COPILOT_GITHUB_TOKEN` が立っていればデバッグ override として Copilot SDK / Octokit に渡す。`GH_TOKEN` / `GITHUB_TOKEN` は他ツール用 token の誤用を避けるため読まない
+  - 立っていない場合、同梱または上書きされた `Copilot:OAuthClientId` で GitHub Device Flow を実行し、取得 token を DPAPI store に保存する
 
 ### 11.3 テスト
 
@@ -1109,12 +1109,12 @@ Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画で�
 
 ### 20.1 目的
 
-自分用に常駐できる程度の配布パスを整える。GitHub PAT は Windows Credential Manager に置く。
+一般配布に耐える配布パスを整える。GitHub 認証は OAuth Device Flow + DPAPI 保存 token を使い、通常利用で PAT は使わない。
 
 ### 20.2 スコープ
 
-- `RepoSyncRadar.App/Security/CredentialStore.cs` — DPAPI ベース(Target = `RepoSyncRadar:GitHub`)
-  - `SaveAsync(string token)`, `ReadAsync()`, `DeleteAsync()`
+- `RepoSyncRadar.App/Auth/DpapiGitHubTokenStore.cs` — DPAPI ベース(`%LocalAppData%\RepoSyncRadar\github-token.bin`)
+  - `SaveAsync(StoredGitHubToken token)`, `LoadAsync()`, `DeleteAsync()`
 - `RepoSyncRadar.App/Updates/UpdateService.cs` — Velopack で自己更新、起動時に最新化チェック
 - アプリ署名は手順書(`docs/RELEASE.md`)に切り出し、コードからは触らない
 
@@ -1139,7 +1139,7 @@ Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画で�
 ### 20.4 完了基準
 
 - 上記 6 件が緑(`WindowsOnly` カテゴリは CI で別走)
-- 手動: ビルド → Velopack でパッケージ → インストール → 起動 → DPAPI 保存した PAT で Octokit が認証成功
+- 手動: ビルド → publish / パッケージ → インストール → 起動 → OAuth Device Flow → DPAPI 保存 token で Copilot SDK と Octokit が認証成功
 
 ---
 

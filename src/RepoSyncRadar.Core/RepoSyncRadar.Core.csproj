@@ -21,10 +21,8 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
-    <PackageReference Include="Microsoft.Extensions.AI" />
     <PackageReference Include="Markdig" />
     <PackageReference Include="Octokit" />
-    <PackageReference Include="GitHub.Copilot.SDK" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 

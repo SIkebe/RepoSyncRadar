@@ -1,6 +1,6 @@
 # RepoSyncRadar 使い方ガイド
 
-`github/docs` の Repo sync PR を毎朝さばいて SNS / 社内 / 顧客向け Changelog を発信する負担を、5〜10 分のワークフローに圧縮するための Windows デスクトップアプリです。Step 1〜19 まで実装されており、Copilot CLI が手元で動く環境があれば実用できます。
+GitHub Enterprise Cloud 管理者が `github/docs` の Repo sync PR を確認し、自分の管理・運用している環境に影響しうる product / policy / billing / security / operational change を見つけるための Windows デスクトップアプリです。公式 GitHub Changelog やサポート案内を置き換えるものではなく、Changelog に明示されない docs 由来のシグナルを 5〜10 分でレビューできる状態に圧縮します。
 
 設計の出発点は [DESIGN.md](DESIGN.md)、ステップ別の実装範囲は [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) を参照してください。
 
@@ -102,7 +102,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 >
 > **Copilot SDK 診断**: `LogLevel` は SDK が起動する Copilot CLI のログレベルです。`TelemetryFilePath` を指定すると SDK の OpenTelemetry file exporter を有効化します。通常は `CaptureContent: false` のままにしてください。`SessionIdleTimeoutSeconds` は `0` / 未指定なら SDK 既定(無効)です。
 >
-> **トークンの保管場所**: OAuth で取得したアクセストークンは DPAPI(`CurrentUser` スコープ)で暗号化し `%LocalAppData%\RepoSyncRadar\github-token.bin` に保存されます。サインアウトはサイドバーから(Step 21 で UI 追加予定)、あるいはこのファイルを削除すれば次回起動時に再サインインを求められます。
+> **トークンの保管場所**: OAuth で取得したアクセストークンは DPAPI(`CurrentUser` スコープ)で暗号化し `%LocalAppData%\RepoSyncRadar\github-token.bin` に保存されます。ヘッダーの **Sign out** で保存済みトークンを削除できます。手動でこのファイルを削除しても、次回起動時に再サインインを求められます。
 >
 > **デバッグ override**: 環境変数 `COPILOT_GITHUB_TOKEN` を立てると OAuth フローを省略してその値を Copilot SDK / Octokit に渡します(`GH_TOKEN` / `GITHUB_TOKEN` のような汎用 PAT 変数は意図的に **読まない** — 他ツールのトークンの誤用を防ぐため)。
 

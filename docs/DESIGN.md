@@ -1,8 +1,8 @@
 # RepoSyncRadar — 設計ドキュメント
 
-> 本書は、`github/docs` の Repo sync PR を日次でチェックして SNS / 社内 / 顧客向けに「非公式 Changelog」を発信している運用負担を軽減するためのデスクトップアプリ **RepoSyncRadar** の設計を、議論の経緯ごと漏らさず記録するものです。
+> 本書は、GitHub Enterprise Cloud 管理者が `github/docs` の Repo sync PR を日次で確認し、自分の管理・運用している環境に影響しうる product / policy / billing / security / operational change を見つけるためのデスクトップアプリ **RepoSyncRadar** の設計を、議論の経緯ごと記録するものです。
 >
-> - **言語 / ランタイム**: C# (.NET 8 以降) / WPF + BlazorWebView
+> - **言語 / ランタイム**: C# (.NET 10) / WPF + BlazorWebView
 > - **エージェント**: [`github/copilot-sdk`](https://github.com/github/copilot-sdk) の .NET SDK (`GitHub.Copilot.SDK`)
 > - **データ**: SQLite + EF Core
 > - **GitHub 連携**: Octokit.NET
@@ -45,7 +45,7 @@
 | L2 走査 | 全コミットメッセージを読む | 反復・退屈・見落としリスク |
 | L3 判定 | 「紹介すべきか」を判断 | 文脈・経験依存、暗黙知 |
 | L4 検証 | 差分を確認する | 認知負荷高、長い差分も含む |
-| L5 出力 | Twitter / 社内 / 顧客向けに書く | 媒体ごとに語調・粒度が異なる |
+| L5 出力 | Teams / 顧客向け / 短文共有に書く | 媒体ごとに語調・粒度が異なる |
 
 ### 1.2 達成したいこと(ゴール)
 
@@ -58,7 +58,7 @@
 ### 1.3 やらないこと(非ゴール)
 
 - 自動投稿は行わない。最終判断と投稿は人間が行う。
-- 公式の changelog を置き換える機能ではない。あくまで個人運用の補助。
+- 公式の GitHub Changelog、リリースノート、サポート案内を置き換える機能ではない。管理者レビューの補助。
 - モバイル対応は現時点ではスコープ外(将来 MAUI Blazor で再利用可能)。
 - 多言語対応(日本語のみ。英訳は共有文案の中で副次的に生成)。
 
@@ -638,7 +638,7 @@ git fetch --prune
 
 | 項目 | 対策 |
 |---|---|
-| GitHub PAT 管理 | Windows Credential Manager (DPAPI)。`CredentialManagement` パッケージまたは P/Invoke |
+| GitHub OAuth トークン管理 | DPAPI(`CurrentUser`) で暗号化してローカル保存。通常利用で PAT は使わない |
 | プロンプトインジェクション | コミットメッセージ / 差分はデータとしてラップ、`SystemMessageMode.Append` でガードレール維持 |
 | ツール権限 | `OnPermissionRequest` で `shell` / `write` / 任意 `url` は UI ダイアログ必須。`ApproveAll` は使わない |
 | SQL インジェクション(`radar_query`) | SELECT のみ + テーブル/カラム allowlist + LIMIT 強制 + パラメータバインド |
@@ -717,7 +717,7 @@ RepoSyncRadar.sln
 | **4. 共有文案** | Adoption セッション + 3 媒体テンプレート + Regenerate | 注目 → 文案 → 編集 → クリップボードで完結 |
 | **5. 自然言語フィルタ** | `radar_query` ツール + Ask Palette | 「先月の Copilot 関連未確認重要変更」のクエリが動く |
 | **6. ローカルプレビュー** | bare clone + `git worktree` + Next.js sidecar、Before/After 並列表示 | PR HEAD の見た目で比較可能 |
-| **7. 配布・運用** | Velopack 自動更新、署名、テレメトリ自分用 | 自分の PC で常駐運用 |
+| **7. 配布・運用** | 署名済み配布、更新、プライバシー/サポート/脆弱性報告導線 | 管理者が安心してインストールできる |
 
 Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Phase 6 で完璧。
 
@@ -769,7 +769,7 @@ Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Ph
 | 用語 | 意味 |
 |---|---|
 | **Repo sync PR** | GitHub 内部リポジトリと `github/docs` の同期 PR。日次で多数のコミットが入る |
-| **Adoption** | 注目したコミットを SNS / 社内 / 顧客向けに紹介すると決めること |
+| **Adoption** | 注目したコミットを Teams / 顧客向け / 短文共有で紹介すると決めること |
 | **Triage** | コミットを未確認から注目候補 / 見送り候補へ振り分けること |
 | **Boost** | 重要度スコアに加算するルール |
 | **BYOK** | Bring Your Own Key。OpenAI / Anthropic / Azure AI Foundry を Copilot SDK 経由で使うこと |
