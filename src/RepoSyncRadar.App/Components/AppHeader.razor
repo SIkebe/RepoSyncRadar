@@ -33,7 +33,7 @@
                            Size="Size.Small"
                            OnClick="OnSignOutAsync"
                            Disabled="@_busy"
-                           data-testid="app-header-signout">Sign out</MudButton>
+                           data-testid="app-header-signout">@L["AppHeader.SignOut"]</MudButton>
                 break;
             case GitHubAuthState.NotSignedIn:
                 <span data-testid="app-header-state"
@@ -44,7 +44,7 @@
                            Size="Size.Small"
                            OnClick="OnSignInAsync"
                            Disabled="@_busy"
-                           data-testid="app-header-signin">Sign in</MudButton>
+                           data-testid="app-header-signin">@L["AppHeader.SignIn"]</MudButton>
                 break;
             case GitHubAuthState.NotConfigured:
                 <span data-testid="app-header-state"
@@ -193,9 +193,9 @@
                 else
                 {
                     <div class="settings-usage-grid" data-testid="settings-copilot-usage-summary">
-                        <div><span>AI Credits</span><strong>@FormatSnapshotAiCreditsWithUnit(_copilotUsage)</strong></div>
-                        <div><span>Premium Request cost</span><strong>@FormatNullablePremiumRequestCost(_copilotUsage.Cost)</strong></div>
-                        <div><span>Premium Requests</span><strong>@FormatPremiumRequests(_copilotUsage)</strong></div>
+                        <div><span>@L["CopilotUsage.Label.AiCredits"]</span><strong>@FormatSnapshotAiCreditsWithUnit(_copilotUsage)</strong></div>
+                        <div><span>@L["CopilotUsage.Label.PremiumRequestCost"]</span><strong>@FormatNullablePremiumRequestCost(_copilotUsage.Cost)</strong></div>
+                        <div><span>@L["CopilotUsage.Label.PremiumRequests"]</span><strong>@FormatPremiumRequests(_copilotUsage)</strong></div>
                         <div><span>@L["Common.Total"]</span><strong>@FormatTokensWithUnit(_copilotUsage.TotalTokens)</strong></div>
                         <div><span>@L["Common.Input"]</span><strong>@FormatTokensWithUnit(_copilotUsage.InputTokens)</strong></div>
                         <div><span>@L["Common.Output"]</span><strong>@FormatTokensWithUnit(_copilotUsage.OutputTokens)</strong></div>
@@ -811,7 +811,7 @@
                 : L["TriageProgress.AriaWithMetrics", BuildTriageCurrentWork(sourcePhase), BuildMetricAriaText(metrics), FormatElapsed(_triageElapsed)]);
     }
 
-    private static void AddCountMetricIfPresent(List<TriageProgressMetric> metrics, string status, string testIdSuffix, string sourceLabel, string displayLabel)
+    private void AddCountMetricIfPresent(List<TriageProgressMetric> metrics, string status, string testIdSuffix, string sourceLabel, string displayLabel)
     {
         if (TryReadCountAfter(status, sourceLabel, out var count))
         {
@@ -846,8 +846,8 @@
         return value.Length > 0;
     }
 
-    private static string BuildMetricAriaText(IReadOnlyList<TriageProgressMetric> metrics)
-        => string.Join('、', metrics.Select(static metric => $"{metric.Label} {metric.Value}"));
+    private string BuildMetricAriaText(IReadOnlyList<TriageProgressMetric> metrics)
+        => string.Join(L["Common.ListSeparator"], metrics.Select(static metric => $"{metric.Label} {metric.Value}"));
 
     private string BuildScoringCurrentWork(string sourcePhase, int analyzedCount, int savedCount, int totalCount)
     {
@@ -994,11 +994,11 @@
             int.TryParse(text.AsSpan(digitStartIndex, nextIndex - digitStartIndex), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out value);
     }
 
-    private static string FormatCount(int count)
-        => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{count} 件");
+    private string FormatCount(int count)
+        => L["Common.ItemCount", count];
 
-    private static string FormatProgressCount(int currentCount, int totalCount)
-        => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{currentCount} / {totalCount} 件");
+    private string FormatProgressCount(int currentCount, int totalCount)
+        => L["Common.ProgressItemCount", currentCount, totalCount];
 
     private sealed record TriageProgressView(
         string CurrentWork,

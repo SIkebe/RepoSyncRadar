@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Services;
@@ -40,12 +41,14 @@ public sealed partial class AdoptionSession
     private readonly IDocsGitHubClient _github;
     private readonly ICopilotSessionFactory _sessionFactory;
     private readonly ILogger<AdoptionSession> _logger;
+    private readonly IStringLocalizer<SharedResource>? _localizer;
 
     public AdoptionSession(
         IDbContextFactory<RadarDbContext> dbFactory,
         IDocsGitHubClient github,
         ICopilotSessionFactory sessionFactory,
-        ILogger<AdoptionSession> logger)
+        ILogger<AdoptionSession> logger,
+        IStringLocalizer<SharedResource>? localizer = null)
     {
         ArgumentNullException.ThrowIfNull(dbFactory);
         ArgumentNullException.ThrowIfNull(github);
@@ -56,6 +59,7 @@ public sealed partial class AdoptionSession
         _github = github;
         _sessionFactory = sessionFactory;
         _logger = logger;
+        _localizer = localizer;
     }
 
     /// <summary>
@@ -128,7 +132,9 @@ public sealed partial class AdoptionSession
             .ToArray();
         if (shas.Length < 2)
         {
-            throw new InvalidOperationException("個別解説は 2 件以上の注目コミットを選択して生成してください。");
+            throw new InvalidOperationException(
+                _localizer?["AdoptionSession.BatchRequiresAtLeastTwo"]
+                ?? "個別解説は 2 件以上の注目コミットを選択して生成してください。");
         }
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -154,7 +160,9 @@ public sealed partial class AdoptionSession
             .ToArray();
         if (notAdopted.Length > 0)
         {
-            throw new InvalidOperationException($"注目以外のコミットが含まれています: {string.Join(", ", notAdopted)}.");
+            throw new InvalidOperationException(
+                _localizer?["AdoptionSession.BatchIncludesNonFocused", string.Join(", ", notAdopted)]
+                ?? $"注目以外のコミットが含まれています: {string.Join(", ", notAdopted)}.");
         }
 
         foreach (var sha in shas)

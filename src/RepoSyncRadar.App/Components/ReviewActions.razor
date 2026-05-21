@@ -12,8 +12,8 @@
 <div class="radar-review-actions action-panel" data-testid="review-actions">
     <header class="action-panel-header">
         <div>
-            <h3>レビュー判断</h3>
-            <p>選択中の通知をどのキューへ移すかを決めます。</p>
+            <h3>@L["ReviewActions.Title"]</h3>
+            <p>@L["ReviewActions.Description"]</p>
         </div>
     </header>
 
@@ -23,7 +23,7 @@
                 class="review-button adopt"
                 disabled="@_busy"
                 @onclick="AdoptAsync">
-            注目する
+            @L["ReviewActions.Watch"]
         </button>
 
         <button type="button"
@@ -31,28 +31,29 @@
                 class="review-button later"
                 disabled="@_busy"
                 @onclick="LaterAsync">
-            保留する
+            @L["ReviewActions.Later"]
         </button>
     </div>
 
     <div class="review-reject-box">
-        <label class="review-field-label" for="review-reject-reason">アーカイブする理由 <span>必須</span></label>
+        <label class="review-field-label" for="review-reject-reason">@L["ReviewActions.ArchiveReason"] <span>@L["ReviewActions.Required"]</span></label>
         <div class="review-reject-presets" data-testid="review-reject-reason-options">
             @foreach (var reason in RejectReasonPresets)
             {
+                var reasonLabel = L[reason.ResourceKey].Value;
                 <button type="button"
-                        class="@BuildRejectReasonPresetClass(reason)"
+                        class="@BuildRejectReasonPresetClass(reasonLabel)"
                         data-testid="review-reject-reason-option"
-                        data-reason="@reason"
+                        data-reason="@reasonLabel"
                         disabled="@_busy"
-                        @onclick="() => SelectRejectReason(reason)">@reason</button>
+                        @onclick="() => SelectRejectReason(reasonLabel)">@reasonLabel</button>
             }
         </div>
         <div class="review-input-action">
             <input id="review-reject-reason"
                    type="text"
                    data-testid="review-reject-reason"
-                   placeholder="例: 既存情報のみ / 対象外"
+                   placeholder="@L["ReviewActions.ArchiveReasonPlaceholder"]"
                    value="@_rejectReason"
                    disabled="@_busy"
                    @oninput="OnRejectReasonChanged" />
@@ -60,17 +61,17 @@
                     data-testid="review-reject"
                     class="review-button reject"
                     disabled="@(_busy || string.IsNullOrWhiteSpace(_rejectReason))"
-                    @onclick="ArchiveAsync">アーカイブする</button>
+                    @onclick="ArchiveAsync">@L["ReviewActions.Archive"]</button>
         </div>
     </div>
 
     <details class="review-ignore-panel" data-testid="review-ignore-details" open="@(_suggestedIgnorePatterns.Count > 0)">
-        <summary>類似ディレクトリをまとめて自動見送り</summary>
+        <summary>@L["ReviewActions.IgnoreSimilarDirectories"]</summary>
         <div class="review-ignore-content">
             @if (_suggestedIgnorePatterns.Count > 0)
             {
                 <div class="review-ignore-suggestions" data-testid="review-ignore-suggestions">
-                    <span class="review-suggestions-label">候補</span>
+                    <span class="review-suggestions-label">@L["ReviewActions.Suggestions"]</span>
                     <div class="review-suggestion-list">
                         @foreach (var pattern in _suggestedIgnorePatterns)
                         {
@@ -82,7 +83,7 @@
                                     disabled="@(_busy || pattern.IsAlreadyIgnored)"
                                     @onclick="() => SelectIgnorePattern(pattern)">
                                 <span class="review-suggestion-pattern">@pattern.Pattern</span>
-                                <span class="review-suggestion-meta">@pattern.MatchCount 件</span>
+                                <span class="review-suggestion-meta">@L["ReviewActions.MatchCount", pattern.MatchCount]</span>
                                 @if (pattern.IgnoreState is not IgnorePatternState.Available)
                                 {
                                     <span class="review-suggestion-state" data-testid="review-ignore-suggestion-state">@BuildSuggestionStateLabel(pattern.IgnoreState)</span>
@@ -92,12 +93,12 @@
                     </div>
                 </div>
             }
-            <label class="review-field-label" for="review-ignore-pattern">パスパターン</label>
+            <label class="review-field-label" for="review-ignore-pattern">@L["ReviewActions.PathPattern"]</label>
             <div class="review-input-action">
                 <input id="review-ignore-pattern"
                        type="text"
                        data-testid="review-ignore-pattern"
-                       placeholder="例: aspnet/security/**"
+                       placeholder="@L["ReviewActions.PathPatternPlaceholder"]"
                        value="@_ignorePattern"
                        disabled="@_busy"
                        @oninput="OnIgnorePatternChanged" />
@@ -105,7 +106,7 @@
                         data-testid="review-ignore"
                         class="review-button ignore"
                         disabled="@(_busy || string.IsNullOrWhiteSpace(_ignorePattern))"
-                        @onclick="IgnoreDirectoryAsync">無視リストへ追加</button>
+                        @onclick="IgnoreDirectoryAsync">@L["ReviewActions.AddToIgnoreList"]</button>
             </div>
         </div>
     </details>
@@ -114,6 +115,9 @@
 @code {
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
+
     [Parameter] public string? Sha { get; set; }
 
     [Parameter] public IReadOnlyList<string> FilePaths { get; set; } = [];
@@ -121,14 +125,14 @@
     [Parameter] public EventCallback<ReviewStatus> Reviewed { get; set; }
 
     private const int MaxSuggestedIgnorePatterns = 6;
-    private static readonly IReadOnlyList<string> RejectReasonPresets =
+    private static readonly IReadOnlyList<RejectReasonPreset> RejectReasonPresets =
     [
-        "対象外",
-        "既存情報のみ",
-        "重複",
-        "軽微な表記変更",
-        "自動生成差分",
-        "フォロー不要",
+        new("ReviewActions.Reason.OutOfScope"),
+        new("ReviewActions.Reason.ExistingInformationOnly"),
+        new("ReviewActions.Reason.Duplicate"),
+        new("ReviewActions.Reason.MinorWordingChange"),
+        new("ReviewActions.Reason.GeneratedDiff"),
+        new("ReviewActions.Reason.NoFollowUpNeeded"),
     ];
     private string _rejectReason = string.Empty;
     private string _ignorePattern = string.Empty;
@@ -197,11 +201,11 @@
             ? "review-suggestion-chip already-ignored"
             : "review-suggestion-chip";
 
-    private static string BuildSuggestionStateLabel(IgnorePatternState state)
+    private string BuildSuggestionStateLabel(IgnorePatternState state)
         => state switch
         {
-            IgnorePatternState.Registered => "登録済み",
-            IgnorePatternState.Covered => "カバー済み",
+            IgnorePatternState.Registered => L["ReviewActions.Suggestion.Registered"],
+            IgnorePatternState.Covered => L["ReviewActions.Suggestion.Covered"],
             _ => string.Empty,
         };
 
@@ -382,4 +386,6 @@
     {
         public bool IsAlreadyIgnored => IgnoreState is not IgnorePatternState.Available;
     }
+
+    private sealed record RejectReasonPreset(string ResourceKey);
 }

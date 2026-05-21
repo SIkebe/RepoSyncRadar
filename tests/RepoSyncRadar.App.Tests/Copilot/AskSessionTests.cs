@@ -1,5 +1,8 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Localization;
 using NSubstitute;
+using RepoSyncRadar.App;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.Core.Services;
 using Xunit;
@@ -9,13 +12,24 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 /// <summary>
 /// Ask session orchestrator tests (IMPLEMENTATION_PLAN.md §Step 18.3).
 /// </summary>
-public sealed class AskSessionTests
+[Collection("Localization")]
+public sealed class AskSessionTests : IDisposable
 {
     private static readonly string[] ShaMessageColumns = ["Sha", "Message"];
     private static readonly IReadOnlyList<object?>[] ShaMessageRows =
     [
         new object?[] { "abc", "msg" },
     ];
+
+    public AskSessionTests()
+    {
+        AppDisplayCulture.Apply(AppDisplayCulture.DefaultCultureName);
+    }
+
+    public void Dispose()
+    {
+        AppDisplayCulture.Apply(AppDisplayCulture.DefaultCultureName);
+    }
     private static readonly string[] ShaOnlyColumns = ["Sha"];
     private static readonly IReadOnlyList<object?>[] ShaOnlyRows =
     [
@@ -83,9 +97,28 @@ public sealed class AskSessionTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task AskAsync_Localizes_Rejection_Message_To_English()
+    {
+        AppDisplayCulture.Apply("en");
+        var ct = TestContext.Current.CancellationToken;
+        var (sut, _, _) = BuildSut(
+            assistantReply: "```sql\nDELETE FROM Commits\n```",
+            runnerResult: new RadarQueryResult(false, "禁止キーワード 'DELETE' を含んでいます。", string.Empty, [], []),
+            localizer: CreateLocalizer());
+
+        var result = await sut.AskAsync("delete everything", cancellationToken: ct);
+
+        Assert.Contains("The query could not be run", result, StringComparison.Ordinal);
+        Assert.Contains("Contains blocked keyword 'DELETE'.", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("クエリ", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("禁止キーワード", result, StringComparison.Ordinal);
+    }
+
     private static (AskSession Sut, IRadarQueryRunner Runner, ICopilotSession Session) BuildSut(
         string assistantReply,
-        RadarQueryResult runnerResult)
+        RadarQueryResult runnerResult,
+        IStringLocalizer<SharedResource>? localizer = null)
     {
         var session = Substitute.For<ICopilotSession>();
         session.SessionId.Returns("ask-1");
@@ -100,6 +133,16 @@ public sealed class AskSessionTests
         runner.RunAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<object?>?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(runnerResult));
 
-        return (new AskSession(runner, factory, NullLogger<AskSession>.Instance), runner, session);
+        return (new AskSession(runner, factory, NullLogger<AskSession>.Instance, localizer), runner, session);
+    }
+
+    private static IStringLocalizer<SharedResource> CreateLocalizer()
+    {
+        var services = new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
+            .BuildServiceProvider();
+
+        return services.GetRequiredService<IStringLocalizer<SharedResource>>();
     }
 }

@@ -8,6 +8,8 @@
   <data name="AppHeader.LastTriage" xml:space="preserve"><value>直近 Triage: 取得 {0} / 新規 {1} / スキップ {2}</value></data>
   <data name="AppHeader.NotConfigured" xml:space="preserve"><value>⚠ OAuth Client Id 未設定</value></data>
   <data name="AppHeader.NotSignedIn" xml:space="preserve"><value>○ 未サインイン</value></data>
+  <data name="AppHeader.SignIn" xml:space="preserve"><value>サインイン</value></data>
+  <data name="AppHeader.SignOut" xml:space="preserve"><value>サインアウト</value></data>
   <data name="AppHeader.SignedIn" xml:space="preserve"><value>● サインイン済み</value></data>
   <data name="AppHeader.Triaging" xml:space="preserve"><value>Triage 中…</value></data>
   <data name="AppHeader.SignInFailed" xml:space="preserve"><value>サインイン失敗</value></data>
@@ -16,6 +18,14 @@
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage 失敗</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage は失敗しました。詳細はエラーを確認してください。</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Triage を開始しています…</value></data>
+  <data name="AskSession.QueryRejected" xml:space="preserve"><value>クエリは実行できませんでした (理由: {0}). 安全な SELECT 文だけが利用できます。</value></data>
+  <data name="AskSession.SqlGuard.BlockedKeyword" xml:space="preserve"><value>禁止キーワード '{0}' を含んでいます。</value></data>
+  <data name="AskSession.SqlGuard.DisallowedTable" xml:space="preserve"><value>テーブル '{0}' は許可リストに含まれていません。</value></data>
+  <data name="AskSession.SqlGuard.EmptySql" xml:space="preserve"><value>空の SQL は受け付けられません。</value></data>
+  <data name="AskSession.SqlGuard.MultipleStatements" xml:space="preserve"><value>複数の SQL 文は許可されていません。</value></data>
+  <data name="AskSession.SqlGuard.SelectOnly" xml:space="preserve"><value>SELECT 文以外は許可されていません。</value></data>
+  <data name="AdoptionSession.BatchIncludesNonFocused" xml:space="preserve"><value>注目以外のコミットが含まれています: {0}.</value></data>
+  <data name="AdoptionSession.BatchRequiresAtLeastTwo" xml:space="preserve"><value>個別解説は 2 件以上の注目コミットを選択して生成してください。</value></data>
   <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>記事の取得に失敗しました ({0}): {1}</value></data>
   <data name="ArticleBody.NotFound" xml:space="preserve"><value>記事が見つかりません (404): {0}</value></data>
   <data name="AskPalette.Busy" xml:space="preserve"><value>問い合わせ中…</value></data>
@@ -87,11 +97,14 @@
   <data name="Common.Elapsed" xml:space="preserve"><value>経過</value></data>
   <data name="Common.AgentNotRegistered" xml:space="preserve"><value>ICopilotAgent が DI に登録されていません。</value></data>
   <data name="Common.Input" xml:space="preserve"><value>入力</value></data>
+  <data name="Common.ItemCount" xml:space="preserve"><value>{0} 件</value></data>
   <data name="Common.Error" xml:space="preserve"><value>エラー</value></data>
   <data name="Common.Last" xml:space="preserve"><value>直近</value></data>
   <data name="Common.Limit" xml:space="preserve"><value>上限</value></data>
+  <data name="Common.ListSeparator" xml:space="preserve"><value>、</value></data>
   <data name="Common.Loading" xml:space="preserve"><value>読み込み中…</value></data>
   <data name="Common.Output" xml:space="preserve"><value>出力</value></data>
+  <data name="Common.ProgressItemCount" xml:space="preserve"><value>{0} / {1} 件</value></data>
   <data name="Common.Reasoning" xml:space="preserve"><value>推論</value></data>
   <data name="Common.Refresh" xml:space="preserve"><value>更新</value></data>
   <data name="Common.Reload" xml:space="preserve"><value>再読み込み</value></data>
@@ -114,6 +127,9 @@
   <data name="CopilotUsage.BillingSource.SdkTokenDetails" xml:space="preserve"><value>算出元: SDK token detail から推定</value></data>
   <data name="CopilotUsage.BillingSource.Unknown" xml:space="preserve"><value>算出元: 不明</value></data>
   <data name="CopilotUsage.EstimatedSuffix" xml:space="preserve"><value> (推定)</value></data>
+  <data name="CopilotUsage.Label.AiCredits" xml:space="preserve"><value>AI Credits</value></data>
+  <data name="CopilotUsage.Label.PremiumRequestCost" xml:space="preserve"><value>Premium Request コスト</value></data>
+  <data name="CopilotUsage.Label.PremiumRequests" xml:space="preserve"><value>Premium Requests</value></data>
   <data name="Drafts.BusyHint" xml:space="preserve"><value>完了すると差分解説、Twitter、Teams、顧客向けの各欄を更新します。</value></data>
   <data name="Drafts.Channel.Customer" xml:space="preserve"><value>顧客向け</value></data>
   <data name="Drafts.Channel.Explanation" xml:space="preserve"><value>差分解説</value></data>
@@ -134,6 +150,28 @@
   <data name="LocalSettings.SaveFailed" xml:space="preserve"><value>アプリ設定の保存に失敗しました</value></data>
   <data name="LocalSettings.Saved" xml:space="preserve"><value>appsettings.local.json を保存しました</value></data>
   <data name="LocalSettings.Title" xml:space="preserve"><value>アプリ設定</value></data>
+  <data name="ReviewActions.AddToIgnoreList" xml:space="preserve"><value>無視リストへ追加</value></data>
+  <data name="ReviewActions.Archive" xml:space="preserve"><value>アーカイブする</value></data>
+  <data name="ReviewActions.ArchiveReason" xml:space="preserve"><value>アーカイブする理由</value></data>
+  <data name="ReviewActions.ArchiveReasonPlaceholder" xml:space="preserve"><value>例: 既存情報のみ / 対象外</value></data>
+  <data name="ReviewActions.Description" xml:space="preserve"><value>選択中の通知をどのキューへ移すかを決めます。</value></data>
+  <data name="ReviewActions.IgnoreSimilarDirectories" xml:space="preserve"><value>類似ディレクトリをまとめて自動見送り</value></data>
+  <data name="ReviewActions.Later" xml:space="preserve"><value>保留する</value></data>
+  <data name="ReviewActions.MatchCount" xml:space="preserve"><value>{0} 件</value></data>
+  <data name="ReviewActions.PathPattern" xml:space="preserve"><value>パスパターン</value></data>
+  <data name="ReviewActions.PathPatternPlaceholder" xml:space="preserve"><value>例: aspnet/security/**</value></data>
+  <data name="ReviewActions.Reason.Duplicate" xml:space="preserve"><value>重複</value></data>
+  <data name="ReviewActions.Reason.ExistingInformationOnly" xml:space="preserve"><value>既存情報のみ</value></data>
+  <data name="ReviewActions.Reason.GeneratedDiff" xml:space="preserve"><value>自動生成差分</value></data>
+  <data name="ReviewActions.Reason.MinorWordingChange" xml:space="preserve"><value>軽微な表記変更</value></data>
+  <data name="ReviewActions.Reason.NoFollowUpNeeded" xml:space="preserve"><value>フォロー不要</value></data>
+  <data name="ReviewActions.Reason.OutOfScope" xml:space="preserve"><value>対象外</value></data>
+  <data name="ReviewActions.Required" xml:space="preserve"><value>必須</value></data>
+  <data name="ReviewActions.Suggestion.Covered" xml:space="preserve"><value>カバー済み</value></data>
+  <data name="ReviewActions.Suggestion.Registered" xml:space="preserve"><value>登録済み</value></data>
+  <data name="ReviewActions.Suggestions" xml:space="preserve"><value>候補</value></data>
+  <data name="ReviewActions.Title" xml:space="preserve"><value>レビュー判断</value></data>
+  <data name="ReviewActions.Watch" xml:space="preserve"><value>注目する</value></data>
   <data name="Settings.CopilotUsage" xml:space="preserve"><value>Copilot 使用量</value></data>
   <data name="Settings.CopilotUsage.Empty" xml:space="preserve"><value>まだ Copilot SDK の使用量は記録されていません。</value></data>
   <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits と Premium Request cost は SDK の usage event / session metrics を優先し、SDK が AI Credits を返さない場合は GitHub Docs のモデル別価格表から概算します。プロンプト本文は保存しません。</value></data>
@@ -186,6 +224,7 @@
   <data name="TriageProgress.Skipped" xml:space="preserve"><value>スキップ</value></data>
   <data name="TriageProgress.Target" xml:space="preserve"><value>対象</value></data>
   <data name="Workbench.Archive" xml:space="preserve"><value>アーカイブへ</value></data>
+  <data name="Workbench.Ask" xml:space="preserve"><value>質問</value></data>
   <data name="Workbench.BackToUnseen" xml:space="preserve"><value>未確認へ戻す</value></data>
   <data name="Workbench.BatchExplanationDescription" xml:space="preserve"><value>選択した注目コミットごとに差分解説と共有文案を生成します。</value></data>
   <data name="Workbench.BatchExplanationProgress" xml:space="preserve"><value>Copilot が注目コミットの解説を個別生成中…</value></data>

@@ -1,6 +1,7 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using RepoSyncRadar.App;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
@@ -13,8 +14,19 @@ namespace RepoSyncRadar.App.Tests.Components;
 /// the cascading <see cref="IServiceProvider"/> set by <c>Workbench</c>, so tests build a
 /// small DI container around NSubstitute fakes and pass it as a cascading value.
 /// </summary>
-public sealed class ReviewActionsTests
+[Collection("Localization")]
+public sealed class ReviewActionsTests : IDisposable
 {
+    public ReviewActionsTests()
+    {
+        AppDisplayCulture.Apply(AppDisplayCulture.DefaultCultureName);
+    }
+
+    public void Dispose()
+    {
+        AppDisplayCulture.Apply(AppDisplayCulture.DefaultCultureName);
+    }
+
     [Fact]
     public void Adopt_Click_Calls_Repository()
     {
@@ -96,6 +108,33 @@ public sealed class ReviewActionsTests
         Assert.Contains("既存情報のみ", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
         Assert.Contains("アーカイブする", cut.Find("[data-testid=\"review-reject\"]").TextContent);
         Assert.Contains("類似ディレクトリ", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
+    }
+
+    [Fact]
+    public void Renders_Clear_Action_Groups_In_English()
+    {
+        AppDisplayCulture.Apply("en");
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
+
+        Assert.Contains("Review Decision", cut.Find("[data-testid=\"review-actions\"]").TextContent);
+        Assert.Contains("Watch", cut.Find("[data-testid=\"review-adopt\"]").TextContent);
+        Assert.Contains("Defer", cut.Find("[data-testid=\"review-later\"]").TextContent);
+        Assert.Contains("Existing information only", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
+        Assert.Contains("Archive", cut.Find("[data-testid=\"review-reject\"]").TextContent);
+        Assert.Contains("Automatically skip similar directories", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
+        Assert.Contains("Suggestions", cut.Find("[data-testid=\"review-ignore-suggestions\"]").TextContent);
+        Assert.Contains("1 match", cut.Find("[data-testid=\"review-ignore-suggestions\"]").TextContent);
+        Assert.Contains("Path pattern", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
+        Assert.Equal("e.g. aspnet/security/**", cut.Find("[data-testid=\"review-ignore-pattern\"]").GetAttribute("placeholder"));
+        Assert.Contains("Add to ignore list", cut.Find("[data-testid=\"review-ignore\"]").TextContent);
     }
 
     [Fact]

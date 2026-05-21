@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Localization;
 using RepoSyncRadar.Core.Services;
 
 namespace RepoSyncRadar.App.Copilot;
@@ -26,11 +27,13 @@ public sealed partial class AskSession
     private readonly IRadarQueryRunner _runner;
     private readonly ICopilotSessionFactory _sessionFactory;
     private readonly ILogger<AskSession> _logger;
+    private readonly IStringLocalizer<SharedResource>? _localizer;
 
     public AskSession(
         IRadarQueryRunner runner,
         ICopilotSessionFactory sessionFactory,
-        ILogger<AskSession> logger)
+        ILogger<AskSession> logger,
+        IStringLocalizer<SharedResource>? localizer = null)
     {
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(sessionFactory);
@@ -38,6 +41,7 @@ public sealed partial class AskSession
         _runner = runner;
         _sessionFactory = sessionFactory;
         _logger = logger;
+        _localizer = localizer;
     }
 
     /// <summary>
@@ -70,7 +74,7 @@ public sealed partial class AskSession
         if (!result.IsValid)
         {
             LogQueryRejected(_logger, result.Reason ?? "(no reason)");
-            return $"クエリは実行できませんでした (理由: {result.Reason}). 安全な SELECT 文だけが利用できます。";
+            return FormatQueryRejectedMessage(result.Reason);
         }
 
         var table = FormatMarkdown(result);
@@ -107,6 +111,44 @@ public sealed partial class AskSession
             return null;
         }
         return match.Groups[1].Value.Trim();
+    }
+
+    private string FormatQueryRejectedMessage(string? reason)
+    {
+        var displayReason = LocalizeSqlGuardReason(reason);
+        return _localizer is null
+            ? $"クエリは実行できませんでした (理由: {displayReason}). 安全な SELECT 文だけが利用できます。"
+            : _localizer["AskSession.QueryRejected", displayReason];
+    }
+
+    private string LocalizeSqlGuardReason(string? reason)
+    {
+        if (_localizer is null || string.IsNullOrWhiteSpace(reason))
+        {
+            return reason ?? string.Empty;
+        }
+
+        return reason switch
+        {
+            "空の SQL は受け付けられません。" => _localizer["AskSession.SqlGuard.EmptySql"],
+            "複数の SQL 文は許可されていません。" => _localizer["AskSession.SqlGuard.MultipleStatements"],
+            "SELECT 文以外は許可されていません。" => _localizer["AskSession.SqlGuard.SelectOnly"],
+            _ when TryMatchQuotedValue(reason, "禁止キーワード '", "' を含んでいます。", out var keyword) => _localizer["AskSession.SqlGuard.BlockedKeyword", keyword],
+            _ when TryMatchQuotedValue(reason, "テーブル '", "' は許可リストに含まれていません。", out var table) => _localizer["AskSession.SqlGuard.DisallowedTable", table],
+            _ => reason,
+        };
+    }
+
+    private static bool TryMatchQuotedValue(string text, string prefix, string suffix, out string value)
+    {
+        value = string.Empty;
+        if (!text.StartsWith(prefix, StringComparison.Ordinal) || !text.EndsWith(suffix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        value = text[prefix.Length..^suffix.Length];
+        return true;
     }
 
     internal static string FormatMarkdown(RadarQueryResult result)

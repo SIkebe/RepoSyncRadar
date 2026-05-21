@@ -497,7 +497,7 @@ public sealed class AppHeaderTests
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
         Assert.Contains("AI Credits0.1230 credits", summary, StringComparison.Ordinal);
-        Assert.Contains("Premium Request cost0.004200 PR", summary, StringComparison.Ordinal);
+        Assert.Contains("Premium Request コスト0.004200 PR", summary, StringComparison.Ordinal);
         Assert.Contains("合計1,600 tokens", summary, StringComparison.Ordinal);
         Assert.Contains("入力1,200 tokens", summary, StringComparison.Ordinal);
         Assert.Contains("出力340 tokens", summary, StringComparison.Ordinal);
@@ -628,7 +628,7 @@ public sealed class AppHeaderTests
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
         Assert.Contains("AI Credits0.2500 credits", summary, StringComparison.Ordinal);
-        Assert.Contains("Premium Request cost2.50 PR", summary, StringComparison.Ordinal);
+        Assert.Contains("Premium Request コスト2.50 PR", summary, StringComparison.Ordinal);
         Assert.Contains("Premium Requests3 requests", summary, StringComparison.Ordinal);
         var metrics = cut.Find("[data-testid=\"settings-copilot-usage-session-metrics\"]").TextContent;
         Assert.Contains("gpt-5", metrics, StringComparison.Ordinal);

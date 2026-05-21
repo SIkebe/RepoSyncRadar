@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using Microsoft.AspNetCore.Components.WebView.Wpf;
@@ -260,8 +261,7 @@ public partial class App : Application
         }
         try
         {
-            var message = $"想定外のエラーが発生しました。\n\n{exception.GetType().Name}: {exception.Message}";
-            showDialog(message);
+            showDialog(BuildUnhandledDialogMessage(exception));
         }
         catch
         {
@@ -292,7 +292,7 @@ public partial class App : Application
         {
             MessageBox.Show(
                 message,
-                "RepoSyncRadar — 想定外のエラー",
+                BuildUnhandledDialogTitle(),
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
         }
@@ -301,6 +301,22 @@ public partial class App : Application
             // Dispatcher may already be torn down — keep the sink quiet.
         }
     }
+
+    private static string BuildUnhandledDialogMessage(Exception exception)
+    {
+        var prefix = IsEnglishUiCulture()
+            ? "An unexpected error occurred."
+            : "想定外のエラーが発生しました。";
+        return $"{prefix}\n\n{exception.GetType().Name}: {exception.Message}";
+    }
+
+    private static string BuildUnhandledDialogTitle()
+        => IsEnglishUiCulture()
+            ? "RepoSyncRadar — Unexpected error"
+            : "RepoSyncRadar — 想定外のエラー";
+
+    private static bool IsEnglishUiCulture()
+        => CultureInfo.CurrentUICulture.Name.StartsWith("en", StringComparison.OrdinalIgnoreCase);
 
     protected override async void OnExit(ExitEventArgs e)
     {
