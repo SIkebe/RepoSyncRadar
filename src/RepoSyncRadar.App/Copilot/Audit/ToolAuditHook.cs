@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using RepoSyncRadar.Core.Data;

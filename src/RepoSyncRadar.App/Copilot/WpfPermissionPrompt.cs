@@ -1,6 +1,6 @@
 using System.Windows;
 using System.Windows.Threading;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace RepoSyncRadar.App.Copilot;
 

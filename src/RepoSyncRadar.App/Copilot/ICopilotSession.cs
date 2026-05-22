@@ -1,7 +1,7 @@
 namespace RepoSyncRadar.App.Copilot;
 
 /// <summary>
-/// Thin abstraction over <see cref="GitHub.Copilot.SDK.CopilotSession"/> so the agent
+/// Thin abstraction over <see cref="GitHub.Copilot.CopilotSession"/> so the agent
 /// orchestrators (Morning Triage, Draft generation, Ask palette) can be unit-tested
 /// without the embedded Copilot CLI. The production implementation
 /// (<see cref="SdkCopilotSession"/>) forwards calls to the real SDK.

@@ -3,7 +3,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// <summary>
 /// Identifies what kind of work a Copilot session is being asked to perform. The
 /// <see cref="SessionConfigBuilder"/> uses this to pick the system message that
-/// is appended to the SDK default prompt (<see cref="GitHub.Copilot.SDK.SystemMessageMode.Append"/>).
+/// is appended to the SDK default prompt (<see cref="GitHub.Copilot.SystemMessageMode.Append"/>).
 /// </summary>
 public enum SessionPurpose
 {

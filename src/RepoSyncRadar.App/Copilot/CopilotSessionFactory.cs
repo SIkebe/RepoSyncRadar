@@ -1,4 +1,4 @@
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -264,9 +264,10 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 
         var clientOptions = new CopilotClientOptions
         {
-            AutoStart = true,
             Logger = logger,
-            LogLevel = string.IsNullOrWhiteSpace(copilot.LogLevel) ? "info" : copilot.LogLevel.Trim(),
+            LogLevel = string.IsNullOrWhiteSpace(copilot.LogLevel)
+                ? CopilotLogLevel.Info
+                : new CopilotLogLevel(copilot.LogLevel.Trim()),
             GitHubToken = token,
             // Force the SDK to use the token we hand it instead of falling back to
             // whatever the bundled CLI / gh CLI happens to be signed in as.
@@ -275,12 +276,12 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 
         if (!string.IsNullOrWhiteSpace(copilot.CliPath))
         {
-            clientOptions.CliPath = copilot.CliPath.Trim();
+            clientOptions.Connection = RuntimeConnection.ForStdio(path: copilot.CliPath.Trim());
         }
 
         if (!string.IsNullOrWhiteSpace(copilot.CopilotHome))
         {
-            clientOptions.CopilotHome = copilot.CopilotHome.Trim();
+            clientOptions.BaseDirectory = copilot.CopilotHome.Trim();
         }
 
         if (copilot.SessionIdleTimeoutSeconds is > 0)

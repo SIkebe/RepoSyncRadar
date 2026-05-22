@@ -1,3 +1,4 @@
+using GitHub.Copilot;
 using Microsoft.Extensions.Logging.Abstractions;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.Core.Options;
@@ -79,13 +80,13 @@ public sealed class CopilotSessionFactoryTests
         var logger = NullLogger<CopilotSessionFactory>.Instance;
         var options = CopilotSessionFactory.BuildClientOptions(copilot, logger, "token-123");
 
-        Assert.True(options.AutoStart);
         Assert.False(options.UseLoggedInUser);
         Assert.Same(logger, options.Logger);
         Assert.Equal("token-123", options.GitHubToken);
-        Assert.Equal("debug", options.LogLevel);
-        Assert.Equal("C:/tools/copilot.exe", options.CliPath);
-        Assert.Equal("C:/data/copilot", options.CopilotHome);
+        Assert.Equal("debug", options.LogLevel?.Value);
+        var stdio = Assert.IsType<StdioRuntimeConnection>(options.Connection);
+        Assert.Equal("C:/tools/copilot.exe", stdio.Path);
+        Assert.Equal("C:/data/copilot", options.BaseDirectory);
         Assert.Equal(120, options.SessionIdleTimeoutSeconds);
         Assert.NotNull(options.Telemetry);
         Assert.Equal("file", options.Telemetry!.ExporterType);

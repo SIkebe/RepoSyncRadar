@@ -1,4 +1,4 @@
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Copilot.Audit;
@@ -18,7 +18,7 @@ internal static class SessionConfigBuilder
     public static SessionConfig Build(
         SessionPurpose purpose,
         IOptions<CopilotOptions> options,
-        PermissionRequestHandler permissionHandler,
+        Func<PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>> permissionHandler,
         ToolAuditHook? auditHook = null,
         IReadOnlyList<AIFunction>? tools = null)
     {
@@ -44,7 +44,7 @@ internal static class SessionConfigBuilder
 
         if (tools is { Count: > 0 })
         {
-            config.Tools = tools.ToList();
+            config.Tools = tools.Cast<AIFunctionDeclaration>().ToList();
             config.AvailableTools = tools.Select(static tool => tool.Name).ToList();
         }
 

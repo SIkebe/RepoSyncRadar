@@ -1,5 +1,5 @@
 using System.Text.Json;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,7 +27,7 @@ public sealed class ToolAuditHookTests
         {
             ToolName = "radar_list_commits",
             ToolArgs = new { status = "Unseen" },
-            Timestamp = harness.Clock.GetTimestamp(),
+            Timestamp = harness.Clock.GetUtcNow(),
         };
         var invocation = new HookInvocation { SessionId = "S1" };
 

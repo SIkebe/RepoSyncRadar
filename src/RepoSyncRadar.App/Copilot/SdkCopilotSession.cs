@@ -1,4 +1,4 @@
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace RepoSyncRadar.App.Copilot;
 
@@ -24,12 +24,9 @@ internal sealed class SdkCopilotSession : ICopilotSession
         _usageTracker = usageTracker;
         if (usageTracker is not null)
         {
-            _usageSubscription = session.On(evt =>
+            _usageSubscription = session.On<AssistantUsageEvent>(usage =>
             {
-                if (evt is AssistantUsageEvent usage)
-                {
-                    usageTracker.Record(CopilotUsageTracker.FromAssistantUsage(usage, purpose, session.SessionId));
-                }
+                usageTracker.Record(CopilotUsageTracker.FromAssistantUsage(usage, purpose, session.SessionId));
             });
         }
     }
@@ -45,8 +42,7 @@ internal sealed class SdkCopilotSession : ICopilotSession
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-        var options = new MessageOptions { Prompt = prompt };
-        var assistant = await _session.SendAndWaitAsync(options, timeout, cancellationToken).ConfigureAwait(false);
+        var assistant = await _session.SendAndWaitAsync(prompt, timeout, cancellationToken).ConfigureAwait(false);
         await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
         return assistant?.Data?.Content ?? string.Empty;
     }

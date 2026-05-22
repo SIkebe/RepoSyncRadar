@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using GitHub.Copilot;
 using Microsoft.Extensions.AI;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.Core.Data;
@@ -10,8 +11,8 @@ namespace RepoSyncRadar.App.Copilot.Tools;
 
 /// <summary>
 /// Registers the read-only <c>radar_*</c> Copilot tools (Step 13). Every tool emitted by
-/// <see cref="CreateAll"/> is annotated with <c>skip_permission = true</c> because it has no
-/// side effects on the local store, the GitHub repository, or any external system.
+/// <see cref="CreateAll"/> uses the SDK's Copilot tool helper with skip-permission metadata
+/// because it has no side effects on the local store, the GitHub repository, or any external system.
 /// </summary>
 public sealed class RadarTools
 {
@@ -154,60 +155,60 @@ public sealed class RadarTools
 
     private AIFunction CreateListCommits()
     {
-        return AIFunctionFactory.Create(
+        return CopilotTool.DefineTool(
             ([Description("Optional review status filter. User-facing labels: 未確認=Unseen, 注目=Adopted, 保留=Later, 見送り候補=Rejected, アーカイブ=Archived. Legacy Seen rows are included in Unseen.")] string? status,
              [Description("Maximum rows to return. Defaults to 50.")] int? limit,
              CancellationToken cancellationToken)
                 => ListCommitsAsync(status, limit, cancellationToken),
+            new CopilotToolOptions { SkipPermission = true },
             new AIFunctionFactoryOptions
             {
                 Name = "radar_list_commits",
                 Description = "Lists docs commits stored in the local radar.db, optionally filtered by review status.",
-                AdditionalProperties = new Dictionary<string, object?> { ["skip_permission"] = true },
             });
     }
 
     private AIFunction CreateGetDiff()
     {
-        return AIFunctionFactory.Create(
+        return CopilotTool.DefineTool(
             ([Description("Commit SHA (40-char hex) to fetch the unified diff for.")] string sha,
              CancellationToken cancellationToken)
                 => GetDiffAsync(sha, cancellationToken),
+            new CopilotToolOptions { SkipPermission = true },
             new AIFunctionFactoryOptions
             {
                 Name = "radar_get_diff",
                 Description = "Returns the unified diff for a commit, with secrets masked and wrapped in untrusted-data fences.",
-                AdditionalProperties = new Dictionary<string, object?> { ["skip_permission"] = true },
             });
     }
 
     private AIFunction CreateResolveUrl()
     {
-        return AIFunctionFactory.Create(
+        return CopilotTool.DefineTool(
             ([Description("Repository-relative path (e.g. content/copilot/about-copilot.md).")] string repoPath,
              [Description("Raw text of the frontmatter 'versions:' YAML block.")] string frontmatterVersions,
              [Description("Preferred UI language. Defaults to 'en'.")] string? language,
              CancellationToken cancellationToken)
                 => ResolveUrlAsync(repoPath, frontmatterVersions, language ?? "en", cancellationToken),
+            new CopilotToolOptions { SkipPermission = true },
             new AIFunctionFactoryOptions
             {
                 Name = "radar_resolve_url",
                 Description = "Resolves a docs repo file path + frontmatter versions to canonical docs.github.com URLs.",
-                AdditionalProperties = new Dictionary<string, object?> { ["skip_permission"] = true },
             });
     }
 
     private AIFunction CreateFetchRendered()
     {
-        return AIFunctionFactory.Create(
+        return CopilotTool.DefineTool(
             ([Description("Canonical docs pathname (e.g. /en/copilot/about-copilot).")] string pathname,
              CancellationToken cancellationToken)
                 => FetchRenderedAsync(pathname, cancellationToken),
+            new CopilotToolOptions { SkipPermission = true },
             new AIFunctionFactoryOptions
             {
                 Name = "radar_fetch_rendered",
                 Description = "Fetches the rendered HTML body for a docs.github.com pathname. Returns an error envelope on failure instead of throwing.",
-                AdditionalProperties = new Dictionary<string, object?> { ["skip_permission"] = true },
             });
     }
 }

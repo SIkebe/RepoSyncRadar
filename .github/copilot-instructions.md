@@ -1,8 +1,8 @@
 # RepoSyncRadar Copilot Instructions
 
-RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter, Teams, and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0-beta.4.
+RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter, Teams, and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0-beta.6.
 
-Use these repository instructions first. Search only when the instructions are incomplete, stale, or contradicted by the code in front of you.
+Use these repository instructions as the starting point. When code or validated behavior contradicts them, follow the verified source and update this file after confirming the rule is stable.
 
 ## Layout
 
@@ -41,15 +41,29 @@ Use these repository instructions first. Search only when the instructions are i
 
 ## Copilot SDK And Auth
 
+### SDK API
+
 - The app must read Copilot SDK final assistant text from `response?.Data?.Content`, not `response?.ToString()`.
-- `GitHub.Copilot.SDK` 1.0.0-beta.4 exposes `MessageOptions` prompt, attachments, mode, and headers. No public JSON schema or response-format property has been observed in the XML docs.
+- `GitHub.Copilot.SDK` 1.0.0-beta.6 exposes `MessageOptions` prompt, attachments, mode, and headers. No public JSON schema or response-format property has been observed in the XML docs.
+- In `GitHub.Copilot.SDK` 1.0.0-beta.6, public C# types live under `GitHub.Copilot` / `GitHub.Copilot.Rpc`, client process settings use `CopilotClientOptions.Connection = RuntimeConnection.ForStdio(...)`, `BaseDirectory`, and `CopilotLogLevel`, and permission handlers use `Func<PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>>`.
+- `GitHub.Copilot.SDK` 1.0.0-beta.6 nupkg currently lacks the generated `GitHub.Copilot.SDK.props`; keep `CopilotCliVersion` pinned in `Directory.Build.props` unless the package starts shipping the props file.
+- For Copilot tool metadata such as `skip_permission`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { SkipPermission = true }, ...)` over magic-string `AdditionalProperties`.
+
+### Client And Telemetry
+
 - Wire diagnostics through `CopilotClientOptions.Logger`, `LogLevel`, and `TelemetryConfig`; `TelemetryFilePath` is inert unless passed through SDK options.
 - `SessionIdleTimeoutSeconds` is a client option; null or zero disables server-side idle cleanup.
+
+### Auth Resolution
+
 - `CopilotSessionFactory` auth resolution order is `COPILOT_GITHUB_TOKEN` debug override, in-memory cache, `IGitHubTokenStore` DPAPI store, then GitHub Device Flow. Do not read `GH_TOKEN` or `GITHUB_TOKEN` for Copilot auth.
 - Release builds should ship a public, non-secret `Copilot:OAuthClientId` in `appsettings.json`; users only override it for forks or organization-managed OAuth Apps.
 - Always set `CopilotClientOptions.UseLoggedInUser = false` so the app does not depend on global GitHub sign-in state.
 - If `OAuthClientId` is missing and there is no stored or env token, fail clearly with `InvalidOperationException` rather than silently falling back.
-- Morning Triage is triggered from `AppHeader` through `ICopilotAgent.RunMorningTriageAsync()`. Triage/Maintenance sessions register `RadarTools.CreateAll()` and `RadarWriteTools.CreateAll()`; write-like tools are intentionally permission-gated except approved scoring/review saves.
+
+### Triage Workflow
+
+- Morning Triage is triggered from `AppHeader` through `ICopilotAgent.RunMorningTriageAsync()`. Triage/Maintenance sessions register `RadarTools.CreateAll()` and `RadarWriteTools.CreateAll()`; write-like tools are permission-gated except `radar_score_commit` and `radar_save_review`, which `RadarPermissionPolicy` pre-approves for triage scoring/review persistence.
 - Triage sends need the longer `MorningTriageSession.TriageSendTimeout` through `ICopilotSession.SendAsync(prompt, timeout, ct)`; the SDK default one-minute wait is too short.
 
 ## UI And Product Behavior
@@ -59,18 +73,29 @@ Use these repository instructions first. Search only when the instructions are i
 - For user-facing sharing drafts, Twitter, Teams, and customer-facing text must include official `docs.github.com` URLs when a publishable docs URL is known. If Copilot omits the URL, preserve safety by appending it before saving.
 - Commit detail should show the useful first commit message line only. Do not surface `Co-authored-by`, `Signed-off-by`, `Reviewed-by`, or `Acked-by` trailers as prominent UI text.
 - Copilot usage UI must label units explicitly: AI Credits as `credits`, Premium Request cost as `PR`, request counts as `requests`, and token counts as `tokens`.
-- When SDK AI Credits are absent, usage estimates may fall back to the GitHub Docs model pricing table. Unknown models should remain unreported rather than guessed.
+- When SDK AI Credits are absent, fall back to the GitHub Docs model pricing table for usage estimates. Unknown models should remain unreported rather than guessed.
 - For Copilot fallback models, prefer currently supported non-retiring models. Check GitHub Changelog plus the supported-models docs before hardcoding model IDs; avoid `GPT-4.1`, `GPT-5`, `GPT-5.2`, and `GPT-5.2-Codex` as preferred fallbacks because they are retired or scheduled for retirement.
 
 ## Preview And WebView
 
+### Preview Infrastructure
+
 - Official `docs.github.com` may already match a Repo sync PR if deployed. Visual comparison should use local preview of parent SHA vs PR HEAD, not production pages.
 - Preview worktrees and npm/Next dev servers are process-sensitive. Use existing `PreviewServerHost`, `DocsWorktreeManager`, `NextDevServerProcessCleaner`, and `PreviewPortAllocator` patterns instead of ad hoc process cleanup.
 - github/docs preview needs `REQUEST_TIMEOUT=600000` because Windows ARM64 first-page compilation can exceed the default 15 seconds.
+
+### WebView2 Behavior
+
 - WebView2 `Source` assignment is a no-op for identical URIs. Markdown preview URLs must include content-affecting dimensions such as docs version and file path in the query. `LocalPreviewContentServer.NormalizeRoute` strips query strings for route lookup.
+
+### Markdown/Liquid Rendering
+
 - Markdown/Liquid preview should mimic github/docs rendering. Render `{% octicon "name" ... %}` as Primer Octicons inline SVG with appropriate classes/attributes. Preserve data tag indentation, alert blocks, tool/platform blocks, prompt blocks, and Copilot links where practical.
-- Markdown comparison preview should read Markdown and referenced Liquid inputs from the bare clone by SHA (`git show`/`git ls-tree`) instead of creating full worktrees; reserve full worktrees for npm/Next preview. Still materialize and serve referenced local assets (for example `assets/images/**/*.png`) from the same commit so screenshots do not break.
+- Markdown comparison preview should read Markdown and referenced Liquid inputs from the bare clone by SHA (`git show`/`git ls-tree`) instead of creating full worktrees; reserve full worktrees for npm/Next preview. For binary or static assets referenced by Markdown, extract only the needed files from the same commit into the preview asset cache so screenshots do not break.
 - Markdown preview Liquid context must stay lazy but complete for the clicked file: load referenced reusables, AUTOTITLE targets, and referenced `data/**/*.yml` sequence files used by `for` loops such as `tables.copilot.models-and-pricing`; do not fall back to all-repo reusable/content scans for interactivity.
+
+### Cache And Theme
+
 - Cache cleanup should detach/rename large worktree directories quickly and let physical deletion continue in the background so the Blazor UI is not blocked by hundreds of MB of file deletes.
 - Dark-theme docs preview must keep text readable; diff highlights should be low-alpha tints with borders/outlines and `color: inherit`.
 

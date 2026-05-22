@@ -1,4 +1,4 @@
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Copilot;
@@ -18,7 +18,7 @@ public class SessionConfigBuilderTests
             Streaming = true,
             AllowedUrlHosts = ["docs.github.com"],
         };
-        PermissionRequestHandler handler = (_, _) =>
+        Func<PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>> handler = (_, _) =>
             Task.FromResult(new PermissionRequestResult { Kind = PermissionRequestResultKind.Approved });
 
         var config = SessionConfigBuilder.Build(
@@ -43,7 +43,7 @@ public class SessionConfigBuilderTests
             Streaming = true,
             AllowedUrlHosts = ["docs.github.com"],
         };
-        PermissionRequestHandler handler = (_, _) =>
+        Func<PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>> handler = (_, _) =>
             Task.FromResult(new PermissionRequestResult { Kind = PermissionRequestResultKind.Approved });
         var tool = AIFunctionFactory.Create(
             () => "ok",
