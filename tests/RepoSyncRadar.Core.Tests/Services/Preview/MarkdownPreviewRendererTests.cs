@@ -1248,7 +1248,8 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("rsr-diff-scrollbar", html, StringComparison.Ordinal);
         Assert.Contains("rsr-diff-scrollbar-marker", html, StringComparison.Ordinal);
-        Assert.Contains("right:12px", html, StringComparison.Ordinal);
+        Assert.Contains("right:24px", html, StringComparison.Ordinal);
+        Assert.Contains("width:10px", html, StringComparison.Ordinal);
         Assert.Contains(".rsr-rendered-diff-added,.rsr-rendered-diff-removed", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", html, StringComparison.Ordinal);
         Assert.Contains("rect.height / maxScrollTop", html, StringComparison.Ordinal);

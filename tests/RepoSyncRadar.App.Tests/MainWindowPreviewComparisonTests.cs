@@ -493,7 +493,8 @@ public sealed class MainWindowPreviewComparisonTests
 
         Assert.Contains("rsr-preview-diff-scrollbar", script, StringComparison.Ordinal);
         Assert.Contains("rsr-preview-diff-scrollbar-marker-after", script, StringComparison.Ordinal);
-        Assert.Contains("right: 12px", script, StringComparison.Ordinal);
+        Assert.Contains("right: 24px", script, StringComparison.Ordinal);
+        Assert.Contains("width: 10px", script, StringComparison.Ordinal);
         Assert.Contains("const rect = element.getBoundingClientRect();", script, StringComparison.Ordinal);
         Assert.Contains("rect.top + window.scrollY", script, StringComparison.Ordinal);
         Assert.Contains("rect.height / maxScrollTop", script, StringComparison.Ordinal);

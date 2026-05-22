@@ -220,9 +220,9 @@ internal static class PreviewDiffHighlighter
   bottom: 0 !important;
   pointer-events: none !important;
   position: fixed !important;
-  right: 12px !important;
+  right: 24px !important;
   top: 0 !important;
-  width: 7px !important;
+  width: 10px !important;
   z-index: 2147483647 !important;
 }
 .rsr-preview-diff-scrollbar-marker {
@@ -231,7 +231,7 @@ internal static class PreviewDiffHighlighter
   min-height: 4px !important;
   position: absolute !important;
   right: 0 !important;
-  width: 7px !important;
+  width: 10px !important;
 }
 .rsr-preview-diff-scrollbar-marker-before {
   background: #f85149 !important;
