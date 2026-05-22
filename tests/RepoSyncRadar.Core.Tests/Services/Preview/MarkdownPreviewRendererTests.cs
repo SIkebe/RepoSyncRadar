@@ -1251,9 +1251,12 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("right:24px", html, StringComparison.Ordinal);
         Assert.Contains("width:10px", html, StringComparison.Ordinal);
         Assert.Contains(".rsr-rendered-diff-added,.rsr-rendered-diff-removed", html, StringComparison.Ordinal);
+        Assert.Contains("const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote'", html, StringComparison.Ordinal);
+        Assert.Contains("element.closest(blockSelector) || element", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", html, StringComparison.Ordinal);
         Assert.Contains("rect.height / maxScrollTop", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", html, StringComparison.Ordinal);
+        Assert.Contains("window.setTimeout(scheduleBuild, 250)", html, StringComparison.Ordinal);
     }
 
     [Fact]
