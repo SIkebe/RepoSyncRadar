@@ -1119,8 +1119,11 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("data-testid=\"rsr-version-diff-summary\"", html, StringComparison.Ordinal);
         Assert.Contains("変更パターン", html, StringComparison.Ordinal);
-        Assert.Contains("Free old note", html, StringComparison.Ordinal);
-        Assert.Contains("Free updated note", html, StringComparison.Ordinal);
+        Assert.Contains("rsr-version-change-excerpt--removed", html, StringComparison.Ordinal);
+        Assert.Contains("rsr-version-change-excerpt--added", html, StringComparison.Ordinal);
+        Assert.Contains("text-decoration-line:line-through", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-version-change-excerpt--removed\">Free old note", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-version-change-excerpt--added\">Free updated note", html, StringComparison.Ordinal);
         Assert.Contains("Enterprise Cloud only addition", html, StringComparison.Ordinal);
         Assert.Contains("rsr-version-diff-item--current", html, StringComparison.Ordinal);
         Assert.Contains("data-change-kind=\"added\"", html, StringComparison.Ordinal);
@@ -1153,8 +1156,8 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("Free, Pro, &amp; Team", html, StringComparison.Ordinal);
         Assert.Contains("Enterprise Cloud", html, StringComparison.Ordinal);
         Assert.Contains("Enterprise Server 3.21 のみ", html, StringComparison.Ordinal);
-        Assert.Equal(1, CountOccurrences(html, "Shared old note"));
-        Assert.Equal(1, CountOccurrences(html, "Shared updated note"));
+        Assert.Equal(1, CountOccurrences(html, "<span class=\"rsr-version-change-excerpt--removed\""));
+        Assert.Equal(2, CountOccurrences(html, "<span class=\"rsr-version-change-excerpt--added\""));
     }
 
     [Fact]

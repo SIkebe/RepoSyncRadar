@@ -249,6 +249,7 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-version-change-kind{color:var(--rsr-muted);font-size:.72rem;font-weight:700;}");
         html.AppendLine(".rsr-version-change-line{align-items:start;display:grid;grid-template-columns:4.5rem minmax(0,1fr);gap:8px;margin:0;font-size:.78rem;}");
         html.AppendLine(".rsr-version-change-label{color:var(--rsr-muted);font-weight:700;margin-right:.35rem;}");
+        html.AppendLine(".rsr-version-change-excerpt{overflow-wrap:anywhere;}.rsr-version-change-excerpt--removed,.rsr-version-change-excerpt--added{border-radius:3px;padding:1px 3px;}.rsr-version-change-excerpt--removed{background:#cf222e24;box-shadow:0 0 0 2px #cf222e24;text-decoration-line:line-through;text-decoration-color:rgba(207,34,46,.85);text-decoration-thickness:1.2px;text-decoration-skip-ink:none;}.rsr-version-change-excerpt--added{background:#2da44e24;box-shadow:0 0 0 2px #2da44e24;}");
         html.AppendLine(".rsr-version-change-note{color:var(--rsr-muted);font-size:.78rem;margin:0;}");
         html.AppendLine(".rsr-version-diff-more{color:var(--rsr-muted);font-size:.76rem;margin:8px 0 0;}");
         html.AppendLine(".rsr-frontmatter-diff{border:1px solid var(--rsr-border);border-left:4px solid var(--rsr-link);border-radius:6px;background:var(--rsr-pre-bg);margin:0 0 1rem;padding:12px;}");
@@ -1476,16 +1477,21 @@ internal static partial class MarkdownPreviewRenderer
             .Append("</span>");
         if (!string.IsNullOrWhiteSpace(change.BeforeExcerpt))
         {
-            AppendVersionChangeExcerpt(html, "変更前", change.BeforeExcerpt);
+            AppendVersionChangeExcerpt(html, "変更前", change.BeforeExcerpt, change.AfterExcerpt, VersionChangeExcerptSide.Before);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterExcerpt))
         {
-            AppendVersionChangeExcerpt(html, "PR HEAD", change.AfterExcerpt);
+            AppendVersionChangeExcerpt(html, "PR HEAD", change.AfterExcerpt, change.BeforeExcerpt, VersionChangeExcerptSide.After);
         }
         html.Append("</div>");
     }
 
-    private static void AppendVersionChangeExcerpt(StringBuilder html, string label, string excerpt)
+    private static void AppendVersionChangeExcerpt(
+        StringBuilder html,
+        string label,
+        string excerpt,
+        string? comparisonExcerpt,
+        VersionChangeExcerptSide side)
     {
         html.Append("<div class=\"rsr-version-change-line\"><span class=\"rsr-version-change-label\">")
             .Append(WebUtility.HtmlEncode(label))
@@ -1496,11 +1502,76 @@ internal static partial class MarkdownPreviewRenderer
         }
         else
         {
-            html.Append("<span>")
-                .Append(WebUtility.HtmlEncode(excerpt))
-                .Append("</span>");
+            AppendVersionChangeExcerptText(html, excerpt, comparisonExcerpt, side);
         }
         html.Append("</div>");
+    }
+
+    private static void AppendVersionChangeExcerptText(
+        StringBuilder html,
+        string excerpt,
+        string? comparisonExcerpt,
+        VersionChangeExcerptSide side)
+    {
+        html.Append("<span class=\"rsr-version-change-excerpt\">");
+        var changedRange = FindInlineChangedRange(excerpt, comparisonExcerpt);
+        if (changedRange.Length == 0)
+        {
+            html.Append(WebUtility.HtmlEncode(excerpt));
+        }
+        else
+        {
+            html.Append(WebUtility.HtmlEncode(excerpt[..changedRange.Start]));
+            html.Append("<span class=\"")
+                .Append(side == VersionChangeExcerptSide.Before
+                    ? "rsr-version-change-excerpt--removed"
+                    : "rsr-version-change-excerpt--added")
+                .Append("\">")
+                .Append(WebUtility.HtmlEncode(excerpt.Substring(changedRange.Start, changedRange.Length)))
+                .Append("</span>");
+            html.Append(WebUtility.HtmlEncode(excerpt[(changedRange.Start + changedRange.Length)..]));
+        }
+        html.Append("</span>");
+    }
+
+    private static InlineChangedRange FindInlineChangedRange(string excerpt, string? comparisonExcerpt)
+    {
+        if (excerpt.Length == 0 || string.Equals(excerpt, comparisonExcerpt, StringComparison.Ordinal))
+        {
+            return new InlineChangedRange(0, 0);
+        }
+        if (string.IsNullOrEmpty(comparisonExcerpt))
+        {
+            return new InlineChangedRange(0, excerpt.Length);
+        }
+
+        var prefixLength = 0;
+        while (prefixLength < excerpt.Length
+            && prefixLength < comparisonExcerpt.Length
+            && excerpt[prefixLength] == comparisonExcerpt[prefixLength])
+        {
+            prefixLength++;
+        }
+
+        var excerptEnd = excerpt.Length - 1;
+        var comparisonEnd = comparisonExcerpt.Length - 1;
+        while (excerptEnd >= prefixLength
+            && comparisonEnd >= prefixLength
+            && excerpt[excerptEnd] == comparisonExcerpt[comparisonEnd])
+        {
+            excerptEnd--;
+            comparisonEnd--;
+        }
+
+        return new InlineChangedRange(prefixLength, excerptEnd - prefixLength + 1);
+    }
+
+    private readonly record struct InlineChangedRange(int Start, int Length);
+
+    private enum VersionChangeExcerptSide
+    {
+        Before,
+        After,
     }
 
     private static string ApplyRenderedMarkdownDiff(
