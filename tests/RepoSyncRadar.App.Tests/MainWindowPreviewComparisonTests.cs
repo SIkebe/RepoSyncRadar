@@ -498,6 +498,8 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const rect = element.getBoundingClientRect();", script, StringComparison.Ordinal);
         Assert.Contains("rect.top + window.scrollY", script, StringComparison.Ordinal);
         Assert.Contains("rect.height / maxScrollTop", script, StringComparison.Ordinal);
+        Assert.Contains("window.innerHeight - height", script, StringComparison.Ordinal);
+        Assert.Contains("markerTop.toFixed(1)", script, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", script, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", script, StringComparison.Ordinal);
     }

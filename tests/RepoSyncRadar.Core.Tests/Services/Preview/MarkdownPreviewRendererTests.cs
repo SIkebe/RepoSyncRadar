@@ -1255,6 +1255,8 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("element.closest(blockSelector) || element", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", html, StringComparison.Ordinal);
         Assert.Contains("rect.height / maxScrollTop", html, StringComparison.Ordinal);
+        Assert.Contains("window.innerHeight - height", html, StringComparison.Ordinal);
+        Assert.Contains("markerTop.toFixed(1)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", html, StringComparison.Ordinal);
         Assert.Contains("window.setTimeout(scheduleBuild, 250)", html, StringComparison.Ordinal);
     }

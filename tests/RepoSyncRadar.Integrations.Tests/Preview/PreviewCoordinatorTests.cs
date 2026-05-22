@@ -255,8 +255,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after?v=fpt&file=CHANGELOG.md"), link.AfterUrl);
         Assert.True(session.IsAllowed(link.BeforeUrl));
         Assert.True(session.IsAllowed(link.AfterUrl));
-        Assert.Contains("Old entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
-        Assert.Contains("New entry", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-removed\">Old</span> entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added\">New</span> entry", capturedPages["/markdown/after"], StringComparison.Ordinal);
         runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!, default);
         await contentServer.Received(1).StartAsync(
             4500,

@@ -21,12 +21,12 @@ internal sealed record PreviewDiffPlan(
 
 internal static class PreviewDiffHighlighter
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly TimeSpan ExtractionRetryDelay = TimeSpan.FromMilliseconds(250);
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly TimeSpan _extractionRetryDelay = TimeSpan.FromMilliseconds(250);
 
-    private const int MaxExtractionAttempts = 6;
+    private const int _maxExtractionAttempts = 6;
 
-    private const string ExtractBlocksScript = """
+    private const string _extractBlocksScript = """
 (() => {
   const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
   const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
@@ -78,16 +78,16 @@ internal static class PreviewDiffHighlighter
             return Array.Empty<PreviewDiffBlock>();
         }
 
-        for (var attempt = 0; attempt < MaxExtractionAttempts; attempt++)
+        for (var attempt = 0; attempt < _maxExtractionAttempts; attempt++)
         {
-            var scriptResult = await view.ExecuteScriptAsync(ExtractBlocksScript);
+          var scriptResult = await view.ExecuteScriptAsync(_extractBlocksScript);
             var blocks = DeserializeBlocks(scriptResult);
-            if (blocks.Count > 0 || attempt == MaxExtractionAttempts - 1)
+          if (blocks.Count > 0 || attempt == _maxExtractionAttempts - 1)
             {
                 return blocks;
             }
 
-            await Task.Delay(ExtractionRetryDelay);
+          await Task.Delay(_extractionRetryDelay);
         }
 
         return Array.Empty<PreviewDiffBlock>();
@@ -176,8 +176,8 @@ internal static class PreviewDiffHighlighter
             return;
         }
 
-        var indexesJson = JsonSerializer.Serialize(changedIndexes, JsonOptions);
-        var paneJson = JsonSerializer.Serialize(pane == PreviewDiffPane.Before ? "before" : "after", JsonOptions);
+        var indexesJson = JsonSerializer.Serialize(changedIndexes, _jsonOptions);
+        var paneJson = JsonSerializer.Serialize(pane == PreviewDiffPane.Before ? "before" : "after", _jsonOptions);
         var script = BuildApplyPlanScript(indexesJson, paneJson);
 
         await view.ExecuteScriptAsync(script);
@@ -277,7 +277,8 @@ internal static class PreviewDiffHighlighter
       const rect = element.getBoundingClientRect();
       const top = Math.max(0, Math.min(1, (rect.top + window.scrollY) / maxScrollTop));
       const height = Math.max(4, Math.min(window.innerHeight, (rect.height / maxScrollTop) * window.innerHeight));
-      marker.style.top = `${(top * 100).toFixed(3)}%`;
+      const markerTop = Math.max(0, Math.min(window.innerHeight - height, top * window.innerHeight));
+      marker.style.top = `${markerTop.toFixed(1)}px`;
       marker.style.height = `${height.toFixed(1)}px`;
       rail.appendChild(marker);
     });
@@ -304,7 +305,7 @@ internal static class PreviewDiffHighlighter
 
         try
         {
-          return JsonSerializer.Deserialize<List<PreviewDiffBlock>>(scriptResult, JsonOptions) is { } blocks
+          return JsonSerializer.Deserialize<List<PreviewDiffBlock>>(scriptResult, _jsonOptions) is { } blocks
             ? blocks
             : Array.Empty<PreviewDiffBlock>();
         }
