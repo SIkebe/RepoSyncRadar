@@ -152,6 +152,7 @@
   <data name="LocalSettings.Title" xml:space="preserve"><value>アプリ設定</value></data>
   <data name="ReviewActions.AddToIgnoreList" xml:space="preserve"><value>無視リストへ追加</value></data>
   <data name="ReviewActions.Archive" xml:space="preserve"><value>アーカイブする</value></data>
+  <data name="ReviewActions.ArchivedReason" xml:space="preserve"><value>アーカイブ済みの理由</value></data>
   <data name="ReviewActions.ArchiveReason" xml:space="preserve"><value>アーカイブする理由</value></data>
   <data name="ReviewActions.ArchiveReasonPlaceholder" xml:space="preserve"><value>例: 既存情報のみ / 対象外</value></data>
   <data name="ReviewActions.Description" xml:space="preserve"><value>選択中の通知をどのキューへ移すかを決めます。</value></data>
@@ -161,6 +162,7 @@
   <data name="ReviewActions.PathPattern" xml:space="preserve"><value>パスパターン</value></data>
   <data name="ReviewActions.PathPatternPlaceholder" xml:space="preserve"><value>例: aspnet/security/**</value></data>
   <data name="ReviewActions.Reason.Duplicate" xml:space="preserve"><value>重複</value></data>
+  <data name="ReviewActions.Reason.AlreadyReviewed" xml:space="preserve"><value>確認済み</value></data>
   <data name="ReviewActions.Reason.ExistingInformationOnly" xml:space="preserve"><value>既存情報のみ</value></data>
   <data name="ReviewActions.Reason.GeneratedDiff" xml:space="preserve"><value>自動生成差分</value></data>
   <data name="ReviewActions.Reason.MinorWordingChange" xml:space="preserve"><value>軽微な表記変更</value></data>

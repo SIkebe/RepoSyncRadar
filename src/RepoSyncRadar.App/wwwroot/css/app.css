@@ -1414,6 +1414,30 @@ html, body {
     gap: 0.35rem;
 }
 
+.review-archived-reason {
+    align-items: center;
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    color: #24292f;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.5rem;
+    padding: 0.45rem 0.6rem;
+}
+
+.review-archived-reason span {
+    color: #57606a;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.review-archived-reason strong {
+    color: #24292f;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
 .review-reason-chip {
     border: 1px solid #d0d7de;
     border-radius: 999px;
@@ -2004,6 +2028,7 @@ html, body {
 .radar-theme-dark .third-party-notice-details pre,
 .radar-theme-dark .review-input-action input,
 .radar-theme-dark .review-suggestion-chip.already-ignored,
+.radar-theme-dark .review-archived-reason,
 .radar-theme-dark .ask-palette-input input[type="text"],
 .radar-theme-dark .commit-search-input,
 .radar-theme-dark .ask-palette-input button,
@@ -2039,9 +2064,14 @@ html, body {
 
 .radar-theme-dark .radar-commit-detail .score-value,
 .radar-theme-dark .review-suggestion-pattern,
+.radar-theme-dark .review-archived-reason strong,
 .radar-theme-dark .third-party-package,
 .radar-theme-dark .third-party-notice-details pre {
     color: var(--radar-chip-fg) !important;
+}
+
+.radar-theme-dark .review-archived-reason span {
+    color: var(--radar-muted-fg) !important;
 }
 
 .radar-theme-dark .radar-commit-detail .category-chip,

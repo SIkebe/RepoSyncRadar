@@ -152,6 +152,7 @@
   <data name="LocalSettings.Title" xml:space="preserve"><value>App Settings</value></data>
   <data name="ReviewActions.AddToIgnoreList" xml:space="preserve"><value>Add to ignore list</value></data>
   <data name="ReviewActions.Archive" xml:space="preserve"><value>Archive</value></data>
+  <data name="ReviewActions.ArchivedReason" xml:space="preserve"><value>Archived reason</value></data>
   <data name="ReviewActions.ArchiveReason" xml:space="preserve"><value>Reason for archiving</value></data>
   <data name="ReviewActions.ArchiveReasonPlaceholder" xml:space="preserve"><value>e.g. existing information only / out of scope</value></data>
   <data name="ReviewActions.Description" xml:space="preserve"><value>Choose which queue this notification should move to.</value></data>
@@ -161,6 +162,7 @@
   <data name="ReviewActions.PathPattern" xml:space="preserve"><value>Path pattern</value></data>
   <data name="ReviewActions.PathPatternPlaceholder" xml:space="preserve"><value>e.g. aspnet/security/**</value></data>
   <data name="ReviewActions.Reason.Duplicate" xml:space="preserve"><value>Duplicate</value></data>
+  <data name="ReviewActions.Reason.AlreadyReviewed" xml:space="preserve"><value>Already reviewed</value></data>
   <data name="ReviewActions.Reason.ExistingInformationOnly" xml:space="preserve"><value>Existing information only</value></data>
   <data name="ReviewActions.Reason.GeneratedDiff" xml:space="preserve"><value>Generated diff</value></data>
   <data name="ReviewActions.Reason.MinorWordingChange" xml:space="preserve"><value>Minor wording change</value></data>

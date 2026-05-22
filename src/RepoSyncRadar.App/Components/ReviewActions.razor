@@ -37,6 +37,13 @@
 
     <div class="review-reject-box">
         <label class="review-field-label" for="review-reject-reason">@L["ReviewActions.ArchiveReason"] <span>@L["ReviewActions.Required"]</span></label>
+        @if (HasArchivedReason)
+        {
+            <div class="review-archived-reason" data-testid="review-archived-reason">
+                <span>@L["ReviewActions.ArchivedReason"]</span>
+                <strong>@ArchivedReason</strong>
+            </div>
+        }
         <div class="review-reject-presets" data-testid="review-reject-reason-options">
             @foreach (var reason in RejectReasonPresets)
             {
@@ -120,6 +127,10 @@
 
     [Parameter] public string? Sha { get; set; }
 
+    [Parameter] public ReviewStatus? CurrentStatus { get; set; }
+
+    [Parameter] public string? CurrentReviewReason { get; set; }
+
     [Parameter] public IReadOnlyList<string> FilePaths { get; set; } = [];
 
     [Parameter] public EventCallback<ReviewStatus> Reviewed { get; set; }
@@ -128,6 +139,7 @@
     private static readonly IReadOnlyList<RejectReasonPreset> RejectReasonPresets =
     [
         new("ReviewActions.Reason.OutOfScope"),
+        new("ReviewActions.Reason.AlreadyReviewed"),
         new("ReviewActions.Reason.ExistingInformationOnly"),
         new("ReviewActions.Reason.Duplicate"),
         new("ReviewActions.Reason.MinorWordingChange"),
@@ -139,6 +151,8 @@
     private List<IgnorePatternSuggestion> _suggestedIgnorePatterns = [];
     private IReadOnlyList<string> _existingIgnorePatterns = [];
     private bool _busy;
+    private bool HasArchivedReason => CurrentStatus == ReviewStatus.Archived && !string.IsNullOrWhiteSpace(CurrentReviewReason);
+    private string ArchivedReason => CurrentReviewReason?.Trim() ?? string.Empty;
 
     protected override async Task OnInitializedAsync()
     {

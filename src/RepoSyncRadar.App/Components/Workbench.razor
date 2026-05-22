@@ -190,6 +190,8 @@
                         </div>
                     }
                     <ReviewActions Sha="@_selectedCommit.Sha"
+                                   CurrentStatus="@_selectedCommit.Review?.Status"
+                                   CurrentReviewReason="@_selectedCommit.Review?.Reason"
                                    FilePaths="@_selectedCommit.Files.Select(static file => file.Path).ToArray()"
                                    Reviewed="HandleReviewCompleted" />
                 }

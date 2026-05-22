@@ -91,6 +91,25 @@ public sealed class ReviewActionsTests : IDisposable
     }
 
     [Fact]
+    public void Archived_Commit_Shows_Saved_Reason()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.CurrentStatus, ReviewStatus.Archived)
+            .Add(c => c.CurrentReviewReason, "もう確認したから"));
+
+        var reason = cut.Find("[data-testid=\"review-archived-reason\"]");
+        Assert.Contains("アーカイブ済みの理由", reason.TextContent);
+        Assert.Contains("もう確認したから", reason.TextContent);
+    }
+
+    [Fact]
     public void Renders_Clear_Action_Groups()
     {
         var repo = Substitute.For<IRadarRepository>();
@@ -105,6 +124,7 @@ public sealed class ReviewActionsTests : IDisposable
         Assert.NotNull(cut.Find("[data-testid=\"review-primary-actions\"]"));
         Assert.Contains("注目する", cut.Find("[data-testid=\"review-adopt\"]").TextContent);
         Assert.Contains("保留する", cut.Find("[data-testid=\"review-later\"]").TextContent);
+        Assert.Contains("確認済み", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
         Assert.Contains("既存情報のみ", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
         Assert.Contains("アーカイブする", cut.Find("[data-testid=\"review-reject\"]").TextContent);
         Assert.Contains("類似ディレクトリ", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
@@ -127,6 +147,7 @@ public sealed class ReviewActionsTests : IDisposable
         Assert.Contains("Review Decision", cut.Find("[data-testid=\"review-actions\"]").TextContent);
         Assert.Contains("Watch", cut.Find("[data-testid=\"review-adopt\"]").TextContent);
         Assert.Contains("Defer", cut.Find("[data-testid=\"review-later\"]").TextContent);
+        Assert.Contains("Already reviewed", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
         Assert.Contains("Existing information only", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
         Assert.Contains("Archive", cut.Find("[data-testid=\"review-reject\"]").TextContent);
         Assert.Contains("Automatically skip similar directories", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
