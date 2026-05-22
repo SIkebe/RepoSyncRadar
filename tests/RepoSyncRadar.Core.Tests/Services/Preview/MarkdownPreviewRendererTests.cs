@@ -1245,8 +1245,36 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("rsr-diff-scrollbar", html, StringComparison.Ordinal);
         Assert.Contains("rsr-diff-scrollbar-marker", html, StringComparison.Ordinal);
+        Assert.Contains("right:12px", html, StringComparison.Ordinal);
         Assert.Contains(".rsr-rendered-diff-added,.rsr-rendered-diff-removed", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", html, StringComparison.Ordinal);
+        Assert.Contains("rect.height / maxScrollTop", html, StringComparison.Ordinal);
+        Assert.Contains("marker.style.height", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Strikes_Through_Removed_Rendered_Diffs()
+    {
+        const string beforeMarkdown = """
+            Intro.
+
+            Removed guidance.
+            """;
+        const string afterMarkdown = """
+            Intro.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "abc1234",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("text-decoration-line:line-through", html, StringComparison.Ordinal);
+        Assert.Contains("text-decoration-skip-ink:none", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-removed\">Removed guidance.</span>", html, StringComparison.Ordinal);
     }
 
     [Fact]

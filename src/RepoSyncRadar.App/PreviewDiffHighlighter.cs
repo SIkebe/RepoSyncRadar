@@ -220,7 +220,7 @@ internal static class PreviewDiffHighlighter
   bottom: 0 !important;
   pointer-events: none !important;
   position: fixed !important;
-  right: 2px !important;
+  right: 12px !important;
   top: 0 !important;
   width: 7px !important;
   z-index: 2147483647 !important;
@@ -228,7 +228,6 @@ internal static class PreviewDiffHighlighter
 .rsr-preview-diff-scrollbar-marker {
   border-radius: 999px !important;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.7), 0 1px 3px rgba(0,0,0,0.25) !important;
-  height: 4px !important;
   min-height: 4px !important;
   position: absolute !important;
   right: 0 !important;
@@ -275,8 +274,11 @@ internal static class PreviewDiffHighlighter
       }
       const marker = document.createElement('div');
       marker.className = `rsr-preview-diff-scrollbar-marker ${pane === 'before' ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
-      const top = Math.max(0, Math.min(1, (element.getBoundingClientRect().top + window.scrollY) / maxScrollTop));
+      const rect = element.getBoundingClientRect();
+      const top = Math.max(0, Math.min(1, (rect.top + window.scrollY) / maxScrollTop));
+      const height = Math.max(4, Math.min(window.innerHeight, (rect.height / maxScrollTop) * window.innerHeight));
       marker.style.top = `${(top * 100).toFixed(3)}%`;
+      marker.style.height = `${height.toFixed(1)}px`;
       rail.appendChild(marker);
     });
     document.body.appendChild(rail);
