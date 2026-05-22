@@ -536,6 +536,28 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Liquid_Syntax_Inside_Inline_Code_Remains_Code_Text()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            An alternative is to use the inverse of the `cancelled()` function, `${{ !cancelled() }}`.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/actions/how-tos/troubleshoot-workflows.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("<code>${{ !cancelled() }}</code>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Liquid 変数", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=&quot;rsr-liquid", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Expands_Reusable_Block_From_LiquidContext()
     {
         var context = new DocsLiquidContext(
@@ -1167,6 +1189,37 @@ public sealed class MarkdownPreviewRendererTests
         Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
         Assert.Contains("<td><code>issue</code></td>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">The issue itself.</span>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Preserves_Added_H3_Heading_When_Diff_Marked()
+    {
+        const string beforeMarkdown = """
+            ## Networking troubleshooting suggestions
+
+            Existing guidance.
+            """;
+        const string afterMarkdown = """
+            ## Networking troubleshooting suggestions
+
+            Existing guidance.
+
+            ### Runner IP addresses flagged by security scanners
+
+            GitHub-hosted runners use shared infrastructure.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/actions/how-tos/troubleshoot-workflows.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<h3", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">Runner IP addresses flagged by security scanners</span></h3>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("### Runner IP addresses flagged by security scanners", html, StringComparison.Ordinal);
     }
 
     [Fact]

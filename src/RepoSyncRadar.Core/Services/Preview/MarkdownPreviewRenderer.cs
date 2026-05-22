@@ -427,6 +427,79 @@ internal static partial class MarkdownPreviewRenderer
         {
             return content;
         }
+
+        return NeutralizeLiquidOutsideMarkdownCode(content);
+    }
+
+    private static string NeutralizeLiquidOutsideMarkdownCode(string content)
+    {
+        var lines = SplitMarkdownLines(content);
+        var neutralized = new StringBuilder(content.Length + 64);
+        var inCodeFence = false;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (index > 0)
+            {
+                neutralized.Append('\n');
+            }
+
+            var line = lines[index];
+            var trimmed = line.TrimStart();
+            var isCodeFence = trimmed.StartsWith("```", StringComparison.Ordinal)
+                || trimmed.StartsWith("~~~", StringComparison.Ordinal);
+            neutralized.Append(inCodeFence || isCodeFence
+                ? line
+                : NeutralizeLiquidOutsideInlineCode(line));
+            if (isCodeFence)
+            {
+                inCodeFence = !inCodeFence;
+            }
+        }
+        return neutralized.ToString();
+    }
+
+    private static string NeutralizeLiquidOutsideInlineCode(string line)
+    {
+        var neutralized = new StringBuilder(line.Length + 32);
+        var cursor = 0;
+        while (cursor < line.Length)
+        {
+            var tickStart = line.IndexOf('`', cursor);
+            if (tickStart < 0)
+            {
+                neutralized.Append(NeutralizeLiquidSegment(line[cursor..]));
+                break;
+            }
+
+            neutralized.Append(NeutralizeLiquidSegment(line[cursor..tickStart]));
+            var tickEnd = FindInlineCodeEnd(line, tickStart);
+            if (tickEnd < 0)
+            {
+                neutralized.Append(line[tickStart..]);
+                break;
+            }
+
+            neutralized.Append(line[tickStart..tickEnd]);
+            cursor = tickEnd;
+        }
+        return neutralized.ToString();
+    }
+
+    private static int FindInlineCodeEnd(string line, int tickStart)
+    {
+        var tickCount = 1;
+        while (tickStart + tickCount < line.Length && line[tickStart + tickCount] == '`')
+        {
+            tickCount++;
+        }
+
+        var closing = new string('`', tickCount);
+        var closeStart = line.IndexOf(closing, tickStart + tickCount, StringComparison.Ordinal);
+        return closeStart < 0 ? -1 : closeStart + tickCount;
+    }
+
+    private static string NeutralizeLiquidSegment(string content)
+    {
         var blocks = LiquidBlockRegex().Replace(content, static m =>
             string.Create(
                 CultureInfo.InvariantCulture,
@@ -1651,19 +1724,26 @@ internal static partial class MarkdownPreviewRenderer
         var trimmedStartLength = line.Length - line.TrimStart().Length;
         var leading = line[..trimmedStartLength];
         var content = line[trimmedStartLength..];
-        if (content.StartsWith("# ", StringComparison.Ordinal))
+        var headingMarkerLength = GetMarkdownHeadingMarkerLength(content);
+        if (headingMarkerLength > 0)
         {
-            return leading + "# <span class=\"" + markerClass + "\">" + content[2..] + "</span>";
-        }
-        if (content.StartsWith("## ", StringComparison.Ordinal))
-        {
-            return leading + "## <span class=\"" + markerClass + "\">" + content[3..] + "</span>";
+            return leading + content[..headingMarkerLength] + " <span class=\"" + markerClass + "\">" + content[(headingMarkerLength + 1)..] + "</span>";
         }
         if (content.StartsWith("- ", StringComparison.Ordinal))
         {
             return leading + "- <span class=\"" + markerClass + "\">" + content[2..] + "</span>";
         }
         return leading + "<span class=\"" + markerClass + "\">" + content + "</span>";
+    }
+
+    private static int GetMarkdownHeadingMarkerLength(string content)
+    {
+        var index = 0;
+        while (index < content.Length && index < 6 && content[index] == '#')
+        {
+            index++;
+        }
+        return index > 0 && index < content.Length && content[index] == ' ' ? index : 0;
     }
 
     private static string MarkMarkdownTableLine(string line, string markerClass, string? comparisonLine)
