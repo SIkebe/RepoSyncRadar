@@ -1047,11 +1047,32 @@ public partial class MainWindow : Window
         if (_beforePreviewDiffReady && _afterPreviewDiffReady)
         {
             var generation = _previewDiffGeneration;
+            if (IsMarkdownComparisonRequest(request))
+            {
+                OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
+                    request.BeforeLabel,
+                    0,
+                    request.SourceChangeCount);
+                PreviewDocsHeaderText.Text = BuildDiffHeaderLabel(
+                    request.AfterLabel,
+                    0,
+                    request.SourceChangeCount);
+                HidePreviewPaneStatus(isBeforePane: true);
+                HidePreviewPaneStatus(isBeforePane: false);
+                return;
+            }
+
             ShowPreviewPaneStatus(isBeforePane: true, "差分を解析中…", "本文ブロックを抽出してハイライトを適用しています。");
             ShowPreviewPaneStatus(isBeforePane: false, "差分を解析中…", "本文ブロックを抽出してハイライトを適用しています。");
             _ = ApplyPreviewDiffHighlightsAsync(generation);
         }
     }
+
+    private static bool IsMarkdownComparisonRequest(PreviewComparisonRequest request)
+        => IsMarkdownPreviewUri(request.BeforeUrl) || IsMarkdownPreviewUri(request.AfterUrl);
+
+    internal static bool IsMarkdownPreviewUri(Uri uri)
+        => uri.AbsolutePath.StartsWith("/markdown/", StringComparison.Ordinal);
 
     private async Task InstallPreviewScrollSynchronizationAsync(
         WebView2CompositionControl view,

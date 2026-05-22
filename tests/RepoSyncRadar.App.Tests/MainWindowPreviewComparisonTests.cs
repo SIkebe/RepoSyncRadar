@@ -217,6 +217,15 @@ public sealed class MainWindowPreviewComparisonTests
             MainWindow.BuildDiffHeaderLabel("PR HEAD Markdown", 0, 1));
     }
 
+    [Theory]
+    [InlineData("http://127.0.0.1:4500/markdown/before?v=fpt&file=data%2Freusables%2Fwebhooks%2Fissue_properties.md", true)]
+    [InlineData("http://127.0.0.1:4500/markdown/after?v=fpt&file=CHANGELOG.md", true)]
+    [InlineData("http://127.0.0.1:4501/en/rest/using-the-rest-api/github-event-types", false)]
+    public void IsMarkdownPreviewUri_Detects_Rendered_Markdown_Comparison_Urls(string url, bool expected)
+    {
+        Assert.Equal(expected, MainWindow.IsMarkdownPreviewUri(new Uri(url)));
+    }
+
     [Fact]
     public void BuildComparisonFilePathLabel_Trims_Path_And_Allows_Empty()
     {
