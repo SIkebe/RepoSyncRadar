@@ -178,7 +178,17 @@ internal static class PreviewDiffHighlighter
 
         var indexesJson = JsonSerializer.Serialize(changedIndexes, JsonOptions);
         var paneJson = JsonSerializer.Serialize(pane == PreviewDiffPane.Before ? "before" : "after", JsonOptions);
-        var script = $$"""
+        var script = BuildApplyPlanScript(indexesJson, paneJson);
+
+        await view.ExecuteScriptAsync(script);
+    }
+
+    internal static string BuildApplyPlanScript(string indexesJson, string paneJson)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(indexesJson);
+        ArgumentException.ThrowIfNullOrWhiteSpace(paneJson);
+
+        return $$"""
 (() => {
   const styleId = 'rsr-preview-diff-style';
   if (!document.getElementById(styleId)) {
@@ -206,6 +216,30 @@ internal static class PreviewDiffHighlighter
   border-left: 4px solid #3fb950 !important;
   box-shadow: inset 0 0 0 1px rgba(63, 185, 80, 0.28) !important;
 }
+.rsr-preview-diff-scrollbar {
+  bottom: 0 !important;
+  pointer-events: none !important;
+  position: fixed !important;
+  right: 2px !important;
+  top: 0 !important;
+  width: 7px !important;
+  z-index: 2147483647 !important;
+}
+.rsr-preview-diff-scrollbar-marker {
+  border-radius: 999px !important;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.7), 0 1px 3px rgba(0,0,0,0.25) !important;
+  height: 4px !important;
+  min-height: 4px !important;
+  position: absolute !important;
+  right: 0 !important;
+  width: 7px !important;
+}
+.rsr-preview-diff-scrollbar-marker-before {
+  background: #f85149 !important;
+}
+.rsr-preview-diff-scrollbar-marker-after {
+  background: #3fb950 !important;
+}
 `;
     document.head.appendChild(style);
   }
@@ -226,6 +260,28 @@ internal static class PreviewDiffHighlighter
       pane === 'before' ? 'rsr-preview-diff-before' : 'rsr-preview-diff-after');
   });
 
+  const markerRootId = 'rsr-preview-diff-scrollbar';
+  document.getElementById(markerRootId)?.remove();
+  if (changedIndexes.size > 0) {
+    const root = document.scrollingElement || document.documentElement || document.body;
+    const maxScrollTop = Math.max(1, root.scrollHeight - window.innerHeight);
+    const rail = document.createElement('div');
+    rail.id = markerRootId;
+    rail.className = 'rsr-preview-diff-scrollbar';
+    changedIndexes.forEach((index) => {
+      const element = document.querySelector(`[data-rsr-diff-index="${index}"]`);
+      if (!element) {
+        return;
+      }
+      const marker = document.createElement('div');
+      marker.className = `rsr-preview-diff-scrollbar-marker ${pane === 'before' ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
+      const top = Math.max(0, Math.min(1, (element.getBoundingClientRect().top + window.scrollY) / maxScrollTop));
+      marker.style.top = `${(top * 100).toFixed(3)}%`;
+      rail.appendChild(marker);
+    });
+    document.body.appendChild(rail);
+  }
+
   const firstChanged = document.querySelector('.rsr-preview-diff-block');
   if (firstChanged) {
     firstChanged.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -234,8 +290,6 @@ internal static class PreviewDiffHighlighter
   return changedIndexes.size;
 })();
 """;
-
-        await view.ExecuteScriptAsync(script);
     }
 
     private static IReadOnlyList<PreviewDiffBlock> DeserializeBlocks(string? scriptResult)

@@ -1192,6 +1192,32 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Adds_Scrollbar_Markers_For_Rendered_Diffs()
+    {
+        const string beforeMarkdown = """
+            Intro.
+            """;
+        const string afterMarkdown = """
+            Intro.
+
+            Added guidance.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("rsr-diff-scrollbar", html, StringComparison.Ordinal);
+        Assert.Contains("rsr-diff-scrollbar-marker", html, StringComparison.Ordinal);
+        Assert.Contains(".rsr-rendered-diff-added,.rsr-rendered-diff-removed", html, StringComparison.Ordinal);
+        Assert.Contains("marker.style.top", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_Added_H3_Heading_When_Diff_Marked()
     {
         const string beforeMarkdown = """

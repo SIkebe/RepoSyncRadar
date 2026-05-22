@@ -487,6 +487,17 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_ApplyPlanScript_Adds_Scrollbar_Diff_Markers()
+    {
+        var script = PreviewDiffHighlighter.BuildApplyPlanScript("[1,2]", "\"after\"");
+
+        Assert.Contains("rsr-preview-diff-scrollbar", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-preview-diff-scrollbar-marker-after", script, StringComparison.Ordinal);
+        Assert.Contains("getBoundingClientRect().top + window.scrollY", script, StringComparison.Ordinal);
+        Assert.Contains("marker.style.top", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildDocsThemeScript_Dark_Sets_Data_Color_Mode_Dark()
     {
         var script = MainWindow.BuildDocsThemeScript(DocsThemeMode.Dark);
