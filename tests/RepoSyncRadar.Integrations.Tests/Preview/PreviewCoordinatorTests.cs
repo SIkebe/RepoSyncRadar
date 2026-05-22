@@ -266,6 +266,78 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Renders_Reusable_Through_Changed_Content_Usage()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-reusable.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-reusable-markdown");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "cat-file -e headsha^{commit}", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(128, string.Empty, "missing")));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, sha) =>
+            {
+                var reusable = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "`issue` | `object` | The issue itself."
+                    : "`issue` | `object` | The issue itself.\n`label` | `object` | The optional label.";
+                WriteRepoFile(path, "data/reusables/webhooks/issue_properties.md", reusable);
+                WriteRepoFile(path, "content/webhooks/less-relevant.md", "---\ntitle: Less relevant\n---\n\n{% data reusables.webhooks.issue_properties %}");
+                WriteRepoFile(path, "content/webhooks/preferred.md", "---\ntitle: Preferred usage\n---\n\n{% data reusables.webhooks.issue_properties %}");
+            });
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123,
+            "headsha",
+            "data/reusables/webhooks/issue_properties.md",
+            progress: null,
+            version: null,
+            changedFilePaths:
+            [
+                "data/reusables/webhooks/issue_properties.md",
+                "content/webhooks/preferred.md",
+            ],
+            cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Equal("data/reusables/webhooks/issue_properties.md", link!.RequestedFilePath);
+        Assert.Equal("content/webhooks/preferred.md", link.RenderedFilePath);
+        Assert.Equal(2, link.ReusableReferenceCount);
+        Assert.Contains("file=data%2Freusables%2Fwebhooks%2Fissue_properties.md", link.AfterUrl.Query, StringComparison.Ordinal);
+        Assert.Contains("rendered=content%2Fwebhooks%2Fpreferred.md", link.AfterUrl.Query, StringComparison.Ordinal);
+        Assert.Contains("Preferred usage", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains("The optional label", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.DoesNotContain("Less relevant", capturedPages["/markdown/after"], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PrepareMarkdownComparisonPreviewAsync_Materializes_Local_Image_Assets_From_BareClone()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -1341,6 +1413,13 @@ public sealed class PreviewCoordinatorTests : IDisposable
             new FixedPreviewPortAllocator(previewBasePort),
             options,
             NullLogger<PreviewCoordinator>.Instance);
+    }
+
+    private static void WriteRepoFile(string root, string repoPath, string content)
+    {
+        var path = Path.Combine(root, repoPath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, content);
     }
 
     private static readonly string _fallbackObjectSourceRoot = Path.Combine(

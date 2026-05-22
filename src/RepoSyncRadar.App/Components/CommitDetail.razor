@@ -433,6 +433,10 @@
     private static bool IsMarkdownPreviewable(CommitFile file)
         => PreviewPathMapper.IsMarkdown(file.Path);
 
+    private static bool IsReusableMarkdownFile(CommitFile file)
+        => file.Path.Replace('\\', '/').StartsWith("data/reusables/", StringComparison.Ordinal)
+            && file.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
+
     private bool IsLocalComparisonPreviewable(CommitFile file)
         => IsPreviewMappable(file) || IsMarkdownPreviewable(file);
 
@@ -644,13 +648,22 @@
                         StateHasChanged();
                     });
                 });
-                var link = await markdownCoordinator.PrepareMarkdownComparisonPreviewAsync(
-                    commit.PrNumber,
-                    commit.Sha,
-                    file.Path,
-                    progress,
-                    version: version,
-                    cancellationToken: token);
+                var link = IsReusableMarkdownFile(file)
+                    ? await markdownCoordinator.PrepareMarkdownComparisonPreviewAsync(
+                        commit.PrNumber,
+                        commit.Sha,
+                        file.Path,
+                        progress,
+                        version,
+                        commit.Files.Select(static changed => changed.Path).ToArray(),
+                        token)
+                    : await markdownCoordinator.PrepareMarkdownComparisonPreviewAsync(
+                        commit.PrNumber,
+                        commit.Sha,
+                        file.Path,
+                        progress,
+                        version,
+                        token);
                 if (link is not null)
                 {
                     if (!CanPublishPreview(operation, commit.Sha))
@@ -659,12 +672,13 @@
                     }
 
                     var previewPosition = GetPreviewPosition(file);
+                    var renderedPath = link.RenderedFilePath ?? file.Path;
                     navigator.PublishComparison(new PreviewComparisonRequest(
                         link.BeforeUrl,
                         link.AfterUrl,
                         L["CommitDetail.BeforeLabel", ShortSha(link.BeforeSha), "Markdown"],
                         $"PR HEAD {ShortSha(link.AfterSha)} Markdown",
-                        file.Path,
+                        renderedPath,
                         previewPosition.Ordinal,
                         previewPosition.Total,
                         CurrentVersion: link.CurrentVersion,
@@ -672,7 +686,9 @@
                         SourceChangeCount: link.SourceChangeCount));
                     _activePreviewPath = file.Path;
                     _activeVersion = link.CurrentVersion;
-                    _previewStatus = L["CommitDetail.MarkdownComparisonOpened", file.Path];
+                    _previewStatus = string.Equals(renderedPath, file.Path, StringComparison.Ordinal)
+                        ? L["CommitDetail.MarkdownComparisonOpened", file.Path]
+                        : L["CommitDetail.MarkdownReusableUsageOpened", file.Path, renderedPath];
                     return;
                 }
                 if (CanUpdatePreviewFeedback(operation))

@@ -76,6 +76,15 @@ public interface IPreviewCoordinator
         DocsVersion? version = null,
         CancellationToken cancellationToken = default);
 
+    Task<PreviewComparisonLink?> PrepareMarkdownComparisonPreviewAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        IProgress<string>? progress,
+        DocsVersion? version,
+        IReadOnlyList<string> changedFilePaths,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Stops the running preview server (if any) and clears the active session.</summary>
     Task StopAsync(CancellationToken cancellationToken = default);
 
@@ -150,7 +159,18 @@ public sealed record PreviewComparisonLink(
     /// Frontmatter / Liquid 条件など、補足表示するソース差分の件数。
     /// </summary>
     public int SourceChangeCount { get; init; }
+
+    /// <summary>ユーザーが選択した元の Markdown パス。reusable 使用箇所プレビューでは reusable 自体のパス。</summary>
+    public string? RequestedFilePath { get; init; }
+
+    /// <summary>実際にレンダリングした Markdown パス。reusable 使用箇所プレビューでは参照元 content ページ。</summary>
+    public string? RenderedFilePath { get; init; }
+
+    /// <summary>reusable の参照元候補数。通常 Markdown プレビューでは 0。</summary>
+    public int ReusableReferenceCount { get; init; }
 }
+
+internal sealed record ReusablePreviewTarget(string FilePath, int ReferenceCount);
 
 /// <inheritdoc cref="IPreviewCoordinator" />
 public sealed partial class PreviewCoordinator : IPreviewCoordinator
@@ -395,6 +415,24 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         IProgress<string>? progress = null,
         DocsVersion? version = null,
         CancellationToken cancellationToken = default)
+        => await PrepareMarkdownComparisonPreviewAsync(
+                prNumber,
+                sha,
+                filePath,
+                progress,
+                version,
+                [],
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task<PreviewComparisonLink?> PrepareMarkdownComparisonPreviewAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        IProgress<string>? progress,
+        DocsVersion? version,
+        IReadOnlyList<string> changedFilePaths,
+        CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(prNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
@@ -418,22 +456,39 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
-        progress?.Report($"{filePath} の変更前 Markdown を bare clone から読み込み中…");
-        var beforeMarkdown = await _worktree.ReadFileTextAsync(session.BeforeSha, filePath, cancellationToken).ConfigureAwait(false);
-        progress?.Report($"{filePath} の PR HEAD Markdown を bare clone から読み込み中…");
-        var afterMarkdown = await _worktree.ReadFileTextAsync(sha, filePath, cancellationToken).ConfigureAwait(false);
+        var requestedFilePath = filePath.Trim();
+        var renderedFilePath = requestedFilePath;
+        var reusableReferenceCount = 0;
+        if (await TryResolveReusablePreviewTargetAsync(
+                session.BeforeSha,
+                sha,
+                requestedFilePath,
+                changedFilePaths,
+                progress,
+                cancellationToken)
+            .ConfigureAwait(false) is { } reusableTarget)
+        {
+            renderedFilePath = reusableTarget.FilePath;
+            reusableReferenceCount = reusableTarget.ReferenceCount;
+            progress?.Report($"{requestedFilePath} は使用箇所 {renderedFilePath} でプレビューします");
+        }
+
+        progress?.Report($"{renderedFilePath} の変更前 Markdown を bare clone から読み込み中…");
+        var beforeMarkdown = await _worktree.ReadFileTextAsync(session.BeforeSha, renderedFilePath, cancellationToken).ConfigureAwait(false);
+        progress?.Report($"{renderedFilePath} の PR HEAD Markdown を bare clone から読み込み中…");
+        var afterMarkdown = await _worktree.ReadFileTextAsync(sha, renderedFilePath, cancellationToken).ConfigureAwait(false);
 
         progress?.Report("変更前 Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
         var beforeLiquid = await LoadLiquidContextCachedAsync(
             session.BeforeSha,
-                filePath,
+                renderedFilePath,
                 beforeMarkdown,
                 cancellationToken)
             .ConfigureAwait(false);
         progress?.Report("PR HEAD Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
         var afterLiquid = await LoadLiquidContextCachedAsync(
             sha,
-                filePath,
+                renderedFilePath,
                 afterMarkdown,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -457,7 +512,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
         progress?.Report("変更前 Markdown を HTML に変換中…");
         var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
-            filePath,
+            renderedFilePath,
             beforeMarkdown,
             session.BeforeSha,
             "変更前",
@@ -467,11 +522,14 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             versionImpacts: versionImpacts,
             frontmatterChanges: frontmatterChanges,
             sourceDiff: sourceDiff,
-            assetBasePath: MarkdownBeforeAssetRoute);
+            assetBasePath: MarkdownBeforeAssetRoute,
+            diffAgainstMarkdown: afterMarkdown,
+            diffAgainstLiquidContext: afterLiquid,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
 
         progress?.Report("PR HEAD Markdown を HTML に変換中…");
         var afterHtml = MarkdownPreviewRenderer.RenderDocument(
-            filePath,
+            renderedFilePath,
             afterMarkdown,
             sha,
             "PR HEAD",
@@ -481,7 +539,10 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             versionImpacts: versionImpacts,
             frontmatterChanges: frontmatterChanges,
             sourceDiff: sourceDiff,
-            assetBasePath: MarkdownAfterAssetRoute);
+            assetBasePath: MarkdownAfterAssetRoute,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffAgainstLiquidContext: beforeLiquid,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
         var pages = new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -517,10 +578,10 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         // 判断して navigation をスキップし、「変更前ページを準備中…」の
         // オーバーレイから先に進めなくなる。
         // LocalPreviewContentServer.NormalizeRoute は query を捨てるためルーティングには影響しない。
-        var query = BuildMarkdownPreviewQuery(effectiveVersion, filePath);
+        var query = BuildMarkdownPreviewQuery(effectiveVersion, requestedFilePath, renderedFilePath);
         var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before?{query}"));
         var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after?{query}"));
-        LogMarkdownComparisonReady(_logger, session.BeforeSha, sha, filePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
+        LogMarkdownComparisonReady(_logger, session.BeforeSha, sha, renderedFilePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
         return new PreviewComparisonLink(
             beforeUrl,
             afterUrl,
@@ -534,13 +595,121 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             CurrentVersion = effectiveVersion,
             AffectedVersions = affectedVersions,
             SourceChangeCount = sourceChangeCount,
+            RequestedFilePath = requestedFilePath,
+            RenderedFilePath = renderedFilePath,
+            ReusableReferenceCount = reusableReferenceCount,
         };
     }
 
-    private static string BuildMarkdownPreviewQuery(DocsVersion version, string filePath)
-        => string.Create(
+    private static string BuildMarkdownPreviewQuery(DocsVersion version, string filePath, string? renderedFilePath = null)
+    {
+        var trimmedFilePath = filePath.Trim();
+        var query = string.Create(
             CultureInfo.InvariantCulture,
-            $"v={Uri.EscapeDataString(version.Slug)}&file={Uri.EscapeDataString(filePath.Trim())}");
+            $"v={Uri.EscapeDataString(version.Slug)}&file={Uri.EscapeDataString(trimmedFilePath)}");
+        var trimmedRenderedPath = renderedFilePath?.Trim();
+        return string.IsNullOrWhiteSpace(trimmedRenderedPath)
+            || string.Equals(trimmedFilePath, trimmedRenderedPath, StringComparison.Ordinal)
+            ? query
+            : query + "&rendered=" + Uri.EscapeDataString(trimmedRenderedPath);
+    }
+
+    private async Task<ReusablePreviewTarget?> TryResolveReusablePreviewTargetAsync(
+        string beforeSha,
+        string afterSha,
+        string filePath,
+        IReadOnlyList<string>? changedFilePaths,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (!TryBuildReusableKey(filePath, out var reusableKey))
+        {
+            return null;
+        }
+
+        var needle = "reusables." + reusableKey;
+        progress?.Report($"{filePath} の使用箇所を content ページから検索中…");
+        var beforeReferences = await _worktree.FindFilesContainingAsync(
+                beforeSha,
+                "content",
+                needle,
+                ".md",
+                cancellationToken)
+            .ConfigureAwait(false);
+        var afterReferences = await _worktree.FindFilesContainingAsync(
+                afterSha,
+                "content",
+                needle,
+                ".md",
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var candidates = beforeReferences
+            .Concat(afterReferences)
+            .Where(static path => path.StartsWith("content/", StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            progress?.Report($"{filePath} の content 使用箇所が見つからないため、reusable 単体で表示します");
+            return null;
+        }
+
+        var changed = changedFilePaths is { Count: > 0 }
+            ? new HashSet<string>(changedFilePaths.Select(NormalizeRepoPathForComparison), StringComparer.Ordinal)
+            : [];
+        var beforeSet = new HashSet<string>(beforeReferences, StringComparer.Ordinal);
+        var afterSet = new HashSet<string>(afterReferences, StringComparer.Ordinal);
+        var selected = candidates
+            .OrderBy(path => GetReusableReferencePriority(path, changed, beforeSet, afterSet))
+            .ThenBy(static path => path, StringComparer.Ordinal)
+            .First();
+        return new ReusablePreviewTarget(selected, candidates.Length);
+    }
+
+    private static int GetReusableReferencePriority(
+        string path,
+        HashSet<string> changedFilePaths,
+        HashSet<string> beforeReferences,
+        HashSet<string> afterReferences)
+    {
+        if (changedFilePaths.Contains(NormalizeRepoPathForComparison(path)))
+        {
+            return 0;
+        }
+        if (beforeReferences.Contains(path) && afterReferences.Contains(path))
+        {
+            return 10;
+        }
+        if (afterReferences.Contains(path))
+        {
+            return 20;
+        }
+        return 30;
+    }
+
+    private static bool TryBuildReusableKey(string filePath, out string key)
+    {
+        key = string.Empty;
+        var normalized = NormalizeRepoPathForComparison(filePath);
+        const string prefix = "data/reusables/";
+        const string suffix = ".md";
+        if (!normalized.StartsWith(prefix, StringComparison.Ordinal)
+            || !normalized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        var relative = normalized[prefix.Length..^suffix.Length];
+        if (string.IsNullOrWhiteSpace(relative))
+        {
+            return false;
+        }
+        key = relative.Replace('/', '.');
+        return true;
+    }
+
+    private static string NormalizeRepoPathForComparison(string path)
+        => path.Trim().Replace('\\', '/').TrimStart('/');
 
     /// <summary>
     /// §Step 19.10 (perf): 同一 (prNumber, sha) で繰り返し呼ばれても重い前準備

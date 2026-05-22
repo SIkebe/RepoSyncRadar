@@ -63,6 +63,7 @@
   <data name="CommitDetail.Files" xml:space="preserve"><value>Files</value></data>
   <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>Preparing local preview for {0}...</value></data>
   <data name="CommitDetail.MarkdownComparisonOpened" xml:space="preserve"><value>Opened {0} as a Markdown parent / PR HEAD comparison</value></data>
+  <data name="CommitDetail.MarkdownReusableUsageOpened" xml:space="preserve"><value>Opened {0} through usage page {1}</value></data>
   <data name="CommitDetail.MarkdownPreviewPreparing" xml:space="preserve"><value>Preparing Markdown comparison for {0}...</value></data>
   <data name="CommitDetail.NoPreviewableFiles" xml:space="preserve"><value>No comparable files</value></data>
   <data name="CommitDetail.NoPublishableUrl" xml:space="preserve"><value>This file does not map to a published docs URL</value></data>

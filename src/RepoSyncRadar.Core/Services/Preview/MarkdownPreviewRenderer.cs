@@ -20,6 +20,13 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 internal static partial class MarkdownPreviewRenderer
 {
+    public enum RenderedMarkdownDiffSide
+    {
+        None,
+        Before,
+        After,
+    }
+
     private static readonly MarkdownPipeline s_pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
         // NOTE: We intentionally do NOT call DisableHtml() here. github/docs
@@ -82,7 +89,10 @@ internal static partial class MarkdownPreviewRenderer
         IReadOnlyList<DocsVersionImpactDetail>? versionImpacts = null,
         IReadOnlyList<MarkdownFrontmatterChange>? frontmatterChanges = null,
         MarkdownSourceDiffSummary? sourceDiff = null,
-        string? assetBasePath = null)
+        string? assetBasePath = null,
+        string? diffAgainstMarkdown = null,
+        DocsLiquidContext? diffAgainstLiquidContext = null,
+        RenderedMarkdownDiffSide diffSide = RenderedMarkdownDiffSide.None)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repoPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
@@ -127,7 +137,14 @@ internal static partial class MarkdownPreviewRenderer
                 content,
                 effectiveLiquidContext,
                 effectiveVersion);
-            var liquidBlocksRendered = RenderOfficialLiquidBlocks(liquidEvaluated);
+            var tableFragmentsExpanded = ExpandMarkdownTableFragments(liquidEvaluated);
+            var diffMarked = ApplyRenderedMarkdownDiff(
+                tableFragmentsExpanded,
+                diffAgainstMarkdown,
+                diffAgainstLiquidContext ?? DocsLiquidContext.Empty,
+                effectiveVersion,
+                diffSide);
+            var liquidBlocksRendered = RenderOfficialLiquidBlocks(diffMarked);
             var githubAlertsRendered = RenderGitHubAlertBlocks(liquidBlocksRendered);
             var liquidNeutralized = NeutralizeLiquid(githubAlertsRendered);
             body = Markdown.ToHtml(liquidNeutralized, s_pipeline);
@@ -176,6 +193,8 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("pre{background:var(--rsr-pre-bg);border-radius:6px;overflow:auto;padding:16px;}pre code{background:transparent;padding:0;}");
         html.AppendLine("img,video{max-width:100%;height:auto;}picture{display:block;margin:0 0 1rem;}picture img{margin-bottom:0;}");
         html.AppendLine("blockquote{border-left:4px solid var(--rsr-blockquote-border);color:var(--rsr-muted);padding-left:1rem;}table{border-collapse:collapse;display:block;overflow:auto;}td,th{border:1px solid var(--rsr-border);padding:6px 13px;}th{background:var(--rsr-th-bg);}");
+        html.AppendLine(".rsr-rendered-diff-added{background:#2da44e24;border-radius:3px;box-shadow:0 0 0 2px #2da44e24;}.rsr-rendered-diff-removed{background:#cf222e24;border-radius:3px;box-shadow:0 0 0 2px #cf222e24;}");
+        html.AppendLine("td .rsr-rendered-diff-added,th .rsr-rendered-diff-added,td .rsr-rendered-diff-removed,th .rsr-rendered-diff-removed{display:block;margin:-6px -13px;padding:6px 13px;}");
         html.AppendLine(".octicon{display:inline-block;vertical-align:text-bottom;fill:currentColor;overflow:visible;}");
         html.AppendLine(".ghd-alert{border:1px solid var(--rsr-border);border-left-width:4px;border-radius:6px;margin:0 0 1rem;padding:12px 14px;background:var(--rsr-article-bg);}");
         html.AppendLine(".ghd-alert>:last-child,.ghd-tool>:last-child{margin-bottom:0;}");
@@ -227,8 +246,9 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-version-change[data-change-kind='removed']{border-left-color:#cf222e;}");
         html.AppendLine(".rsr-version-change[data-change-kind='updated']{border-left-color:#bf8700;}");
         html.AppendLine(".rsr-version-change-kind{color:var(--rsr-muted);font-size:.72rem;font-weight:700;}");
-        html.AppendLine(".rsr-version-change p{margin:0;font-size:.78rem;}");
+        html.AppendLine(".rsr-version-change-line{align-items:start;display:grid;grid-template-columns:4.5rem minmax(0,1fr);gap:8px;margin:0;font-size:.78rem;}");
         html.AppendLine(".rsr-version-change-label{color:var(--rsr-muted);font-weight:700;margin-right:.35rem;}");
+        html.AppendLine(".rsr-version-change-note{color:var(--rsr-muted);font-size:.78rem;margin:0;}");
         html.AppendLine(".rsr-version-diff-more{color:var(--rsr-muted);font-size:.76rem;margin:8px 0 0;}");
         html.AppendLine(".rsr-frontmatter-diff{border:1px solid var(--rsr-border);border-left:4px solid var(--rsr-link);border-radius:6px;background:var(--rsr-pre-bg);margin:0 0 1rem;padding:12px;}");
         html.AppendLine(".rsr-frontmatter-diff h2{font-size:.95rem;margin:0 0 6px;}");
@@ -1381,18 +1401,523 @@ internal static partial class MarkdownPreviewRenderer
             .Append("</span>");
         if (!string.IsNullOrWhiteSpace(change.BeforeExcerpt))
         {
-            html.Append("<p><span class=\"rsr-version-change-label\">変更前</span>")
-                .Append(WebUtility.HtmlEncode(change.BeforeExcerpt))
-                .Append("</p>");
+            AppendVersionChangeExcerpt(html, "変更前", change.BeforeExcerpt);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterExcerpt))
         {
-            html.Append("<p><span class=\"rsr-version-change-label\">PR HEAD</span>")
-                .Append(WebUtility.HtmlEncode(change.AfterExcerpt))
-                .Append("</p>");
+            AppendVersionChangeExcerpt(html, "PR HEAD", change.AfterExcerpt);
         }
         html.Append("</div>");
     }
+
+    private static void AppendVersionChangeExcerpt(StringBuilder html, string label, string excerpt)
+    {
+        html.Append("<div class=\"rsr-version-change-line\"><span class=\"rsr-version-change-label\">")
+            .Append(WebUtility.HtmlEncode(label))
+            .Append("</span>");
+        if (LooksLikeMarkdownTableExcerpt(excerpt))
+        {
+            html.Append("<p class=\"rsr-version-change-note\">表を含む差分です。本文のレンダリング済み差分で確認してください。</p>");
+        }
+        else
+        {
+            html.Append("<span>")
+                .Append(WebUtility.HtmlEncode(excerpt))
+                .Append("</span>");
+        }
+        html.Append("</div>");
+    }
+
+    private static string ApplyRenderedMarkdownDiff(
+        string renderedMarkdown,
+        string? diffAgainstMarkdown,
+        DocsLiquidContext diffAgainstLiquidContext,
+        DocsVersion version,
+        RenderedMarkdownDiffSide diffSide)
+    {
+        if (diffSide == RenderedMarkdownDiffSide.None || string.IsNullOrEmpty(diffAgainstMarkdown))
+        {
+            return renderedMarkdown;
+        }
+
+        var (_, comparisonContent) = SplitFrontmatter(diffAgainstMarkdown);
+        var comparisonRendered = DocsLiquidEvaluator.Evaluate(
+            comparisonContent,
+            diffAgainstLiquidContext,
+            version);
+        comparisonRendered = ExpandMarkdownTableFragments(comparisonRendered);
+        if (string.Equals(renderedMarkdown, comparisonRendered, StringComparison.Ordinal))
+        {
+            return renderedMarkdown;
+        }
+
+        var currentLines = SplitMarkdownLines(renderedMarkdown);
+        var comparisonLines = SplitMarkdownLines(comparisonRendered);
+        var changed = FindCurrentChangedLines(currentLines, comparisonLines);
+        if (changed.Count == 0)
+        {
+            return renderedMarkdown;
+        }
+
+        var marked = new StringBuilder(renderedMarkdown.Length + (changed.Count * 48));
+        var markerClass = diffSide == RenderedMarkdownDiffSide.After
+            ? "rsr-rendered-diff-added"
+            : "rsr-rendered-diff-removed";
+        var inCodeFence = false;
+        for (var index = 0; index < currentLines.Length; index++)
+        {
+            if (index > 0)
+            {
+                marked.Append('\n');
+            }
+            var line = currentLines[index];
+            var trimmed = line.TrimStart();
+            var isCodeFence = trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal);
+            var canMark = !inCodeFence && !isCodeFence && CanMarkRenderedDiffLine(trimmed);
+            marked.Append(changed.Contains(index) && canMark
+                ? MarkRenderedDiffLine(line, markerClass, comparisonLines)
+                : line);
+            if (isCodeFence)
+            {
+                inCodeFence = !inCodeFence;
+            }
+        }
+        return marked.ToString();
+    }
+
+    private static string ExpandMarkdownTableFragments(string markdown)
+    {
+        var lines = SplitMarkdownLines(markdown);
+        var expanded = new StringBuilder(markdown.Length + 128);
+        var pendingRows = new List<string>();
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            var tableRows = SplitConcatenatedMarkdownTableRows(line);
+            if (tableRows.Count > 0)
+            {
+                pendingRows.AddRange(tableRows);
+                continue;
+            }
+
+            FlushTableFragment(expanded, pendingRows);
+            if (expanded.Length > 0)
+            {
+                expanded.Append('\n');
+            }
+            expanded.Append(line);
+        }
+
+        FlushTableFragment(expanded, pendingRows);
+        return expanded.ToString();
+    }
+
+    private static List<string> SplitConcatenatedMarkdownTableRows(string line)
+    {
+        if (IsMarkdownTableLine(line))
+        {
+            return [line];
+        }
+
+        var trimmed = line.Trim();
+        if (!trimmed.Contains("||", StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        var rows = new List<string>();
+        foreach (var part in trimmed.Split("||", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var candidate = part.Trim('|', ' ');
+            if (!IsMarkdownTableLine(candidate))
+            {
+                return [];
+            }
+            rows.Add(candidate);
+        }
+        return rows.Count > 1 ? rows : [];
+    }
+
+    private static void FlushTableFragment(StringBuilder markdown, List<string> pendingRows)
+    {
+        if (pendingRows.Count == 0)
+        {
+            return;
+        }
+
+        var columnCount = pendingRows.Select(static row => SplitMarkdownTableRow(row).Count).DefaultIfEmpty(0).Max();
+        if (columnCount > 0 && !pendingRows.Any(IsMarkdownTableSeparatorRow))
+        {
+            if (markdown.Length > 0)
+            {
+                markdown.Append('\n');
+            }
+            AppendInferredTableHeader(markdown, columnCount);
+        }
+
+        foreach (var row in pendingRows)
+        {
+            if (markdown.Length > 0)
+            {
+                markdown.Append('\n');
+            }
+            markdown.Append(row);
+        }
+        pendingRows.Clear();
+    }
+
+    private static void AppendInferredTableHeader(StringBuilder markdown, int columnCount)
+    {
+        var headers = columnCount switch
+        {
+            2 => ["Name", "Description"],
+            3 => ["Name", "Type", "Description"],
+            _ => Enumerable.Range(1, columnCount).Select(static index => string.Create(CultureInfo.InvariantCulture, $"Column {index}")).ToArray(),
+        };
+        markdown.Append("| ").AppendJoin(" | ", headers).AppendLine(" |");
+        markdown.Append('|');
+        for (var index = 0; index < columnCount; index++)
+        {
+            markdown.Append(" --- |");
+        }
+    }
+
+    private static bool CanMarkRenderedDiffLine(string trimmedLine)
+        => !trimmedLine.StartsWith("{%", StringComparison.Ordinal)
+            && !trimmedLine.StartsWith("{{", StringComparison.Ordinal)
+            && !trimmedLine.StartsWith('<');
+
+    private static string[] SplitMarkdownLines(string markdown)
+        => markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
+
+    private static HashSet<int> FindCurrentChangedLines(string[] currentLines, string[] comparisonLines)
+    {
+        var table = BuildLineLcsTable(currentLines, comparisonLines);
+        var changed = new HashSet<int>();
+        var currentIndex = 0;
+        var comparisonIndex = 0;
+        while (currentIndex < currentLines.Length || comparisonIndex < comparisonLines.Length)
+        {
+            if (currentIndex < currentLines.Length
+                && comparisonIndex < comparisonLines.Length
+                && string.Equals(currentLines[currentIndex], comparisonLines[comparisonIndex], StringComparison.Ordinal))
+            {
+                currentIndex++;
+                comparisonIndex++;
+            }
+            else if (currentIndex < currentLines.Length
+                && (comparisonIndex == comparisonLines.Length || table[currentIndex + 1, comparisonIndex] >= table[currentIndex, comparisonIndex + 1]))
+            {
+                if (!string.IsNullOrWhiteSpace(currentLines[currentIndex]))
+                {
+                    changed.Add(currentIndex);
+                }
+                currentIndex++;
+            }
+            else
+            {
+                comparisonIndex++;
+            }
+        }
+        return changed;
+    }
+
+    private static int[,] BuildLineLcsTable(string[] currentLines, string[] comparisonLines)
+    {
+        var table = new int[currentLines.Length + 1, comparisonLines.Length + 1];
+        for (var currentIndex = currentLines.Length - 1; currentIndex >= 0; currentIndex--)
+        {
+            for (var comparisonIndex = comparisonLines.Length - 1; comparisonIndex >= 0; comparisonIndex--)
+            {
+                table[currentIndex, comparisonIndex] = string.Equals(currentLines[currentIndex], comparisonLines[comparisonIndex], StringComparison.Ordinal)
+                    ? table[currentIndex + 1, comparisonIndex + 1] + 1
+                    : Math.Max(table[currentIndex + 1, comparisonIndex], table[currentIndex, comparisonIndex + 1]);
+            }
+        }
+        return table;
+    }
+
+    private static string MarkRenderedDiffLine(string line, string markerClass, string[] comparisonLines)
+    {
+        if (IsMarkdownTableSeparatorRow(line))
+        {
+            return line;
+        }
+        if (IsMarkdownTableLine(line))
+        {
+            return MarkMarkdownTableLine(line, markerClass, FindComparableMarkdownTableLine(line, comparisonLines));
+        }
+
+        var trimmedStartLength = line.Length - line.TrimStart().Length;
+        var leading = line[..trimmedStartLength];
+        var content = line[trimmedStartLength..];
+        if (content.StartsWith("# ", StringComparison.Ordinal))
+        {
+            return leading + "# <span class=\"" + markerClass + "\">" + content[2..] + "</span>";
+        }
+        if (content.StartsWith("## ", StringComparison.Ordinal))
+        {
+            return leading + "## <span class=\"" + markerClass + "\">" + content[3..] + "</span>";
+        }
+        if (content.StartsWith("- ", StringComparison.Ordinal))
+        {
+            return leading + "- <span class=\"" + markerClass + "\">" + content[2..] + "</span>";
+        }
+        return leading + "<span class=\"" + markerClass + "\">" + content + "</span>";
+    }
+
+    private static string MarkMarkdownTableLine(string line, string markerClass, string? comparisonLine)
+    {
+        var cellsToMark = FindMarkdownTableCellsToMark(line, comparisonLine);
+        if (cellsToMark.Count == 0)
+        {
+            return line;
+        }
+        var marked = new StringBuilder(line.Length + 64);
+        var current = new StringBuilder();
+        var cellIndex = line.TrimStart().StartsWith('|') ? -1 : 0;
+        var escaped = false;
+        foreach (var ch in line)
+        {
+            if (escaped)
+            {
+                current.Append(ch);
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\')
+            {
+                escaped = true;
+                current.Append(ch);
+                continue;
+            }
+            if (ch == '|')
+            {
+                AppendMarkedTableCell(
+                    marked,
+                    current.ToString(),
+                    markerClass,
+                    cellsToMark.Contains(cellIndex));
+                current.Clear();
+                cellIndex++;
+                marked.Append('|');
+                continue;
+            }
+            current.Append(ch);
+        }
+        AppendMarkedTableCell(
+            marked,
+            current.ToString(),
+            markerClass,
+            cellsToMark.Contains(cellIndex));
+        return marked.ToString();
+    }
+
+    private static HashSet<int> FindMarkdownTableCellsToMark(string line, string? comparisonLine)
+    {
+        var currentCells = SplitMarkdownTableRow(line);
+        if (currentCells.Count == 0)
+        {
+            return [];
+        }
+
+        if (comparisonLine is null)
+        {
+            return Enumerable.Range(0, currentCells.Count).ToHashSet();
+        }
+
+        var comparisonCells = SplitMarkdownTableRow(comparisonLine);
+        if (comparisonCells.Count == 0)
+        {
+            return Enumerable.Range(0, currentCells.Count).ToHashSet();
+        }
+
+        var cellsToMark = new HashSet<int>();
+        for (var index = 0; index < currentCells.Count; index++)
+        {
+            if (index >= comparisonCells.Count
+                || !string.Equals(NormalizeMarkdownTableCell(currentCells[index]), NormalizeMarkdownTableCell(comparisonCells[index]), StringComparison.Ordinal))
+            {
+                cellsToMark.Add(index);
+            }
+        }
+        return cellsToMark;
+    }
+
+    private static string? FindComparableMarkdownTableLine(string line, string[] comparisonLines)
+    {
+        if (IsMarkdownTableSeparatorRow(line))
+        {
+            return null;
+        }
+
+        var currentCells = SplitMarkdownTableRow(line);
+        if (currentCells.Count == 0)
+        {
+            return null;
+        }
+
+        var bestScore = 0;
+        string? bestLine = null;
+        foreach (var comparisonLine in comparisonLines)
+        {
+            if (!IsMarkdownTableLine(comparisonLine) || IsMarkdownTableSeparatorRow(comparisonLine))
+            {
+                continue;
+            }
+
+            var comparisonCells = SplitMarkdownTableRow(comparisonLine);
+            if (comparisonCells.Count == 0)
+            {
+                continue;
+            }
+
+            var score = CountMatchingLeadingMarkdownTableCells(currentCells, comparisonCells);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestLine = comparisonLine;
+            }
+        }
+
+        return bestScore > 0 ? bestLine : null;
+    }
+
+    private static int CountMatchingLeadingMarkdownTableCells(List<string> currentCells, List<string> comparisonCells)
+    {
+        var max = Math.Min(currentCells.Count, comparisonCells.Count);
+        var score = 0;
+        for (var index = 0; index < max; index++)
+        {
+            if (!string.Equals(NormalizeMarkdownTableCell(currentCells[index]), NormalizeMarkdownTableCell(comparisonCells[index]), StringComparison.Ordinal))
+            {
+                break;
+            }
+            score++;
+        }
+        return score;
+    }
+
+    private static string NormalizeMarkdownTableCell(string cell)
+        => Regex.Replace(cell.Trim(), @"\s+", " ");
+
+    private static void AppendMarkedTableCell(StringBuilder marked, string cell, string markerClass, bool shouldMark)
+    {
+        if (!shouldMark || string.IsNullOrWhiteSpace(cell))
+        {
+            marked.Append(cell);
+            return;
+        }
+
+        var leadingLength = cell.Length - cell.TrimStart().Length;
+        var trailingLength = cell.Length - cell.TrimEnd().Length;
+        var leading = cell[..leadingLength];
+        var trailing = cell[(cell.Length - trailingLength)..];
+        var value = cell[leadingLength..(cell.Length - trailingLength)];
+        marked.Append(leading)
+            .Append(WrapRenderedDiff(value, markerClass))
+            .Append(trailing);
+    }
+
+    private static string WrapRenderedDiff(string value, string markerClass)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+        return "<span class=\"" + markerClass + "\">" + value + "</span>";
+    }
+
+    private static bool LooksLikeMarkdownTableExcerpt(string excerpt)
+        => IsMarkdownTableLine(excerpt) || excerpt.Contains("||", StringComparison.Ordinal);
+
+    private static bool IsMarkdownTableLine(string excerpt)
+    {
+        var trimmed = excerpt.Trim();
+        if (!trimmed.Contains('|', StringComparison.Ordinal))
+        {
+            return false;
+        }
+        if (IsMarkdownTableSeparatorRow(trimmed))
+        {
+            return true;
+        }
+
+        var cells = SplitMarkdownTableRow(trimmed);
+        if (cells.Count < 2)
+        {
+            return false;
+        }
+        if (trimmed.StartsWith('|') && trimmed.EndsWith('|'))
+        {
+            return true;
+        }
+        return IsLikelyReusableTableFragmentRow(cells);
+    }
+
+    private static bool IsLikelyReusableTableFragmentRow(List<string> cells)
+        => cells.Count == 3
+            && IsCompactTableCell(cells[0])
+            && IsCompactTableCell(cells[1])
+            && cells[2].Trim().Length >= 8;
+
+    private static bool IsCompactTableCell(string cell)
+    {
+        var value = cell.Trim().Trim('`');
+        return value.Length is > 0 and <= 64 && !value.Any(char.IsWhiteSpace);
+    }
+
+    private static List<string> SplitMarkdownTableRow(string excerpt)
+    {
+        var trimmed = excerpt.Trim();
+        if (!trimmed.Contains('|', StringComparison.Ordinal) || IsMarkdownTableSeparatorRow(trimmed))
+        {
+            return [];
+        }
+
+        var cells = new List<string>();
+        var current = new StringBuilder();
+        var escaped = false;
+        foreach (var ch in trimmed)
+        {
+            if (escaped)
+            {
+                current.Append(ch);
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\')
+            {
+                escaped = true;
+                continue;
+            }
+            if (ch == '|')
+            {
+                cells.Add(current.ToString());
+                current.Clear();
+                continue;
+            }
+            current.Append(ch);
+        }
+        cells.Add(current.ToString());
+
+        if (trimmed.StartsWith('|') && cells.Count > 0 && string.IsNullOrWhiteSpace(cells[0]))
+        {
+            cells.RemoveAt(0);
+        }
+        if (trimmed.EndsWith('|') && cells.Count > 0 && string.IsNullOrWhiteSpace(cells[^1]))
+        {
+            cells.RemoveAt(cells.Count - 1);
+        }
+
+        return cells.Count >= 2 && cells.Any(static cell => !string.IsNullOrWhiteSpace(cell))
+            ? cells
+            : [];
+    }
+
+    private static bool IsMarkdownTableSeparatorRow(string value)
+        => value.Trim('|', ' ').Split('|', StringSplitOptions.RemoveEmptyEntries)
+            .All(static cell => cell.Trim().Trim(':').All(static ch => ch == '-'));
 
     private static string BuildChangeKindSlug(DocsVersionChangeKind kind)
         => kind switch

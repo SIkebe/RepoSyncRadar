@@ -1104,6 +1104,149 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Rendered_Table_Row_Diffs_In_Full_File()
+    {
+        const string beforeMarkdown = """
+            `issue` | `object` | The issue itself.
+            """;
+        const string afterMarkdown = """
+            `issue` | `object` | The issue itself.
+            `label` | `object` | The optional label.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "data/reusables/webhooks/issue_properties.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt],
+            selectedVersion: DocsVersion.Fpt,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<th>Name</th>", html, StringComparison.Ordinal);
+        Assert.Contains("<th>Type</th>", html, StringComparison.Ordinal);
+        Assert.Contains("<th>Description</th>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><span class=\"rsr-rendered-diff-added\"><code>label</code></span></td>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><span class=\"rsr-rendered-diff-added\"><code>object</code></span></td>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><span class=\"rsr-rendered-diff-added\">The optional label.</span></td>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<p><code>issue</code> | <code>object</code>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Marks_Only_Changed_Table_Cells_For_Existing_Row()
+    {
+        const string beforeMarkdown = """
+            | Key | Type | Description |
+            | --- | --- | --- |
+            | `action` | `string` | The action that was performed. Can be one of `opened`, `closed`, `reopened`. |
+            | `issue` | `object` | The issue itself. |
+            """;
+        const string afterMarkdown = """
+            | Key | Type | Description |
+            | --- | --- | --- |
+            | `action` | `string` | The action that was performed. Can be one of `opened`, `closed`, `reopened`, `assigned`, `unassigned`, `labeled`, or `unlabeled`. |
+            | `issue` | `object` | The issue itself. |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/rest/using-the-rest-api/github-event-types.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<td><code>action</code></td>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><code>string</code></td>", html, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", html, StringComparison.Ordinal);
+        Assert.Contains("<code>assigned</code>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><span class=\"rsr-rendered-diff-added\">The action that was performed.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"><code>action</code></span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"><code>string</code></span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
+        Assert.Contains("<td><code>issue</code></td>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">The issue itself.</span>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Expands_Concatenated_Table_Row_Fragments()
+    {
+        const string beforeMarkdown = "`issue` | `object` | The issue itself. || `assignee` | `object` | The optional user.";
+        const string afterMarkdown = "`issue` | `object` | The issue itself. || `assignee` | `object` | The optional user. || `labels` | `array` | The optional labels.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "data/reusables/webhooks/issue_properties.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<th>Name</th>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><code>issue</code></td>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><code>object</code></td>", html, StringComparison.Ordinal);
+        Assert.Contains("<td>The issue itself.</td>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><span class=\"rsr-rendered-diff-added\"><code>labels</code></span></td>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<p><code>issue</code> | <code>object</code>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Expands_TrailingPipe_Table_Row_Fragments()
+    {
+        const string beforeMarkdown = """
+            `issue` | `object` | The issue itself. |
+            `assignee` | `object` | The optional user who was assigned or unassigned from the issue. |
+            """;
+        const string afterMarkdown = """
+            `issue` | `object` | The issue itself. |
+            `assignee` | `object` | The optional user who was assigned or unassigned from the issue. |
+            `labels` | `array` | The optional array of label objects describing the labels on the issue. |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "data/reusables/webhooks/issue_properties.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<table>", html, StringComparison.Ordinal);
+        Assert.Contains("<th>Name</th>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><code>issue</code></td>", html, StringComparison.Ordinal);
+        Assert.Contains("<td><span class=\"rsr-rendered-diff-added\"><code>labels</code></span></td>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<p><code>issue</code> | <code>object</code>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Version_Diff_Summary_Does_Not_Render_Table_Excerpts_As_Partial_Tables()
+    {
+        var impacts = new[]
+        {
+            new DocsVersionImpactDetail(
+                DocsVersion.Fpt,
+                [new DocsVersionChangeSnippet(
+                    DocsVersionChangeKind.Updated,
+                    "issue | object | The issue itself. || assignee | object | The optional user who was assigned or unassigned from the issue.",
+                    "issue | object | The issue itself. || assignee | object | The optional user who was assigned or unassigned from the issue. | label | object | The optional label.")]),
+        };
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "data/reusables/webhooks/issue_properties.md",
+            "# Issue properties",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt],
+            selectedVersion: DocsVersion.Fpt,
+            versionImpacts: impacts);
+
+        Assert.Contains("本文のレンダリング済み差分で確認してください", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-version-change-table", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("issue | object", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Source_Diff_Summary_Renders_Ifversion_And_Related_Feature_Changes()
     {
         var sourceDiff = new MarkdownSourceDiffSummary(

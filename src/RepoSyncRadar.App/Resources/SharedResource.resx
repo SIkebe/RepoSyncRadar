@@ -63,6 +63,7 @@
   <data name="CommitDetail.Files" xml:space="preserve"><value>ファイル</value></data>
   <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>{0} のローカルプレビューを準備中…</value></data>
   <data name="CommitDetail.MarkdownComparisonOpened" xml:space="preserve"><value>{0} を Markdown として変更前 / PR HEAD で比較表示しました</value></data>
+  <data name="CommitDetail.MarkdownReusableUsageOpened" xml:space="preserve"><value>{0} を使用箇所 {1} で比較表示しました</value></data>
   <data name="CommitDetail.MarkdownPreviewPreparing" xml:space="preserve"><value>{0} を Markdown として比較準備中…</value></data>
   <data name="CommitDetail.NoPreviewableFiles" xml:space="preserve"><value>比較可能なファイルなし</value></data>
   <data name="CommitDetail.NoPublishableUrl" xml:space="preserve"><value>このファイルは公開ドキュメント URL に対応していません</value></data>
