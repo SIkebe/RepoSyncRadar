@@ -1282,6 +1282,27 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Only_Changed_Text_In_Updated_Paragraph()
+    {
+        const string unchangedPrefix = "Optionally, you can require review or approval from specific teams when a pull request changes certain files or directories. You can specify up to 15 different teams, and for each team you can require a certain number of approvals from team members.";
+        const string addedSuffix = " For an approval from a team member to count, the team must have write permissions (or higher) for the repository.";
+        var beforeMarkdown = unchangedPrefix;
+        var afterMarkdown = unchangedPrefix + addedSuffix;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(unchangedPrefix, html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">" + addedSuffix + "</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">" + unchangedPrefix, html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_Added_H3_Heading_When_Diff_Marked()
     {
         const string beforeMarkdown = """

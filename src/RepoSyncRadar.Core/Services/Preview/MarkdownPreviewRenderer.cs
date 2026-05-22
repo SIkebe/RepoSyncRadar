@@ -1794,31 +1794,108 @@ internal static partial class MarkdownPreviewRenderer
             return MarkMarkdownTableLine(line, markerClass, FindComparableMarkdownTableLine(line, comparisonLines));
         }
 
+        if (TryGetMarkableRenderedDiffParts(line, out var parts))
+        {
+            var comparisonContent = FindComparableRenderedDiffContent(parts, comparisonLines);
+            return parts.Prefix + MarkRenderedDiffContent(parts.Content, markerClass, comparisonContent);
+        }
+
+        return line;
+    }
+
+    private static bool TryGetMarkableRenderedDiffParts(string line, out RenderedDiffLineParts parts)
+    {
         var trimmedStartLength = line.Length - line.TrimStart().Length;
         var leading = line[..trimmedStartLength];
         var content = line[trimmedStartLength..];
         if (content.StartsWith("> ", StringComparison.Ordinal))
         {
             var quoted = content[2..];
-            return IsGitHubAlertMarker(quoted) || string.IsNullOrWhiteSpace(quoted)
-                ? line
-                : leading + "> <span class=\"" + markerClass + "\">" + quoted + "</span>";
+            if (IsGitHubAlertMarker(quoted) || string.IsNullOrWhiteSpace(quoted))
+            {
+                parts = default;
+                return false;
+            }
+            parts = new RenderedDiffLineParts(RenderedDiffLineKind.Quote, leading + "> ", quoted);
+            return true;
         }
         if (string.Equals(content, ">", StringComparison.Ordinal))
         {
-            return line;
+            parts = default;
+            return false;
         }
 
         var headingMarkerLength = GetMarkdownHeadingMarkerLength(content);
         if (headingMarkerLength > 0)
         {
-            return leading + content[..headingMarkerLength] + " <span class=\"" + markerClass + "\">" + content[(headingMarkerLength + 1)..] + "</span>";
+            parts = new RenderedDiffLineParts(
+                RenderedDiffLineKind.Heading,
+                leading + content[..headingMarkerLength] + " ",
+                content[(headingMarkerLength + 1)..]);
+            return true;
         }
         if (content.StartsWith("- ", StringComparison.Ordinal))
         {
-            return leading + "- <span class=\"" + markerClass + "\">" + content[2..] + "</span>";
+            parts = new RenderedDiffLineParts(RenderedDiffLineKind.ListItem, leading + "- ", content[2..]);
+            return true;
         }
-        return leading + "<span class=\"" + markerClass + "\">" + content + "</span>";
+        parts = new RenderedDiffLineParts(RenderedDiffLineKind.Paragraph, leading, content);
+        return true;
+    }
+
+    private static string MarkRenderedDiffContent(string content, string markerClass, string? comparisonContent)
+    {
+        if (string.IsNullOrEmpty(comparisonContent))
+        {
+            return "<span class=\"" + markerClass + "\">" + content + "</span>";
+        }
+
+        var changedRange = FindInlineChangedRange(content, comparisonContent);
+        if (changedRange.Length == 0)
+        {
+            return content;
+        }
+
+        return content[..changedRange.Start]
+            + "<span class=\"" + markerClass + "\">"
+            + content.Substring(changedRange.Start, changedRange.Length)
+            + "</span>"
+            + content[(changedRange.Start + changedRange.Length)..];
+    }
+
+    private static string? FindComparableRenderedDiffContent(RenderedDiffLineParts currentParts, string[] comparisonLines)
+    {
+        string? bestContent = null;
+        var bestScore = 0;
+        foreach (var comparisonLine in comparisonLines)
+        {
+            if (!TryGetMarkableRenderedDiffParts(comparisonLine, out var comparisonParts)
+                || comparisonParts.Kind != currentParts.Kind)
+            {
+                continue;
+            }
+
+            var changedRange = FindInlineChangedRange(currentParts.Content, comparisonParts.Content);
+            var score = currentParts.Content.Length - changedRange.Length;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestContent = comparisonParts.Content;
+            }
+        }
+
+        var minimumScore = Math.Min(12, Math.Max(1, currentParts.Content.Length / 3));
+        return bestScore >= minimumScore ? bestContent : null;
+    }
+
+    private readonly record struct RenderedDiffLineParts(RenderedDiffLineKind Kind, string Prefix, string Content);
+
+    private enum RenderedDiffLineKind
+    {
+        Paragraph,
+        Heading,
+        ListItem,
+        Quote,
     }
 
     private static bool IsGitHubAlertMarker(string value)
