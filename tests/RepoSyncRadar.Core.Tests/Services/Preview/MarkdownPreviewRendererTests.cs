@@ -1308,6 +1308,24 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Does_Not_Show_Raw_Diff_Spans_Inside_Inline_Code()
+    {
+        const string beforeMarkdown = "`@github` Create a PR for the widget function.";
+        const string afterMarkdown = "`/delegate` Create a PR for the widget function.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/tutorials/roll-out-at-scale/enable-developers/index.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.DoesNotContain("&lt;span class=&quot;rsr-rendered-diff-added&quot;&gt;", html, StringComparison.Ordinal);
+        Assert.Contains("<code><span class=\"rsr-rendered-diff-added\">/delegate</span></code> Create a PR", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_Added_H3_Heading_When_Diff_Marked()
     {
         const string beforeMarkdown = """
