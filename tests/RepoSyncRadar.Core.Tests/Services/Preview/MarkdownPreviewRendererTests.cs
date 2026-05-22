@@ -815,6 +815,38 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Preserves_GitHub_Alert_When_Diff_Marked()
+    {
+        const string beforeMarkdown = """
+            ## Further reading
+
+            Existing guidance.
+            """;
+        const string afterMarkdown = """
+            ## Further reading
+
+            > [!NOTE]
+            > When you upgrade or switch your enterprise plan, your existing payment method is not carried forward.
+
+            Existing guidance.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/organizations/managing-organization-settings/upgrading-to-the-github-customer-agreement.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", html, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"ghd-markdown-alert-title\">Note</p>", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">When you upgrade", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[!NOTE]", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&gt; [!NOTE]", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Renders_Docs_Tool_Blocks_As_Official_Tool_Html()
     {
         var markdown = """

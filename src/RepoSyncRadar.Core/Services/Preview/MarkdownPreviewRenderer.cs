@@ -1726,6 +1726,18 @@ internal static partial class MarkdownPreviewRenderer
         var trimmedStartLength = line.Length - line.TrimStart().Length;
         var leading = line[..trimmedStartLength];
         var content = line[trimmedStartLength..];
+        if (content.StartsWith("> ", StringComparison.Ordinal))
+        {
+            var quoted = content[2..];
+            return IsGitHubAlertMarker(quoted) || string.IsNullOrWhiteSpace(quoted)
+                ? line
+                : leading + "> <span class=\"" + markerClass + "\">" + quoted + "</span>";
+        }
+        if (string.Equals(content, ">", StringComparison.Ordinal))
+        {
+            return line;
+        }
+
         var headingMarkerLength = GetMarkdownHeadingMarkerLength(content);
         if (headingMarkerLength > 0)
         {
@@ -1737,6 +1749,9 @@ internal static partial class MarkdownPreviewRenderer
         }
         return leading + "<span class=\"" + markerClass + "\">" + content + "</span>";
     }
+
+    private static bool IsGitHubAlertMarker(string value)
+        => value.TrimStart().StartsWith("[!", StringComparison.Ordinal);
 
     private static int GetMarkdownHeadingMarkerLength(string content)
     {
