@@ -228,6 +228,25 @@ public sealed partial class AdoptionSession
         sb.AppendLine("- `影響と次に見るべき点`: 影響を受ける読者、確認すべき API/権限/バージョン/既存記述との関係を書く。");
         sb.AppendLine("- 推測は断定せず、差分から確認できた事実と確認観点を分ける。");
         sb.AppendLine();
+        var openApiReferencePaths = GetOpenApiReferenceDataPaths(commit).ToArray();
+        if (openApiReferencePaths.Length > 0)
+        {
+            sb.AppendLine("## OpenAPI / API reference 差分の追加要件");
+            sb.AppendLine("- このコミットは OpenAPI 由来の API reference data を含むため、Markdown 差分だけで判断しない。");
+            sb.AppendLine("- explanation では、当該 API の差分に関する詳細な解説を必ず含める。エンドポイント、HTTP メソッド、権限/permission、認証方式、request/response schema、preview/version、追加・削除・意味変更を差分から確認できる範囲で具体的に書く。");
+            sb.AppendLine("- `差分の見方` では、下記の API data file と対応する `content/rest/**` ページの両方を参照して、生成された Markdown だけでは落ちやすい API 仕様上の意味を説明する。");
+            sb.AppendLine("- `影響と次に見るべき点` では、API 利用者、SDK/クライアント生成、GitHub Apps/Fine-grained PAT/Webhook 利用者への確認観点を含める。");
+            sb.AppendLine("- トリガーになった API data file:");
+            foreach (var path in openApiReferencePaths.Take(20))
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"  - `{path}`").AppendLine();
+            }
+            if (openApiReferencePaths.Length > 20)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"  - ... and {openApiReferencePaths.Length - 20} more").AppendLine();
+            }
+            sb.AppendLine();
+        }
         sb.AppendLine("## 過去の注目例 (Few-shot)");
         var any = false;
         foreach (var ex in fewShot)
@@ -261,6 +280,21 @@ public sealed partial class AdoptionSession
         sb.AppendLine("```");
         return sb.ToString();
     }
+
+    private static IEnumerable<string> GetOpenApiReferenceDataPaths(Commit commit)
+        => commit.Files
+            .Select(static file => file.Path)
+            .Where(IsOpenApiReferenceDataPath)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal);
+
+    private static bool IsOpenApiReferenceDataPath(string path)
+        => path.StartsWith("src/rest/data/", StringComparison.Ordinal)
+            || path.StartsWith("src/github-apps/data/", StringComparison.Ordinal)
+            || path.StartsWith("src/webhooks/data/", StringComparison.Ordinal)
+            || string.Equals(path, "src/rest/lib/config.json", StringComparison.Ordinal)
+            || string.Equals(path, "src/github-apps/lib/config.json", StringComparison.Ordinal)
+            || string.Equals(path, "src/webhooks/lib/config.json", StringComparison.Ordinal);
 
     private static DraftBundle EnsureOfficialDocUrls(DraftBundle bundle, IReadOnlyList<string> officialDocUrls)
     {

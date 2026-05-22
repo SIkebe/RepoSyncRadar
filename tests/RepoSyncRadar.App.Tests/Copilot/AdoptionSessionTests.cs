@@ -295,6 +295,53 @@ public sealed class AdoptionSessionTests
     }
 
     [Fact]
+    public void BuildPrompt_Includes_OpenApi_Detail_Requirements_For_Api_Data_Files()
+    {
+        var commit = new Commit
+        {
+            Sha = "openapi-data",
+            Message = "Refresh generated API data",
+            Author = "docs-bot",
+            Files =
+            [
+                new CommitFile { Path = "content/rest/copilot/index.md" },
+                new CommitFile { Path = "src/rest/data/fpt-2026-03-10/copilot.json" },
+                new CommitFile { Path = "src/github-apps/data/ghec-2026-03-10/server-to-server-rest.json" },
+                new CommitFile { Path = "src/webhooks/lib/config.json" },
+            ],
+        };
+
+        var prompt = AdoptionSession.BuildPrompt(commit, [], "diff");
+
+        Assert.Contains("## OpenAPI / API reference 差分の追加要件", prompt, StringComparison.Ordinal);
+        Assert.Contains("Markdown 差分だけで判断しない", prompt, StringComparison.Ordinal);
+        Assert.Contains("当該 API の差分に関する詳細な解説を必ず含める", prompt, StringComparison.Ordinal);
+        Assert.Contains("エンドポイント、HTTP メソッド、権限/permission、認証方式", prompt, StringComparison.Ordinal);
+        Assert.Contains("src/rest/data/fpt-2026-03-10/copilot.json", prompt, StringComparison.Ordinal);
+        Assert.Contains("src/github-apps/data/ghec-2026-03-10/server-to-server-rest.json", prompt, StringComparison.Ordinal);
+        Assert.Contains("src/webhooks/lib/config.json", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildPrompt_Does_Not_Include_OpenApi_Requirements_For_Rest_Markdown_Only()
+    {
+        var commit = new Commit
+        {
+            Sha = "rest-markdown",
+            Message = "Update REST docs page",
+            Author = "octo",
+            Files =
+            [
+                new CommitFile { Path = "content/rest/copilot/index.md" },
+            ],
+        };
+
+        var prompt = AdoptionSession.BuildPrompt(commit, [], "diff");
+
+        Assert.DoesNotContain("## OpenAPI / API reference 差分の追加要件", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Generate_Appends_Official_Doc_Url_When_Drafts_Omit_It()
     {
         var ct = TestContext.Current.CancellationToken;
