@@ -5,6 +5,8 @@
 @using RepoSyncRadar.Core.Services
 @implements IDisposable
 
+@{ ApplyDisplayCultureForRender(); }
+
 @*
     AppHeader — top bar shown at the top of Workbench. Surfaces the current GitHub
     auth state (Not configured / Not signed in / Signed in), exposes Sign in / Sign
@@ -301,6 +303,8 @@
 
     [CascadingParameter] public string DisplayCulture { get; set; } = AppDisplayCulture.DefaultCultureName;
 
+    [Parameter] public EventCallback<string> DisplayCultureChanged { get; set; }
+
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
@@ -345,6 +349,18 @@
 
         await RefreshStateAsync();
     }
+
+    protected override void OnParametersSet()
+    {
+        var displayCulture = AppDisplayCulture.NormalizeCultureName(DisplayCulture);
+        if (!_settingsDisplayCultureSaving && !string.Equals(_displayCulture, displayCulture, StringComparison.OrdinalIgnoreCase))
+        {
+            _displayCulture = displayCulture;
+        }
+    }
+
+    private void ApplyDisplayCultureForRender()
+        => AppDisplayCulture.Apply(_displayCulture);
 
     private static CopilotUsageSnapshot EmptyCopilotUsage { get; } = new(
         0,
@@ -516,6 +532,7 @@
             var store = Services.GetRequiredService<IAppUserSettingsStore>();
             await store.SaveDisplayCultureAsync(normalizedCulture, CancellationToken.None);
             _displayCulture = AppDisplayCulture.Apply(normalizedCulture).Name;
+            await DisplayCultureChanged.InvokeAsync(_displayCulture);
             _settingsDisplayCultureStatus = L["Settings.DisplayLanguage.Saved", GetDisplayCultureLabel(normalizedCulture)];
         }
         catch (Exception ex)

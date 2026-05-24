@@ -3,6 +3,8 @@
 @using RepoSyncRadar.Core.Models
 @implements IDisposable
 
+@{ ApplyDisplayCultureForRender(); }
+
 @*
     Sidebar — Phase 1 minimum review inbox.
     Reads counts per ReviewStatus from IRadarRepository and emits status selection events.
@@ -48,6 +50,8 @@
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
+    [CascadingParameter] public string DisplayCulture { get; set; } = AppDisplayCulture.DefaultCultureName;
+
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
@@ -57,6 +61,9 @@
 
     private IReadOnlyDictionary<ReviewStatus, int>? _counts;
     private IReviewBroadcaster? _broadcaster;
+
+    private void ApplyDisplayCultureForRender()
+        => AppDisplayCulture.Apply(DisplayCulture);
 
     protected override async Task OnInitializedAsync()
     {

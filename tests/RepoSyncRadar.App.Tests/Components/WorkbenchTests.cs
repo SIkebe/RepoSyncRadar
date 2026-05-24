@@ -90,6 +90,53 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
+    public async Task Workbench_SettingsPanel_ReRenders_Header_And_LocalSettings_When_DisplayCulture_Is_Saved()
+    {
+        try
+        {
+            var repo = Substitute.For<IRadarRepository>();
+            repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(CountsFor(ReviewStatus.Unseen)));
+            repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<IReadOnlyList<Commit>>([]));
+            repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+            var settingsStore = new TestAppUserSettingsStore(new AppUserSettings { DisplayCulture = "ja" }, raiseEvents: false);
+
+            await using var ctx = CreateWorkbenchTestContext(repo, out _, settingsStore);
+            var cut = ctx.Render<Workbench>();
+
+            cut.Find("[data-testid=\"app-header-settings\"]").Click();
+            cut.WaitForAssertion(() => Assert.Contains("表示言語", cut.Find("[data-testid=\"settings-panel\"]").TextContent, StringComparison.Ordinal));
+
+            cut.Find("[data-testid=\"settings-display-language-en\"]").Click();
+
+            cut.WaitForAssertion(() =>
+            {
+                var shellText = cut.Find("[data-testid=\"radar-shell\"]").TextContent;
+                Assert.Equal("en", settingsStore.Current.DisplayCulture);
+                Assert.Contains("Signed in", shellText, StringComparison.Ordinal);
+                Assert.Contains("Unseen", shellText, StringComparison.Ordinal);
+                Assert.Contains("Watch", shellText, StringComparison.Ordinal);
+                Assert.Contains("Display Language", shellText, StringComparison.Ordinal);
+                Assert.Contains("Default Theme", shellText, StringComparison.Ordinal);
+                Assert.Contains("App Settings", shellText, StringComparison.Ordinal);
+                Assert.Contains("Saved changes are guaranteed to apply on the next launch.", shellText, StringComparison.Ordinal);
+                Assert.DoesNotContain("サインイン済み", shellText, StringComparison.Ordinal);
+                Assert.DoesNotContain("未確認", shellText, StringComparison.Ordinal);
+                Assert.DoesNotContain("注目", shellText, StringComparison.Ordinal);
+                Assert.DoesNotContain("表示言語", shellText, StringComparison.Ordinal);
+                Assert.DoesNotContain("既定テーマ", shellText, StringComparison.Ordinal);
+                Assert.DoesNotContain("アプリ設定", shellText, StringComparison.Ordinal);
+            });
+        }
+        finally
+        {
+            AppDisplayCulture.Apply(AppDisplayCulture.DefaultCultureName);
+        }
+    }
+
+    [Fact]
     public async Task Workbench_Renders_Resizable_Three_Column_Shell()
     {
         var repo = Substitute.For<IRadarRepository>();
@@ -1018,6 +1065,13 @@ public sealed class WorkbenchTests
         auth.GetStateAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult(GitHubAuthState.SignedIn));
         auth.GetCurrentLoginAsync(Arg.Any<CancellationToken>()).Returns(Task.FromResult<string?>("octocat"));
         var resolver = Substitute.For<IPathToUrlResolver>();
+        var localSettingsStore = Substitute.For<ILocalAppSettingsStore>();
+        localSettingsStore.SettingsPath.Returns(Path.Combine(Path.GetTempPath(), "appsettings.local.json"));
+        localSettingsStore.Current.Returns(LocalAppSettings.Default.Clone());
+        localSettingsStore.LoadAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(LocalAppSettings.Default.Clone()));
+        localSettingsStore.SaveAsync(Arg.Any<LocalAppSettings>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
         if (settingsStore is null)
         {
             settingsStore = Substitute.For<IAppUserSettingsStore>();
@@ -1040,6 +1094,7 @@ public sealed class WorkbenchTests
             {
                 BaseAddress = new Uri("https://docs.github.com/"),
             }))
+            .AddSingleton(localSettingsStore)
             .AddSingleton(settingsStore);
         return ctx;
     }
@@ -1175,8 +1230,10 @@ public sealed class WorkbenchTests
         }
     }
 
-    private sealed class TestAppUserSettingsStore(AppUserSettings initial) : IAppUserSettingsStore
+    private sealed class TestAppUserSettingsStore(AppUserSettings initial, bool raiseEvents = true) : IAppUserSettingsStore
     {
+        private readonly bool _raiseEvents = raiseEvents;
+
         public AppUserSettings Current { get; private set; } = initial;
 
         public event Action<AppUserSettings>? SettingsChanged;
@@ -1199,7 +1256,10 @@ public sealed class WorkbenchTests
         public void Set(AppUserSettings settings)
         {
             Current = settings;
-            SettingsChanged?.Invoke(Current);
+            if (_raiseEvents)
+            {
+                SettingsChanged?.Invoke(Current);
+            }
         }
     }
 

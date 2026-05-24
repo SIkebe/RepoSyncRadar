@@ -35,7 +35,7 @@
              data-testid="radar-sidebar-resizer"></div>
 
         <main class="radar-workbench">
-            <AppHeader />
+            <AppHeader DisplayCultureChanged="HandleDisplayCultureChanged" />
 
             <MudPaper Elevation="0" Class="pa-2 ask-palette-shell" data-testid="ask-palette-shell">
                 <button type="button"
@@ -266,6 +266,9 @@
         {
         }
     }
+
+    private void HandleDisplayCultureChanged(string cultureName)
+        => _displayCulture = AppDisplayCulture.Apply(cultureName).Name;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
