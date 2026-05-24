@@ -128,11 +128,6 @@
                     <h2>@L["Common.Settings"]</h2>
                     <p>@L["Settings.Description"]</p>
                 </div>
-                <button type="button"
-                        class="toolbar-button compact secondary"
-                        data-testid="settings-refresh-ignore-rules"
-                        disabled="@_settingsLoading"
-                        @onclick="LoadIgnoreRulesAsync">@L["Common.Refresh"]</button>
             </header>
 
             <section class="settings-section" data-testid="settings-display-language-section">
@@ -232,7 +227,14 @@
             <ThirdPartyNoticesPanel />
 
             <section class="settings-section" data-testid="settings-ignore-rules">
-                <h3>@L["Settings.IgnoreList"]</h3>
+                <header class="settings-subheader">
+                    <h3>@L["Settings.IgnoreList"]</h3>
+                    <button type="button"
+                            class="toolbar-button compact secondary"
+                            data-testid="settings-refresh-ignore-rules"
+                            disabled="@_settingsLoading"
+                            @onclick="LoadIgnoreRulesAsync">@L["Settings.IgnoreList.Refresh"]</button>
+                </header>
                 @if (_settingsLoading)
                 {
                     <p class="settings-muted" data-testid="settings-ignore-rules-loading">@L["Common.Loading"]</p>

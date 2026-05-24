@@ -183,13 +183,14 @@
   <data name="Settings.Description" xml:space="preserve"><value>Review display language, default theme, app settings, licenses, and ignore rules.</value></data>
   <data name="Settings.DisplayLanguage" xml:space="preserve"><value>Display Language</value></data>
   <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>Switching display language...</value></data>
-  <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>Display language set to {0}</value></data>
+  <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>Display language switched to {0}.</value></data>
   <data name="Settings.DisplayLanguage.SaveFailed" xml:space="preserve"><value>Failed to save display language</value></data>
   <data name="Settings.IgnoreList" xml:space="preserve"><value>Ignore List</value></data>
   <data name="Settings.IgnoreList.DeleteFailed" xml:space="preserve"><value>Failed to delete ignore rules</value></data>
   <data name="Settings.IgnoreList.Deleted" xml:space="preserve"><value>Deleted {0} ignore rule(s)</value></data>
   <data name="Settings.IgnoreList.Empty" xml:space="preserve"><value>No ignore rules have been configured yet.</value></data>
   <data name="Settings.IgnoreList.LoadFailed" xml:space="preserve"><value>Failed to load ignore rules</value></data>
+  <data name="Settings.IgnoreList.Refresh" xml:space="preserve"><value>Refresh ignore list</value></data>
   <data name="Settings.Theme.Dark" xml:space="preserve"><value>Dark</value></data>
   <data name="Settings.Theme.Light" xml:space="preserve"><value>Light</value></data>
   <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>Failed to load theme settings</value></data>

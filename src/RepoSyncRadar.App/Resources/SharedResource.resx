@@ -183,13 +183,14 @@
   <data name="Settings.Description" xml:space="preserve"><value>表示言語、既定テーマ、アプリ設定、ライセンス、無視リストを確認できます。</value></data>
   <data name="Settings.DisplayLanguage" xml:space="preserve"><value>表示言語</value></data>
   <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>表示言語を切り替えています…</value></data>
-  <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>表示言語を {0} に設定しました</value></data>
+  <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>表示言語を {0} に切り替えました。</value></data>
   <data name="Settings.DisplayLanguage.SaveFailed" xml:space="preserve"><value>表示言語の保存に失敗しました</value></data>
   <data name="Settings.IgnoreList" xml:space="preserve"><value>無視リスト</value></data>
   <data name="Settings.IgnoreList.DeleteFailed" xml:space="preserve"><value>無視リストの削除に失敗しました</value></data>
   <data name="Settings.IgnoreList.Deleted" xml:space="preserve"><value>{0} 件の無視リストを削除しました</value></data>
   <data name="Settings.IgnoreList.Empty" xml:space="preserve"><value>無視リストはまだ設定されていません。</value></data>
   <data name="Settings.IgnoreList.LoadFailed" xml:space="preserve"><value>無視リストの読み込みに失敗しました</value></data>
+  <data name="Settings.IgnoreList.Refresh" xml:space="preserve"><value>無視リストを更新</value></data>
   <data name="Settings.Theme.Dark" xml:space="preserve"><value>ダーク</value></data>
   <data name="Settings.Theme.Light" xml:space="preserve"><value>ライト</value></data>
   <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>テーマ設定の読み込みに失敗しました</value></data>

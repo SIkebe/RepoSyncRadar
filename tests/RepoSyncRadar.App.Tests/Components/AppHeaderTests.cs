@@ -451,6 +451,10 @@ public sealed class AppHeaderTests
         {
             Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"settings-third-party-notices\"]"));
+            Assert.DoesNotContain("無視リストを更新", cut.Find(".app-settings-header").TextContent, StringComparison.Ordinal);
+            Assert.Equal(
+                "無視リストを更新",
+                cut.Find("[data-testid=\"settings-ignore-rules\"] [data-testid=\"settings-refresh-ignore-rules\"]").TextContent.Trim());
             var patterns = cut.FindAll("[data-testid=\"settings-ignore-rule-pattern\"]")
                 .Select(static node => node.TextContent)
                 .ToArray();
@@ -883,7 +887,9 @@ public sealed class AppHeaderTests
             settingsStore.Received(1).SaveDisplayCultureAsync("ja", Arg.Any<CancellationToken>());
             Assert.Equal("true", cut.Find("[data-testid=\"settings-display-language-ja\"]").GetAttribute("aria-pressed"));
             Assert.Equal("false", cut.Find("[data-testid=\"settings-display-language-en\"]").GetAttribute("aria-pressed"));
-            Assert.Contains("表示言語", cut.Find("[data-testid=\"settings-display-language-status\"]").TextContent, StringComparison.Ordinal);
+            var status = cut.Find("[data-testid=\"settings-display-language-status\"]").TextContent;
+            Assert.Contains("表示言語", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("すぐ反映", status, StringComparison.Ordinal);
         });
     }
 

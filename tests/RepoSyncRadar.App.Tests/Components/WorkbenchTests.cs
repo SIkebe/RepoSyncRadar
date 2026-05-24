@@ -119,6 +119,8 @@ public sealed class WorkbenchTests
                 Assert.Contains("Unseen", shellText, StringComparison.Ordinal);
                 Assert.Contains("Watch", shellText, StringComparison.Ordinal);
                 Assert.Contains("Display Language", shellText, StringComparison.Ordinal);
+                Assert.DoesNotContain("The screen updates immediately.", shellText, StringComparison.Ordinal);
+                Assert.Contains("Refresh ignore list", shellText, StringComparison.Ordinal);
                 Assert.Contains("Default Theme", shellText, StringComparison.Ordinal);
                 Assert.Contains("App Settings", shellText, StringComparison.Ordinal);
                 Assert.Contains("Saved changes are guaranteed to apply on the next launch.", shellText, StringComparison.Ordinal);
