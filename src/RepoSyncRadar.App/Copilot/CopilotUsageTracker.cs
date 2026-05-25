@@ -208,7 +208,7 @@ public sealed record CopilotUsageRecord(
 
     public CopilotUsageBillingSource BillingSource()
     {
-        if (TotalNanoAiu is > 0)
+        if (Cost is > 0 || TotalNanoAiu is > 0)
         {
             return CopilotUsageBillingSource.SdkReported;
         }
@@ -342,7 +342,7 @@ public sealed record CopilotSessionUsageMetrics(
 
     public CopilotUsageBillingSource BillingSource()
     {
-        if (TotalNanoAiu is > 0)
+        if (TotalPremiumRequestCost is > 0 || TotalNanoAiu is > 0)
         {
             return CopilotUsageBillingSource.SdkReported;
         }
@@ -389,7 +389,7 @@ public sealed record CopilotModelUsageMetrics(
     }
 
     public CopilotUsageBillingSource BillingSource()
-        => TotalNanoAiu is > 0
+        => RequestCost is > 0 || TotalNanoAiu is > 0
             ? CopilotUsageBillingSource.SdkReported
             : EffectiveTotalNanoAiu() is > 0
                 ? CopilotUsageBillingSource.OfficialPricingTable

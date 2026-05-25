@@ -194,6 +194,32 @@ public sealed class CopilotUsageTrackerTests
     }
 
     [Fact]
+    public void Record_Treats_Cost_Only_Usage_As_Sdk_Reported()
+    {
+        var tracker = new CopilotUsageTracker();
+        tracker.Record(new CopilotUsageRecord(
+            new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            "Ask",
+            "gpt-unknown",
+            null,
+            100,
+            10,
+            0,
+            0,
+            0,
+            0.0042,
+            null,
+            []));
+
+        var snapshot = tracker.GetSnapshot();
+
+        Assert.Null(snapshot.TotalNanoAiu);
+        Assert.Equal(0.0042, snapshot.Cost);
+        Assert.Equal(CopilotUsageBillingSource.SdkReported, snapshot.BillingSource);
+    }
+
+    [Fact]
     public void Record_Estimates_Anthropic_Cache_Write_From_Official_Model_Pricing()
     {
         var tracker = new CopilotUsageTracker();
