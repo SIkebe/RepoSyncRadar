@@ -20,5 +20,7 @@ public sealed class WebViewOptions
         "github.com",
         "github.githubassets.com",
         "avatars.githubusercontent.com",
+        "api.githubcopilot.com",
+        "api.enterprise.githubcopilot.com",
     ];
 }

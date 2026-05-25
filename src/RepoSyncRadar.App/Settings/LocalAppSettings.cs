@@ -121,6 +121,8 @@ public sealed class WebViewLocalAppSettings
         "github.com",
         "github.githubassets.com",
         "avatars.githubusercontent.com",
+        "api.githubcopilot.com",
+        "api.enterprise.githubcopilot.com",
     ];
 
     public WebViewLocalAppSettings Clone()

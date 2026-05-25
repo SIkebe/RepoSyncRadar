@@ -108,6 +108,17 @@ public class OptionsValidationTests
     }
 
     [Fact]
+    public void WebView_DefaultAllowedHosts_Include_GitHubCopilotChatApis()
+    {
+        using var sp = BuildServiceProvider(ValidJson);
+
+        var webView = sp.GetRequiredService<IOptions<WebViewOptions>>().Value;
+
+        Assert.Contains("api.githubcopilot.com", webView.AllowedUrlHosts);
+        Assert.Contains("api.enterprise.githubcopilot.com", webView.AllowedUrlHosts);
+    }
+
+    [Fact]
     public void Bind_OAuthScopes_AreNormalizedAndDeduplicated()
     {
         // OAuth scope strings are case-sensitive at the IdP, but GitHub's documentation

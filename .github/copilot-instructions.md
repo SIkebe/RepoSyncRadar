@@ -89,6 +89,7 @@ Use these repository instructions as the starting point. When code or validated 
 ### WebView2 Behavior
 
 - WebView2 `Source` assignment is a no-op for identical URIs. Markdown preview URLs must include content-affecting dimensions such as docs version and file path in the query. `LocalPreviewContentServer.NormalizeRoute` strips query strings for route lookup.
+- The right-pane WebView opens GitHub PR/commit pages and may also host GitHub.com Copilot Chat. Keep `WebView.AllowedUrlHosts` separate from Copilot tool URL permissions, and include the GitHub Copilot Chat API hosts (`api.githubcopilot.com` and `api.enterprise.githubcopilot.com`) so chat preflight requests are not blocked as `Chat failed to load`.
 - For preview UI regressions tied to a specific commit, validate in the real app with `REPOSYNCRADAR_BLAZOR_CDP_PORT` and `REPOSYNCRADAR_DOCS_CDP_PORT`: select the exact commit row, open `WebView2 で開く`, inspect the docs WebView DOM for the reported artifact, and capture a screenshot under `artifacts/` before claiming the fix works.
 
 ### Markdown/Liquid Rendering
