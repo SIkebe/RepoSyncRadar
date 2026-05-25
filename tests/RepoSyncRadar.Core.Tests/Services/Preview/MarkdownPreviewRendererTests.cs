@@ -847,6 +847,36 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Preserves_Asterisk_List_When_Diff_Marked()
+    {
+        const string beforeMarkdown = """
+            ## Further reading
+
+            * [Choosing a setup path](https://docs.github.com/copilot/setup)
+            """;
+        const string afterMarkdown = """
+            ## Further reading
+
+            * [Choosing a setup path](https://docs.github.com/copilot/setup)
+            * [Understanding the agent loop](https://docs.github.com/copilot/agent-loop)
+            * [Telemetry and observability](https://docs.github.com/copilot/telemetry)
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/copilot-sdk/sdk-getting-started.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<ul>", html, StringComparison.Ordinal);
+        Assert.Contains("<li><span class=\"rsr-rendered-diff-added\"><a href=\"https://docs.github.com/copilot/agent-loop\">Understanding the agent loop</a></span></li>", html, StringComparison.Ordinal);
+        Assert.Contains("<li><span class=\"rsr-rendered-diff-added\"><a href=\"https://docs.github.com/copilot/telemetry\">Telemetry and observability</a></span></li>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<p>*", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Renders_Docs_Tool_Blocks_As_Official_Tool_Html()
     {
         var markdown = """

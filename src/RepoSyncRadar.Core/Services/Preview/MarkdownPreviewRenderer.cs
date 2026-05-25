@@ -1843,13 +1843,42 @@ internal static partial class MarkdownPreviewRenderer
                 content[(headingMarkerLength + 1)..]);
             return true;
         }
-        if (content.StartsWith("- ", StringComparison.Ordinal))
+        var listMarkerLength = GetMarkdownListMarkerLength(content);
+        if (listMarkerLength > 0)
         {
-            parts = new RenderedDiffLineParts(RenderedDiffLineKind.ListItem, leading + "- ", content[2..]);
+            parts = new RenderedDiffLineParts(
+                RenderedDiffLineKind.ListItem,
+                leading + content[..listMarkerLength],
+                content[listMarkerLength..]);
             return true;
         }
         parts = new RenderedDiffLineParts(RenderedDiffLineKind.Paragraph, leading, content);
         return true;
+    }
+
+    private static int GetMarkdownListMarkerLength(string content)
+    {
+        if (content.Length >= 2
+            && (content[0] is '-' or '*' or '+')
+            && char.IsWhiteSpace(content[1]))
+        {
+            return 2;
+        }
+
+        var digitLength = 0;
+        while (digitLength < content.Length && char.IsDigit(content[digitLength]))
+        {
+            digitLength++;
+        }
+        if (digitLength > 0
+            && digitLength + 1 < content.Length
+            && content[digitLength] is '.' or ')'
+            && char.IsWhiteSpace(content[digitLength + 1]))
+        {
+            return digitLength + 2;
+        }
+
+        return 0;
     }
 
     private static string MarkRenderedDiffContent(string content, string markerClass, string? comparisonContent)
