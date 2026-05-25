@@ -1,4 +1,5 @@
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -8,6 +9,8 @@ using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
 
+#pragma warning disable GHCP001 // beta.7 exposes permission decisions through experimental RPC types.
+
 /// <summary>
 /// Validates that <see cref="RadarPermissionPolicy"/> still routes stronger
 /// write-flavoured <see cref="PermissionRequestCustomTool"/> events through
@@ -16,6 +19,8 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class PermissionFlowTests
 {
     private static readonly PermissionInvocation Invocation = new() { SessionId = "session-write" };
+    private static readonly string ApproveOnceKind = PermissionDecision.ApproveOnce().Kind;
+    private static readonly string RejectKind = PermissionDecision.Reject("test").Kind;
 
     private static RadarPermissionPolicy CreatePolicy(IPermissionPrompt prompt)
     {
@@ -43,7 +48,7 @@ public sealed class PermissionFlowTests
 
         var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), Invocation);
 
-        Assert.Equal("approve-once", result.Kind);
+        Assert.Equal(ApproveOnceKind, result.Kind);
         await prompt.Received(1).ConfirmAsync(
             Arg.Is<PermissionRequestCustomTool>(t => t.ToolName == "radar_post_draft"),
             Arg.Any<CancellationToken>());
@@ -58,6 +63,7 @@ public sealed class PermissionFlowTests
 
         var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), Invocation);
 
-        Assert.Equal("reject", result.Kind);
+        Assert.Equal(RejectKind, result.Kind);
     }
 }
+#pragma warning restore GHCP001
