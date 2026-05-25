@@ -1,6 +1,6 @@
 # RepoSyncRadar Copilot Instructions
 
-RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter, Teams, and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0-beta.6.
+RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter, Teams, and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0-beta.7.
 
 Use these repository instructions as the starting point. When code or validated behavior contradicts them, follow the verified source and update this file after confirming the rule is stable.
 
@@ -16,7 +16,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 ## Build And Test
 
-- The pinned SDK is in `global.json`: .NET SDK `10.0.203` with `rollForward: latestFeature`.
+- The pinned SDK is in `global.json`: .NET SDK `10.0.300` with `rollForward: latestFeature`.
 - Restore/build from the repo root. Prefer PowerShell on Windows.
 - Validate ordinary changes with:
   - `dotnet build RepoSyncRadar.sln -warnaserror`
@@ -44,9 +44,11 @@ Use these repository instructions as the starting point. When code or validated 
 ### SDK API
 
 - The app must read Copilot SDK final assistant text from `response?.Data?.Content`, not `response?.ToString()`.
-- `GitHub.Copilot.SDK` 1.0.0-beta.6 exposes `MessageOptions` prompt, attachments, mode, and headers. No public JSON schema or response-format property has been observed in the XML docs.
-- In `GitHub.Copilot.SDK` 1.0.0-beta.6, public C# types live under `GitHub.Copilot` / `GitHub.Copilot.Rpc`, client process settings use `CopilotClientOptions.Connection = RuntimeConnection.ForStdio(...)`, `BaseDirectory`, and `CopilotLogLevel`, and permission handlers use `Func<PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>>`.
-- `GitHub.Copilot.SDK` 1.0.0-beta.6 nupkg currently lacks the generated `GitHub.Copilot.SDK.props`; keep `CopilotCliVersion` pinned in `Directory.Build.props` unless the package starts shipping the props file.
+- `GitHub.Copilot.SDK` 1.0.0-beta.7 exposes `MessageOptions` prompt, attachments, mode, and headers. No public JSON schema or response-format property has been observed in the XML docs.
+- In `GitHub.Copilot.SDK` 1.0.0-beta.7, public C# types live under `GitHub.Copilot` / `GitHub.Copilot.Rpc`, client process settings use `CopilotClientOptions.Connection = RuntimeConnection.ForStdio(...)`, `BaseDirectory`, and `CopilotLogLevel`, and permission handlers use `Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>>` with `PermissionDecision.ApproveOnce()` / `Reject(...)` / `UserNotAvailable()`.
+- `GitHub.Copilot.SDK` 1.0.0-beta.7 nupkg includes `build/GitHub.Copilot.SDK.props` with `CopilotCliVersion=1.0.53-2`; do not pin `CopilotCliVersion` in `Directory.Build.props` unless a future package regresses.
+- In beta.7 hook payloads such as `PreToolUseHookInput.ToolArgs` and `PostToolUseHookInput.ToolResult` are `JsonElement?`; tests should create fixtures with `JsonSerializer.SerializeToElement(...)`.
+- In beta.7 `AssistantUsageData` no longer exposes `CopilotUsage`; use `Cost` and session `Usage.GetMetricsAsync()` for SDK-reported billing details, and keep `GHCP001` suppressions local to experimental SDK telemetry/permission types.
 - For Copilot tool metadata such as `skip_permission`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { SkipPermission = true }, ...)` over magic-string `AdditionalProperties`.
 
 ### Client And Telemetry
