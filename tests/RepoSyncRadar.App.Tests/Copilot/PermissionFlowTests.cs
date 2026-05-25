@@ -43,7 +43,7 @@ public sealed class PermissionFlowTests
 
         var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+        Assert.Equal("approve-once", result.Kind);
         await prompt.Received(1).ConfirmAsync(
             Arg.Is<PermissionRequestCustomTool>(t => t.ToolName == "radar_post_draft"),
             Arg.Any<CancellationToken>());
@@ -58,6 +58,6 @@ public sealed class PermissionFlowTests
 
         var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Rejected, result.Kind);
+        Assert.Equal("reject", result.Kind);
     }
 }

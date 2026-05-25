@@ -81,7 +81,7 @@ public class RadarPermissionPolicyTests
 
         var result = await policy.HandleAsync(NewCustomTool("tc-1", "radar_list_commits"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+        Assert.Equal("approve-once", result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -95,7 +95,7 @@ public class RadarPermissionPolicyTests
 
         var result = await policy.HandleAsync(NewCustomTool("tc-triage-write", toolName), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+        Assert.Equal("approve-once", result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -107,7 +107,7 @@ public class RadarPermissionPolicyTests
 
         var result = await policy.HandleAsync(NewRead("tc-2", "/some/file.md"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+        Assert.Equal("approve-once", result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -119,7 +119,7 @@ public class RadarPermissionPolicyTests
 
         var result = await policy.HandleAsync(NewUrl("tc-3", "https://docs.github.com/en/actions"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+        Assert.Equal("approve-once", result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -132,7 +132,7 @@ public class RadarPermissionPolicyTests
 
         var result = await policy.HandleAsync(NewUrl("tc-4", "https://example.com/foo"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+        Assert.Equal("approve-once", result.Kind);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -145,7 +145,7 @@ public class RadarPermissionPolicyTests
 
         var result = await policy.HandleAsync(NewUrl("tc-5", "https://example.com/foo"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Rejected, result.Kind);
+        Assert.Equal("reject", result.Kind);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -158,7 +158,7 @@ public class RadarPermissionPolicyTests
 
         var result = await policy.HandleAsync(NewWrite("tc-6", "C:/repo/foo.md"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Approved, result.Kind);
+        Assert.Equal("approve-once", result.Kind);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -171,7 +171,7 @@ public class RadarPermissionPolicyTests
 
         var result = await policy.HandleAsync(NewWrite("tc-7", "C:/repo/bar.md"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.Rejected, result.Kind);
+        Assert.Equal("reject", result.Kind);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -183,7 +183,7 @@ public class RadarPermissionPolicyTests
 
         var result = await policy.HandleAsync(NewShell("tc-8", "rm -rf /"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.UserNotAvailable, result.Kind);
+        Assert.Equal("user-not-available", result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -196,7 +196,7 @@ public class RadarPermissionPolicyTests
         // PermissionRequestMcp は本アプリでは未対応扱い。今後 MCP を許可するときに別途扱う。
         var result = await policy.HandleAsync(NewMcp("tc-9"), Invocation);
 
-        Assert.Equal(PermissionRequestResultKind.UserNotAvailable, result.Kind);
+        Assert.Equal("user-not-available", result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 }

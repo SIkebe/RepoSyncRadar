@@ -1,4 +1,5 @@
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Copilot;
@@ -6,6 +7,8 @@ using RepoSyncRadar.Core.Options;
 using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
+
+#pragma warning disable GHCP001 // beta.7 exposes permission decisions through experimental RPC types.
 
 public class SessionConfigBuilderTests
 {
@@ -18,8 +21,8 @@ public class SessionConfigBuilderTests
             Streaming = true,
             AllowedUrlHosts = ["docs.github.com"],
         };
-        Func<PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>> handler = (_, _) =>
-            Task.FromResult(new PermissionRequestResult { Kind = PermissionRequestResultKind.Approved });
+        Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> handler = (_, _) =>
+            Task.FromResult(PermissionDecision.ApproveOnce());
 
         var config = SessionConfigBuilder.Build(
             SessionPurpose.Triage,
@@ -43,8 +46,8 @@ public class SessionConfigBuilderTests
             Streaming = true,
             AllowedUrlHosts = ["docs.github.com"],
         };
-        Func<PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>> handler = (_, _) =>
-            Task.FromResult(new PermissionRequestResult { Kind = PermissionRequestResultKind.Approved });
+        Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> handler = (_, _) =>
+            Task.FromResult(PermissionDecision.ApproveOnce());
         var tool = AIFunctionFactory.Create(
             () => "ok",
             new AIFunctionFactoryOptions
@@ -65,3 +68,4 @@ public class SessionConfigBuilderTests
         Assert.Equal(["radar_test"], config.AvailableTools);
     }
 }
+#pragma warning restore GHCP001

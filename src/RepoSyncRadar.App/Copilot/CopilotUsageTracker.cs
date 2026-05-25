@@ -118,13 +118,13 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
         Changed?.Invoke();
     }
 
+#pragma warning disable GHCP001 // beta.7 exposes usage cost and metrics as experimental SDK telemetry.
     internal static CopilotUsageRecord FromAssistantUsage(
         AssistantUsageEvent usage,
         SessionPurpose purpose,
         string sessionId)
     {
         var data = usage.Data;
-        var copilotUsage = data?.CopilotUsage;
         return new CopilotUsageRecord(
             usage.Timestamp,
             sessionId,
@@ -137,12 +137,10 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
             data?.CacheReadTokens ?? 0,
             data?.CacheWriteTokens ?? 0,
             data?.Cost,
-            copilotUsage?.TotalNanoAiu,
-            copilotUsage?.TokenDetails?.Select(static detail =>
-                new CopilotUsageTokenDetail(detail.TokenType, detail.TokenCount, detail.BatchSize, detail.CostPerBatch)).ToArray() ?? []);
+            TotalNanoAiu: null,
+            TokenDetails: []);
     }
 
-#pragma warning disable GHCP001 // beta.4 exposes session usage metrics as experimental.
     internal static CopilotSessionUsageMetrics FromSessionMetrics(
         UsageGetMetricsResult metrics,
         SessionPurpose purpose,

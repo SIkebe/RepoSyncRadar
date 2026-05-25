@@ -1,7 +1,10 @@
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
 using Microsoft.Extensions.Logging;
 
 namespace RepoSyncRadar.App.Copilot;
+
+#pragma warning disable GHCP001 // beta.7 exposes permission decisions through experimental RPC types.
 
 /// <summary>
 /// Implements <see cref="PermissionRequestHandler"/> for RepoSyncRadar. The policy is
@@ -55,7 +58,7 @@ public sealed partial class RadarPermissionPolicy
     /// Adapts the policy to the SDK delegate shape. Pass <c>policy.HandleAsync</c> as the
     /// <see cref="SessionConfig.OnPermissionRequest"/> value.
     /// </summary>
-    public async Task<PermissionRequestResult> HandleAsync(
+    public async Task<PermissionDecision> HandleAsync(
         PermissionRequest request,
         PermissionInvocation invocation)
     {
@@ -105,20 +108,20 @@ public sealed partial class RadarPermissionPolicy
         }
     }
 
-    private async Task<PermissionRequestResult> ConfirmAsync(PermissionRequest request)
+    private async Task<PermissionDecision> ConfirmAsync(PermissionRequest request)
     {
         var approved = await _prompt.ConfirmAsync(request).ConfigureAwait(false);
         return approved ? Approved() : DeniedByUser();
     }
 
-    private static PermissionRequestResult Approved() =>
-        new() { Kind = PermissionRequestResultKind.Approved };
+    private static PermissionDecision Approved() =>
+        PermissionDecision.ApproveOnce();
 
-    private static PermissionRequestResult DeniedByUser() =>
-        new() { Kind = PermissionRequestResultKind.Rejected };
+    private static PermissionDecision DeniedByUser() =>
+        PermissionDecision.Reject("Rejected by user.");
 
-    private static PermissionRequestResult DeniedByRules() =>
-        new() { Kind = PermissionRequestResultKind.UserNotAvailable };
+    private static PermissionDecision DeniedByRules() =>
+        PermissionDecision.UserNotAvailable();
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
         Message = "Approving custom tool {ToolName} (session={SessionId})")]
@@ -152,3 +155,4 @@ public sealed partial class RadarPermissionPolicy
         Message = "Denying unsupported permission kind {Kind} by rule (session={SessionId})")]
     private static partial void LogDenyingUnknownKind(ILogger logger, string? kind, string sessionId);
 }
+#pragma warning restore GHCP001

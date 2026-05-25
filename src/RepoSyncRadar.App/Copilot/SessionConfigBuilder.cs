@@ -1,10 +1,13 @@
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Copilot.Audit;
 using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;
+
+#pragma warning disable GHCP001 // beta.7 exposes permission decisions through experimental RPC types.
 
 /// <summary>
 /// Builds <see cref="SessionConfig"/> values for a given <see cref="SessionPurpose"/>.
@@ -18,7 +21,7 @@ internal static class SessionConfigBuilder
     public static SessionConfig Build(
         SessionPurpose purpose,
         IOptions<CopilotOptions> options,
-        Func<PermissionRequest, PermissionInvocation, Task<PermissionRequestResult>> permissionHandler,
+        Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> permissionHandler,
         ToolAuditHook? auditHook = null,
         IReadOnlyList<AIFunction>? tools = null)
     {
@@ -85,3 +88,4 @@ internal static class SessionConfigBuilder
         _ => throw new ArgumentOutOfRangeException(nameof(purpose), purpose, "Unsupported session purpose."),
     };
 }
+#pragma warning restore GHCP001
