@@ -115,6 +115,7 @@ public class OptionsValidationTests
         var webView = sp.GetRequiredService<IOptions<WebViewOptions>>().Value;
 
         Assert.Contains("api.githubcopilot.com", webView.AllowedUrlHosts);
+        Assert.Contains("api.business.githubcopilot.com", webView.AllowedUrlHosts);
         Assert.Contains("api.enterprise.githubcopilot.com", webView.AllowedUrlHosts);
     }
 
