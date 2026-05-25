@@ -1644,99 +1644,6 @@ html, body {
     max-height: 22rem;
 }
 
-/* AskPalette — gives the Ctrl+K row a proper flex layout so the input, the
-   実行 button, and the SQL-debug toggle don't visually collide with the
-   AppHeader's Sync button above. */
-.ask-palette-shell {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.ask-palette-toggle {
-    align-self: flex-start;
-    background: #f6f8fa;
-    border: 1px solid #d0d7de;
-    border-radius: 4px;
-    color: #24292f;
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.82rem;
-    font-weight: 700;
-    min-height: 1.8rem;
-    padding: 0.25rem 0.7rem;
-}
-
-.ask-palette-toggle:hover {
-    background: #eaeef2;
-}
-
-.ask-palette {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.ask-palette-input {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-}
-
-.ask-palette-input input[type="text"] {
-    flex: 1 1 18rem;
-    min-width: 12rem;
-    padding: 0.4rem 0.6rem;
-    border: 1px solid #ced4da;
-    border-radius: 4px;
-    font: inherit;
-}
-
-.ask-palette-input button {
-    padding: 0.4rem 0.9rem;
-    border: 1px solid #ced4da;
-    background: #f8f9fa;
-    border-radius: 4px;
-    cursor: pointer;
-    font: inherit;
-}
-
-.ask-palette-input button:hover:not([disabled]) {
-    background: #e9ecef;
-}
-
-.ask-palette-input button[disabled] {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.ask-palette-input label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.85rem;
-    color: #555;
-    white-space: nowrap;
-}
-
-.ask-palette-busy {
-    color: #555;
-    font-size: 0.85rem;
-    margin: 0;
-}
-
-.ask-palette-result {
-    background: #f6f8fa;
-    border: 1px solid #d0d7de;
-    border-radius: 4px;
-    padding: 0.6rem 0.8rem;
-    margin: 0;
-    white-space: pre-wrap;
-    font-family: "Cascadia Mono", "Consolas", monospace;
-    font-size: 0.85rem;
-}
-
 /* Preview 起動進捗 UI (スピナー / 経過秒 / ログ tail / 中止ボタン)。
    600 秒に伸ばした PreviewReadyTimeoutSeconds の silent な待ち時間を可視化する。 */
 .preview-progress {
@@ -1977,8 +1884,6 @@ html, body {
 .radar-theme-dark .drafts-empty,
 .radar-theme-dark .drafts-placeholder,
 .radar-theme-dark .drafts-busy,
-.radar-theme-dark .ask-palette-input label,
-.radar-theme-dark .ask-palette-busy,
 .radar-theme-dark .preview-progress-text,
 .radar-theme-dark .preview-progress-elapsed,
 .radar-theme-dark .preview-progress-pid,
@@ -1998,8 +1903,7 @@ html, body {
 .radar-theme-dark .commit-row:hover,
 .radar-theme-dark .toolbar-button.secondary:hover:not(:disabled),
 .radar-theme-dark .review-button:hover:not(:disabled),
-.radar-theme-dark .review-reason-chip:hover:not(:disabled),
-.radar-theme-dark .ask-palette-input button:hover:not([disabled]) {
+.radar-theme-dark .review-reason-chip:hover:not(:disabled) {
     background: var(--radar-hover-bg) !important;
 }
 
@@ -2029,10 +1933,7 @@ html, body {
 .radar-theme-dark .review-input-action input,
 .radar-theme-dark .review-suggestion-chip.already-ignored,
 .radar-theme-dark .review-archived-reason,
-.radar-theme-dark .ask-palette-input input[type="text"],
 .radar-theme-dark .commit-search-input,
-.radar-theme-dark .ask-palette-input button,
-.radar-theme-dark .ask-palette-result,
 .radar-theme-dark .preview-progress,
 .radar-theme-dark .preview-cancel,
 .radar-theme-dark .commit-search-clear,
@@ -2049,7 +1950,6 @@ html, body {
 .radar-theme-dark .radar-commit-detail .scoring,
 .radar-theme-dark .radar-commit-detail .file-row,
 .radar-theme-dark .drafts-channel,
-.radar-theme-dark .ask-palette-result,
 .radar-theme-dark .batch-explanation-progress,
 .radar-theme-dark .preview-progress {
     background: var(--radar-panel-bg) !important;
@@ -2133,7 +2033,6 @@ html, body {
 .radar-theme-dark .review-suggestion-chip:focus-visible,
 .radar-theme-dark .settings-theme-option:focus-visible,
 .radar-theme-dark .radar-commit-detail .file-row .open-in-webview:focus-visible,
-.radar-theme-dark .ask-palette-input button:focus-visible,
 .radar-theme-dark .preview-cancel:focus-visible {
     outline: 2px solid var(--radar-accent-border);
     outline-offset: 2px;

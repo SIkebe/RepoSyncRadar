@@ -26,7 +26,7 @@
 - [Step 15. Morning Triage セッション](#step-15-morning-triage-セッション)
 - [Step 16. Review UI(注目 / 保留 / 見送り候補 / アーカイブ / Ignore)](#step-16-review-ui注目--保留--見送り候補--アーカイブ--ignore)
 - [Step 17. Adoption セッション + 共有文案](#step-17-adoption-セッション--共有文案)
-- [Step 18. `radar_query` と Ask Palette](#step-18-radar_query-と-ask-palette)
+- [Step 18. Ask Palette 再設計待ち](#step-18-ask-palette-再設計待ち)
 - [Step 19. ローカルプレビュー(bare clone + worktree)](#step-19-ローカルプレビューbare-clone--worktree)
 - [Step 19.5. ローカルプレビューの UI 配線](#step-195-ローカルプレビューの-ui-配線)
 - [Step 19.6. ローカルプレビューの起動時間を抜本短縮](#step-196-ローカルプレビューの起動時間を抜本短縮)
@@ -734,52 +734,11 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 ---
 
-## Step 18. `radar_query` と Ask Palette
+## Step 18. Ask Palette 再設計待ち
 
-### 18.1 目的
+自然言語から SQL を生成してローカル SQLite に問い合わせる Ask Palette は、PR/コミットの文脈を GitHub.com Copilot Chat に任せられる場面が多く、スキーマ同期や結果から作業へ戻る導線も不十分だったため撤回しました。
 
-自然言語フィルタを SELECT 限定 SQL に落とし、`radar_query` ツールで実行。SQL インジェクションと暴走を絶対に許さない。
-
-### 18.2 スコープ
-
-- `RepoSyncRadar.Core/Services/SqlGuard.cs` — `Validate(sql, parameters)` で
-  - 単一文のみ
-  - `SELECT` で始まる
-  - `INSERT/UPDATE/DELETE/DROP/ATTACH/PRAGMA/...` を全て禁止
-  - 参照可能なテーブル/カラムを allow-list に制限
-  - `LIMIT` が無ければ強制で `LIMIT 100` を付ける
-- `radar_query` ツール: `SqlGuard` 通過後に `Microsoft.Data.Sqlite` を直接叩く(EF Core を経由しない=高速&安全)
-- `RepoSyncRadar.App/Components/AskPalette.razor` — Ctrl+K で開く、`ICopilotAgent.AskAsync` を呼ぶ
-- `AskSession` は `radar_query` を **唯一の** ツールとして登録、`SystemMessageMode.Customize` でスキーマを Replace
-
-### 18.3 テスト
-
-`Core.Tests/Services/SqlGuardTests.cs`
-
-| ケース | 期待 |
-|---|---|
-| `SELECT * FROM Commits LIMIT 5` | OK |
-| `INSERT INTO Commits ...` | reject |
-| `SELECT * FROM Commits; DROP TABLE Commits` | reject(複数文) |
-| `SELECT * FROM SecretTable` | reject(allow-list 外) |
-| `SELECT * FROM Commits` (LIMIT 無し) | 末尾に `LIMIT 100` を付与して OK |
-| `pragma table_info('Commits')` | reject |
-| `ATTACH DATABASE ...` | reject |
-| 大文字小文字混在 / コメント (`--`, `/* */`) で隠した DDL | reject |
-| 値が `?` パラメータでバインド | パラメータが解釈される |
-
-`App.Tests/Copilot/AskSessionTests.cs`
-
-| テスト | 内容 |
-|---|---|
-| `AskAsync_Returns_Formatted_Rows` | フェイクが `radar_query` を 1 回呼ぶ → 結果が Markdown テーブルに |
-| `AskAsync_Hides_Sql_From_User_By_Default` | 既定は結果のみ。`debug=true` で SQL も返す |
-| `AskAsync_Rejects_Write_Like_Prompt` | プロンプトに「すべて削除して」と書くと、`radar_query` が reject → エージェントがメッセージで応答 |
-
-### 18.4 完了基準
-
-- SqlGuard 9 件 + AskSession 3 件が緑
-- 手動: Ctrl+K → 「先月の Copilot Workspace 関連の重要変更」→ 結果テーブル表示
+再実装する場合は、まず用途を「RepoSyncRadar 独自のローカル判断・履歴を分析する機能」に絞り、固定スキーマのプロンプトではなくコードから生成したスキーマ、定型クエリ、結果行からコミットへ戻る導線を設計してから進めます。
 
 ---
 
@@ -1210,8 +1169,8 @@ Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画で�
   - 完了日 2026-05-13, テスト件数 5
 - [x] Step 17 — Adoption + 共有文案
   - 完了日 2026-05-13, テスト件数 8
-- [x] Step 18 — Ask Palette / SqlGuard
-  - 完了日 2026-05-13, テスト件数 12
+- [ ] Step 18 — Ask Palette 再設計待ち
+  - 既存実装は撤回済み。再実装前に用途と導線を再設計する。
 - [x] Step 19 — ローカルプレビュー (Core のみ)
   - 完了日 2026-05-13, テスト件数 7
 - [x] Step 19.5 — ローカルプレビュー UI 配線

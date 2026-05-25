@@ -568,7 +568,7 @@ public sealed class AppHeaderTests
         usageTracker.Record(new CopilotUsageRecord(
             new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
             "session-1",
-            SessionPurpose.Ask.ToString(),
+            SessionPurpose.Adoption.ToString(),
             "gpt-5.5",
             "api-1",
             100,

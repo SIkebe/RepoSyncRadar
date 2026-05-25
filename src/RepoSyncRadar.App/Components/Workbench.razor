@@ -37,20 +37,6 @@
         <main class="radar-workbench">
             <AppHeader DisplayCultureChanged="HandleDisplayCultureChanged" />
 
-            <MudPaper Elevation="0" Class="pa-2 ask-palette-shell" data-testid="ask-palette-shell">
-                <button type="button"
-                        class="ask-palette-toggle"
-                        data-testid="ask-palette-toggle"
-                        aria-expanded="@_askPaletteExpanded.ToString().ToLowerInvariant()"
-                        @onclick="ToggleAskPaletteAsync">
-                    @L["Workbench.Ask"]
-                </button>
-                @if (_askPaletteExpanded)
-                {
-                    <AskPalette />
-                }
-            </MudPaper>
-
             <MudPaper Elevation="0" Class="pa-2">
                 <div class="commit-search-toolbar" data-testid="commit-search-toolbar">
                     <label class="commit-search-label" for="commit-hash-search">@L["Common.Search"]</label>
@@ -218,7 +204,6 @@
     private int _listRefreshVersion;
     private bool _bulkReviewBusy;
     private string? _bulkReviewStatus;
-    private bool _askPaletteExpanded;
     private bool _batchExplanationBusy;
     private bool _batchExplanationCanceling;
     private string? _batchExplanationStatus;
@@ -362,12 +347,6 @@
 
         _commitHashQuery = string.Empty;
         RefreshCommitListForCurrentFilter();
-        return Task.CompletedTask;
-    }
-
-    private Task ToggleAskPaletteAsync()
-    {
-        _askPaletteExpanded = !_askPaletteExpanded;
         return Task.CompletedTask;
     }
 

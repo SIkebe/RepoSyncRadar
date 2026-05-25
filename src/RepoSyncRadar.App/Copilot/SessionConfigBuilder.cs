@@ -79,9 +79,6 @@ internal static class SessionConfigBuilder
         SessionPurpose.Adoption =>
             "You are the RepoSyncRadar focused-commit explainer and writer. Explain the diff in Japanese, "
             + "then produce shareable drafts for the chosen commit. Stay factual.",
-        SessionPurpose.Ask =>
-            "You are the RepoSyncRadar query assistant. Answer using only radar_query results. "
-            + "Refuse anything that requires writes or shell access.",
         SessionPurpose.Maintenance =>
             "You are the RepoSyncRadar maintenance reviewer. Propose ignore / boost rules "
             + "based on the recent review history. Do not apply changes without approval.",

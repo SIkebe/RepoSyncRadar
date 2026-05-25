@@ -18,20 +18,10 @@
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage 失敗</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage は失敗しました。詳細はエラーを確認してください。</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Triage を開始しています…</value></data>
-  <data name="AskSession.QueryRejected" xml:space="preserve"><value>クエリは実行できませんでした (理由: {0}). 安全な SELECT 文だけが利用できます。</value></data>
-  <data name="AskSession.SqlGuard.BlockedKeyword" xml:space="preserve"><value>禁止キーワード '{0}' を含んでいます。</value></data>
-  <data name="AskSession.SqlGuard.DisallowedTable" xml:space="preserve"><value>テーブル '{0}' は許可リストに含まれていません。</value></data>
-  <data name="AskSession.SqlGuard.EmptySql" xml:space="preserve"><value>空の SQL は受け付けられません。</value></data>
-  <data name="AskSession.SqlGuard.MultipleStatements" xml:space="preserve"><value>複数の SQL 文は許可されていません。</value></data>
-  <data name="AskSession.SqlGuard.SelectOnly" xml:space="preserve"><value>SELECT 文以外は許可されていません。</value></data>
   <data name="AdoptionSession.BatchIncludesNonFocused" xml:space="preserve"><value>注目以外のコミットが含まれています: {0}.</value></data>
   <data name="AdoptionSession.BatchRequiresAtLeastTwo" xml:space="preserve"><value>個別解説は 2 件以上の注目コミットを選択して生成してください。</value></data>
   <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>記事の取得に失敗しました ({0}): {1}</value></data>
   <data name="ArticleBody.NotFound" xml:space="preserve"><value>記事が見つかりません (404): {0}</value></data>
-  <data name="AskPalette.Busy" xml:space="preserve"><value>問い合わせ中…</value></data>
-  <data name="AskPalette.Placeholder" xml:space="preserve"><value>質問を入力 (Ctrl+Enter で実行)</value></data>
-  <data name="AskPalette.SessionNotRegistered" xml:space="preserve"><value>AskSession が DI に登録されていません。</value></data>
-  <data name="AskPalette.ShowSql" xml:space="preserve"><value>SQL を表示 (debug)</value></data>
   <data name="CommitList.Empty.ArchiveHint" xml:space="preserve"><value>アクティブな確認対象から外した候補がここに表示されます。</value></data>
   <data name="CommitList.Empty.ArchiveTitle" xml:space="preserve"><value>アーカイブは空です。</value></data>
   <data name="CommitList.Empty.DefaultHint" xml:space="preserve"><value>キューや検索条件を変えて確認してください。</value></data>
@@ -228,7 +218,6 @@
   <data name="TriageProgress.Skipped" xml:space="preserve"><value>スキップ</value></data>
   <data name="TriageProgress.Target" xml:space="preserve"><value>対象</value></data>
   <data name="Workbench.Archive" xml:space="preserve"><value>アーカイブへ</value></data>
-  <data name="Workbench.Ask" xml:space="preserve"><value>質問</value></data>
   <data name="Workbench.BackToUnseen" xml:space="preserve"><value>未確認へ戻す</value></data>
   <data name="Workbench.BatchExplanationDescription" xml:space="preserve"><value>選択した注目コミットごとに差分解説と共有文案を生成します。</value></data>
   <data name="Workbench.BatchExplanationProgress" xml:space="preserve"><value>Copilot が注目コミットの解説を個別生成中…</value></data>

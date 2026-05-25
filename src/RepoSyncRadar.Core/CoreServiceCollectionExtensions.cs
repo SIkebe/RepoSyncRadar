@@ -39,7 +39,6 @@ public static class CoreServiceCollectionExtensions
             new GitHubClient(new ProductHeaderValue("RepoSyncRadar")));
 
         services.TryAddSingleton<IRadarRepository, RadarRepository>();
-        services.TryAddSingleton<IRadarQueryRunner, SqliteRadarQueryRunner>();
         services.TryAddSingleton<IDocsGitHubClient, DocsGitHubClient>();
         services.TryAddSingleton<ICommitIngestionService, CommitIngestionService>();
         services.TryAddSingleton<IPathToUrlResolver, NullPathToUrlResolver>();

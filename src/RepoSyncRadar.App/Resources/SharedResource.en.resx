@@ -18,20 +18,10 @@
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage failed</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage failed. Check the error details.</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Starting triage...</value></data>
-  <data name="AskSession.QueryRejected" xml:space="preserve"><value>The query could not be run (reason: {0}). Only safe SELECT statements are available.</value></data>
-  <data name="AskSession.SqlGuard.BlockedKeyword" xml:space="preserve"><value>Contains blocked keyword '{0}'.</value></data>
-  <data name="AskSession.SqlGuard.DisallowedTable" xml:space="preserve"><value>Table '{0}' is not in the allow list.</value></data>
-  <data name="AskSession.SqlGuard.EmptySql" xml:space="preserve"><value>Empty SQL is not accepted.</value></data>
-  <data name="AskSession.SqlGuard.MultipleStatements" xml:space="preserve"><value>Multiple SQL statements are not allowed.</value></data>
-  <data name="AskSession.SqlGuard.SelectOnly" xml:space="preserve"><value>Only SELECT statements are allowed.</value></data>
   <data name="AdoptionSession.BatchIncludesNonFocused" xml:space="preserve"><value>The selection includes commits that are not watched: {0}.</value></data>
   <data name="AdoptionSession.BatchRequiresAtLeastTwo" xml:space="preserve"><value>Select at least two watched commits to generate individual explanations.</value></data>
   <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>Failed to fetch article ({0}): {1}</value></data>
   <data name="ArticleBody.NotFound" xml:space="preserve"><value>Article not found (404): {0}</value></data>
-  <data name="AskPalette.Busy" xml:space="preserve"><value>Asking...</value></data>
-  <data name="AskPalette.Placeholder" xml:space="preserve"><value>Ask a question (Ctrl+Enter to run)</value></data>
-  <data name="AskPalette.SessionNotRegistered" xml:space="preserve"><value>AskSession is not registered in DI.</value></data>
-  <data name="AskPalette.ShowSql" xml:space="preserve"><value>Show SQL (debug)</value></data>
   <data name="CommitList.Empty.ArchiveHint" xml:space="preserve"><value>Candidates removed from active review appear here.</value></data>
   <data name="CommitList.Empty.ArchiveTitle" xml:space="preserve"><value>The archive is empty.</value></data>
   <data name="CommitList.Empty.DefaultHint" xml:space="preserve"><value>Try a different queue or search filter.</value></data>
@@ -228,7 +218,6 @@
   <data name="TriageProgress.Skipped" xml:space="preserve"><value>Skipped</value></data>
   <data name="TriageProgress.Target" xml:space="preserve"><value>Target</value></data>
   <data name="Workbench.Archive" xml:space="preserve"><value>Archive</value></data>
-  <data name="Workbench.Ask" xml:space="preserve"><value>Ask</value></data>
   <data name="Workbench.BackToUnseen" xml:space="preserve"><value>Back to Unseen</value></data>
   <data name="Workbench.BatchExplanationDescription" xml:space="preserve"><value>Generate a diff explanation and sharing drafts for each selected watch commit.</value></data>
   <data name="Workbench.BatchExplanationProgress" xml:space="preserve"><value>Copilot is generating explanations for watch commits...</value></data>

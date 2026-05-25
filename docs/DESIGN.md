@@ -235,7 +235,6 @@ Copilot エージェントは「計画 → ツール選択 → 実行 → 観察
 | `radar_fetch_rendered` | `/api/article/body` で公式 HTML 取得 | HttpClient |
 | `radar_score_commit` | スコアと注目カテゴリを保存 | SQLite (`Scoring`) |
 | `radar_save_review` | 注目 / 保留 / 見送り候補 / アーカイブ / Seen の保存 | SQLite (`Review`) |
-| `radar_query` | 自然言語フィルタ用の SELECT 限定 SQL 実行 | EF Core + SqlGuard |
 | `radar_post_draft` | 媒体別の共有文案を保存 | SQLite (`Draft`) |
 | `radar_ignore_rule` | 無視ディレクトリ / パターンの追加 | SQLite (`IgnoreRule`) |
 | `radar_boost_rule` | 重要度ブーストルールの追加 | SQLite (`BoostRule`) |
@@ -262,7 +261,6 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 
 - **副作用ありのツールは `OnPermissionRequest` で必ず確認**(`radar_save_review` / `radar_post_draft` / `radar_ignore_rule` 等)。
 - **読み取り専用ツールは `skip_permission = true` 可**(`radar_list_commits` / `radar_get_diff` 等)。
-- **`radar_query` は SELECT のみ + allowlist + LIMIT 強制**で SQL インジェクションと暴走を抑制。
 
 ---
 
@@ -281,13 +279,7 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 - 入力: 注目コミット + 差分 + 解決済み URL + 過去の注目例 5 件(few-shot)。
 - 出力: JSON で `{ twitter_ja, teams_ja, customer_ja }`。
 
-### 7.3 `AskSession`
-
-- 自然言語フィルタ用のチャット(コマンドパレット)。
-- `radar_query` ツール 1 つだけを露出。
-- `SystemMessageMode.Customize` でスキーマと安全ルールを Replace、Tone を Append。
-
-### 7.4 `MaintenanceSession`(任意 / 週次)
+### 7.3 `MaintenanceSession`(任意 / 週次)
 
 - 振り返り: 注目 / 保留 / 見送り候補 / アーカイブの傾向を集計し、無視ルール / ブーストルールの提案を生成。
 - ユーザーは生成された提案を一覧から有効化するだけ。
@@ -546,14 +538,6 @@ public sealed class CopilotToolLog
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 11.4 Ask Palette(自然言語フィルタ)
-
-```
-✦ "先月 Copilot Workspace に関する未確認の重要変更を出して"
- → SELECT * FROM Commits c JOIN Scoring s ON ... WHERE s.Score >= 0.6 ...
- → 12 件ヒット
-```
-
 ---
 
 ## 12. ローカルプレビュー戦略
@@ -641,7 +625,6 @@ git fetch --prune
 | GitHub OAuth トークン管理 | DPAPI(`CurrentUser`) で暗号化してローカル保存。通常利用で PAT は使わない |
 | プロンプトインジェクション | コミットメッセージ / 差分はデータとしてラップ、`SystemMessageMode.Append` でガードレール維持 |
 | ツール権限 | `OnPermissionRequest` で `shell` / `write` / 任意 `url` は UI ダイアログ必須。`ApproveAll` は使わない |
-| SQL インジェクション(`radar_query`) | SELECT のみ + テーブル/カラム allowlist + LIMIT 強制 + パラメータバインド |
 | シークレットの LLM 送信防止 | 差分の URL / トークン / メアド / PII を正規表現でマスクしてから送る |
 | ログ | `OnPreToolUse` / `OnPostToolUse` 全件を SQLite と JSONL に保存 |
 | アプリ署名 | `signtool.exe` + 自前 EV 証明書、または Microsoft Store 配布 |
@@ -715,11 +698,10 @@ RepoSyncRadar.sln
 | **2. Copilot SDK 統合** | `CopilotClient` 起動、最小ツール (`radar_list_commits` / `radar_get_diff`) 登録、Morning Triage セッション | スコアと要約が SQLite に入る |
 | **3. レビュー UI** | 注目 / 保留 / アーカイブ / Ignore、Reason 入力、Sidebar フィルタ | 1 日 5 分運用が成立 |
 | **4. 共有文案** | Adoption セッション + 3 媒体テンプレート + Regenerate | 注目 → 文案 → 編集 → クリップボードで完結 |
-| **5. 自然言語フィルタ** | `radar_query` ツール + Ask Palette | 「先月の Copilot 関連未確認重要変更」のクエリが動く |
-| **6. ローカルプレビュー** | bare clone + `git worktree` + Next.js sidecar、Before/After 並列表示 | PR HEAD の見た目で比較可能 |
-| **7. 配布・運用** | 署名済み配布、更新、プライバシー/サポート/脆弱性報告導線 | 管理者が安心してインストールできる |
+| **5. ローカルプレビュー** | bare clone + `git worktree` + Next.js sidecar、Before/After 並列表示 | PR HEAD の見た目で比較可能 |
+| **6. 配布・運用** | 署名済み配布、更新、プライバシー/サポート/脆弱性報告導線 | 管理者が安心してインストールできる |
 
-Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Phase 6 で完璧。
+Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Phase 5 でプレビューまで完結。
 
 ---
 
@@ -733,7 +715,7 @@ Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Ph
 | D4 | `GitHub.Copilot.SDK` を中核に据える | 2026-05-12 | エージェントオーケストレーションを自前実装しない |
 | D5 | SQLite + EF Core を採用 | 2026-05-12 | ローカル単独、バックアップ 1 ファイル、クエリ容易 |
 | D6 | submodule は不採用、アプリは独立リポジトリ | 2026-05-12 | submodule は vendoring 用途 / 毎日追跡と相性が悪い |
-| D7 | Phase 1〜5 は API オンリー、Phase 6 で bare clone + worktree | 2026-05-12 | 初期セットアップを軽量に保つ |
+| D7 | Phase 1〜4 は API オンリー、Phase 5 で bare clone + worktree | 2026-05-12 | 初期セットアップを軽量に保つ |
 | D8 | `SystemMessageMode.Append` を基本とする | 2026-05-12 | ガードレール削除を禁止 |
 | D9 | `OnPermissionRequest` で `shell` / `write` / 任意 `url` を UI 確認必須 | 2026-05-12 | `ApproveAll` は使わない |
 | D10 | 自動投稿はしない | 2026-05-12 | 信頼を失わないため、最終確認は人間 |

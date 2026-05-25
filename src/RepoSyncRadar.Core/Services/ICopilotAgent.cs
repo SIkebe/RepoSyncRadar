@@ -26,12 +26,6 @@ public interface ICopilotAgent
         IReadOnlyList<string> commitShas,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Answers a natural-language query against the local store. The implementation routes the
-    /// question through Copilot, which composes a SELECT-only SQL query via the
-    /// <c>radar_query</c> tool.
-    /// </summary>
-    Task<string> AskAsync(string naturalLanguageQuery, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
