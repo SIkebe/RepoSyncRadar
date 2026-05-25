@@ -9,7 +9,7 @@ namespace RepoSyncRadar.App.Tests;
 
 public sealed class MainWindowPreviewComparisonTests
 {
-    private static readonly int[] IndexOne = [1];
+    private static readonly int[] _indexOne = [1];
 
     [Fact]
     public void IsLocalPreviewUri_Returns_True_For_Loopback_Http()
@@ -48,6 +48,16 @@ public sealed class MainWindowPreviewComparisonTests
     public void BuildSinglePageHeaderLabel_Describes_Navigation_Target(string url, string expected)
     {
         Assert.Equal(expected, MainWindow.BuildSinglePageHeaderLabel(new Uri(url)));
+    }
+
+    [Theory]
+    [InlineData("https://github.com/github/docs/commit/abc", true)]
+    [InlineData("https://github.com/copilot", true)]
+    [InlineData("https://docs.github.com/en/copilot", false)]
+    [InlineData("https://example.com/page", false)]
+    public void ShouldResetBeforeSinglePageNavigation_Only_Targets_GitHub(string url, bool expected)
+    {
+        Assert.Equal(expected, MainWindow.ShouldResetBeforeSinglePageNavigation(new Uri(url)));
     }
 
     [Fact]
@@ -431,7 +441,7 @@ public sealed class MainWindowPreviewComparisonTests
         var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
 
         Assert.Empty(plan.BeforeChangedIndexes);
-        Assert.Equal(IndexOne, plan.AfterChangedIndexes);
+        Assert.Equal(_indexOne, plan.AfterChangedIndexes);
     }
 
     [Fact]
@@ -482,8 +492,8 @@ public sealed class MainWindowPreviewComparisonTests
 
         var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
 
-        Assert.Equal(IndexOne, plan.BeforeChangedIndexes);
-        Assert.Equal(IndexOne, plan.AfterChangedIndexes);
+        Assert.Equal(_indexOne, plan.BeforeChangedIndexes);
+        Assert.Equal(_indexOne, plan.AfterChangedIndexes);
     }
 
     [Fact]

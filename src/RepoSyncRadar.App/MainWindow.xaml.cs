@@ -107,6 +107,7 @@ public partial class MainWindow : Window
     private const ushort RiMouseButton5Down = 0x0100;
 
     private static readonly Uri InitialDocsUri = new("https://docs.github.com/en");
+    private static readonly Uri BlankNavigationUri = new("about:blank");
 
     /// <summary>
     /// Environment variable name. When set to a TCP port, BlazorWebView's WebView2
@@ -140,6 +141,8 @@ public partial class MainWindow : Window
     private readonly IAppUserSettingsStore _userSettingsStore;
     private readonly ILogger<MainWindow> _logger;
     private PreviewComparisonRequest? _activePreviewDiffRequest;
+    private Uri? _activeSinglePageRequest;
+    private Uri? _pendingSinglePageAfterBlank;
     private int _previewDiffGeneration;
     private bool _beforePreviewDiffReady;
     private bool _afterPreviewDiffReady;
@@ -212,11 +215,13 @@ public partial class MainWindow : Window
             _windowHwndSource = null;
             if (DocsView.CoreWebView2 is not null)
             {
+                DocsView.CoreWebView2.DOMContentLoaded -= OnDocsSurfaceDomContentLoaded;
                 DocsView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
                 RemoveDocsThemeDocumentScript(DocsView);
             }
             if (PreviewView.CoreWebView2 is not null)
             {
+                PreviewView.CoreWebView2.DOMContentLoaded -= OnDocsSurfaceDomContentLoaded;
                 PreviewView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
                 RemoveDocsThemeDocumentScript(PreviewView);
             }
@@ -657,6 +662,7 @@ public partial class MainWindow : Window
             CoreWebView2WebResourceContext.All);
         view.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
         view.CoreWebView2.Settings.IsWebMessageEnabled = true;
+        view.CoreWebView2.DOMContentLoaded += OnDocsSurfaceDomContentLoaded;
         view.CoreWebView2.WebMessageReceived += OnPreviewScrollMessageReceived;
         ApplyWebViewThemePreference(view, _docsTheme);
         _ = InstallMouseHistoryNavigationAsync(view);
@@ -837,8 +843,27 @@ public partial class MainWindow : Window
         }
 
         StopPreviewDiffTracking();
+        NavigateSinglePageRequest(url);
+    }
+
+    private void NavigateSinglePageRequest(Uri url)
+    {
+        _activeSinglePageRequest = url;
+        _pendingSinglePageAfterBlank = null;
         ShowSinglePageMode(BuildSinglePageHeaderLabel(url));
-        DocsView.Source = url;
+        ShowPreviewPaneStatus(
+            isBeforePane: true,
+            text: "ページを読み込み中…",
+            detail: url.AbsoluteUri);
+
+        if (ShouldResetBeforeSinglePageNavigation(url))
+        {
+            _pendingSinglePageAfterBlank = url;
+            NavigatePreviewPane(DocsView, BlankNavigationUri);
+            return;
+        }
+
+        NavigatePreviewPane(DocsView, url);
     }
 
     private void NavigatePreviewComparisonRequest(PreviewComparisonRequest request)
@@ -869,6 +894,13 @@ public partial class MainWindow : Window
         }
 
         view.Source = url;
+    }
+
+    internal static bool ShouldResetBeforeSinglePageNavigation(Uri url)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+
+        return string.Equals(url.Host, "github.com", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -989,6 +1021,10 @@ public partial class MainWindow : Window
     private void OnDocsViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         _ = ApplyDocsThemeAsync(DocsView);
+        if (HandleSinglePageNavigationCompleted(DocsView, e))
+        {
+            return;
+        }
         OnPreviewDiffPaneNavigationCompleted(DocsView, isBeforePane: true, e);
     }
 
@@ -996,6 +1032,56 @@ public partial class MainWindow : Window
     {
         _ = ApplyDocsThemeAsync(PreviewView);
         OnPreviewDiffPaneNavigationCompleted(PreviewView, isBeforePane: false, e);
+    }
+
+    private void OnDocsSurfaceDomContentLoaded(object? sender, CoreWebView2DOMContentLoadedEventArgs e)
+    {
+        if (_activePreviewDiffRequest is not null
+            || _pendingSinglePageAfterBlank is not null
+            || !ReferenceEquals(sender, DocsView.CoreWebView2)
+            || _activeSinglePageRequest is not { } request
+            || !IsSameNavigationTarget(DocsView.Source, request))
+        {
+            return;
+        }
+
+        HidePreviewPaneStatus(isBeforePane: true);
+    }
+
+    private bool HandleSinglePageNavigationCompleted(
+        WebView2CompositionControl view,
+        CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (_activePreviewDiffRequest is not null || !ReferenceEquals(view, DocsView))
+        {
+            return false;
+        }
+
+        if (_pendingSinglePageAfterBlank is { } pending
+            && IsSameNavigationTarget(view.Source, BlankNavigationUri))
+        {
+            _pendingSinglePageAfterBlank = null;
+            NavigatePreviewPane(DocsView, pending);
+            return true;
+        }
+
+        if (_activeSinglePageRequest is not { } request
+            || !IsSameNavigationTarget(view.Source, request))
+        {
+            return false;
+        }
+
+        if (!e.IsSuccess)
+        {
+            ShowPreviewPaneStatus(
+                isBeforePane: true,
+                text: "ページの読み込みに失敗しました",
+                detail: $"WebView2: {e.WebErrorStatus}");
+            return true;
+        }
+
+        HidePreviewPaneStatus(isBeforePane: true);
+        return true;
     }
 
     private void OnPreviewDiffPaneNavigationCompleted(
