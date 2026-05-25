@@ -91,7 +91,9 @@ public sealed partial class AskSession
         # RepoSyncRadar Ask Palette
         以下の質問に答えるための SQL を考えてください。
         - 必ず 1 文の `SELECT` 文を ```sql ``` フェンスで囲んで返してください。
-        - 許可されているテーブル: Commits, Files, Reviews, Drafts, Scores, IgnoreRules, BoostRules, Audits, PathUrlMap
+        - 必ず実際の SQLite テーブル名だけを使ってください。EF のナビゲーション名や単数形/別名は使わないでください。
+        - 許可されているテーブル: Commits, CommitFiles, Scorings, Reviews, Drafts, PathUrlMaps, IgnoreRules, BoostRules, CopilotToolLogs
+        - よく使う結合: CommitFiles.Sha = Commits.Sha, Scorings.Sha = Commits.Sha, Reviews.Sha = Commits.Sha, Drafts.Sha = Commits.Sha
         - 書き込み系 (INSERT/UPDATE/DELETE/DROP 等) は禁止されています。
 
         ## 質問

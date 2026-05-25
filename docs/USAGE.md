@@ -266,7 +266,7 @@ worktree ごとに作業ディレクトリが分かれるため、`npm install` 
 
 ### 5.2 監査ログ
 
-すべての `radar_*` ツール呼び出しは `Audits` テーブルに記録(Step 12 の `OnPreToolUse` / `OnPostToolUse`)。Ask Palette で次のように確認できます:
+すべての `radar_*` ツール呼び出しは `CopilotToolLogs` テーブルに記録(Step 12 の `OnPreToolUse` / `OnPostToolUse`)。Ask Palette で次のように確認できます:
 
 ```
 過去 1 時間に呼ばれた radar_* ツールを多い順に

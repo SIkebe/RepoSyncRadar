@@ -40,6 +40,42 @@ public sealed class SqlGuardTests
     }
 
     [Fact]
+    public void Accepts_Current_Radar_Tables()
+    {
+        var tables = new[]
+        {
+            "Commits",
+            "CommitFiles",
+            "Scorings",
+            "Reviews",
+            "Drafts",
+            "PathUrlMaps",
+            "IgnoreRules",
+            "BoostRules",
+            "CopilotToolLogs",
+        };
+
+        foreach (var table in tables)
+        {
+            var result = SqlGuard.Validate($"SELECT * FROM {table} LIMIT 1");
+            Assert.True(result.IsValid, result.Reason);
+        }
+    }
+
+    [Fact]
+    public void Rejects_Stale_Display_Table_Names()
+    {
+        var staleTables = new[] { "Files", "Scores", "Audits", "PathUrlMap" };
+
+        foreach (var table in staleTables)
+        {
+            var result = SqlGuard.Validate($"SELECT * FROM {table} LIMIT 1");
+            Assert.False(result.IsValid);
+            Assert.Contains(table, result.Reason!, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void Appends_Default_Limit_When_Missing()
     {
         var result = SqlGuard.Validate("SELECT Sha FROM Commits");

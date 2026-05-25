@@ -25,14 +25,14 @@ public sealed partial class SqlGuard
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Commits",
-            "Files",
+            "CommitFiles",
             "Reviews",
             "Drafts",
-            "Scores",
+            "Scorings",
             "IgnoreRules",
             "BoostRules",
-            "Audits",
-            "PathUrlMap",
+            "CopilotToolLogs",
+            "PathUrlMaps",
         };
 
     private static readonly IReadOnlySet<string> ForbiddenKeywords =

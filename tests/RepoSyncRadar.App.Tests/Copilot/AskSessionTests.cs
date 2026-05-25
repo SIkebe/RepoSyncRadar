@@ -115,6 +115,21 @@ public sealed class AskSessionTests : IDisposable
         Assert.DoesNotContain("禁止キーワード", result, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void BuildPrompt_Uses_Actual_Sqlite_Table_Names()
+    {
+        var prompt = AskSession.BuildPrompt("Enterprise Team を API で扱う変更は?");
+
+        Assert.Contains("CommitFiles", prompt, StringComparison.Ordinal);
+        Assert.Contains("Scorings", prompt, StringComparison.Ordinal);
+        Assert.Contains("CopilotToolLogs", prompt, StringComparison.Ordinal);
+        Assert.Contains("PathUrlMaps", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Commits, Files", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Scores", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Audits", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("PathUrlMap\n", prompt, StringComparison.Ordinal);
+    }
+
     private static (AskSession Sut, IRadarQueryRunner Runner, ICopilotSession Session) BuildSut(
         string assistantReply,
         RadarQueryResult runnerResult,
