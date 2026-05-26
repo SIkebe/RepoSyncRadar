@@ -64,6 +64,18 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""\bhref\s*=\s*(?<quote>["'])(?<href>.*?)\k<quote>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex AnchorHrefRegex();
 
+    [GeneratedRegex("""<span\b(?<attrs>[^>]*)>\s*AUTOTITLE\s*</span>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex AutotitleSpanRegex();
+
+    [GeneratedRegex(@"\[(?<label>AUTOTITLE)\](?=\()", RegexOptions.IgnoreCase)]
+    private static partial Regex AutotitleMarkdownLabelRegex();
+
+    [GeneratedRegex(@"\[AUTOTITLE\]\((?<href>[^\s)]+)\)?", RegexOptions.IgnoreCase)]
+    private static partial Regex AutotitleMarkdownLinkRegex();
+
+    [GeneratedRegex("""<[^>]+>""", RegexOptions.Singleline)]
+    private static partial Regex HtmlTagRegex();
+
     [GeneratedRegex("""(?<attr>\b(?:src|poster)\s*=\s*)(?<quote>["'])(?<url>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlAssetUrlRegex();
 
@@ -288,8 +300,18 @@ internal static partial class MarkdownPreviewRenderer
             html.Append("<p class=\"rsr-path\">").Append(repoPathDisplay).AppendLine("</p>");
         }
         AppendVersionBadgeMarkup(html, selectedVersion ?? effectiveVersion, affectedVersions);
-        AppendVersionDiffSummary(html, selectedVersion ?? effectiveVersion, versionImpacts);
-        AppendSourceDiffSummary(html, sourceDiff);
+        AppendVersionDiffSummary(
+            html,
+            selectedVersion ?? effectiveVersion,
+            versionImpacts,
+            trimmedRepoPath,
+            effectiveLiquidContext);
+        AppendSourceDiffSummary(
+            html,
+            sourceDiff,
+            trimmedRepoPath,
+            effectiveLiquidContext,
+            effectiveVersion);
         html.AppendLine("</header>");
         if (!string.IsNullOrWhiteSpace(introHtml))
         {
@@ -738,7 +760,7 @@ internal static partial class MarkdownPreviewRenderer
         return AnchorRegex().Replace(html, match =>
         {
             var innerHtml = match.Groups["body"].Value;
-            if (!string.Equals(WebUtility.HtmlDecode(innerHtml).Trim(), "AUTOTITLE", StringComparison.Ordinal))
+            if (!IsAutotitleLinkBody(innerHtml))
             {
                 return match.Value;
             }
@@ -763,8 +785,39 @@ internal static partial class MarkdownPreviewRenderer
                 return match.Value;
             }
 
-            return string.Concat("<a", attrs, ">", titleHtml, "</a>");
+            var diffClass = TryGetAutotitleDiffClass(innerHtml);
+            var replacementBody = diffClass is null
+                ? titleHtml
+                : string.Concat("<span class=\"", diffClass, "\">", titleHtml, "</span>");
+
+            return string.Concat("<a", attrs, ">", replacementBody, "</a>");
         });
+    }
+
+    private static bool IsAutotitleLinkBody(string innerHtml)
+    {
+        var text = HtmlTagRegex().Replace(innerHtml, string.Empty);
+        return string.Equals(WebUtility.HtmlDecode(text).Trim(), "AUTOTITLE", StringComparison.Ordinal);
+    }
+
+    private static string? TryGetAutotitleDiffClass(string innerHtml)
+    {
+        var match = AutotitleSpanRegex().Match(innerHtml);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var attrs = match.Groups["attrs"].Value;
+        if (attrs.Contains("rsr-rendered-diff-added", StringComparison.Ordinal))
+        {
+            return "rsr-rendered-diff-added";
+        }
+        if (attrs.Contains("rsr-rendered-diff-removed", StringComparison.Ordinal))
+        {
+            return "rsr-rendered-diff-removed";
+        }
+        return null;
     }
 
     private static string? ResolveAutotitleRawTitle(
@@ -783,6 +836,21 @@ internal static partial class MarkdownPreviewRenderer
             if (pageTitles.TryGetValue(candidate, out var title))
             {
                 return title;
+            }
+        }
+
+        if (normalizedHref.EndsWith("...", StringComparison.Ordinal))
+        {
+            var prefix = normalizedHref[..^3].Trim('/');
+            foreach (var candidatePrefix in BuildAutotitleTruncatedLookupPrefixes(prefix))
+            {
+                foreach (var pair in pageTitles)
+                {
+                    if (pair.Key.StartsWith(candidatePrefix, StringComparison.Ordinal))
+                    {
+                        return pair.Value;
+                    }
+                }
             }
         }
         return null;
@@ -886,6 +954,26 @@ internal static partial class MarkdownPreviewRenderer
 
         yield return "content/" + trimmed + ".md";
         yield return "content/" + trimmed + "/index.md";
+    }
+
+    private static IEnumerable<string> BuildAutotitleTruncatedLookupPrefixes(string normalizedHrefPrefix)
+    {
+        var trimmed = normalizedHrefPrefix.Trim('/');
+        if (trimmed.Length == 0)
+        {
+            yield break;
+        }
+
+        yield return trimmed;
+        yield return "/" + trimmed;
+
+        if (trimmed.StartsWith("content/", StringComparison.Ordinal))
+        {
+            yield return trimmed;
+            yield break;
+        }
+
+        yield return "content/" + trimmed;
     }
 
     private static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
@@ -1163,7 +1251,9 @@ internal static partial class MarkdownPreviewRenderer
     private static void AppendVersionDiffSummary(
         StringBuilder html,
         DocsVersion currentVersion,
-        IReadOnlyList<DocsVersionImpactDetail>? versionImpacts)
+        IReadOnlyList<DocsVersionImpactDetail>? versionImpacts,
+        string repoPath,
+        DocsLiquidContext liquidContext)
     {
         if (versionImpacts is null || versionImpacts.Count == 0)
         {
@@ -1210,7 +1300,7 @@ internal static partial class MarkdownPreviewRenderer
             var visibleChanges = group.Changes.Take(3).ToArray();
             foreach (var change in visibleChanges)
             {
-                AppendVersionChange(html, change);
+                AppendVersionChange(html, change, repoPath, liquidContext, currentVersion);
             }
             if (group.Changes.Count > visibleChanges.Length)
             {
@@ -1225,7 +1315,10 @@ internal static partial class MarkdownPreviewRenderer
 
     private static void AppendSourceDiffSummary(
         StringBuilder html,
-        MarkdownSourceDiffSummary? sourceDiff)
+        MarkdownSourceDiffSummary? sourceDiff,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         if (sourceDiff is null || !sourceDiff.HasChanges)
         {
@@ -1243,7 +1336,7 @@ internal static partial class MarkdownPreviewRenderer
 
         foreach (var change in sourceDiff.IfversionChanges.Take(8))
         {
-            AppendIfversionSourceChange(html, change);
+            AppendIfversionSourceChange(html, change, repoPath, liquidContext, version);
         }
 
         foreach (var fileChange in sourceDiff.RelatedFileChanges.Take(4))
@@ -1255,7 +1348,7 @@ internal static partial class MarkdownPreviewRenderer
                 .Append("</p>");
             foreach (var lineChange in fileChange.Changes.Take(6))
             {
-                AppendSourceLineChange(html, lineChange);
+                AppendSourceLineChange(html, lineChange, repoPath, liquidContext, version);
             }
             if (fileChange.Changes.Count > 6)
             {
@@ -1273,7 +1366,12 @@ internal static partial class MarkdownPreviewRenderer
         html.Append("</ul></section>");
     }
 
-    private static void AppendIfversionSourceChange(StringBuilder html, MarkdownIfversionChange change)
+    private static void AppendIfversionSourceChange(
+        StringBuilder html,
+        MarkdownIfversionChange change,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         html.Append("<li class=\"rsr-source-change\" data-change-kind=\"")
             .Append(WebUtility.HtmlEncode(BuildChangeKindSlug(change.Kind)))
@@ -1283,43 +1381,79 @@ internal static partial class MarkdownPreviewRenderer
             .Append("</span>");
         if (!string.IsNullOrWhiteSpace(change.BeforeExpression))
         {
-            AppendSourceLine(html, "変更前", "{% ifversion " + change.BeforeExpression + " %}");
+            AppendSourceLine(html, "変更前", "{% ifversion " + change.BeforeExpression + " %}", repoPath, liquidContext, version);
         }
         if (!string.IsNullOrWhiteSpace(change.BeforePreview))
         {
-            AppendSourceLine(html, "対象本文", change.BeforePreview);
+            AppendSourceLine(html, "対象本文", change.BeforePreview, repoPath, liquidContext, version);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterExpression))
         {
-            AppendSourceLine(html, "PR HEAD", "{% ifversion " + change.AfterExpression + " %}");
+            AppendSourceLine(html, "PR HEAD", "{% ifversion " + change.AfterExpression + " %}", repoPath, liquidContext, version);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterPreview)
             && !string.Equals(change.BeforePreview, change.AfterPreview, StringComparison.Ordinal))
         {
-            AppendSourceLine(html, "対象本文", change.AfterPreview);
+            AppendSourceLine(html, "対象本文", change.AfterPreview, repoPath, liquidContext, version);
         }
         html.Append("</li>");
     }
 
-    private static void AppendSourceLineChange(StringBuilder html, MarkdownSourceLineChange change)
+    private static void AppendSourceLineChange(
+        StringBuilder html,
+        MarkdownSourceLineChange change,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         if (!string.IsNullOrWhiteSpace(change.BeforeLine))
         {
-            AppendSourceLine(html, "変更前", change.BeforeLine);
+            AppendSourceLine(html, "変更前", change.BeforeLine, repoPath, liquidContext, version);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterLine))
         {
-            AppendSourceLine(html, "PR HEAD", change.AfterLine);
+            AppendSourceLine(html, "PR HEAD", change.AfterLine, repoPath, liquidContext, version);
         }
     }
 
-    private static void AppendSourceLine(StringBuilder html, string label, string line)
+    private static void AppendSourceLine(
+        StringBuilder html,
+        string label,
+        string line,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
+        var displayLine = RewriteAutotitlePlainTextLine(line, repoPath, liquidContext, version);
         html.Append("<p class=\"rsr-source-line\"><span class=\"rsr-source-line-label\">")
             .Append(WebUtility.HtmlEncode(label))
             .Append("</span><code>")
-            .Append(WebUtility.HtmlEncode(line))
+            .Append(WebUtility.HtmlEncode(displayLine))
             .Append("</code></p>");
+    }
+
+    private static string RewriteAutotitlePlainTextLine(
+        string line,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        if (string.IsNullOrEmpty(line) || liquidContext.PageTitles.Count == 0)
+        {
+            return line;
+        }
+
+        return AutotitleMarkdownLinkRegex().Replace(line, match =>
+        {
+            var rawTitle = ResolveAutotitleRawTitle(match.Groups["href"].Value, repoPath, liquidContext.PageTitles);
+            if (string.IsNullOrWhiteSpace(rawTitle))
+            {
+                return "the referenced docs page";
+            }
+
+            var titleText = EvaluateLiquidText(rawTitle, liquidContext, version).Trim();
+            return titleText.Length == 0 ? "the referenced docs page" : titleText;
+        });
     }
 
     private static string RenderFrontmatterDiff(IReadOnlyList<MarkdownFrontmatterChange>? changes)
@@ -1476,7 +1610,12 @@ internal static partial class MarkdownPreviewRenderer
         html.Append("</ul>");
     }
 
-    private static void AppendVersionChange(StringBuilder html, DocsVersionChangeSnippet change)
+    private static void AppendVersionChange(
+        StringBuilder html,
+        DocsVersionChangeSnippet change,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         html.Append("<div class=\"rsr-version-change\" data-change-kind=\"")
             .Append(WebUtility.HtmlEncode(BuildChangeKindSlug(change.Kind)))
@@ -1486,11 +1625,27 @@ internal static partial class MarkdownPreviewRenderer
             .Append("</span>");
         if (!string.IsNullOrWhiteSpace(change.BeforeExcerpt))
         {
-            AppendVersionChangeExcerpt(html, "変更前", change.BeforeExcerpt, change.AfterExcerpt, VersionChangeExcerptSide.Before);
+            AppendVersionChangeExcerpt(
+                html,
+                "変更前",
+                change.BeforeExcerpt,
+                change.AfterExcerpt,
+                VersionChangeExcerptSide.Before,
+                repoPath,
+                liquidContext,
+                version);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterExcerpt))
         {
-            AppendVersionChangeExcerpt(html, "PR HEAD", change.AfterExcerpt, change.BeforeExcerpt, VersionChangeExcerptSide.After);
+            AppendVersionChangeExcerpt(
+                html,
+                "PR HEAD",
+                change.AfterExcerpt,
+                change.BeforeExcerpt,
+                VersionChangeExcerptSide.After,
+                repoPath,
+                liquidContext,
+                version);
         }
         html.Append("</div>");
     }
@@ -1500,7 +1655,10 @@ internal static partial class MarkdownPreviewRenderer
         string label,
         string excerpt,
         string? comparisonExcerpt,
-        VersionChangeExcerptSide side)
+        VersionChangeExcerptSide side,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         html.Append("<div class=\"rsr-version-change-line\"><span class=\"rsr-version-change-label\">")
             .Append(WebUtility.HtmlEncode(label))
@@ -1511,7 +1669,11 @@ internal static partial class MarkdownPreviewRenderer
         }
         else
         {
-            AppendVersionChangeExcerptText(html, excerpt, comparisonExcerpt, side);
+            var displayExcerpt = RewriteAutotitlePlainTextLine(excerpt, repoPath, liquidContext, version);
+            var displayComparisonExcerpt = comparisonExcerpt is null
+                ? null
+                : RewriteAutotitlePlainTextLine(comparisonExcerpt, repoPath, liquidContext, version);
+            AppendVersionChangeExcerptText(html, displayExcerpt, displayComparisonExcerpt, side);
         }
         html.Append("</div>");
     }
@@ -1883,6 +2045,11 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string MarkRenderedDiffContent(string content, string markerClass, string? comparisonContent)
     {
+        if (TryMarkAutotitleMarkdownLinkLabels(content, markerClass, out var markedAutotitleLinks))
+        {
+            return markedAutotitleLinks;
+        }
+
         if (string.IsNullOrEmpty(comparisonContent))
         {
             return "<span class=\"" + markerClass + "\">" + content + "</span>";
@@ -1899,6 +2066,26 @@ internal static partial class MarkdownPreviewRenderer
             + content.Substring(changedRange.Start, changedRange.Length)
             + "</span>"
             + content[(changedRange.Start + changedRange.Length)..];
+    }
+
+    private static bool TryMarkAutotitleMarkdownLinkLabels(string content, string markerClass, out string marked)
+    {
+        marked = content;
+        if (!content.Contains("[AUTOTITLE]", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var replaced = AutotitleMarkdownLabelRegex().Replace(
+            content,
+            match => string.Concat("[<span class=\"", markerClass, "\">", match.Groups["label"].Value, "</span>]"));
+        if (string.Equals(replaced, content, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        marked = replaced;
+        return true;
     }
 
     private static string? FindComparableRenderedDiffContent(RenderedDiffLineParts currentParts, string[] comparisonLines)

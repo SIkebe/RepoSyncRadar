@@ -473,6 +473,66 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Rewrites_Autotitle_Link_Text_When_Diff_Span_Wraps_Body()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/using-the-audit-log-api-for-your-enterprise"] = "Using the audit log API for your enterprise",
+            });
+
+        var markdown = "See <a href=\"/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/using-the-audit-log-api-for-your-enterprise\"><span class=\"rsr-rendered-diff-added\">AUTOTITLE</span></a>.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/exporting-audit-log-activity-for-your-enterprise.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">Using the audit log API for your enterprise</span></a>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">AUTOTITLE</span></a>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderedDiff_Does_Not_Insert_Span_Into_Autotitle_Link_Destination()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/streaming-the-audit-log-for-your-enterprise"] = "Streaming the audit log for your enterprise",
+            });
+        const string beforeMarkdown = """
+            ## Export limits
+
+            There is a hard limit when exporting audit logs.
+            """;
+        const string afterMarkdown = """
+            ## Export limits
+
+            If you intend to review a large dataset of audit logs, we recommend streaming your logs to an external data management system. For more information, see [AUTOTITLE](/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/streaming-the-audit-log-for-your-enterprise).
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/exporting-audit-log-activity-for-your-enterprise.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("href=\"/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/streaming-the-audit-log-for-your-enterprise\"", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">Streaming the audit log for your enterprise</span></a>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("%3C/span%3E", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(">AUTOTITLE</span></a>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Leaves_Unresolved_Autotitle_Link_Text_Untouched()
     {
         var markdown = "See [AUTOTITLE](/missing/page).";
@@ -1191,6 +1251,74 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Version_Diff_Summary_Rewrites_Autotitle_In_Excerpts()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/using-the-audit-log-api-for-your-enterprise"] = "Using the audit log API for your enterprise",
+            });
+        var impacts = new[]
+        {
+            new DocsVersionImpactDetail(
+                DocsVersion.Ghec,
+                [new DocsVersionChangeSnippet(
+                    DocsVersionChangeKind.Added,
+                    null,
+                    "For more information, see [AUTOTITLE](/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/using-the-audit-log-api-for-your-enterprise).")]),
+        };
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/exporting-audit-log-activity-for-your-enterprise.md",
+            "# Exporting audit log activity",
+            "abc1234",
+            "PR HEAD",
+            context,
+            affectedVersions: [DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Ghec,
+            versionImpacts: impacts);
+
+        Assert.Contains("Using the audit log API for your enterprise", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Version_Diff_Summary_Rewrites_Truncated_Autotitle_In_Excerpts()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/using-the-audit-log-api-for-your-enterprise"] = "Using the audit log API for your enterprise",
+            });
+        var impacts = new[]
+        {
+            new DocsVersionImpactDetail(
+                DocsVersion.Ghec,
+                [new DocsVersionChangeSnippet(
+                    DocsVersionChangeKind.Added,
+                    null,
+                    "For more information, see [AUTOTITLE](/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/us...")]),
+        };
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/exporting-audit-log-activity-for-your-enterprise.md",
+            "# Exporting audit log activity",
+            "abc1234",
+            "PR HEAD",
+            context,
+            affectedVersions: [DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Ghec,
+            versionImpacts: impacts);
+
+        Assert.Contains("Using the audit log API for your enterprise", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Rendered_Table_Row_Diffs_In_Full_File()
     {
         const string beforeMarkdown = """
@@ -1490,6 +1618,37 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("&gt;= 3.21", html, StringComparison.Ordinal);
         Assert.Contains("&gt;= 3.22", html, StringComparison.Ordinal);
         Assert.Contains("本文レンダリング差分はありません", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Source_Diff_Summary_Rewrites_Autotitle_In_Excerpts()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/streaming-the-audit-log-for-your-enterprise"] = "Streaming the audit log for your enterprise",
+            });
+        var sourceDiff = new MarkdownSourceDiffSummary(
+            [new MarkdownIfversionChange(
+                DocsVersionChangeKind.Added,
+                null,
+                "ghec",
+                null,
+                "For more information, see [AUTOTITLE](/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/streaming-the-audit-log-for-your-enterprise).")],
+            []);
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/exporting-audit-log-activity-for-your-enterprise.md",
+            "# Exporting audit log activity",
+            "abc1234",
+            "PR HEAD",
+            context,
+            sourceDiff: sourceDiff);
+
+        Assert.Contains("Streaming the audit log for your enterprise", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
     }
 
     private static int CountOccurrences(string value, string search)
