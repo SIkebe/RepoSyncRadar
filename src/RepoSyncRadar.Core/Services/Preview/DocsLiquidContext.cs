@@ -13,6 +13,8 @@ namespace RepoSyncRadar.Core.Services.Preview;
 ///   <c>title</c> をリンク解決用の repo path / docs path alias で引ける辞書。</item>
 ///   <item><see cref="DataSequences"/>: <c>data/**/*.yml</c> のうち root が配列の
 ///   ファイルを <c>tables.copilot.models-and-pricing</c> 形式のキーで引ける辞書。</item>
+///   <item><see cref="Features"/>: <c>data/features/*.yml</c> の <c>versions</c>
+///   mapping を feature id で引ける辞書。</item>
 /// </list>
 /// 値は加工せず生のまま保持し、評価時に <see cref="DocsLiquidEvaluator"/> が
 /// 再帰展開する。
@@ -21,8 +23,23 @@ public sealed record DocsLiquidContext(
     IReadOnlyDictionary<string, string> Variables,
     IReadOnlyDictionary<string, string> Reusables,
     IReadOnlyDictionary<string, string> PageTitles,
-    IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>> DataSequences)
+    IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>> DataSequences,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Features)
 {
+    public DocsLiquidContext(
+        IReadOnlyDictionary<string, string> variables,
+        IReadOnlyDictionary<string, string> reusables,
+        IReadOnlyDictionary<string, string> pageTitles,
+        IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>> dataSequences)
+        : this(
+            variables,
+            reusables,
+            pageTitles,
+            dataSequences,
+            new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal))
+    {
+    }
+
     public DocsLiquidContext(
         IReadOnlyDictionary<string, string> variables,
         IReadOnlyDictionary<string, string> reusables,
@@ -31,7 +48,8 @@ public sealed record DocsLiquidContext(
             variables,
             reusables,
             pageTitles,
-            new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal))
+            new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal),
+            new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal))
     {
     }
 
@@ -50,5 +68,6 @@ public sealed record DocsLiquidContext(
         new Dictionary<string, string>(StringComparer.Ordinal),
         new Dictionary<string, string>(StringComparer.Ordinal),
         new Dictionary<string, string>(StringComparer.Ordinal),
-        new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal));
+        new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal),
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal));
 }

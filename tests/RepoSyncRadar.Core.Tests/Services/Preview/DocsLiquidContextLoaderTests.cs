@@ -221,6 +221,29 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadForMarkdownAsync_Loads_Referenced_Feature_Versions()
+    {
+        WriteDataFile(
+            Path.Combine("features", "enhanced-billing-platform.yml"),
+            """
+            versions:
+              fpt: '*'
+              ghec: '*'
+              ghes: '>= 3.22'
+            """);
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/admin/support.md",
+            "{% ifversion enhanced-billing-platform %}Enhanced billing link.{% endif %}",
+            TestContext.Current.CancellationToken);
+
+        var versions = context.Features["enhanced-billing-platform"];
+        Assert.Equal("*", versions["fpt"]);
+        Assert.Equal(">= 3.22", versions["ghes"]);
+    }
+
+    [Fact]
     public async Task LoadForMarkdownAsync_Loads_Direct_Autotitle_Target()
     {
         WriteContentFile(

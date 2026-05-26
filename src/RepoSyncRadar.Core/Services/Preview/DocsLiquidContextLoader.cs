@@ -31,7 +31,19 @@ internal static partial class DocsLiquidContextLoader
     private const string _contentDir = "content";
     private const string _variablesSubdir = "variables";
     private const string _reusablesSubdir = "reusables";
+    private const string _featuresSubdir = "features";
     private const string _dataDir = "data";
+
+    private static readonly HashSet<string> _nonFeatureIdentifiers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "and",
+        "or",
+        "not",
+        "fpt",
+        "ghec",
+        "ghes",
+        "ghae",
+    };
 
     [GeneratedRegex(@"\{%-?\s*(?:data|indented_data_reference)\s+reusables\.(?<key>[A-Za-z0-9_.\-/+_]+)(?:\s+[^%]*)?-?%\}", RegexOptions.IgnoreCase)]
     private static partial Regex ReusableReferenceRegex();
@@ -48,6 +60,12 @@ internal static partial class DocsLiquidContextLoader
     [GeneratedRegex(@"\{\{-?\s*(?:site\.data\.)?variables\.(?<key>[A-Za-z0-9_.\-/_\[\]]+)\s*-?\}\}", RegexOptions.IgnoreCase)]
     private static partial Regex VariableReferenceRegex();
 
+    [GeneratedRegex(@"\{%-?\s*(?:ifversion|elsif)\s+(?<expr>.*?)\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex IfversionExpressionRegex();
+
+    [GeneratedRegex(@"\b[a-zA-Z_][a-zA-Z0-9_-]*\b")]
+    private static partial Regex IdentifierRegex();
+
     public static async Task<DocsLiquidContext> LoadAsync(
         string? worktreePath,
         CancellationToken cancellationToken)
@@ -61,11 +79,12 @@ internal static partial class DocsLiquidContextLoader
         var reusables = await LoadReusablesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
         var pageTitles = await LoadPageTitlesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
         var dataSequences = await LoadDataSequencesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
-        if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0 && dataSequences.Count == 0)
+        var features = await LoadFeaturesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
+        if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0 && dataSequences.Count == 0 && features.Count == 0)
         {
             return DocsLiquidContext.Empty;
         }
-        return new DocsLiquidContext(variables, reusables, pageTitles, dataSequences);
+        return new DocsLiquidContext(variables, reusables, pageTitles, dataSequences, features);
     }
 
     public static async Task<DocsLiquidContext> LoadForMarkdownAsync(
@@ -111,11 +130,16 @@ internal static partial class DocsLiquidContextLoader
                 liquidSources,
                 cancellationToken)
             .ConfigureAwait(false);
-        if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0 && dataSequences.Count == 0)
+        var features = await LoadReferencedFeaturesAsync(
+            source,
+            liquidSources,
+            cancellationToken)
+            .ConfigureAwait(false);
+        if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0 && dataSequences.Count == 0 && features.Count == 0)
         {
             return DocsLiquidContext.Empty;
         }
-        return new DocsLiquidContext(variables, reusables, pageTitles, dataSequences);
+        return new DocsLiquidContext(variables, reusables, pageTitles, dataSequences, features);
     }
 
     private static async Task<IReadOnlyDictionary<string, string>> LoadPageTitlesAsync(
@@ -1040,6 +1064,145 @@ internal static partial class DocsLiquidContextLoader
             YamlSequenceNode sequence => string.Join(", ", sequence.Children.Select(ConvertYamlValue)),
             _ => string.Empty,
         };
+
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>> LoadFeaturesAsync(
+        string worktreePath,
+        CancellationToken cancellationToken)
+    {
+        var featuresDir = Path.Combine(worktreePath, _dataDir, _featuresSubdir);
+        if (!Directory.Exists(featuresDir))
+        {
+            return new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+        }
+
+        var result = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+        foreach (var file in Directory.EnumerateFiles(featuresDir, "*.yml", SearchOption.TopDirectoryOnly))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var featureId = Path.GetFileNameWithoutExtension(file);
+            await AddFeatureFromFileAsync(file, featureId, result, cancellationToken).ConfigureAwait(false);
+        }
+        return result;
+    }
+
+    private static async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>> LoadReferencedFeaturesAsync(
+        IDocsFileSource source,
+        IEnumerable<string?> sources,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+        foreach (var featureId in sources.SelectMany(ExtractFeatureIdentifiers).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var yaml = await source.ReadTextAsync(ResolveFeatureRepoPath(featureId), cancellationToken).ConfigureAwait(false);
+            if (yaml is null)
+            {
+                continue;
+            }
+            AddFeatureFromYaml(yaml, featureId, result);
+        }
+        return result;
+    }
+
+    private static async Task AddFeatureFromFileAsync(
+        string file,
+        string featureId,
+        Dictionary<string, IReadOnlyDictionary<string, string>> result,
+        CancellationToken cancellationToken)
+    {
+        string yaml;
+        try
+        {
+            yaml = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
+        }
+        catch (IOException)
+        {
+            return;
+        }
+
+        AddFeatureFromYaml(yaml, featureId, result);
+    }
+
+    private static void AddFeatureFromYaml(
+        string yaml,
+        string featureId,
+        Dictionary<string, IReadOnlyDictionary<string, string>> result)
+    {
+        var versions = TryParseFeatureVersions(yaml);
+        if (versions.Count > 0)
+        {
+            result[featureId] = versions;
+        }
+    }
+
+    private static Dictionary<string, string> TryParseFeatureVersions(string yaml)
+    {
+        var versions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(yaml))
+        {
+            return versions;
+        }
+
+        var stream = new YamlStream();
+        try
+        {
+            using var reader = new StringReader(yaml);
+            stream.Load(reader);
+        }
+        catch (Exception)
+        {
+            return versions;
+        }
+
+        foreach (var doc in stream.Documents)
+        {
+            if (doc.RootNode is not YamlMappingNode root)
+            {
+                continue;
+            }
+
+            foreach (var entry in root.Children)
+            {
+                if (entry.Key is not YamlScalarNode { Value: "versions" }
+                    || entry.Value is not YamlMappingNode versionsNode)
+                {
+                    continue;
+                }
+
+                foreach (var versionEntry in versionsNode.Children)
+                {
+                    if (versionEntry.Key is YamlScalarNode keyNode && !string.IsNullOrWhiteSpace(keyNode.Value))
+                    {
+                        versions[keyNode.Value!] = ConvertYamlValue(versionEntry.Value);
+                    }
+                }
+            }
+        }
+        return versions;
+    }
+
+    private static IEnumerable<string> ExtractFeatureIdentifiers(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            yield break;
+        }
+
+        foreach (Match ifversionMatch in IfversionExpressionRegex().Matches(source))
+        {
+            foreach (Match identifierMatch in IdentifierRegex().Matches(ifversionMatch.Groups["expr"].Value))
+            {
+                var value = identifierMatch.Value;
+                if (!_nonFeatureIdentifiers.Contains(value))
+                {
+                    yield return value;
+                }
+            }
+        }
+    }
+
+    private static string ResolveFeatureRepoPath(string featureId)
+        => _dataDir + "/" + _featuresSubdir + "/" + featureId + ".yml";
 
     private static async Task<IReadOnlyDictionary<string, string>> LoadReusablesAsync(
         string worktreePath,

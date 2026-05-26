@@ -188,7 +188,7 @@ internal static partial class DocsLiquidEvaluator
         //    variables / reusables の展開で新しい ifversion が現れることがあるため、
         //    反復展開の中でも毎回 ResolveConditionals を通す。
         current = ResolveForLoops(current, context, version);
-        current = ResolveConditionals(current, version);
+        current = ResolveConditionals(current, version, context.Features);
         current = OcticonTagRegex().Replace(current, ResolveOcticonTag);
 
         // 3. variables / reusables を反復展開。
@@ -201,7 +201,7 @@ internal static partial class DocsLiquidEvaluator
             current = IndentedDataRegex().Replace(current, m => ResolveIndentedDataExpr(m, context));
             current = VariableExprRegex().Replace(current, m => ResolveDataExpr(m.Groups["expr"].Value, context, m.Value));
             current = ResolveForLoops(current, context, version);
-            current = ResolveConditionals(current, version);
+            current = ResolveConditionals(current, version, context.Features);
             current = OcticonTagRegex().Replace(current, ResolveOcticonTag);
             if (string.Equals(before, current, StringComparison.Ordinal))
             {
@@ -315,7 +315,7 @@ internal static partial class DocsLiquidEvaluator
         foreach (var row in rows)
         {
             var scope = new LoopScope(variableName, row);
-            var rendered = ResolveConditionals(body, version, scope);
+            var rendered = ResolveConditionals(body, version, context.Features, scope);
             rendered = ResolveLoopVariables(rendered, scope);
             sb.Append(rendered);
         }
@@ -683,7 +683,11 @@ internal static partial class DocsLiquidEvaluator
         sb.Append(segment);
     }
 
-    private static string ResolveConditionals(string source, DocsVersion version, LoopScope? scope = null)
+    private static string ResolveConditionals(
+        string source,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features,
+        LoopScope? scope = null)
     {
         var current = source;
         for (var safety = 0; safety < _infiniteLoopGuard; safety++)
@@ -693,7 +697,7 @@ internal static partial class DocsLiquidEvaluator
                 var tag = m.Groups["tag"].Value;
                 var cond = m.Groups["cond"].Value;
                 var body = m.Groups["body"].Value;
-                return EvaluateBlock(tag, cond, body, version, scope);
+                return EvaluateBlock(tag, cond, body, version, features, scope);
             });
             if (string.Equals(replaced, current, StringComparison.Ordinal))
             {
@@ -709,7 +713,13 @@ internal static partial class DocsLiquidEvaluator
     /// 採用すべき分岐の本文 (= elsif/else 境界で切り出した片) を返す。
     /// どの分岐も真でなく <c>{% else %}</c> も無ければ空文字列。
     /// </summary>
-    private static string EvaluateBlock(string tag, string cond, string body, DocsVersion version, LoopScope? scope)
+    private static string EvaluateBlock(
+        string tag,
+        string cond,
+        string body,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features,
+        LoopScope? scope)
     {
         var isVersion = string.Equals(tag, "ifversion", StringComparison.Ordinal);
 
@@ -717,12 +727,12 @@ internal static partial class DocsLiquidEvaluator
         var separators = BranchSeparatorRegex().Matches(body);
         if (separators.Count == 0)
         {
-            return EvaluateCondition(cond, isVersion, version, scope) ? body : string.Empty;
+            return EvaluateCondition(cond, isVersion, version, features, scope) ? body : string.Empty;
         }
 
         // 0 番目 = if 本体 (条件: cond)
         var firstBranchBody = body[..separators[0].Index];
-        if (EvaluateCondition(cond, isVersion, version, scope))
+        if (EvaluateCondition(cond, isVersion, version, features, scope))
         {
             return firstBranchBody;
         }
@@ -741,7 +751,7 @@ internal static partial class DocsLiquidEvaluator
             {
                 return branchBody;
             }
-            if (EvaluateCondition(branchCond, isVersion, version, scope))
+            if (EvaluateCondition(branchCond, isVersion, version, features, scope))
             {
                 return branchBody;
             }
@@ -750,11 +760,16 @@ internal static partial class DocsLiquidEvaluator
         return string.Empty;
     }
 
-    private static bool EvaluateCondition(string condition, bool isVersion, DocsVersion version, LoopScope? scope)
+    private static bool EvaluateCondition(
+        string condition,
+        bool isVersion,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features,
+        LoopScope? scope)
     {
         if (isVersion)
         {
-            return VersionExpressionEvaluator.Evaluate(condition, version);
+            return VersionExpressionEvaluator.Evaluate(condition, version, features);
         }
         if (TryEvaluateLoopCondition(condition, scope, out var loopConditionResult))
         {
