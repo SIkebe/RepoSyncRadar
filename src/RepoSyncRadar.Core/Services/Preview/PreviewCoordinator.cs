@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.Core.Options;
@@ -207,6 +208,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     // commitSha + filePath ごとに、クリックされた Markdown が実際に参照する
     // variables/reusables/page titles だけを読み込んだ DocsLiquidContext を使い回す。
     private readonly ConcurrentDictionary<LiquidContextCacheKey, DocsLiquidContext> _liquidContextCache = new();
+    private long _markdownPreviewGeneration;
 
     private readonly record struct PreparedSessionKey(int PrNumber, string Sha);
 
@@ -578,7 +580,10 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         // 判断して navigation をスキップし、「変更前ページを準備中…」の
         // オーバーレイから先に進めなくなる。
         // LocalPreviewContentServer.NormalizeRoute は query を捨てるためルーティングには影響しない。
-        var query = BuildMarkdownPreviewQuery(effectiveVersion, requestedFilePath, renderedFilePath);
+        // r はレンダリング世代。同じ version/file の再生成でも WebView2 に別 URL として
+        // 認識させ、古い DOM/HTTP cache の表示を避ける。
+        var renderGeneration = Interlocked.Increment(ref _markdownPreviewGeneration);
+        var query = BuildMarkdownPreviewQuery(effectiveVersion, requestedFilePath, renderedFilePath, renderGeneration);
         var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before?{query}"));
         var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after?{query}"));
         LogMarkdownComparisonReady(_logger, session.BeforeSha, sha, renderedFilePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
@@ -601,17 +606,27 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         };
     }
 
-    private static string BuildMarkdownPreviewQuery(DocsVersion version, string filePath, string? renderedFilePath = null)
+    private static string BuildMarkdownPreviewQuery(
+        DocsVersion version,
+        string filePath,
+        string? renderedFilePath = null,
+        long renderGeneration = 0)
     {
         var trimmedFilePath = filePath.Trim();
         var query = string.Create(
             CultureInfo.InvariantCulture,
             $"v={Uri.EscapeDataString(version.Slug)}&file={Uri.EscapeDataString(trimmedFilePath)}");
         var trimmedRenderedPath = renderedFilePath?.Trim();
-        return string.IsNullOrWhiteSpace(trimmedRenderedPath)
-            || string.Equals(trimmedFilePath, trimmedRenderedPath, StringComparison.Ordinal)
-            ? query
-            : query + "&rendered=" + Uri.EscapeDataString(trimmedRenderedPath);
+        if (!string.IsNullOrWhiteSpace(trimmedRenderedPath)
+            && !string.Equals(trimmedFilePath, trimmedRenderedPath, StringComparison.Ordinal))
+        {
+            query += "&rendered=" + Uri.EscapeDataString(trimmedRenderedPath);
+        }
+        if (renderGeneration > 0)
+        {
+            query += string.Create(CultureInfo.InvariantCulture, $"&r={renderGeneration}");
+        }
+        return query;
     }
 
     internal static DocsVersion ResolveInitialMarkdownPreviewVersion(IReadOnlyList<DocsVersion> affectedVersions)

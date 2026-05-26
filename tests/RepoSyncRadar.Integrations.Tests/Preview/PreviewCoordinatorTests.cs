@@ -251,8 +251,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
         // §Step 19.9/19.10: version slug と file path を URL に必ず埋め込む。
         // WebView2 の Source 等価判定で「同じ URL」とみなされて navigation が
         // スキップされ、オーバーレイが「変更前ページを準備中…」のまま固まる回帰を防ぐ。
-        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/before?v=fpt&file=CHANGELOG.md"), link!.BeforeUrl);
-        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after?v=fpt&file=CHANGELOG.md"), link.AfterUrl);
+        AssertMarkdownPreviewUrl(link!.BeforeUrl, "/markdown/before", "v=fpt", "file=CHANGELOG.md");
+        AssertMarkdownPreviewUrl(link.AfterUrl, "/markdown/after", "v=fpt", "file=CHANGELOG.md");
         Assert.True(session.IsAllowed(link.BeforeUrl));
         Assert.True(session.IsAllowed(link.AfterUrl));
         Assert.Contains("rsr-rendered-diff-removed\">Old</span> entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
@@ -683,8 +683,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
             cancellationToken: ct);
 
         Assert.NotNull(link);
-        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/before?v={expectedSlug}&file=CHANGELOG.md"), link!.BeforeUrl);
-        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/after?v={expectedSlug}&file=CHANGELOG.md"), link.AfterUrl);
+        AssertMarkdownPreviewUrl(link!.BeforeUrl, "/markdown/before", $"v={expectedSlug}", "file=CHANGELOG.md");
+        AssertMarkdownPreviewUrl(link.AfterUrl, "/markdown/after", $"v={expectedSlug}", "file=CHANGELOG.md");
     }
 
     [Fact]
@@ -736,7 +736,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
         Assert.NotNull(link);
         Assert.Equal(DocsVersion.Ghec, link!.CurrentVersion);
-        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after?v=ghec&file=content%2Fadmin%2Faudit.md"), link.AfterUrl);
+        AssertMarkdownPreviewUrl(link.AfterUrl, "/markdown/after", "v=ghec", "file=content%2Fadmin%2Faudit.md");
         Assert.Contains("enterprise limit.", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.Contains(">Using the audit log API</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.DoesNotContain(">AUTOTITLE</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
@@ -1468,6 +1468,19 @@ public sealed class PreviewCoordinatorTests : IDisposable
             new FixedPreviewPortAllocator(previewBasePort),
             options,
             NullLogger<PreviewCoordinator>.Instance);
+    }
+
+    private static void AssertMarkdownPreviewUrl(Uri actual, string path, params string[] expectedQueryParts)
+    {
+        Assert.Equal("http", actual.Scheme);
+        Assert.Equal("127.0.0.1", actual.Host);
+        Assert.Equal(4500, actual.Port);
+        Assert.Equal(path, actual.AbsolutePath);
+        foreach (var part in expectedQueryParts)
+        {
+            Assert.Contains(part, actual.Query, StringComparison.Ordinal);
+        }
+        Assert.Contains("r=", actual.Query, StringComparison.Ordinal);
     }
 
     private static void WriteRepoFile(string root, string repoPath, string content)
