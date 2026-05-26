@@ -16,12 +16,12 @@ namespace RepoSyncRadar.Core.Services.Sanitization;
 /// </remarks>
 public static class UntrustedTextWrapper
 {
-    private const string OpenPrefix = "<<<UNTRUSTED:";
-    private const string OpenSuffix = ">>>";
-    private const string CloseMarker = "<<<END>>>";
+    private const string _openPrefix = "<<<UNTRUSTED:";
+    private const string _openSuffix = ">>>";
+    private const string _closeMarker = "<<<END>>>";
 
-    private const string OpenPrefixEscaped = "<<<UNTRUSTED-ESCAPED:";
-    private const string CloseMarkerEscaped = "<<<END-ESCAPED>>>";
+    private const string _openPrefixEscaped = "<<<UNTRUSTED-ESCAPED:";
+    private const string _closeMarkerEscaped = "<<<END-ESCAPED>>>";
 
     /// <summary>
     /// Returns <paramref name="content"/> wrapped in untrusted-data fences.
@@ -36,13 +36,13 @@ public static class UntrustedTextWrapper
         var safeTitle = Neutralise(title);
         var safeContent = Neutralise(content);
 
-        return $"{OpenPrefix}{safeTitle}{OpenSuffix}\n{safeContent}\n{CloseMarker}";
+        return $"{_openPrefix}{safeTitle}{_openSuffix}\n{safeContent}\n{_closeMarker}";
     }
 
     private static string Neutralise(string value)
     {
         return value
-            .Replace(OpenPrefix, OpenPrefixEscaped, StringComparison.Ordinal)
-            .Replace(CloseMarker, CloseMarkerEscaped, StringComparison.Ordinal);
+            .Replace(_openPrefix, _openPrefixEscaped, StringComparison.Ordinal)
+            .Replace(_closeMarker, _closeMarkerEscaped, StringComparison.Ordinal);
     }
 }

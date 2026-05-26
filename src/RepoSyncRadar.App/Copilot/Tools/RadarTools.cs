@@ -16,9 +16,9 @@ namespace RepoSyncRadar.App.Copilot.Tools;
 /// </summary>
 public sealed class RadarTools
 {
-    private const int DefaultCommitLimit = 50;
+    private const int _defaultCommitLimit = 50;
 
-    private static readonly string[] BaseVersionIds = ["fpt", "ghec"];
+    private static readonly string[] _baseVersionIds = ["fpt", "ghec"];
 
     private readonly IRadarRepository _repo;
     private readonly IDocsGitHubClient _github;
@@ -69,7 +69,7 @@ public sealed class RadarTools
         var filter = new CommitQueryFilter
         {
             Status = parsedStatus,
-            Limit = limit ?? DefaultCommitLimit,
+            Limit = limit ?? _defaultCommitLimit,
             UnscoredOnly = parsedStatus == ReviewStatus.Unseen,
         };
 
@@ -121,7 +121,7 @@ public sealed class RadarTools
         }
 
         var dict = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
-        foreach (var versionId in BaseVersionIds)
+        foreach (var versionId in _baseVersionIds)
         {
             var pages = await _docs.GetPageListAsync(language, versionId, cancellationToken).ConfigureAwait(false);
             if (pages.Count > 0)

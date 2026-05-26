@@ -19,11 +19,11 @@ namespace RepoSyncRadar.Integrations.Tests.GitHub;
 /// </summary>
 public class DocsGitHubClientTests
 {
-    private const string Owner = "github";
-    private const string Repo = "docs";
+    private const string _owner = "github";
+    private const string _repo = "docs";
 
-    private static readonly int[] ExpectedPrNumbers = [1001, 1003, 1005];
-    private static readonly string[] ExpectedShas = ["sha-1001", "sha-1003", "sha-1005"];
+    private static readonly int[] _expectedPrNumbers = [1001, 1003, 1005];
+    private static readonly string[] _expectedShas = ["sha-1001", "sha-1003", "sha-1005"];
 
     [Fact]
     public async Task FetchUnseenCommitsAsync_Filters_By_Title()
@@ -41,9 +41,9 @@ public class DocsGitHubClientTests
             MakePullRequest(1005, "Repo sync 2026-05-12"),
         };
         github.PullRequest.GetAllForRepository(
-            Owner, Repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>()).Returns(prs);
+            _owner, _repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>()).Returns(prs);
 
-        github.PullRequest.Commits(Owner, Repo, Arg.Any<int>())
+        github.PullRequest.Commits(_owner, _repo, Arg.Any<int>())
             .Returns(call =>
             {
                 var number = call.Arg<int>();
@@ -56,8 +56,8 @@ public class DocsGitHubClientTests
         var commits = await client.FetchUnseenCommitsAsync(ct);
 
         Assert.Equal(3, commits.Count);
-        Assert.Equal(ExpectedPrNumbers, commits.Select(c => c.PrNumber).ToArray());
-        Assert.Equal(ExpectedShas, commits.Select(c => c.Sha).ToArray());
+        Assert.Equal(_expectedPrNumbers, commits.Select(c => c.PrNumber).ToArray());
+        Assert.Equal(_expectedShas, commits.Select(c => c.Sha).ToArray());
     }
 
     [Fact]
@@ -69,10 +69,10 @@ public class DocsGitHubClientTests
             .Returns((IReadOnlySet<string>)new HashSet<string>(StringComparer.Ordinal) { "sha-known" });
 
         github.PullRequest.GetAllForRepository(
-            Owner, Repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>())
+            _owner, _repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>())
             .Returns((IReadOnlyList<PullRequest>)new[] { MakePullRequest(42, "Repo sync 2026-05-12") });
 
-        github.PullRequest.Commits(Owner, Repo, 42)
+        github.PullRequest.Commits(_owner, _repo, 42)
             .Returns((IReadOnlyList<PullRequestCommit>)new[]
             {
                 MakePullRequestCommit("sha-known", "old", "octocat"),
@@ -103,18 +103,18 @@ public class DocsGitHubClientTests
         };
 
         github.PullRequest.GetAllForRepository(
-            Owner,
-            Repo,
+            _owner,
+            _repo,
             Arg.Any<PullRequestRequest>(),
             Arg.Is<ApiOptions>(o => o.StartPage == 1 && o.PageSize == 100 && o.PageCount == 1))
             .Returns(firstPage);
         github.PullRequest.GetAllForRepository(
-            Owner,
-            Repo,
+            _owner,
+            _repo,
             Arg.Any<PullRequestRequest>(),
             Arg.Is<ApiOptions>(o => o.StartPage == 2 && o.PageSize == 100 && o.PageCount == 1))
             .Returns(secondPage);
-        github.PullRequest.Commits(Owner, Repo, Arg.Any<int>())
+        github.PullRequest.Commits(_owner, _repo, Arg.Any<int>())
             .Returns(call =>
             {
                 var number = call.Arg<int>();
@@ -129,18 +129,18 @@ public class DocsGitHubClientTests
         Assert.Equal([2001, 2003], commits.Select(static commit => commit.PrNumber).ToArray());
 
         await github.PullRequest.Received(1).GetAllForRepository(
-            Owner,
-            Repo,
+            _owner,
+            _repo,
             Arg.Any<PullRequestRequest>(),
             Arg.Is<ApiOptions>(o => o.StartPage == 1 && o.PageSize == 100 && o.PageCount == 1));
         await github.PullRequest.Received(1).GetAllForRepository(
-            Owner,
-            Repo,
+            _owner,
+            _repo,
             Arg.Any<PullRequestRequest>(),
             Arg.Is<ApiOptions>(o => o.StartPage == 2 && o.PageSize == 100 && o.PageCount == 1));
         await github.PullRequest.DidNotReceive().GetAllForRepository(
-            Owner,
-            Repo,
+            _owner,
+            _repo,
             Arg.Any<PullRequestRequest>(),
             Arg.Is<ApiOptions>(o => o.StartPage == 3));
     }
@@ -153,7 +153,7 @@ public class DocsGitHubClientTests
         var ct = TestContext.Current.CancellationToken;
 
         github.PullRequest.GetAllForRepository(
-            Owner, Repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>())
+            _owner, _repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>())
             .Returns((IReadOnlyList<PullRequest>)new[]
             {
                 MakePullRequest(3003, "Repo sync 2026-05-16", lowerBound.AddDays(1)),
@@ -161,7 +161,7 @@ public class DocsGitHubClientTests
                 MakePullRequest(3004, "Unrelated docs update", lowerBound),
                 MakePullRequest(3001, "Repo sync 2026-05-14", lowerBound.AddTicks(-1)),
             });
-        github.PullRequest.Commits(Owner, Repo, Arg.Any<int>())
+        github.PullRequest.Commits(_owner, _repo, Arg.Any<int>())
             .Returns(call =>
             {
                 var number = call.Arg<int>();
@@ -174,11 +174,11 @@ public class DocsGitHubClientTests
         var commits = await client.FetchUnseenCommitsAsync(ct);
 
         Assert.Equal([3003, 3002], commits.Select(static commit => commit.PrNumber).ToArray());
-        await github.PullRequest.DidNotReceive().Commits(Owner, Repo, 3001);
-        await github.PullRequest.DidNotReceive().Commits(Owner, Repo, 3004);
+        await github.PullRequest.DidNotReceive().Commits(_owner, _repo, 3001);
+        await github.PullRequest.DidNotReceive().Commits(_owner, _repo, 3004);
         await github.PullRequest.Received(1).GetAllForRepository(
-            Owner,
-            Repo,
+            _owner,
+            _repo,
             Arg.Is<PullRequestRequest>(request => request.SortProperty == PullRequestSort.Created
                 && request.SortDirection == SortDirection.Descending),
             Arg.Any<ApiOptions>());
@@ -198,18 +198,18 @@ public class DocsGitHubClientTests
             .ToArray();
 
         github.PullRequest.GetAllForRepository(
-            Owner,
-            Repo,
+            _owner,
+            _repo,
             Arg.Any<PullRequestRequest>(),
             Arg.Is<ApiOptions>(o => o.StartPage == 1 && o.PageSize == 100 && o.PageCount == 1))
             .Returns(firstPage);
         github.PullRequest.GetAllForRepository(
-            Owner,
-            Repo,
+            _owner,
+            _repo,
             Arg.Any<PullRequestRequest>(),
             Arg.Is<ApiOptions>(o => o.StartPage == 2))
             .Returns((IReadOnlyList<PullRequest>)Array.Empty<PullRequest>());
-        github.PullRequest.Commits(Owner, Repo, Arg.Any<int>())
+        github.PullRequest.Commits(_owner, _repo, Arg.Any<int>())
             .Returns(call =>
             {
                 var number = call.Arg<int>();
@@ -223,8 +223,8 @@ public class DocsGitHubClientTests
 
         Assert.Equal([4001, 4002], commits.Select(static commit => commit.PrNumber).ToArray());
         await github.PullRequest.DidNotReceive().GetAllForRepository(
-            Owner,
-            Repo,
+            _owner,
+            _repo,
             Arg.Any<PullRequestRequest>(),
             Arg.Is<ApiOptions>(o => o.StartPage == 2));
     }
@@ -248,7 +248,7 @@ public class DocsGitHubClientTests
 
         Assert.Equal("--- a/x\n+++ b/x\n", diff);
         await github.Connection.Received(1).Get<string>(
-            Arg.Is<Uri>(u => u.ToString() == $"repos/{Owner}/{Repo}/commits/deadbeef"),
+            Arg.Is<Uri>(u => u.ToString() == $"repos/{_owner}/{_repo}/commits/deadbeef"),
             Arg.Any<IDictionary<string, string>?>(),
             "application/vnd.github.v3.diff",
             Arg.Any<CancellationToken>());
@@ -276,7 +276,7 @@ public class DocsGitHubClientTests
             target: null,
             submoduleGitUrl: null);
 
-        github.Repository.Content.GetAllContentsByRef(Owner, Repo, "content/intro.md", "feature-branch")
+        github.Repository.Content.GetAllContentsByRef(_owner, _repo, "content/intro.md", "feature-branch")
             .Returns((IReadOnlyList<RepositoryContent>)new[] { content });
 
         var result = await client.GetFileContentAsync("content/intro.md", "feature-branch", ct);
@@ -293,7 +293,7 @@ public class DocsGitHubClientTests
         var ct = TestContext.Current.CancellationToken;
 
         github.PullRequest.GetAllForRepository(
-            Owner, Repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>())
+            _owner, _repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>())
             .Returns((IReadOnlyList<PullRequest>)Array.Empty<PullRequest>());
 
         _ = await client.FetchUnseenCommitsAsync(ct);
@@ -319,8 +319,8 @@ public class DocsGitHubClientTests
 
         var options = new GitHubOptions
         {
-            Owner = Owner,
-            Repo = Repo,
+            Owner = _owner,
+            Repo = _repo,
             PullRequestTitleFilter = "Repo sync",
             MaxPullRequests = 5,
         };

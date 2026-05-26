@@ -14,7 +14,7 @@ namespace RepoSyncRadar.App.Copilot.Audit;
 /// </remarks>
 public sealed class FileSystemAuditJsonlSink : IAuditJsonlSink, IDisposable
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false,
     };
@@ -52,7 +52,7 @@ public sealed class FileSystemAuditJsonlSink : IAuditJsonlSink, IDisposable
 
         var date = _clock.GetUtcNow().UtcDateTime.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
         var path = Path.Combine(_rootDirectory, $"{date}.jsonl");
-        var line = JsonSerializer.Serialize(record, JsonOptions) + "\n";
+        var line = JsonSerializer.Serialize(record, _jsonOptions) + "\n";
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

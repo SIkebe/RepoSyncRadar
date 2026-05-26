@@ -34,9 +34,9 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </remarks>
 public sealed partial class NodeModulesShareManager : INodeModulesShareManager
 {
-    private const string StoreDirectoryName = ".shared-node-modules";
-    private const string CompleteSentinelName = ".complete";
-    private const string LockFileName = "package-lock.json";
+    private const string _storeDirectoryName = ".shared-node-modules";
+    private const string _completeSentinelName = ".complete";
+    private const string _lockFileName = "package-lock.json";
 
     // Per-hash gates are static so multiple PreviewServerHost instances (which
     // each own their own PreviewServerHost) coordinate through the same lock.
@@ -79,7 +79,7 @@ public sealed partial class NodeModulesShareManager : INodeModulesShareManager
 
         var slotDir = Path.Combine(storeRoot, lockHash);
         var sharedNodeModules = Path.Combine(slotDir, "node_modules");
-        var completeFlag = Path.Combine(slotDir, CompleteSentinelName);
+        var completeFlag = Path.Combine(slotDir, _completeSentinelName);
         var link = Path.Combine(worktreePath, "node_modules");
 
         Directory.CreateDirectory(slotDir);
@@ -135,11 +135,11 @@ public sealed partial class NodeModulesShareManager : INodeModulesShareManager
     private string? GetStoreRoot()
         => string.IsNullOrWhiteSpace(_options.WorktreeRoot)
             ? null
-            : Path.Combine(_options.WorktreeRoot, StoreDirectoryName);
+            : Path.Combine(_options.WorktreeRoot, _storeDirectoryName);
 
     private static string TryComputeLockHash(string worktreePath)
     {
-        var lockPath = Path.Combine(worktreePath, LockFileName);
+        var lockPath = Path.Combine(worktreePath, _lockFileName);
         if (!File.Exists(lockPath))
         {
             return string.Empty;

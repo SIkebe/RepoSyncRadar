@@ -11,7 +11,7 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 /// </summary>
 public sealed class PreviewSessionTests
 {
-    private static readonly int[] ComparisonPorts = [4500, 4501];
+    private static readonly int[] _comparisonPorts = [4500, 4501];
 
     [Fact]
     public void Inactive_Blocks_All()
@@ -47,7 +47,7 @@ public sealed class PreviewSessionTests
 
         Assert.True(sut.IsAllowed(new Uri(url)));
         Assert.Equal(4500, sut.ActivePort);
-        Assert.Equal(ComparisonPorts, sut.ActivePorts);
+        Assert.Equal(_comparisonPorts, sut.ActivePorts);
     }
 
     [Theory]

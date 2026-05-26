@@ -175,8 +175,8 @@ internal sealed record ReusablePreviewTarget(string FilePath, int ReferenceCount
 /// <inheritdoc cref="IPreviewCoordinator" />
 public sealed partial class PreviewCoordinator : IPreviewCoordinator
 {
-    private const string MarkdownBeforeAssetRoute = "/markdown-assets/before";
-    private const string MarkdownAfterAssetRoute = "/markdown-assets/after";
+    private const string _markdownBeforeAssetRoute = "/markdown-assets/before";
+    private const string _markdownAfterAssetRoute = "/markdown-assets/after";
 
     private readonly DocsWorktreeManager _worktree;
     private readonly PreviewServerHost _server;
@@ -522,7 +522,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             versionImpacts: versionImpacts,
             frontmatterChanges: frontmatterChanges,
             sourceDiff: sourceDiff,
-            assetBasePath: MarkdownBeforeAssetRoute,
+            assetBasePath: _markdownBeforeAssetRoute,
             diffAgainstMarkdown: afterMarkdown,
             diffAgainstLiquidContext: afterLiquid,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
@@ -539,7 +539,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             versionImpacts: versionImpacts,
             frontmatterChanges: frontmatterChanges,
             sourceDiff: sourceDiff,
-            assetBasePath: MarkdownAfterAssetRoute,
+            assetBasePath: _markdownAfterAssetRoute,
             diffAgainstMarkdown: beforeMarkdown,
             diffAgainstLiquidContext: beforeLiquid,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
@@ -938,8 +938,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         string afterHtml,
         CancellationToken cancellationToken)
     {
-        var beforeAssets = ExtractMarkdownAssetRepoPaths(beforeHtml, MarkdownBeforeAssetRoute);
-        var afterAssets = ExtractMarkdownAssetRepoPaths(afterHtml, MarkdownAfterAssetRoute);
+        var beforeAssets = ExtractMarkdownAssetRepoPaths(beforeHtml, _markdownBeforeAssetRoute);
+        var afterAssets = ExtractMarkdownAssetRepoPaths(afterHtml, _markdownAfterAssetRoute);
         if (beforeAssets.Count == 0 && afterAssets.Count == 0)
         {
             return (new Dictionary<string, string>(StringComparer.Ordinal), null);
@@ -953,7 +953,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             var materialized = await _worktree.MaterializeFilesAsync(beforeSha, beforeAssets, beforeRoot, cancellationToken).ConfigureAwait(false);
             if (materialized.Count > 0)
             {
-                assetRoots[MarkdownBeforeAssetRoute] = beforeRoot;
+                assetRoots[_markdownBeforeAssetRoute] = beforeRoot;
             }
         }
 
@@ -963,7 +963,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             var materialized = await _worktree.MaterializeFilesAsync(afterSha, afterAssets, afterRoot, cancellationToken).ConfigureAwait(false);
             if (materialized.Count > 0)
             {
-                assetRoots[MarkdownAfterAssetRoute] = afterRoot;
+                assetRoots[_markdownAfterAssetRoute] = afterRoot;
             }
         }
 

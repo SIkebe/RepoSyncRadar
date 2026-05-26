@@ -34,7 +34,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 [Collection(SeededE2ETests.Name)]
 public sealed class PreviewE2ETests
 {
-    private const string PreviewDisabledStatus =
+    private const string _previewDisabledStatus =
         "プレビュー機能は無効です (DocsRepository 未設定)";
 
     private readonly SeededAppHostFixture _fixture;
@@ -80,7 +80,7 @@ public sealed class PreviewE2ETests
         var status = page.Locator("[data-testid='commit-detail-preview-status']");
         await status.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await Assertions.Expect(status).ToHaveTextAsync(
-            PreviewDisabledStatus,
+            _previewDisabledStatus,
             new() { Timeout = 10000 });
 
         // The button is busy while the click handler runs; once we see the
@@ -133,7 +133,7 @@ public sealed class PreviewE2ETests
         // round-tripped through the coordinator.
         var status = blazorPage.Locator("[data-testid='commit-detail-preview-status']");
         await Assertions.Expect(status).ToHaveTextAsync(
-            PreviewDisabledStatus,
+            _previewDisabledStatus,
             new() { Timeout = 10000 });
 
         // DocsView must still be on docs.github.com (never navigated to a

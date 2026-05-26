@@ -30,7 +30,7 @@ public sealed partial class AdoptionSession
     internal const int MaxRepairSourceChars = 20 * 1024;
     internal const string TruncatedMarker = "\n…[truncated by RepoSyncRadar — original diff exceeded 50KB]\n";
 
-    private static readonly JsonSerializerOptions DraftJsonOptions = new()
+    private static readonly JsonSerializerOptions _draftJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
@@ -577,7 +577,7 @@ public sealed partial class AdoptionSession
         DraftJson? parsed;
         try
         {
-            parsed = JsonSerializer.Deserialize<DraftJson>(payload, DraftJsonOptions);
+            parsed = JsonSerializer.Deserialize<DraftJson>(payload, _draftJsonOptions);
         }
         catch (JsonException ex)
         {

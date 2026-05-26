@@ -75,8 +75,8 @@ public sealed class PreviewServerHostFactory : IPreviewServerHostFactory
 /// </summary>
 public sealed partial class PreviewServerHost : IAsyncDisposable
 {
-    private const string PreviewRequestTimeoutEnvironmentKey = "REQUEST_TIMEOUT";
-    private const string DefaultPreviewRequestTimeoutMilliseconds = "600000";
+    private const string _previewRequestTimeoutEnvironmentKey = "REQUEST_TIMEOUT";
+    private const string _defaultPreviewRequestTimeoutMilliseconds = "600000";
 
     private readonly IProcessRunner _runner;
     private readonly IPortReadyProbe _probe;
@@ -369,7 +369,7 @@ public sealed partial class PreviewServerHost : IAsyncDisposable
         var result = template is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : new Dictionary<string, string>(template, StringComparer.Ordinal);
-        result.TryAdd(PreviewRequestTimeoutEnvironmentKey, DefaultPreviewRequestTimeoutMilliseconds);
+        result.TryAdd(_previewRequestTimeoutEnvironmentKey, _defaultPreviewRequestTimeoutMilliseconds);
         return result;
     }
 

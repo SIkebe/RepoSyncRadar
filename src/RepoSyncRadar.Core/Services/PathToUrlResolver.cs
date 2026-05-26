@@ -22,10 +22,10 @@ namespace RepoSyncRadar.Core.Services;
 /// </remarks>
 public static class PathToUrlResolver
 {
-    private const string ContentPrefix = "content/";
-    private const string MarkdownExt = ".md";
-    private const string GhesPrefix = "ghes-";
-    private const string EnglishLanguage = "en";
+    private const string _contentPrefix = "content/";
+    private const string _markdownExt = ".md";
+    private const string _ghesPrefix = "ghes-";
+    private const string _englishLanguage = "en";
 
     /// <summary>
     /// Returns all canonical URLs for the given repository path. An empty list means
@@ -42,22 +42,22 @@ public static class PathToUrlResolver
         string repoPath,
         string frontmatterVersions,
         IReadOnlyDictionary<string, IReadOnlyList<string>> pageListByLangVersion,
-        string language = EnglishLanguage)
+        string language = _englishLanguage)
     {
         ArgumentNullException.ThrowIfNull(repoPath);
         ArgumentNullException.ThrowIfNull(frontmatterVersions);
         ArgumentNullException.ThrowIfNull(pageListByLangVersion);
         ArgumentException.ThrowIfNullOrWhiteSpace(language);
 
-        if (!repoPath.StartsWith(ContentPrefix, StringComparison.Ordinal))
+        if (!repoPath.StartsWith(_contentPrefix, StringComparison.Ordinal))
         {
             return [];
         }
 
-        var rel = repoPath[ContentPrefix.Length..];
-        if (rel.EndsWith(MarkdownExt, StringComparison.OrdinalIgnoreCase))
+        var rel = repoPath[_contentPrefix.Length..];
+        if (rel.EndsWith(_markdownExt, StringComparison.OrdinalIgnoreCase))
         {
-            rel = rel[..^MarkdownExt.Length];
+            rel = rel[..^_markdownExt.Length];
         }
 
         if (rel.Length == 0)
@@ -104,8 +104,8 @@ public static class PathToUrlResolver
             return pages;
         }
 
-        if (!string.Equals(language, EnglishLanguage, StringComparison.Ordinal)
-            && pageListByLangVersion.TryGetValue($"{EnglishLanguage}/{versionId}", out var fallback))
+        if (!string.Equals(language, _englishLanguage, StringComparison.Ordinal)
+            && pageListByLangVersion.TryGetValue($"{_englishLanguage}/{versionId}", out var fallback))
         {
             return fallback;
         }
@@ -176,7 +176,7 @@ public static class PathToUrlResolver
         {
             foreach (var version in available)
             {
-                resolved.Add(GhesPrefix + FormatVersion(version));
+                resolved.Add(_ghesPrefix + FormatVersion(version));
             }
             return;
         }
@@ -190,7 +190,7 @@ public static class PathToUrlResolver
         {
             if (SatisfiesComparator(version, op, target))
             {
-                resolved.Add(GhesPrefix + FormatVersion(version));
+                resolved.Add(_ghesPrefix + FormatVersion(version));
             }
         }
     }
@@ -199,8 +199,8 @@ public static class PathToUrlResolver
         IReadOnlyDictionary<string, IReadOnlyList<string>> pageListByLangVersion,
         string language)
     {
-        var primaryPrefix = $"{language}/{GhesPrefix}";
-        var fallbackPrefix = $"{EnglishLanguage}/{GhesPrefix}";
+        var primaryPrefix = $"{language}/{_ghesPrefix}";
+        var fallbackPrefix = $"{_englishLanguage}/{_ghesPrefix}";
 
         var seen = new HashSet<Version>();
         foreach (var key in pageListByLangVersion.Keys)
@@ -210,7 +210,7 @@ public static class PathToUrlResolver
             {
                 versionPart = key[primaryPrefix.Length..];
             }
-            else if (!string.Equals(language, EnglishLanguage, StringComparison.Ordinal)
+            else if (!string.Equals(language, _englishLanguage, StringComparison.Ordinal)
                 && key.StartsWith(fallbackPrefix, StringComparison.Ordinal))
             {
                 versionPart = key[fallbackPrefix.Length..];

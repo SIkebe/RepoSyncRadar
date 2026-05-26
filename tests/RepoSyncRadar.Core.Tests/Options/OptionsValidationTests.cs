@@ -9,7 +9,7 @@ namespace RepoSyncRadar.Core.Tests.Options;
 
 public class OptionsValidationTests
 {
-    private const string ValidJson = """
+    private const string _validJson = """
     {
       "GitHub": {
         "Owner": "github",
@@ -35,7 +35,7 @@ public class OptionsValidationTests
     [Fact]
     public void Bind_ValidConfiguration_PassesValidation()
     {
-        using var sp = BuildServiceProvider(ValidJson);
+        using var sp = BuildServiceProvider(_validJson);
 
         var github = sp.GetRequiredService<IOptions<GitHubOptions>>().Value;
         var docs = sp.GetRequiredService<IOptions<DocsApiOptions>>().Value;
@@ -50,7 +50,7 @@ public class OptionsValidationTests
     [Fact]
     public void Bind_GitHubPullRequestCreatedAtOrAfter_BindsIsoTimestamp()
     {
-        var json = ValidJson.Replace(
+        var json = _validJson.Replace(
             "\"MaxPullRequests\": 5",
             "\"MaxPullRequests\": 5,\n        \"PullRequestCreatedAtOrAfter\": \"2026-05-15T00:00:00Z\"",
             StringComparison.Ordinal);
@@ -66,7 +66,7 @@ public class OptionsValidationTests
     [Fact]
     public void Bind_GitHubOwnerEmpty_ThrowsOptionsValidationException()
     {
-        var json = ValidJson.Replace("\"Owner\": \"github\"", "\"Owner\": \"\"", StringComparison.Ordinal);
+        var json = _validJson.Replace("\"Owner\": \"github\"", "\"Owner\": \"\"", StringComparison.Ordinal);
         using var sp = BuildServiceProvider(json);
 
         var ex = Assert.Throws<OptionsValidationException>(
@@ -78,7 +78,7 @@ public class OptionsValidationTests
     [Fact]
     public void Bind_DocsApiBaseAddressHttp_ThrowsOptionsValidationException()
     {
-        var json = ValidJson.Replace(
+        var json = _validJson.Replace(
             "\"BaseAddress\": \"https://docs.github.com/\"",
             "\"BaseAddress\": \"http://docs.github.com/\"",
             StringComparison.Ordinal);
@@ -93,7 +93,7 @@ public class OptionsValidationTests
     [Fact]
     public void Bind_AllowedUrlHosts_AreNormalizedLowercaseAndDeduplicated()
     {
-        var json = ValidJson.Replace(
+        var json = _validJson.Replace(
             "\"AllowedUrlHosts\": [ \"docs.github.com\", \"api.github.com\" ]",
             "\"AllowedUrlHosts\": [ \"Docs.GitHub.com\", \"API.github.com\", \"docs.github.com\" ]",
             StringComparison.Ordinal);
@@ -110,7 +110,7 @@ public class OptionsValidationTests
     [Fact]
     public void WebView_DefaultAllowedHosts_Include_GitHubCopilotChatApis()
     {
-        using var sp = BuildServiceProvider(ValidJson);
+        using var sp = BuildServiceProvider(_validJson);
 
         var webView = sp.GetRequiredService<IOptions<WebViewOptions>>().Value;
 
@@ -126,7 +126,7 @@ public class OptionsValidationTests
         // canonicalizes them as lowercase (e.g. "read:user"). Normalizing keeps the
         // device-flow request body stable regardless of how a contributor types them
         // into appsettings.json.
-        var json = ValidJson.Replace(
+        var json = _validJson.Replace(
             "\"AllowedUrlHosts\": [ \"docs.github.com\", \"api.github.com\" ]",
             "\"AllowedUrlHosts\": [ \"docs.github.com\" ],\n    \"OAuthClientId\": \"  Iv1.test  \",\n    \"OAuthScopes\": [ \"Read:User\", \" read:user \", \"\" ]",
             StringComparison.Ordinal);
@@ -141,7 +141,7 @@ public class OptionsValidationTests
     [Fact]
     public void Bind_OAuthClientIdWhitespace_BecomesNull()
     {
-        var json = ValidJson.Replace(
+        var json = _validJson.Replace(
             "\"AllowedUrlHosts\": [ \"docs.github.com\", \"api.github.com\" ]",
             "\"AllowedUrlHosts\": [ \"docs.github.com\" ],\n    \"OAuthClientId\": \"   \"",
             StringComparison.Ordinal);
@@ -155,7 +155,7 @@ public class OptionsValidationTests
     [Fact]
     public void Bind_CopilotSdkOptions_AreTrimmedAndNormalized()
     {
-        var json = ValidJson.Replace(
+        var json = _validJson.Replace(
             "\"Streaming\": true,",
             "\"Streaming\": true,\n    \"LogLevel\": \" Debug \",\n    \"SessionIdleTimeoutSeconds\": 90,\n    \"CopilotHome\": \" C:/data/copilot \",\n    \"TelemetryFilePath\": \" C:/logs/copilot.jsonl \",",
             StringComparison.Ordinal);
@@ -172,7 +172,7 @@ public class OptionsValidationTests
     [Fact]
     public void Bind_CopilotDefaultModelEmpty_ThrowsOptionsValidationException()
     {
-        var json = ValidJson.Replace("\"DefaultModel\": \"gpt-5\"", "\"DefaultModel\": \"\"", StringComparison.Ordinal);
+        var json = _validJson.Replace("\"DefaultModel\": \"gpt-5\"", "\"DefaultModel\": \"\"", StringComparison.Ordinal);
         using var sp = BuildServiceProvider(json);
 
         var ex = Assert.Throws<OptionsValidationException>(

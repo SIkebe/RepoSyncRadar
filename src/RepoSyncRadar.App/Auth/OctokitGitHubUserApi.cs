@@ -10,14 +10,14 @@ namespace RepoSyncRadar.App.Auth;
 /// </summary>
 internal sealed class OctokitGitHubUserApi : IGitHubUserApi
 {
-    private static readonly ProductHeaderValue Product = new("RepoSyncRadar");
+    private static readonly ProductHeaderValue _product = new("RepoSyncRadar");
 
     public async Task<string?> GetCurrentLoginAsync(string accessToken, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(accessToken);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var client = new GitHubClient(Product)
+        var client = new GitHubClient(_product)
         {
             Credentials = new Credentials(accessToken),
         };

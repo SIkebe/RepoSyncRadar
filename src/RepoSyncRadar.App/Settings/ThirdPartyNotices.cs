@@ -44,7 +44,7 @@ public static class ThirdPartyNotices
             "Copyright (C) Microsoft Corporation. All rights reserved.",
             "https://aka.ms/webview",
             "https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.3967.48",
-            WebView2LicenseText),
+            _webView2LicenseText),
         Mit("MudBlazor", "9.4.0", "Copyright 2026 MudBlazor", "https://mudblazor.com/"),
         Mit("Octokit", "14.0.0", "Copyright GitHub 2017", "https://github.com/octokit/octokit.net"),
         Mit("YamlDotNet", "17.1.0", "Copyright (c) Antoine Aubry and contributors", "https://github.com/aaubry/YamlDotNet/wiki"),
@@ -112,7 +112,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """;
 
-    private const string WebView2LicenseText = """
+    private const string _webView2LicenseText = """
 Copyright (C) Microsoft Corporation. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

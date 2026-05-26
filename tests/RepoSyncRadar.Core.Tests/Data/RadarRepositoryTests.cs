@@ -13,9 +13,9 @@ namespace RepoSyncRadar.Core.Tests.Data;
 /// </summary>
 public sealed class RadarRepositoryTests
 {
-    private static readonly string[] BulkShas = ["sha-a", "sha-b", "sha-c"];
-    private static readonly string[] OnlyShaB = ["sha-b"];
-    private static readonly string[] KnownIntersectionInput = ["sha-known", "sha-new-1", "sha-new-2"];
+    private static readonly string[] _bulkShas = ["sha-a", "sha-b", "sha-c"];
+    private static readonly string[] _onlyShaB = ["sha-b"];
+    private static readonly string[] _knownIntersectionInput = ["sha-known", "sha-new-1", "sha-new-2"];
 
     [Fact]
     public async Task UpsertCommitsAsync_Inserts_New()
@@ -33,12 +33,12 @@ public sealed class RadarRepositoryTests
             },
             ct);
 
-        Assert.Equal(BulkShas, inserted.ToArray());
+        Assert.Equal(_bulkShas, inserted.ToArray());
 
         using var verify = fixture.CreateContext();
         Assert.Equal(3, verify.Commits.Count());
         Assert.Equal(
-            BulkShas,
+            _bulkShas,
             verify.Commits.OrderBy(c => c.Sha).Select(c => c.Sha).ToArray());
     }
 
@@ -64,7 +64,7 @@ public sealed class RadarRepositoryTests
             },
             ct);
 
-        Assert.Equal(OnlyShaB, inserted.ToArray());
+        Assert.Equal(_onlyShaB, inserted.ToArray());
 
         using var verify = fixture.CreateContext();
         var preserved = verify.Commits.Single(c => c.Sha == "sha-a");
@@ -127,7 +127,7 @@ public sealed class RadarRepositoryTests
             ct);
 
         var known = await repository.GetKnownShasAsync(
-            KnownIntersectionInput,
+            _knownIntersectionInput,
             ct);
 
         Assert.Single(known);

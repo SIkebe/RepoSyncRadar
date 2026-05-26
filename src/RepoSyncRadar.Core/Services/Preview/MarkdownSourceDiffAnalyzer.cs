@@ -27,10 +27,10 @@ public sealed record MarkdownSourceLineChange(
 
 public static partial class MarkdownSourceDiffAnalyzer
 {
-    private const int MaxPreviewLines = 5;
-    private const int MaxPreviewLength = 700;
+    private const int _maxPreviewLines = 5;
+    private const int _maxPreviewLength = 700;
 
-    private static readonly HashSet<string> s_nonFeatureIdentifiers = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> _nonFeatureIdentifiers = new(StringComparer.OrdinalIgnoreCase)
     {
         "and",
         "or",
@@ -213,12 +213,12 @@ public static partial class MarkdownSourceDiffAnalyzer
             .Split('\n')
             .Select(static line => line.Trim())
             .Where(static line => line.Length > 0)
-            .Take(MaxPreviewLines)
+            .Take(_maxPreviewLines)
             .ToArray();
         var preview = string.Join('\n', lines);
-        return preview.Length <= MaxPreviewLength
+        return preview.Length <= _maxPreviewLength
             ? preview
-            : preview[..MaxPreviewLength] + "...";
+            : preview[.._maxPreviewLength] + "...";
     }
 
     private static IEnumerable<string> ExtractFeatureIdentifiers(string? expression)
@@ -231,7 +231,7 @@ public static partial class MarkdownSourceDiffAnalyzer
         return IdentifierRegex()
             .Matches(expression)
             .Select(static match => match.Value)
-            .Where(static value => !s_nonFeatureIdentifiers.Contains(value))
+            .Where(static value => !_nonFeatureIdentifiers.Contains(value))
             .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 

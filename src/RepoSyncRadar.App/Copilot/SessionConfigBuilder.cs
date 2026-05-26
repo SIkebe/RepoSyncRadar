@@ -16,7 +16,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// </summary>
 internal static class SessionConfigBuilder
 {
-    private const string ClientName = "RepoSyncRadar";
+    private const string _clientName = "RepoSyncRadar";
 
     public static SessionConfig Build(
         SessionPurpose purpose,
@@ -32,7 +32,7 @@ internal static class SessionConfigBuilder
 
         var config = new SessionConfig
         {
-            ClientName = ClientName,
+            ClientName = _clientName,
             Model = copilot.DefaultModel,
             Streaming = copilot.Streaming,
             SystemMessage = new SystemMessageConfig

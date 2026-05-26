@@ -27,7 +27,7 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </remarks>
 public sealed partial class SystemProcessRunner : IProcessRunner
 {
-    private static readonly ConcurrentDictionary<string, string> s_resolvedExecutableCache =
+    private static readonly ConcurrentDictionary<string, string> _resolvedExecutableCache =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
     private readonly ILogger<SystemProcessRunner> _logger;
@@ -205,7 +205,7 @@ public sealed partial class SystemProcessRunner : IProcessRunner
         var pathEnv = Environment.GetEnvironmentVariable("PATH");
         var pathExtEnv = Environment.GetEnvironmentVariable("PATHEXT");
         var cacheKey = string.Concat(fileName, "\0", pathEnv, "\0", pathExtEnv);
-        return s_resolvedExecutableCache.GetOrAdd(
+        return _resolvedExecutableCache.GetOrAdd(
             cacheKey,
             static (_, state) => ResolveExecutable(
                 state.FileName,
@@ -320,15 +320,15 @@ public sealed partial class SystemProcessRunner : IProcessRunner
         // 64 lines × ~200 chars ≈ 12 KB upper bound per stream. Enough to catch
         // a typical npm / next.js stack trace without unbounded growth for
         // sidecars that may run for hours.
-        private const int MaxBufferedLines = 64;
+        private const int _maxBufferedLines = 64;
 
         private readonly Process _process;
         private readonly ILogger _logger;
         private readonly string _label;
         private readonly object _stdoutGate = new();
         private readonly object _stderrGate = new();
-        private readonly List<string> _stdoutBuffer = new(MaxBufferedLines);
-        private readonly List<string> _stderrBuffer = new(MaxBufferedLines);
+        private readonly List<string> _stdoutBuffer = new(_maxBufferedLines);
+        private readonly List<string> _stderrBuffer = new(_maxBufferedLines);
 
         public ProcessHandle(Process process, ILogger logger, string label)
         {
@@ -397,14 +397,14 @@ public sealed partial class SystemProcessRunner : IProcessRunner
         private void OnStdout(object sender, DataReceivedEventArgs e)
         {
             if (e.Data is null) { return; }
-            AppendBuffered(_stdoutBuffer, _stdoutGate, e.Data, MaxBufferedLines);
+            AppendBuffered(_stdoutBuffer, _stdoutGate, e.Data, _maxBufferedLines);
             LogStdout(_logger, _label, e.Data);
         }
 
         private void OnStderr(object sender, DataReceivedEventArgs e)
         {
             if (e.Data is null) { return; }
-            AppendBuffered(_stderrBuffer, _stderrGate, e.Data, MaxBufferedLines);
+            AppendBuffered(_stderrBuffer, _stderrGate, e.Data, _maxBufferedLines);
             LogStderr(_logger, _label, e.Data);
         }
     }

@@ -12,32 +12,32 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 public static class PreviewPathMapper
 {
-    private const string ContentPrefix = "content/";
-    private const string MarkdownExt = ".md";
-    private const string MarkdownLongExt = ".markdown";
-    private const string IndexSegment = "/index";
-    private const string DefaultLanguage = "en";
+    private const string _contentPrefix = "content/";
+    private const string _markdownExt = ".md";
+    private const string _markdownLongExt = ".markdown";
+    private const string _indexSegment = "/index";
+    private const string _defaultLanguage = "en";
 
     /// <summary>
     /// Returns <c>"/{lang}/{path-without-content-prefix-and-md}"</c>, or <c>null</c>
     /// when <paramref name="repoPath"/> is not a publishable content markdown file.
     /// </summary>
-    public static string? Map(string repoPath, string language = DefaultLanguage)
+    public static string? Map(string repoPath, string language = _defaultLanguage)
     {
         if (string.IsNullOrWhiteSpace(repoPath))
         {
             return null;
         }
-        if (!repoPath.StartsWith(ContentPrefix, StringComparison.Ordinal))
+        if (!repoPath.StartsWith(_contentPrefix, StringComparison.Ordinal))
         {
             return null;
         }
-        if (!repoPath.EndsWith(MarkdownExt, StringComparison.OrdinalIgnoreCase))
+        if (!repoPath.EndsWith(_markdownExt, StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        var rel = repoPath[ContentPrefix.Length..^MarkdownExt.Length];
+        var rel = repoPath[_contentPrefix.Length..^_markdownExt.Length];
         if (rel.Length == 0)
         {
             // "content/.md" — nonsense input.
@@ -49,12 +49,12 @@ public static class PreviewPathMapper
         {
             rel = string.Empty;
         }
-        else if (rel.EndsWith(IndexSegment, StringComparison.Ordinal))
+        else if (rel.EndsWith(_indexSegment, StringComparison.Ordinal))
         {
-            rel = rel[..^IndexSegment.Length];
+            rel = rel[..^_indexSegment.Length];
         }
 
-        var lang = string.IsNullOrWhiteSpace(language) ? DefaultLanguage : language;
+        var lang = string.IsNullOrWhiteSpace(language) ? _defaultLanguage : language;
         return rel.Length == 0
             ? string.Create(CultureInfo.InvariantCulture, $"/{lang}")
             : string.Create(CultureInfo.InvariantCulture, $"/{lang}/{rel}");
@@ -63,6 +63,6 @@ public static class PreviewPathMapper
     /// <summary>Returns true for repository-relative Markdown files, including non-publishable files such as CHANGELOG.md.</summary>
     public static bool IsMarkdown(string repoPath)
         => !string.IsNullOrWhiteSpace(repoPath)
-            && (repoPath.EndsWith(MarkdownExt, StringComparison.OrdinalIgnoreCase)
-                || repoPath.EndsWith(MarkdownLongExt, StringComparison.OrdinalIgnoreCase));
+            && (repoPath.EndsWith(_markdownExt, StringComparison.OrdinalIgnoreCase)
+                || repoPath.EndsWith(_markdownLongExt, StringComparison.OrdinalIgnoreCase));
 }

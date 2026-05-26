@@ -18,7 +18,7 @@ namespace RepoSyncRadar.Integrations.Tests.Preview;
 /// </summary>
 public sealed class PreviewCoordinatorTests : IDisposable
 {
-    private static readonly int[] ComparisonPorts = [4500, 4501];
+    private static readonly int[] _comparisonPorts = [4500, 4501];
 
     private readonly string _tempRoot;
 
@@ -140,7 +140,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Equal("headsha", link.AfterSha);
         Assert.True(session.IsAllowed(link.BeforeUrl));
         Assert.True(session.IsAllowed(link.AfterUrl));
-        Assert.Equal(ComparisonPorts, session.ActivePorts);
+        Assert.Equal(_comparisonPorts, session.ActivePorts);
         Assert.Contains(calls, c => c.StartsWith("RUN git rev-parse headsha^", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("START npm run dev -- --port 4501", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("START npm run dev -- --port 4500", StringComparison.Ordinal));

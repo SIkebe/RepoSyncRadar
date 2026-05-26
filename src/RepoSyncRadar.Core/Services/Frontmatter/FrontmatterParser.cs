@@ -22,8 +22,8 @@ public sealed record FrontmatterData(string VersionsRaw);
 /// </remarks>
 public static class FrontmatterParser
 {
-    private const string Fence = "---";
-    private const string VersionsKey = "versions:";
+    private const string _fence = "---";
+    private const string _versionsKey = "versions:";
 
     /// <summary>
     /// Parses a Markdown source string. Returns <see langword="null"/> if the document has no
@@ -40,7 +40,7 @@ public static class FrontmatterParser
         }
 
         var lines = source.Split('\n');
-        if (lines.Length == 0 || NormalizeLine(lines[0]) != Fence)
+        if (lines.Length == 0 || NormalizeLine(lines[0]) != _fence)
         {
             return null;
         }
@@ -48,7 +48,7 @@ public static class FrontmatterParser
         var closingIndex = -1;
         for (var i = 1; i < lines.Length; i++)
         {
-            if (NormalizeLine(lines[i]) == Fence)
+            if (NormalizeLine(lines[i]) == _fence)
             {
                 closingIndex = i;
                 break;
@@ -71,7 +71,7 @@ public static class FrontmatterParser
         for (var i = start; i < end; i++)
         {
             var line = NormalizeLine(lines[i]);
-            if (line.StartsWith(VersionsKey, StringComparison.Ordinal))
+            if (line.StartsWith(_versionsKey, StringComparison.Ordinal))
             {
                 versionsLine = i;
                 break;
@@ -84,7 +84,7 @@ public static class FrontmatterParser
         }
 
         var header = NormalizeLine(lines[versionsLine]);
-        var afterColon = header[VersionsKey.Length..].Trim();
+        var afterColon = header[_versionsKey.Length..].Trim();
         if (afterColon.Length > 0)
         {
             // Inline value such as `versions: '*'`. Surface it as a single-line block so the

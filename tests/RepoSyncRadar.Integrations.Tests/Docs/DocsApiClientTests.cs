@@ -14,21 +14,21 @@ namespace RepoSyncRadar.Integrations.Tests.Docs;
 /// </summary>
 public class DocsApiClientTests
 {
-    private const string BaseAddress = "https://docs.github.com/";
+    private const string _baseAddress = "https://docs.github.com/";
 
-    private static readonly string[] ExpectedPaths = ["/en/get-started", "/en/repositories"];
+    private static readonly string[] _expectedPaths = ["/en/get-started", "/en/repositories"];
 
     [Fact]
     public async Task GetPageListAsync_Returns_Parsed_Paths()
     {
         var (client, handler, _) = CreateClient();
         var ct = TestContext.Current.CancellationToken;
-        handler.Expect(HttpMethod.Get, BaseAddress + "api/pagelist/en/fpt")
+        handler.Expect(HttpMethod.Get, _baseAddress + "api/pagelist/en/fpt")
             .Respond("application/json", "[\"/en/get-started\",\"/en/repositories\"]");
 
         var result = await client.GetPageListAsync("en", "fpt", ct);
 
-        Assert.Equal(ExpectedPaths, result);
+        Assert.Equal(_expectedPaths, result);
         handler.VerifyNoOutstandingExpectation();
     }
 
@@ -38,7 +38,7 @@ public class DocsApiClientTests
         var (client, handler, _) = CreateClient();
         var ct = TestContext.Current.CancellationToken;
         var hitCount = 0;
-        handler.When(HttpMethod.Get, BaseAddress + "api/pagelist/en/fpt")
+        handler.When(HttpMethod.Get, _baseAddress + "api/pagelist/en/fpt")
             .Respond(_ =>
             {
                 Interlocked.Increment(ref hitCount);
@@ -58,7 +58,7 @@ public class DocsApiClientTests
         var (client, handler, clock) = CreateClient(pageListCacheSeconds: 60);
         var ct = TestContext.Current.CancellationToken;
         var hitCount = 0;
-        handler.When(HttpMethod.Get, BaseAddress + "api/pagelist/en/fpt")
+        handler.When(HttpMethod.Get, _baseAddress + "api/pagelist/en/fpt")
             .Respond(_ =>
             {
                 Interlocked.Increment(ref hitCount);
@@ -77,7 +77,7 @@ public class DocsApiClientTests
     {
         var (client, handler, _) = CreateClient();
         var ct = TestContext.Current.CancellationToken;
-        handler.Expect(HttpMethod.Get, BaseAddress + "api/article/body")
+        handler.Expect(HttpMethod.Get, _baseAddress + "api/article/body")
             .WithQueryString("pathname", "/en/get-started")
             .Respond("text/html", "<p>hello</p>");
 
@@ -92,7 +92,7 @@ public class DocsApiClientTests
     {
         var (client, handler, _) = CreateClient();
         var ct = TestContext.Current.CancellationToken;
-        handler.Expect(HttpMethod.Get, BaseAddress + "api/article/meta")
+        handler.Expect(HttpMethod.Get, _baseAddress + "api/article/meta")
             .WithQueryString("pathname", "/en/old-path")
             .Respond(
                 "application/json",
@@ -109,7 +109,7 @@ public class DocsApiClientTests
     {
         var (client, handler, _) = CreateClient();
         var ct = TestContext.Current.CancellationToken;
-        handler.When(HttpMethod.Get, BaseAddress + "api/article/meta")
+        handler.When(HttpMethod.Get, _baseAddress + "api/article/meta")
             .Respond(HttpStatusCode.NotFound);
 
         var result = await client.ResolveCanonicalAsync("/en/missing", ct);
@@ -122,7 +122,7 @@ public class DocsApiClientTests
     {
         var (client, handler, _) = CreateClient();
         var ct = TestContext.Current.CancellationToken;
-        handler.When(HttpMethod.Get, BaseAddress + "api/pagelist/en/fpt")
+        handler.When(HttpMethod.Get, _baseAddress + "api/pagelist/en/fpt")
             .Respond(HttpStatusCode.InternalServerError, "text/plain", "boom");
 
         var ex = await Assert.ThrowsAsync<DocsApiException>(
@@ -163,7 +163,7 @@ public class DocsApiClientTests
         var httpClient = handler.ToHttpClient();
         var options = Options.Create(new DocsApiOptions
         {
-            BaseAddress = new Uri(BaseAddress),
+            BaseAddress = new Uri(_baseAddress),
             ClientName = "reposyncradar",
             DefaultLanguage = "en",
             PageListCacheSeconds = pageListCacheSeconds,

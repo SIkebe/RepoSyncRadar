@@ -16,8 +16,8 @@ namespace RepoSyncRadar.App.Copilot.Tools;
 /// </summary>
 public sealed class RadarWriteTools
 {
-    private const double BoostDeltaMax = 5.0;
-    private const double BoostDeltaMin = -5.0;
+    private const double _boostDeltaMax = 5.0;
+    private const double _boostDeltaMin = -5.0;
 
     private readonly IDbContextFactory<RadarDbContext> _dbFactory;
     private readonly TriageScoringProgressTracker _triageProgress;
@@ -202,9 +202,9 @@ public sealed class RadarWriteTools
         {
             return new WriteResult("pattern is required.");
         }
-        if (double.IsNaN(args.Delta) || args.Delta > BoostDeltaMax || args.Delta < BoostDeltaMin)
+        if (double.IsNaN(args.Delta) || args.Delta > _boostDeltaMax || args.Delta < _boostDeltaMin)
         {
-            return new WriteResult($"delta must be between {BoostDeltaMin} and {BoostDeltaMax}.");
+            return new WriteResult($"delta must be between {_boostDeltaMin} and {_boostDeltaMax}.");
         }
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);

@@ -6,7 +6,7 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 public sealed class NextDevServerProcessCleanerTests : IDisposable
 {
     private readonly string _tempRoot;
-    private static readonly PreviewProcessSnapshot[] NoProcesses = [];
+    private static readonly PreviewProcessSnapshot[] _noProcesses = [];
 
     public NextDevServerProcessCleanerTests()
     {
@@ -23,7 +23,7 @@ public sealed class NextDevServerProcessCleanerTests : IDisposable
             Path.Combine(logDir, "next-development.log"),
             "{\"message\":\"Server started  port=4501 pid=32776 nodeEnv=development\"}" + Environment.NewLine);
 
-        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, NoProcesses);
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, _noProcesses);
 
         Assert.Equal(32776, Assert.Single(pids));
     }
@@ -35,7 +35,7 @@ public sealed class NextDevServerProcessCleanerTests : IDisposable
             + _tempRoot
             + " - Log: .next\\dev\\logs\\next-development.log Run taskkill /PID 32776 /F to stop it.";
 
-        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, message, NoProcesses);
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, message, _noProcesses);
 
         Assert.Equal(32776, Assert.Single(pids));
     }
@@ -48,7 +48,7 @@ public sealed class NextDevServerProcessCleanerTests : IDisposable
             + otherDir
             + " - Log: .next\\dev\\logs\\next-development.log Run taskkill /PID 32776 /F to stop it.";
 
-        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, message, NoProcesses);
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, message, _noProcesses);
 
         Assert.Empty(pids);
     }
@@ -76,7 +76,7 @@ public sealed class NextDevServerProcessCleanerTests : IDisposable
             Path.Combine(_tempRoot, ".reposyncradar-preview-pids"),
             "18452" + Environment.NewLine + "not-a-pid" + Environment.NewLine);
 
-        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, NoProcesses);
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, _noProcesses);
 
         Assert.Equal(18452, Assert.Single(pids));
     }
@@ -86,7 +86,7 @@ public sealed class NextDevServerProcessCleanerTests : IDisposable
     {
         NextDevServerProcessCleaner.RememberPreviewProcess(_tempRoot, 36556);
 
-        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, NoProcesses);
+        var pids = NextDevServerProcessCleaner.FindCandidatePids(_tempRoot, startupFailureOutput: null, _noProcesses);
 
         Assert.Equal(36556, Assert.Single(pids));
     }

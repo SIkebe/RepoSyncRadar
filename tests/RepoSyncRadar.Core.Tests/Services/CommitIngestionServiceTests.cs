@@ -13,8 +13,8 @@ namespace RepoSyncRadar.Core.Tests.Services;
 /// </summary>
 public sealed class CommitIngestionServiceTests
 {
-    private static readonly string[] BothCandidateShas = ["sha-known", "sha-new"];
-    private static readonly string[] OnlyShaNew = ["sha-new"];
+    private static readonly string[] _bothCandidateShas = ["sha-known", "sha-new"];
+    private static readonly string[] _onlyShaNew = ["sha-new"];
 
     [Fact]
     public async Task IngestAsync_Persists_Only_New()
@@ -29,7 +29,7 @@ public sealed class CommitIngestionServiceTests
             .Returns((IReadOnlyList<Commit>)new[] { known, fresh });
 
         repo.GetKnownShasAsync(
-                Arg.Is<IEnumerable<string>>(s => s.SequenceEqual(BothCandidateShas)),
+                Arg.Is<IEnumerable<string>>(s => s.SequenceEqual(_bothCandidateShas)),
                 Arg.Any<CancellationToken>())
             .Returns((IReadOnlySet<string>)new HashSet<string>(StringComparer.Ordinal) { "sha-known" });
 
@@ -47,7 +47,7 @@ public sealed class CommitIngestionServiceTests
         await docs.DidNotReceive().GetCommitFilesAsync("sha-known", Arg.Any<CancellationToken>());
 
         await repo.Received(1).UpsertCommitsAsync(
-            Arg.Is<IEnumerable<Commit>>(seq => seq.Select(c => c.Sha).SequenceEqual(OnlyShaNew)),
+            Arg.Is<IEnumerable<Commit>>(seq => seq.Select(c => c.Sha).SequenceEqual(_onlyShaNew)),
             Arg.Any<CancellationToken>());
     }
 

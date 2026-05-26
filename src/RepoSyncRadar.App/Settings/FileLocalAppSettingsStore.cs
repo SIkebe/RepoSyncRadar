@@ -10,7 +10,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
 {
     internal const string LocalSettingsPathEnv = "REPOSYNCRADAR_LOCAL_APPSETTINGS_PATH";
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         WriteIndented = true,
     };
@@ -92,7 +92,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 Directory.CreateDirectory(directory);
             }
 
-            var json = root.ToJsonString(JsonOptions);
+            var json = root.ToJsonString(_jsonOptions);
             await File.WriteAllTextAsync(SettingsPath, json, cancellationToken).ConfigureAwait(false);
             Current = normalized.Clone();
         }

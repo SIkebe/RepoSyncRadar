@@ -30,7 +30,7 @@ namespace RepoSyncRadar.Core.Services.Docs;
 /// </remarks>
 public sealed class DocsApiClient : IDocsApiClient
 {
-    private static readonly JsonSerializerOptions s_jsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _http;
     private readonly DocsApiOptions _options;
@@ -75,7 +75,7 @@ public sealed class DocsApiClient : IDocsApiClient
         await EnsureSuccessAsync(response, path, treatNotFoundAsArticleMissing: false, cancellationToken).ConfigureAwait(false);
 
         var paths = await response.Content
-            .ReadFromJsonAsync<List<string>>(s_jsonOptions, cancellationToken)
+            .ReadFromJsonAsync<List<string>>(_jsonOptions, cancellationToken)
             .ConfigureAwait(false);
 
         var value = (IReadOnlyList<string>)(paths ?? new List<string>(capacity: 0));
@@ -101,7 +101,7 @@ public sealed class DocsApiClient : IDocsApiClient
         await EnsureSuccessAsync(response, path, treatNotFoundAsArticleMissing: false, cancellationToken).ConfigureAwait(false);
 
         var meta = await response.Content
-            .ReadFromJsonAsync<ArticleMetaResponse>(s_jsonOptions, cancellationToken)
+            .ReadFromJsonAsync<ArticleMetaResponse>(_jsonOptions, cancellationToken)
             .ConfigureAwait(false);
 
         if (meta is null)
