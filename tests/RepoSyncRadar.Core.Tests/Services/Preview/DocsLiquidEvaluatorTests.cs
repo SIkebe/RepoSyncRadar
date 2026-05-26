@@ -138,6 +138,19 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Expands_Reusable_With_Underscore_Directory()
+    {
+        var ctx = WithReusables(
+            ("audit_log.audit-log-enterprise-export-limit", "There is a hard limit when exporting audit logs."));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% data reusables.audit_log.audit-log-enterprise-export-limit %}",
+            ctx);
+
+        Assert.Equal("There is a hard limit when exporting audit logs.", result);
+    }
+
+    [Fact]
     public void Trims_Data_Tag_Expansion_Like_Official_Docs()
     {
         var ctx = WithReusables(("guide.note", "\nUse this note.\n"));

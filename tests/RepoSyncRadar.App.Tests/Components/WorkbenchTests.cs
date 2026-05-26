@@ -180,31 +180,6 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
-    public async Task AskPalette_Starts_Collapsed_And_Can_Be_Expanded()
-    {
-        var repo = Substitute.For<IRadarRepository>();
-        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(CountsFor(ReviewStatus.Unseen)));
-        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<Commit>>([]));
-
-        await using var ctx = CreateWorkbenchTestContext(repo, out _);
-        var cut = ctx.Render<Workbench>();
-
-        Assert.Empty(cut.FindAll("[data-testid=\"ask-palette\"]"));
-        var toggle = cut.Find("[data-testid=\"ask-palette-toggle\"]");
-        Assert.Equal("false", toggle.GetAttribute("aria-expanded"));
-
-        toggle.Click();
-
-        cut.WaitForAssertion(() =>
-        {
-            Assert.NotEmpty(cut.FindAll("[data-testid=\"ask-palette\"]"));
-            Assert.Equal("true", cut.Find("[data-testid=\"ask-palette-toggle\"]").GetAttribute("aria-expanded"));
-        });
-    }
-
-    [Fact]
     public async Task Archiving_Selected_Commit_Returns_To_Unseen_Queue_And_Clears_Detail()
     {
         var target = new Commit

@@ -11,16 +11,16 @@ namespace RepoSyncRadar.App.Tests.Auth;
 
 public class GitHubDeviceFlowAuthenticatorTests
 {
-    private const string ClientId = "Iv1.testclient";
-    private const string ExpectedDeviceCodeUrl = "https://github.com/login/device/code";
-    private const string ExpectedTokenUrl = "https://github.com/login/oauth/access_token";
+    private const string _clientId = "Iv1.testclient";
+    private const string _expectedDeviceCodeUrl = "https://github.com/login/device/code";
+    private const string _expectedTokenUrl = "https://github.com/login/oauth/access_token";
 
     [Fact]
     public async Task RequestCodeAsync_ParsesGitHubResponse()
     {
         var handler = new MockHttpMessageHandler();
-        handler.When(HttpMethod.Post, ExpectedDeviceCodeUrl)
-            .WithFormData("client_id", ClientId)
+        handler.When(HttpMethod.Post, _expectedDeviceCodeUrl)
+            .WithFormData("client_id", _clientId)
             .WithFormData("scope", "read:user")
             .Respond("application/json", """
                 {
@@ -36,7 +36,7 @@ public class GitHubDeviceFlowAuthenticatorTests
         var authenticator = CreateAuthenticator(handler, time);
 
         var challenge = await authenticator.RequestCodeAsync(
-            ClientId, ["read:user"], TestContext.Current.CancellationToken);
+            _clientId, ["read:user"], TestContext.Current.CancellationToken);
 
         Assert.Equal("deadbeef", challenge.DeviceCode);
         Assert.Equal("ABCD-1234", challenge.UserCode);
@@ -49,7 +49,7 @@ public class GitHubDeviceFlowAuthenticatorTests
     public async Task PollForTokenAsync_ReturnsAccessTokenWhenGitHubReturnsOne()
     {
         var handler = new MockHttpMessageHandler();
-        handler.When(HttpMethod.Post, ExpectedTokenUrl)
+        handler.When(HttpMethod.Post, _expectedTokenUrl)
             .Respond("application/json", """
                 {
                   "access_token": "ghu_abc",
@@ -62,7 +62,7 @@ public class GitHubDeviceFlowAuthenticatorTests
         var authenticator = CreateAuthenticator(handler, time);
         var challenge = NewChallenge(time);
 
-        var pollTask = authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken);
+        var pollTask = authenticator.PollForTokenAsync(_clientId, challenge, TestContext.Current.CancellationToken);
         time.Advance(challenge.Interval);
         var token = await pollTask;
 
@@ -76,9 +76,9 @@ public class GitHubDeviceFlowAuthenticatorTests
     public async Task PollForTokenAsync_OnAuthorizationPending_RetriesUntilSuccess()
     {
         var handler = new MockHttpMessageHandler();
-        handler.Expect(HttpMethod.Post, ExpectedTokenUrl)
+        handler.Expect(HttpMethod.Post, _expectedTokenUrl)
             .Respond("application/json", """{"error":"authorization_pending"}""");
-        handler.Expect(HttpMethod.Post, ExpectedTokenUrl)
+        handler.Expect(HttpMethod.Post, _expectedTokenUrl)
             .Respond("application/json", """{"access_token":"ghu_ok","token_type":"bearer"}""");
 
         // Use real TimeProvider with a millisecond-scale interval. FakeTimeProvider
@@ -87,7 +87,7 @@ public class GitHubDeviceFlowAuthenticatorTests
         var authenticator = CreateAuthenticator(handler, TimeProvider.System);
         var challenge = NewShortChallenge();
 
-        var token = await authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken);
+        var token = await authenticator.PollForTokenAsync(_clientId, challenge, TestContext.Current.CancellationToken);
 
         Assert.Equal("ghu_ok", token.AccessToken);
         handler.VerifyNoOutstandingExpectation();
@@ -97,9 +97,9 @@ public class GitHubDeviceFlowAuthenticatorTests
     public async Task PollForTokenAsync_OnSlowDown_ExtendsInterval()
     {
         var handler = new MockHttpMessageHandler();
-        handler.Expect(HttpMethod.Post, ExpectedTokenUrl)
+        handler.Expect(HttpMethod.Post, _expectedTokenUrl)
             .Respond("application/json", """{"error":"slow_down"}""");
-        handler.Expect(HttpMethod.Post, ExpectedTokenUrl)
+        handler.Expect(HttpMethod.Post, _expectedTokenUrl)
             .Respond("application/json", """{"access_token":"ghu_ok","token_type":"bearer"}""");
 
         // Real-time poll; verifies the slow_down branch is taken (interval extension
@@ -107,7 +107,7 @@ public class GitHubDeviceFlowAuthenticatorTests
         var authenticator = CreateAuthenticator(handler, TimeProvider.System);
         var challenge = NewShortChallenge();
 
-        var token = await authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken);
+        var token = await authenticator.PollForTokenAsync(_clientId, challenge, TestContext.Current.CancellationToken);
 
         Assert.Equal("ghu_ok", token.AccessToken);
         handler.VerifyNoOutstandingExpectation();
@@ -117,14 +117,14 @@ public class GitHubDeviceFlowAuthenticatorTests
     public async Task PollForTokenAsync_OnAccessDenied_Throws()
     {
         var handler = new MockHttpMessageHandler();
-        handler.When(HttpMethod.Post, ExpectedTokenUrl)
+        handler.When(HttpMethod.Post, _expectedTokenUrl)
             .Respond("application/json", """{"error":"access_denied"}""");
 
         var authenticator = CreateAuthenticator(handler, TimeProvider.System);
         var challenge = NewShortChallenge();
 
         await Assert.ThrowsAsync<DeviceFlowFailedException>(() =>
-            authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken));
+            authenticator.PollForTokenAsync(_clientId, challenge, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class GitHubDeviceFlowAuthenticatorTests
         time.Advance(TimeSpan.FromSeconds(20));
 
         await Assert.ThrowsAsync<DeviceFlowFailedException>(() =>
-            authenticator.PollForTokenAsync(ClientId, challenge, TestContext.Current.CancellationToken));
+            authenticator.PollForTokenAsync(_clientId, challenge, TestContext.Current.CancellationToken));
     }
 
     private static GitHubDeviceFlowAuthenticator CreateAuthenticator(MockHttpMessageHandler handler, TimeProvider time)

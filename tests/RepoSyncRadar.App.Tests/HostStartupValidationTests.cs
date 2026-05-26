@@ -9,7 +9,7 @@ namespace RepoSyncRadar.App.Tests;
 
 public class HostStartupValidationTests
 {
-    private const string ValidJson = """
+    private const string _validJson = """
     {
       "GitHub": {
         "Owner": "github",
@@ -35,7 +35,7 @@ public class HostStartupValidationTests
     [Fact]
     public async Task StartAsync_ValidConfiguration_StartsHostSuccessfully()
     {
-        using var host = BuildHost(ValidJson);
+        using var host = BuildHost(_validJson);
 
         await host.StartAsync(TestContext.Current.CancellationToken);
         await host.StopAsync(TestContext.Current.CancellationToken);
@@ -44,7 +44,7 @@ public class HostStartupValidationTests
     [Fact]
     public async Task StartAsync_InvalidGitHubOwner_ThrowsOptionsValidationException()
     {
-        var json = ValidJson.Replace("\"Owner\": \"github\"", "\"Owner\": \"\"", StringComparison.Ordinal);
+        var json = _validJson.Replace("\"Owner\": \"github\"", "\"Owner\": \"\"", StringComparison.Ordinal);
         using var host = BuildHost(json);
 
         await Assert.ThrowsAsync<OptionsValidationException>(

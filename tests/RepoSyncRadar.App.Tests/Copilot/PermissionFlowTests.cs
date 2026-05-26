@@ -18,9 +18,9 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 /// </summary>
 public sealed class PermissionFlowTests
 {
-    private static readonly PermissionInvocation Invocation = new() { SessionId = "session-write" };
-    private static readonly string ApproveOnceKind = PermissionDecision.ApproveOnce().Kind;
-    private static readonly string RejectKind = PermissionDecision.Reject("test").Kind;
+    private static readonly PermissionInvocation _invocation = new() { SessionId = "session-write" };
+    private static readonly string _approveOnceKind = PermissionDecision.ApproveOnce().Kind;
+    private static readonly string _rejectKind = PermissionDecision.Reject("test").Kind;
 
     private static RadarPermissionPolicy CreatePolicy(IPermissionPrompt prompt)
     {
@@ -46,9 +46,9 @@ public sealed class PermissionFlowTests
         prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(true);
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), Invocation);
+        var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), _invocation);
 
-        Assert.Equal(ApproveOnceKind, result.Kind);
+        Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.Received(1).ConfirmAsync(
             Arg.Is<PermissionRequestCustomTool>(t => t.ToolName == "radar_post_draft"),
             Arg.Any<CancellationToken>());
@@ -61,9 +61,9 @@ public sealed class PermissionFlowTests
         prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(false);
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), Invocation);
+        var result = await policy.HandleAsync(NewCustomTool("radar_post_draft"), _invocation);
 
-        Assert.Equal(RejectKind, result.Kind);
+        Assert.Equal(_rejectKind, result.Kind);
     }
 }
 #pragma warning restore GHCP001

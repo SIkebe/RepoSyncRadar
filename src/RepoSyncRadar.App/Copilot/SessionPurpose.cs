@@ -13,9 +13,6 @@ public enum SessionPurpose
     /// <summary>Adoption — drafts platform-specific posts for a focused commit.</summary>
     Adoption,
 
-    /// <summary>Ask Palette — answers natural-language queries by calling <c>radar_query</c>.</summary>
-    Ask,
-
     /// <summary>Weekly maintenance — suggests ignore / boost rule updates.</summary>
     Maintenance,
 }

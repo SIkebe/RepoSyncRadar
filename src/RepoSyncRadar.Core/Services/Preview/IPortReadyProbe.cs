@@ -35,10 +35,10 @@ public sealed class TcpPortReadyProbe : IPortReadyProbe
 {
     /// <summary>Interval between probe attempts. Kept small enough to be responsive but
     /// large enough not to drown the logger.</summary>
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan _pollInterval = TimeSpan.FromMilliseconds(500);
 
     /// <summary>Per-attempt connect timeout so a misbehaving stack can't pin the probe.</summary>
-    private static readonly TimeSpan ConnectAttemptTimeout = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan _connectAttemptTimeout = TimeSpan.FromSeconds(2);
 
     public async Task<bool> WaitForListenAsync(
         int port,
@@ -62,7 +62,7 @@ public sealed class TcpPortReadyProbe : IPortReadyProbe
             }
             try
             {
-                await Task.Delay(PollInterval, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(_pollInterval, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -75,7 +75,7 @@ public sealed class TcpPortReadyProbe : IPortReadyProbe
     private static async Task<bool> TryConnectAsync(int port, CancellationToken cancellationToken)
     {
         using var client = new TcpClient();
-        using var timeout = new CancellationTokenSource(ConnectAttemptTimeout);
+        using var timeout = new CancellationTokenSource(_connectAttemptTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         try
         {

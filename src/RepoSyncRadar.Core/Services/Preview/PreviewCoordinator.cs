@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.Core.Options;
@@ -65,7 +66,8 @@ public interface IPreviewCoordinator
     /// worktrees, hosts both rendered pages on localhost, and returns before/after URLs.
     /// </summary>
     /// <param name="version">
-    /// 描画する <see cref="DocsVersion"/>。未指定なら <see cref="DocsVersionCatalog.Default"/> (= fpt)。
+    /// 描画する <see cref="DocsVersion"/>。未指定なら差分が出る最初の版を使う。
+    /// 差分が版依存でない場合は <see cref="DocsVersionCatalog.Default"/> (= fpt) を使う。
     /// <c>{% ifversion ... %}</c> がこの版で評価される。
     /// </param>
     Task<PreviewComparisonLink?> PrepareMarkdownComparisonPreviewAsync(
@@ -175,8 +177,8 @@ internal sealed record ReusablePreviewTarget(string FilePath, int ReferenceCount
 /// <inheritdoc cref="IPreviewCoordinator" />
 public sealed partial class PreviewCoordinator : IPreviewCoordinator
 {
-    private const string MarkdownBeforeAssetRoute = "/markdown-assets/before";
-    private const string MarkdownAfterAssetRoute = "/markdown-assets/after";
+    private const string _markdownBeforeAssetRoute = "/markdown-assets/before";
+    private const string _markdownAfterAssetRoute = "/markdown-assets/after";
 
     private readonly DocsWorktreeManager _worktree;
     private readonly PreviewServerHost _server;
@@ -206,6 +208,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     // commitSha + filePath ごとに、クリックされた Markdown が実際に参照する
     // variables/reusables/page titles だけを読み込んだ DocsLiquidContext を使い回す。
     private readonly ConcurrentDictionary<LiquidContextCacheKey, DocsLiquidContext> _liquidContextCache = new();
+    private long _markdownPreviewGeneration;
 
     private readonly record struct PreparedSessionKey(int PrNumber, string Sha);
 
@@ -442,8 +445,6 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             throw new InvalidOperationException($"'{filePath}' は Markdown ファイルではありません。");
         }
 
-        var effectiveVersion = version ?? DocsVersionCatalog.Default;
-
         if (!_worktree.IsEnabled)
         {
             LogDisabled(_logger);
@@ -500,6 +501,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             afterMarkdown,
             afterLiquid);
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
+        var effectiveVersion = version ?? ResolveInitialMarkdownPreviewVersion(affectedVersions);
         progress?.Report("フロントマターの変更点を解析中…");
         var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
         progress?.Report("Liquid 条件と関連 data ファイルの差分を解析中…");
@@ -522,7 +524,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             versionImpacts: versionImpacts,
             frontmatterChanges: frontmatterChanges,
             sourceDiff: sourceDiff,
-            assetBasePath: MarkdownBeforeAssetRoute,
+            assetBasePath: _markdownBeforeAssetRoute,
             diffAgainstMarkdown: afterMarkdown,
             diffAgainstLiquidContext: afterLiquid,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
@@ -539,7 +541,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             versionImpacts: versionImpacts,
             frontmatterChanges: frontmatterChanges,
             sourceDiff: sourceDiff,
-            assetBasePath: MarkdownAfterAssetRoute,
+            assetBasePath: _markdownAfterAssetRoute,
             diffAgainstMarkdown: beforeMarkdown,
             diffAgainstLiquidContext: beforeLiquid,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
@@ -578,7 +580,10 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         // 判断して navigation をスキップし、「変更前ページを準備中…」の
         // オーバーレイから先に進めなくなる。
         // LocalPreviewContentServer.NormalizeRoute は query を捨てるためルーティングには影響しない。
-        var query = BuildMarkdownPreviewQuery(effectiveVersion, requestedFilePath, renderedFilePath);
+        // r はレンダリング世代。同じ version/file の再生成でも WebView2 に別 URL として
+        // 認識させ、古い DOM/HTTP cache の表示を避ける。
+        var renderGeneration = Interlocked.Increment(ref _markdownPreviewGeneration);
+        var query = BuildMarkdownPreviewQuery(effectiveVersion, requestedFilePath, renderedFilePath, renderGeneration);
         var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before?{query}"));
         var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after?{query}"));
         LogMarkdownComparisonReady(_logger, session.BeforeSha, sha, renderedFilePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
@@ -601,17 +606,36 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         };
     }
 
-    private static string BuildMarkdownPreviewQuery(DocsVersion version, string filePath, string? renderedFilePath = null)
+    private static string BuildMarkdownPreviewQuery(
+        DocsVersion version,
+        string filePath,
+        string? renderedFilePath = null,
+        long renderGeneration = 0)
     {
         var trimmedFilePath = filePath.Trim();
         var query = string.Create(
             CultureInfo.InvariantCulture,
             $"v={Uri.EscapeDataString(version.Slug)}&file={Uri.EscapeDataString(trimmedFilePath)}");
         var trimmedRenderedPath = renderedFilePath?.Trim();
-        return string.IsNullOrWhiteSpace(trimmedRenderedPath)
-            || string.Equals(trimmedFilePath, trimmedRenderedPath, StringComparison.Ordinal)
-            ? query
-            : query + "&rendered=" + Uri.EscapeDataString(trimmedRenderedPath);
+        if (!string.IsNullOrWhiteSpace(trimmedRenderedPath)
+            && !string.Equals(trimmedFilePath, trimmedRenderedPath, StringComparison.Ordinal))
+        {
+            query += "&rendered=" + Uri.EscapeDataString(trimmedRenderedPath);
+        }
+        if (renderGeneration > 0)
+        {
+            query += string.Create(CultureInfo.InvariantCulture, $"&r={renderGeneration}");
+        }
+        return query;
+    }
+
+    internal static DocsVersion ResolveInitialMarkdownPreviewVersion(IReadOnlyList<DocsVersion> affectedVersions)
+    {
+        ArgumentNullException.ThrowIfNull(affectedVersions);
+
+        return affectedVersions.Count > 0
+            ? affectedVersions[0]
+            : DocsVersionCatalog.Default;
     }
 
     private async Task<ReusablePreviewTarget?> TryResolveReusablePreviewTargetAsync(
@@ -938,8 +962,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         string afterHtml,
         CancellationToken cancellationToken)
     {
-        var beforeAssets = ExtractMarkdownAssetRepoPaths(beforeHtml, MarkdownBeforeAssetRoute);
-        var afterAssets = ExtractMarkdownAssetRepoPaths(afterHtml, MarkdownAfterAssetRoute);
+        var beforeAssets = ExtractMarkdownAssetRepoPaths(beforeHtml, _markdownBeforeAssetRoute);
+        var afterAssets = ExtractMarkdownAssetRepoPaths(afterHtml, _markdownAfterAssetRoute);
         if (beforeAssets.Count == 0 && afterAssets.Count == 0)
         {
             return (new Dictionary<string, string>(StringComparer.Ordinal), null);
@@ -953,7 +977,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             var materialized = await _worktree.MaterializeFilesAsync(beforeSha, beforeAssets, beforeRoot, cancellationToken).ConfigureAwait(false);
             if (materialized.Count > 0)
             {
-                assetRoots[MarkdownBeforeAssetRoute] = beforeRoot;
+                assetRoots[_markdownBeforeAssetRoute] = beforeRoot;
             }
         }
 
@@ -963,7 +987,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             var materialized = await _worktree.MaterializeFilesAsync(afterSha, afterAssets, afterRoot, cancellationToken).ConfigureAwait(false);
             if (materialized.Count > 0)
             {
-                assetRoots[MarkdownAfterAssetRoute] = afterRoot;
+                assetRoots[_markdownAfterAssetRoute] = afterRoot;
             }
         }
 

@@ -33,10 +33,10 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 internal static partial class DocsLiquidEvaluator
 {
-    private const int DefaultMaxRecursionDepth = 6;
-    private const int InfiniteLoopGuard = 64;
-    private const char RawSentinelStart = '\uE000';
-    private const char RawSentinelEnd = '\uE001';
+    private const int _defaultMaxRecursionDepth = 6;
+    private const int _infiniteLoopGuard = 64;
+    private const char _rawSentinelStart = '\uE000';
+    private const char _rawSentinelEnd = '\uE001';
 
     // {% raw %}...{% endraw %} — 中身を退避する。
     [GeneratedRegex(@"\{%\s*raw\s*%\}(?<content>.*?)\{%\s*endraw\s*%\}", RegexOptions.Singleline)]
@@ -52,11 +52,11 @@ internal static partial class DocsLiquidEvaluator
     private static partial Regex AssignTagRegex();
 
     // {% data variables.X.Y %} / {% data reusables.X.Y %} / {% data reusables.X.Y+arg %}
-    [GeneratedRegex(@"\{%-?\s*data\s+(?<expr>[A-Za-z0-9_.\-/+\[\]]+)\s*-?%\}")]
+    [GeneratedRegex(@"\{%-?\s*data\s+(?<expr>[A-Za-z0-9_.\-/+_\[\]]+)\s*-?%\}")]
     private static partial Regex DataTagRegex();
 
     // {% indented_data_reference reusables.X spaces=N %}
-    [GeneratedRegex(@"\{%-?\s*indented_data_reference\s+(?<expr>[A-Za-z0-9_.\-/+]+)(?:\s+spaces=(?<spaces>\d+))?\s*-?%\}")]
+    [GeneratedRegex(@"\{%-?\s*indented_data_reference\s+(?<expr>[A-Za-z0-9_.\-/+_]+)(?:\s+spaces=(?<spaces>\d+))?\s*-?%\}")]
     private static partial Regex IndentedDataRegex();
 
     // {% for entry in tables.copilot.models-and-pricing %}...{% endfor %}
@@ -80,7 +80,7 @@ internal static partial class DocsLiquidEvaluator
     [GeneratedRegex(@"(\r?\n){3,}")]
     private static partial Regex ExtraEmptyLinesRegex();
 
-    private static readonly Dictionary<string, OcticonDefinition> s_octicons =
+    private static readonly Dictionary<string, OcticonDefinition> _octicons =
         new Dictionary<string, OcticonDefinition>(StringComparer.Ordinal)
         {
             ["check"] = new(
@@ -163,7 +163,7 @@ internal static partial class DocsLiquidEvaluator
         string? source,
         DocsLiquidContext context,
         DocsVersion version,
-        int maxRecursionDepth = DefaultMaxRecursionDepth)
+        int maxRecursionDepth = _defaultMaxRecursionDepth)
     {
         if (string.IsNullOrEmpty(source))
         {
@@ -231,7 +231,7 @@ internal static partial class DocsLiquidEvaluator
     public static string Evaluate(
         string? source,
         DocsLiquidContext context,
-        int maxRecursionDepth = DefaultMaxRecursionDepth)
+        int maxRecursionDepth = _defaultMaxRecursionDepth)
         => Evaluate(source, context, DocsVersionCatalog.Default, maxRecursionDepth);
 
     private static string StripNonOutputLiquid(string source)
@@ -289,7 +289,7 @@ internal static partial class DocsLiquidEvaluator
     private static string ResolveForLoops(string source, DocsLiquidContext context, DocsVersion version)
     {
         var current = source;
-        for (var safety = 0; safety < InfiniteLoopGuard; safety++)
+        for (var safety = 0; safety < _infiniteLoopGuard; safety++)
         {
             var replaced = ForBlockRegex().Replace(current, m => ResolveForBlock(m, context, version));
             if (string.Equals(replaced, current, StringComparison.Ordinal))
@@ -487,7 +487,7 @@ internal static partial class DocsLiquidEvaluator
                 $"{DefaultOcticonLabel(iconName)} icon");
         }
 
-        if (!s_octicons.TryGetValue(iconName, out var definition))
+        if (!_octicons.TryGetValue(iconName, out var definition))
         {
             return RenderFallbackOcticonSvg(iconName, options);
         }
@@ -686,7 +686,7 @@ internal static partial class DocsLiquidEvaluator
     private static string ResolveConditionals(string source, DocsVersion version, LoopScope? scope = null)
     {
         var current = source;
-        for (var safety = 0; safety < InfiniteLoopGuard; safety++)
+        for (var safety = 0; safety < _infiniteLoopGuard; safety++)
         {
             var replaced = InnermostIfBlockRegex().Replace(current, m =>
             {
@@ -767,7 +767,7 @@ internal static partial class DocsLiquidEvaluator
     }
 
     private static string CreateRawSentinel(int index)
-        => string.Create(CultureInfo.InvariantCulture, $"{RawSentinelStart}RAW{index}{RawSentinelEnd}");
+        => string.Create(CultureInfo.InvariantCulture, $"{_rawSentinelStart}RAW{index}{_rawSentinelEnd}");
 
     private static string CleanUpLiquidPost(string source)
         => ExtraEmptyLinesRegex().Replace(source, "\n\n");

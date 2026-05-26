@@ -387,6 +387,97 @@ public sealed class AdoptionSessionTests
     }
 
     [Fact]
+    public async Task Generate_Fallback_Official_Doc_Url_Drops_Index_Segment()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("url-index", ReviewStatus.Adopted, cancellationToken: ct);
+        await using (var db = harness.CreateDb())
+        {
+            db.CommitFiles.Add(new CommitFile
+            {
+                Sha = "url-index",
+                Path = "content/copilot/concepts/models/index.md",
+                Status = "modified",
+                Additions = 1,
+                Deletions = 0,
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff"));
+
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        var bundle = await sut.GenerateDraftsAsync("url-index", ct);
+
+        const string expectedUrl = "https://docs.github.com/en/copilot/concepts/models";
+        Assert.Contains(expectedUrl, bundle.TwitterJa, StringComparison.Ordinal);
+        Assert.DoesNotContain("/models/index", bundle.TwitterJa, StringComparison.Ordinal);
+        Assert.Contains(expectedUrl, bundle.TeamsJa, StringComparison.Ordinal);
+        Assert.DoesNotContain("/models/index", bundle.TeamsJa, StringComparison.Ordinal);
+        Assert.Contains(expectedUrl, bundle.CustomerJa, StringComparison.Ordinal);
+        Assert.DoesNotContain("/models/index", bundle.CustomerJa, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Generate_Normalizes_Mapped_Official_Doc_Url_Index_Segment()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("url-mapped-index", ReviewStatus.Adopted, cancellationToken: ct);
+        await using (var db = harness.CreateDb())
+        {
+            db.CommitFiles.Add(new CommitFile
+            {
+                Sha = "url-mapped-index",
+                Path = "content/copilot/concepts/models/index.md",
+                Status = "modified",
+                Additions = 1,
+                Deletions = 0,
+            });
+            db.PathUrlMaps.Add(new PathUrlMap
+            {
+                Path = "content/copilot/concepts/models/index.md",
+                Version = "fpt",
+                Language = "en",
+                Url = "/en/copilot/concepts/models/index",
+                ResolvedAt = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff"));
+
+        string? capturedPrompt = null;
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        var bundle = await sut.GenerateDraftsAsync("url-mapped-index", ct);
+
+        const string expectedUrl = "https://docs.github.com/en/copilot/concepts/models";
+        Assert.Contains(expectedUrl, capturedPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("/models/index", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains(expectedUrl, bundle.TwitterJa, StringComparison.Ordinal);
+        Assert.DoesNotContain("/models/index", bundle.TwitterJa, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Generate_Rejects_Unadopted_Commit()
     {
         var ct = TestContext.Current.CancellationToken;

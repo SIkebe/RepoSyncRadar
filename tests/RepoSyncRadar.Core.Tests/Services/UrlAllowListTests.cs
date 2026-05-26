@@ -10,7 +10,7 @@ namespace RepoSyncRadar.Core.Tests.Services;
 /// </summary>
 public class UrlAllowListTests
 {
-    private static readonly string[] DocsGithubHosts = ["docs.github.com"];
+    private static readonly string[] _docsGithubHosts = ["docs.github.com"];
 
     [Theory]
     [InlineData("https://docs.github.com/foo", true)]
@@ -21,7 +21,7 @@ public class UrlAllowListTests
     [InlineData("not a url", false)]
     public void IsAllowed_Returns_Expected_For_DocsGithub(string url, bool expected)
     {
-        var list = new UrlAllowList(DocsGithubHosts);
+        var list = new UrlAllowList(_docsGithubHosts);
 
         Assert.Equal(expected, list.IsAllowed(url));
     }

@@ -18,7 +18,7 @@ namespace RepoSyncRadar.Integrations.Tests.Preview;
 /// </summary>
 public sealed class PreviewCoordinatorTests : IDisposable
 {
-    private static readonly int[] ComparisonPorts = [4500, 4501];
+    private static readonly int[] _comparisonPorts = [4500, 4501];
 
     private readonly string _tempRoot;
 
@@ -140,7 +140,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Equal("headsha", link.AfterSha);
         Assert.True(session.IsAllowed(link.BeforeUrl));
         Assert.True(session.IsAllowed(link.AfterUrl));
-        Assert.Equal(ComparisonPorts, session.ActivePorts);
+        Assert.Equal(_comparisonPorts, session.ActivePorts);
         Assert.Contains(calls, c => c.StartsWith("RUN git rev-parse headsha^", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("START npm run dev -- --port 4501", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("START npm run dev -- --port 4500", StringComparison.Ordinal));
@@ -251,8 +251,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
         // §Step 19.9/19.10: version slug と file path を URL に必ず埋め込む。
         // WebView2 の Source 等価判定で「同じ URL」とみなされて navigation が
         // スキップされ、オーバーレイが「変更前ページを準備中…」のまま固まる回帰を防ぐ。
-        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/before?v=fpt&file=CHANGELOG.md"), link!.BeforeUrl);
-        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after?v=fpt&file=CHANGELOG.md"), link.AfterUrl);
+        AssertMarkdownPreviewUrl(link!.BeforeUrl, "/markdown/before", "v=fpt", "file=CHANGELOG.md");
+        AssertMarkdownPreviewUrl(link.AfterUrl, "/markdown/after", "v=fpt", "file=CHANGELOG.md");
         Assert.True(session.IsAllowed(link.BeforeUrl));
         Assert.True(session.IsAllowed(link.AfterUrl));
         Assert.Contains("rsr-rendered-diff-removed\">Old</span> entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
@@ -683,8 +683,64 @@ public sealed class PreviewCoordinatorTests : IDisposable
             cancellationToken: ct);
 
         Assert.NotNull(link);
-        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/before?v={expectedSlug}&file=CHANGELOG.md"), link!.BeforeUrl);
-        Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/after?v={expectedSlug}&file=CHANGELOG.md"), link.AfterUrl);
+        AssertMarkdownPreviewUrl(link!.BeforeUrl, "/markdown/before", $"v={expectedSlug}", "file=CHANGELOG.md");
+        AssertMarkdownPreviewUrl(link.AfterUrl, "/markdown/after", $"v={expectedSlug}", "file=CHANGELOG.md");
+    }
+
+    [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Defaults_To_First_Affected_Version()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-ghec-default.git");
+        var wtRoot = Path.Combine(_tempRoot, "wt-ghec-default");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, sha) =>
+            {
+                WriteRepoFile(path, "content/admin/audit.md", "---\ntitle: Audit\n---\n\n{% data reusables.audit_log.audit-log-enterprise-export-limit %}");
+                WriteRepoFile(path, "content/admin/audit-api.md", "---\ntitle: Using the audit log API\n---\n\nAPI page");
+                var reusable = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "{% ifversion ghec %}Old enterprise limit. See [AUTOTITLE](/admin/audit-api).{% endif %}"
+                    : "{% ifversion ghec %}New enterprise limit. See [AUTOTITLE](/admin/audit-api).{% endif %}";
+                WriteRepoFile(path, "data/reusables/audit_log/audit-log-enterprise-export-limit.md", reusable);
+            });
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", "content/admin/audit.md", cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Equal(DocsVersion.Ghec, link!.CurrentVersion);
+        AssertMarkdownPreviewUrl(link.AfterUrl, "/markdown/after", "v=ghec", "file=content%2Fadmin%2Faudit.md");
+        Assert.Contains("enterprise limit.", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains("Using the audit log API", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains("href=\"/admin/audit-api\"", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.DoesNotContain(">AUTOTITLE</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
     }
 
     // §Step 19.9 regression: 同一ファイル・同一 sha でも version を切り替えれば
@@ -1413,6 +1469,19 @@ public sealed class PreviewCoordinatorTests : IDisposable
             new FixedPreviewPortAllocator(previewBasePort),
             options,
             NullLogger<PreviewCoordinator>.Instance);
+    }
+
+    private static void AssertMarkdownPreviewUrl(Uri actual, string path, params string[] expectedQueryParts)
+    {
+        Assert.Equal("http", actual.Scheme);
+        Assert.Equal("127.0.0.1", actual.Host);
+        Assert.Equal(4500, actual.Port);
+        Assert.Equal(path, actual.AbsolutePath);
+        foreach (var part in expectedQueryParts)
+        {
+            Assert.Contains(part, actual.Query, StringComparison.Ordinal);
+        }
+        Assert.Contains("r=", actual.Query, StringComparison.Ordinal);
     }
 
     private static void WriteRepoFile(string root, string repoPath, string content)

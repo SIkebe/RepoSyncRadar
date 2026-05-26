@@ -52,7 +52,7 @@ public static partial class SecretMasker
     [GeneratedRegex(@"\b\d{12}\b", RegexOptions.CultureInvariant)]
     private static partial Regex PhoneRegex();
 
-    private static readonly (Func<Regex> Pattern, string Replacement)[] Rules =
+    private static readonly (Func<Regex> Pattern, string Replacement)[] _rules =
     [
         (GitHubPatRegex, "***GITHUB_PAT***"),
         (JwtRegex, "***JWT***"),
@@ -74,7 +74,7 @@ public static partial class SecretMasker
         ArgumentNullException.ThrowIfNull(input);
 
         var current = input;
-        foreach (var (pattern, replacement) in Rules)
+        foreach (var (pattern, replacement) in _rules)
         {
             current = pattern().Replace(current, replacement);
         }

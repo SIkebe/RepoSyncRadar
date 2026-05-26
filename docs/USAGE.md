@@ -137,10 +137,10 @@ dotnet run --project src/RepoSyncRadar.App
 ┌──────────────┬──────────────────────────────────────────────┐
 │ Sidebar      │ Workbench                                    │
 │  未確認       │  ┌──────────────────────────────────────┐    │
-│  注目         │  │ Ask Palette  (Ctrl+Enter で実行)     │    │
-│  保留         │  │ Commit List  (絞り込み済みの一覧)    │    │
-│  見送り候補   │  ├──────────────────────────────────────┤    │
-│  アーカイブ   │  │ Commit Detail                        │    │
+│  注目         │  │ Commit List  (絞り込み済みの一覧)    │    │
+│  保留         │  ├──────────────────────────────────────┤    │
+│  見送り候補   │  │ Commit Detail                        │    │
+│  アーカイブ   │  │   - Files / URLs / scoring details   │    │
 │              │  │   - Review Actions (Focus/Archive/…) │    │
 │              │  │   - Drafts Panel  (3 媒体下書き)     │    │
 │              │  └──────────────────────────────────────┘    │
@@ -148,7 +148,6 @@ dotnet run --project src/RepoSyncRadar.App
 ```
 
 - **Sidebar**: ステータス別の件数。クリックでフィルタ切り替え。
-- **Ask Palette**: 自然言語で SQL を投げるコマンドパレット(Step 18 で追加)。
 - **Commit List**: 取り込まれたコミットの一覧。クリックで詳細へ。
 - **Commit Detail**: ファイル一覧 + 公開 URL マッピング。
 
@@ -193,19 +192,6 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
 - [`AdoptionSession`](../src/RepoSyncRadar.App/Copilot/AdoptionSession.cs) が、差分(50KB 超は安全に切り詰め) + 過去 5 件の注目例(few-shot)を Copilot に渡し、Twitter / Teams / 顧客向けの 3 媒体を JSON で返させて `Drafts` テーブルに保存。
 - 各媒体には **コピーボタン**(WPF Dispatcher 経由で Clipboard へ)。
 - 注目キューで複数コミットをチェックすると、複数の差分を横断した **まとめて解説生成** が使えます。結果は選択セット向けの一時テキストとして Workbench に表示し、必要に応じてコピーできます。
-
-### 4.4 Ask Palette(自然言語フィルタ)
-
-Workbench 最上段の [`AskPalette`](../src/RepoSyncRadar.App/Components/AskPalette.razor)(Step 18):
-
-1. 「先週注目したコミットで `actions` ディレクトリのものは?」のように日本語で書く
-2. **実行** か **Ctrl+Enter** で送信
-3. [`AskSession`](../src/RepoSyncRadar.App/Copilot/AskSession.cs) が Copilot に SQL を作らせ、[`SqlGuard`](../src/RepoSyncRadar.Core/Services/SqlGuard.cs) で検査(SELECT のみ / 許可 9 テーブル / `LIMIT 100` 強制)
-4. 通過した SQL を読み取り専用 SQLite 接続で実行 → Markdown 表で表示
-
-`SQL を表示 (debug)` にチェックを入れると、実行された SQL も出ます(デバッグ用途)。
-
----
 
 ## 5. オプション機能
 
@@ -266,11 +252,7 @@ worktree ごとに作業ディレクトリが分かれるため、`npm install` 
 
 ### 5.2 監査ログ
 
-すべての `radar_*` ツール呼び出しは `Audits` テーブルに記録(Step 12 の `OnPreToolUse` / `OnPostToolUse`)。Ask Palette で次のように確認できます:
-
-```
-過去 1 時間に呼ばれた radar_* ツールを多い順に
-```
+すべての `radar_*` ツール呼び出しは `CopilotToolLogs` テーブルに記録(Step 12 の `OnPreToolUse` / `OnPostToolUse`)。
 
 ---
 

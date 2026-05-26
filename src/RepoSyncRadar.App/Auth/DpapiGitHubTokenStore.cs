@@ -15,8 +15,8 @@ namespace RepoSyncRadar.App.Auth;
 [SupportedOSPlatform("windows")]
 public sealed partial class DpapiGitHubTokenStore : IGitHubTokenStore
 {
-    private const string DefaultFileName = "github-token.bin";
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private const string _defaultFileName = "github-token.bin";
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly string _path;
     private readonly ILogger<DpapiGitHubTokenStore> _logger;
@@ -56,7 +56,7 @@ public sealed partial class DpapiGitHubTokenStore : IGitHubTokenStore
         try
         {
             var plain = ProtectedData.Unprotect(cipher, optionalEntropy: null, DataProtectionScope.CurrentUser);
-            return JsonSerializer.Deserialize<StoredGitHubToken>(plain, JsonOptions);
+            return JsonSerializer.Deserialize<StoredGitHubToken>(plain, _jsonOptions);
         }
         catch (CryptographicException ex)
         {
@@ -80,7 +80,7 @@ public sealed partial class DpapiGitHubTokenStore : IGitHubTokenStore
             Directory.CreateDirectory(dir);
         }
 
-        var plain = JsonSerializer.SerializeToUtf8Bytes(token, JsonOptions);
+        var plain = JsonSerializer.SerializeToUtf8Bytes(token, _jsonOptions);
         var cipher = ProtectedData.Protect(plain, optionalEntropy: null, DataProtectionScope.CurrentUser);
         await File.WriteAllBytesAsync(_path, cipher, cancellationToken).ConfigureAwait(false);
     }
@@ -105,7 +105,7 @@ public sealed partial class DpapiGitHubTokenStore : IGitHubTokenStore
     private static string ResolveDefaultPath() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "RepoSyncRadar",
-        DefaultFileName);
+        _defaultFileName);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning,
         Message = "Failed to read GitHub token file {Path}; treating as signed out.")]

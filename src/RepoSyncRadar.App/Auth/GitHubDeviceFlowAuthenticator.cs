@@ -26,10 +26,10 @@ namespace RepoSyncRadar.App.Auth;
 /// </remarks>
 public sealed partial class GitHubDeviceFlowAuthenticator : IGitHubDeviceFlowAuthenticator
 {
-    private const string DeviceCodePath = "login/device/code";
-    private const string AccessTokenPath = "login/oauth/access_token";
-    private const string DeviceGrantType = "urn:ietf:params:oauth:grant-type:device_code";
-    private static readonly TimeSpan SlowDownIncrement = TimeSpan.FromSeconds(5);
+    private const string _deviceCodePath = "login/device/code";
+    private const string _accessTokenPath = "login/oauth/access_token";
+    private const string _deviceGrantType = "urn:ietf:params:oauth:grant-type:device_code";
+    private static readonly TimeSpan _slowDownIncrement = TimeSpan.FromSeconds(5);
 
     private readonly HttpClient _http;
     private readonly TimeProvider _timeProvider;
@@ -68,7 +68,7 @@ public sealed partial class GitHubDeviceFlowAuthenticator : IGitHubDeviceFlowAut
             ["scope"] = string.Join(' ', scopes),
         };
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, DeviceCodePath)
+        using var request = new HttpRequestMessage(HttpMethod.Post, _deviceCodePath)
         {
             Content = new FormUrlEncodedContent(form),
         };
@@ -129,10 +129,10 @@ public sealed partial class GitHubDeviceFlowAuthenticator : IGitHubDeviceFlowAut
             {
                 ["client_id"] = clientId,
                 ["device_code"] = challenge.DeviceCode,
-                ["grant_type"] = DeviceGrantType,
+                ["grant_type"] = _deviceGrantType,
             };
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, AccessTokenPath)
+            using var request = new HttpRequestMessage(HttpMethod.Post, _accessTokenPath)
             {
                 Content = new FormUrlEncodedContent(form),
             };
@@ -159,7 +159,7 @@ public sealed partial class GitHubDeviceFlowAuthenticator : IGitHubDeviceFlowAut
                         LogAuthorizationPending(_logger);
                         continue;
                     case "slow_down":
-                        interval += SlowDownIncrement;
+                        interval += _slowDownIncrement;
                         LogSlowDown(_logger, interval.TotalSeconds);
                         continue;
                     case "expired_token":

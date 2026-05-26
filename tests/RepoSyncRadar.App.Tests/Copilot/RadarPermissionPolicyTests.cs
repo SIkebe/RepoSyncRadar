@@ -13,10 +13,10 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 
 public class RadarPermissionPolicyTests
 {
-    private static readonly PermissionInvocation Invocation = new() { SessionId = "session-1" };
-    private static readonly string ApproveOnceKind = PermissionDecision.ApproveOnce().Kind;
-    private static readonly string RejectKind = PermissionDecision.Reject("test").Kind;
-    private static readonly string UserNotAvailableKind = PermissionDecision.UserNotAvailable().Kind;
+    private static readonly PermissionInvocation _invocation = new() { SessionId = "session-1" };
+    private static readonly string _approveOnceKind = PermissionDecision.ApproveOnce().Kind;
+    private static readonly string _rejectKind = PermissionDecision.Reject("test").Kind;
+    private static readonly string _userNotAvailableKind = PermissionDecision.UserNotAvailable().Kind;
 
     private static RadarPermissionPolicy CreatePolicy(IPermissionPrompt prompt)
     {
@@ -85,9 +85,9 @@ public class RadarPermissionPolicyTests
         var prompt = Substitute.For<IPermissionPrompt>();
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewCustomTool("tc-1", "radar_list_commits"), Invocation);
+        var result = await policy.HandleAsync(NewCustomTool("tc-1", "radar_list_commits"), _invocation);
 
-        Assert.Equal(ApproveOnceKind, result.Kind);
+        Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -99,9 +99,9 @@ public class RadarPermissionPolicyTests
         var prompt = Substitute.For<IPermissionPrompt>();
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewCustomTool("tc-triage-write", toolName), Invocation);
+        var result = await policy.HandleAsync(NewCustomTool("tc-triage-write", toolName), _invocation);
 
-        Assert.Equal(ApproveOnceKind, result.Kind);
+        Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -111,9 +111,9 @@ public class RadarPermissionPolicyTests
         var prompt = Substitute.For<IPermissionPrompt>();
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewRead("tc-2", "/some/file.md"), Invocation);
+        var result = await policy.HandleAsync(NewRead("tc-2", "/some/file.md"), _invocation);
 
-        Assert.Equal(ApproveOnceKind, result.Kind);
+        Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -123,9 +123,9 @@ public class RadarPermissionPolicyTests
         var prompt = Substitute.For<IPermissionPrompt>();
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewUrl("tc-3", "https://docs.github.com/en/actions"), Invocation);
+        var result = await policy.HandleAsync(NewUrl("tc-3", "https://docs.github.com/en/actions"), _invocation);
 
-        Assert.Equal(ApproveOnceKind, result.Kind);
+        Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -136,9 +136,9 @@ public class RadarPermissionPolicyTests
         prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(true);
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewUrl("tc-4", "https://example.com/foo"), Invocation);
+        var result = await policy.HandleAsync(NewUrl("tc-4", "https://example.com/foo"), _invocation);
 
-        Assert.Equal(ApproveOnceKind, result.Kind);
+        Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -149,9 +149,9 @@ public class RadarPermissionPolicyTests
         prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(false);
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewUrl("tc-5", "https://example.com/foo"), Invocation);
+        var result = await policy.HandleAsync(NewUrl("tc-5", "https://example.com/foo"), _invocation);
 
-        Assert.Equal(RejectKind, result.Kind);
+        Assert.Equal(_rejectKind, result.Kind);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -162,9 +162,9 @@ public class RadarPermissionPolicyTests
         prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(true);
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewWrite("tc-6", "C:/repo/foo.md"), Invocation);
+        var result = await policy.HandleAsync(NewWrite("tc-6", "C:/repo/foo.md"), _invocation);
 
-        Assert.Equal(ApproveOnceKind, result.Kind);
+        Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -175,9 +175,9 @@ public class RadarPermissionPolicyTests
         prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(false);
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewWrite("tc-7", "C:/repo/bar.md"), Invocation);
+        var result = await policy.HandleAsync(NewWrite("tc-7", "C:/repo/bar.md"), _invocation);
 
-        Assert.Equal(RejectKind, result.Kind);
+        Assert.Equal(_rejectKind, result.Kind);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -187,9 +187,9 @@ public class RadarPermissionPolicyTests
         var prompt = Substitute.For<IPermissionPrompt>();
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewShell("tc-8", "rm -rf /"), Invocation);
+        var result = await policy.HandleAsync(NewShell("tc-8", "rm -rf /"), _invocation);
 
-        Assert.Equal(UserNotAvailableKind, result.Kind);
+        Assert.Equal(_userNotAvailableKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -200,9 +200,9 @@ public class RadarPermissionPolicyTests
         var policy = CreatePolicy(prompt);
 
         // PermissionRequestMcp は本アプリでは未対応扱い。今後 MCP を許可するときに別途扱う。
-        var result = await policy.HandleAsync(NewMcp("tc-9"), Invocation);
+        var result = await policy.HandleAsync(NewMcp("tc-9"), _invocation);
 
-        Assert.Equal(UserNotAvailableKind, result.Kind);
+        Assert.Equal(_userNotAvailableKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 }

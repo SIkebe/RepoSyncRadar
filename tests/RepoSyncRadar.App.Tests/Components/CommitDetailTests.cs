@@ -18,7 +18,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 /// </summary>
 public class CommitDetailTests
 {
-    private static readonly string[] CopilotAboutUrls =
+    private static readonly string[] _copilotAboutUrls =
     [
         "/en/copilot/about-copilot",
         "/en/enterprise-cloud@latest/copilot/about-copilot",
@@ -45,7 +45,7 @@ public class CommitDetailTests
         var resolver = Substitute.For<IPathToUrlResolver>();
         resolver
             .ResolveAsync("content/copilot/about-copilot.md", Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<string>>(CopilotAboutUrls));
+            .Returns(Task.FromResult<IReadOnlyList<string>>(_copilotAboutUrls));
 
         using var cut = RenderDetailWith(commit, resolver);
 
@@ -256,7 +256,7 @@ public class CommitDetailTests
         var resolver = Substitute.For<IPathToUrlResolver>();
         resolver
             .ResolveAsync("content/copilot/about-copilot.md", Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<string>>(CopilotAboutUrls));
+            .Returns(Task.FromResult<IReadOnlyList<string>>(_copilotAboutUrls));
 
         var navigator = new PreviewNavigator();
         Uri? captured = null;

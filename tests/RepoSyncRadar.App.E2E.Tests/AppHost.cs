@@ -19,8 +19,8 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// </remarks>
 public sealed class AppHost : IAsyncDisposable
 {
-    private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan _startupTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// Environment overrides that force the optional preview pipeline OFF for any
@@ -124,8 +124,8 @@ public sealed class AppHost : IAsyncDisposable
 
         try
         {
-            await WaitForCdpAsync(blazorPort, StartupTimeout, cancellationToken).ConfigureAwait(false);
-            await WaitForCdpAsync(docsPort, StartupTimeout, cancellationToken).ConfigureAwait(false);
+            await WaitForCdpAsync(blazorPort, _startupTimeout, cancellationToken).ConfigureAwait(false);
+            await WaitForCdpAsync(docsPort, _startupTimeout, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -226,7 +226,7 @@ public sealed class AppHost : IAsyncDisposable
             if (!_process.HasExited)
             {
                 _process.Kill(entireProcessTree: true);
-                using var cts = new CancellationTokenSource(ShutdownTimeout);
+                using var cts = new CancellationTokenSource(_shutdownTimeout);
                 await _process.WaitForExitAsync(cts.Token).ConfigureAwait(false);
             }
         }

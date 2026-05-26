@@ -34,8 +34,8 @@ namespace RepoSyncRadar.Core.Services.GitHub;
 /// </remarks>
 public sealed class DocsGitHubClient : IDocsGitHubClient
 {
-    private const int GitHubMaxPageSize = 100;
-    private const string DiffMediaType = "application/vnd.github.v3.diff";
+    private const int _gitHubMaxPageSize = 100;
+    private const string _diffMediaType = "application/vnd.github.v3.diff";
 
     private readonly IGitHubClient _github;
     private readonly IGitHubAccessTokenProvider _tokenProvider;
@@ -135,7 +135,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
         cancellationToken.ThrowIfCancellationRequested();
         var uri = new Uri($"repos/{_options.Owner}/{_options.Repo}/commits/{sha}", UriKind.Relative);
         var response = await _github.Connection
-            .Get<string>(uri, parameters: null, accepts: DiffMediaType, cancellationToken)
+            .Get<string>(uri, parameters: null, accepts: _diffMediaType, cancellationToken)
             .ConfigureAwait(false);
 
         return response.Body ?? string.Empty;
@@ -205,7 +205,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
                 }
             }
 
-            if (reachedCreatedAtLowerBound || prs.Count < GitHubMaxPageSize)
+            if (reachedCreatedAtLowerBound || prs.Count < _gitHubMaxPageSize)
             {
                 break;
             }
@@ -236,7 +236,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
     private static ApiOptions BuildPullRequestPageOptions(int page)
         => new()
         {
-            PageSize = GitHubMaxPageSize,
+            PageSize = _gitHubMaxPageSize,
             PageCount = 1,
             StartPage = page,
         };

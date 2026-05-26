@@ -64,6 +64,15 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""\bhref\s*=\s*(?<quote>["'])(?<href>.*?)\k<quote>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex AnchorHrefRegex();
 
+    [GeneratedRegex("""<span\b(?<attrs>[^>]*)>\s*AUTOTITLE\s*</span>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex AutotitleSpanRegex();
+
+    [GeneratedRegex(@"\[AUTOTITLE\]\((?<href>[^\s)]+)\)?", RegexOptions.IgnoreCase)]
+    private static partial Regex AutotitleMarkdownLinkRegex();
+
+    [GeneratedRegex("""<[^>]+>""", RegexOptions.Singleline)]
+    private static partial Regex HtmlTagRegex();
+
     [GeneratedRegex("""(?<attr>\b(?:src|poster)\s*=\s*)(?<quote>["'])(?<url>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlAssetUrlRegex();
 
@@ -271,7 +280,7 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("</style>");
         html.AppendLine("<script>");
         html.AppendLine("(() => { document.addEventListener('click', event => { const button = event.target?.closest?.('[data-rsr-version-slug]'); if (!button || button.getAttribute('aria-current') === 'true') return; const slug = button.getAttribute('data-rsr-version-slug'); if (!slug) return; window.chrome?.webview?.postMessage(`rsr-preview-version:${slug}`); }); })();");
-        html.AppendLine("(() => { const markerRootId = 'rsr-diff-scrollbar'; const selector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed'; const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote'; const collectTargets = () => { const seen = new Set(); const targets = []; Array.from(document.querySelectorAll(selector)).forEach(element => { const target = element.closest(blockSelector) || element; if (seen.has(target)) return; seen.add(target); targets.push({ element: target, removed: element.classList.contains('rsr-rendered-diff-removed') }); }); return targets; }; const build = () => { document.getElementById(markerRootId)?.remove(); const targets = collectTargets(); if (targets.length === 0) return; const root = document.scrollingElement || document.documentElement || document.body; const maxScrollTop = Math.max(1, root.scrollHeight - window.innerHeight); const rail = document.createElement('div'); rail.id = markerRootId; rail.className = 'rsr-diff-scrollbar'; targets.forEach(target => { const marker = document.createElement('div'); marker.className = 'rsr-diff-scrollbar-marker ' + (target.removed ? 'rsr-diff-scrollbar-marker--removed' : 'rsr-diff-scrollbar-marker--added'); const rect = target.element.getBoundingClientRect(); const top = Math.max(0, Math.min(1, (rect.top + window.scrollY) / maxScrollTop)); const height = Math.max(4, Math.min(window.innerHeight, (rect.height / maxScrollTop) * window.innerHeight)); const markerTop = Math.max(0, Math.min(window.innerHeight - height, top * window.innerHeight)); marker.style.top = `${markerTop.toFixed(1)}px`; marker.style.height = `${height.toFixed(1)}px`; rail.appendChild(marker); }); document.body.appendChild(rail); }; const scheduleBuild = () => window.requestAnimationFrame(() => window.requestAnimationFrame(build)); document.addEventListener('DOMContentLoaded', scheduleBuild, { once: true }); window.addEventListener('load', scheduleBuild, { once: true }); window.addEventListener('resize', scheduleBuild, { passive: true }); window.setTimeout(scheduleBuild, 250); })();");
+        html.AppendLine("(() => { const markerRootId = 'rsr-diff-scrollbar'; const selector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed'; const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote'; const collectTargets = () => { const seen = new Set(); const targets = []; Array.from(document.querySelectorAll(selector)).forEach(element => { const target = element.closest(blockSelector) || element; if (seen.has(target)) return; seen.add(target); targets.push({ element: target, removed: element.classList.contains('rsr-rendered-diff-removed') }); }); return targets; }; const build = () => { document.getElementById(markerRootId)?.remove(); const targets = collectTargets(); if (targets.length === 0) return; const root = document.scrollingElement || document.documentElement || document.body; const documentHeight = Math.max(1, root.scrollHeight); const viewportHeight = window.innerHeight; const scrollTop = root.scrollTop || window.scrollY || 0; const rail = document.createElement('div'); rail.id = markerRootId; rail.className = 'rsr-diff-scrollbar'; targets.forEach(target => { const marker = document.createElement('div'); marker.className = 'rsr-diff-scrollbar-marker ' + (target.removed ? 'rsr-diff-scrollbar-marker--removed' : 'rsr-diff-scrollbar-marker--added'); const rect = target.element.getBoundingClientRect(); const documentTop = Math.max(0, rect.top + scrollTop); const top = Math.max(0, Math.min(1, documentTop / documentHeight)); const height = Math.max(4, Math.min(viewportHeight, (rect.height / documentHeight) * viewportHeight)); const markerTop = Math.max(0, Math.min(viewportHeight - height, top * viewportHeight)); marker.style.top = `${markerTop.toFixed(1)}px`; marker.style.height = `${height.toFixed(1)}px`; rail.appendChild(marker); }); document.body.appendChild(rail); }; const scheduleBuild = () => window.requestAnimationFrame(() => window.requestAnimationFrame(build)); document.addEventListener('DOMContentLoaded', scheduleBuild, { once: true }); window.addEventListener('load', scheduleBuild, { once: true }); window.addEventListener('resize', scheduleBuild, { passive: true }); window.setTimeout(scheduleBuild, 250); })();");
         html.AppendLine("</script>");
         html.AppendLine("</head>");
         html.AppendLine("<body>");
@@ -288,8 +297,18 @@ internal static partial class MarkdownPreviewRenderer
             html.Append("<p class=\"rsr-path\">").Append(repoPathDisplay).AppendLine("</p>");
         }
         AppendVersionBadgeMarkup(html, selectedVersion ?? effectiveVersion, affectedVersions);
-        AppendVersionDiffSummary(html, selectedVersion ?? effectiveVersion, versionImpacts);
-        AppendSourceDiffSummary(html, sourceDiff);
+        AppendVersionDiffSummary(
+            html,
+            selectedVersion ?? effectiveVersion,
+            versionImpacts,
+            trimmedRepoPath,
+            effectiveLiquidContext);
+        AppendSourceDiffSummary(
+            html,
+            sourceDiff,
+            trimmedRepoPath,
+            effectiveLiquidContext,
+            effectiveVersion);
         html.AppendLine("</header>");
         if (!string.IsNullOrWhiteSpace(introHtml))
         {
@@ -738,7 +757,7 @@ internal static partial class MarkdownPreviewRenderer
         return AnchorRegex().Replace(html, match =>
         {
             var innerHtml = match.Groups["body"].Value;
-            if (!string.Equals(WebUtility.HtmlDecode(innerHtml).Trim(), "AUTOTITLE", StringComparison.Ordinal))
+            if (!IsAutotitleLinkBody(innerHtml))
             {
                 return match.Value;
             }
@@ -763,8 +782,39 @@ internal static partial class MarkdownPreviewRenderer
                 return match.Value;
             }
 
-            return string.Concat("<a", attrs, ">", titleHtml, "</a>");
+            var diffClass = TryGetAutotitleDiffClass(innerHtml);
+            var replacementBody = diffClass is null
+                ? titleHtml
+                : string.Concat("<span class=\"", diffClass, "\">", titleHtml, "</span>");
+
+            return string.Concat("<a", attrs, ">", replacementBody, "</a>");
         });
+    }
+
+    private static bool IsAutotitleLinkBody(string innerHtml)
+    {
+        var text = HtmlTagRegex().Replace(innerHtml, string.Empty);
+        return string.Equals(WebUtility.HtmlDecode(text).Trim(), "AUTOTITLE", StringComparison.Ordinal);
+    }
+
+    private static string? TryGetAutotitleDiffClass(string innerHtml)
+    {
+        var match = AutotitleSpanRegex().Match(innerHtml);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var attrs = match.Groups["attrs"].Value;
+        if (attrs.Contains("rsr-rendered-diff-added", StringComparison.Ordinal))
+        {
+            return "rsr-rendered-diff-added";
+        }
+        if (attrs.Contains("rsr-rendered-diff-removed", StringComparison.Ordinal))
+        {
+            return "rsr-rendered-diff-removed";
+        }
+        return null;
     }
 
     private static string? ResolveAutotitleRawTitle(
@@ -783,6 +833,21 @@ internal static partial class MarkdownPreviewRenderer
             if (pageTitles.TryGetValue(candidate, out var title))
             {
                 return title;
+            }
+        }
+
+        if (normalizedHref.EndsWith("...", StringComparison.Ordinal))
+        {
+            var prefix = normalizedHref[..^3].Trim('/');
+            foreach (var candidatePrefix in BuildAutotitleTruncatedLookupPrefixes(prefix))
+            {
+                foreach (var pair in pageTitles)
+                {
+                    if (pair.Key.StartsWith(candidatePrefix, StringComparison.Ordinal))
+                    {
+                        return pair.Value;
+                    }
+                }
             }
         }
         return null;
@@ -886,6 +951,26 @@ internal static partial class MarkdownPreviewRenderer
 
         yield return "content/" + trimmed + ".md";
         yield return "content/" + trimmed + "/index.md";
+    }
+
+    private static IEnumerable<string> BuildAutotitleTruncatedLookupPrefixes(string normalizedHrefPrefix)
+    {
+        var trimmed = normalizedHrefPrefix.Trim('/');
+        if (trimmed.Length == 0)
+        {
+            yield break;
+        }
+
+        yield return trimmed;
+        yield return "/" + trimmed;
+
+        if (trimmed.StartsWith("content/", StringComparison.Ordinal))
+        {
+            yield return trimmed;
+            yield break;
+        }
+
+        yield return "content/" + trimmed;
     }
 
     private static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
@@ -1163,7 +1248,9 @@ internal static partial class MarkdownPreviewRenderer
     private static void AppendVersionDiffSummary(
         StringBuilder html,
         DocsVersion currentVersion,
-        IReadOnlyList<DocsVersionImpactDetail>? versionImpacts)
+        IReadOnlyList<DocsVersionImpactDetail>? versionImpacts,
+        string repoPath,
+        DocsLiquidContext liquidContext)
     {
         if (versionImpacts is null || versionImpacts.Count == 0)
         {
@@ -1210,7 +1297,7 @@ internal static partial class MarkdownPreviewRenderer
             var visibleChanges = group.Changes.Take(3).ToArray();
             foreach (var change in visibleChanges)
             {
-                AppendVersionChange(html, change);
+                AppendVersionChange(html, change, repoPath, liquidContext, currentVersion);
             }
             if (group.Changes.Count > visibleChanges.Length)
             {
@@ -1225,7 +1312,10 @@ internal static partial class MarkdownPreviewRenderer
 
     private static void AppendSourceDiffSummary(
         StringBuilder html,
-        MarkdownSourceDiffSummary? sourceDiff)
+        MarkdownSourceDiffSummary? sourceDiff,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         if (sourceDiff is null || !sourceDiff.HasChanges)
         {
@@ -1243,7 +1333,7 @@ internal static partial class MarkdownPreviewRenderer
 
         foreach (var change in sourceDiff.IfversionChanges.Take(8))
         {
-            AppendIfversionSourceChange(html, change);
+            AppendIfversionSourceChange(html, change, repoPath, liquidContext, version);
         }
 
         foreach (var fileChange in sourceDiff.RelatedFileChanges.Take(4))
@@ -1255,7 +1345,7 @@ internal static partial class MarkdownPreviewRenderer
                 .Append("</p>");
             foreach (var lineChange in fileChange.Changes.Take(6))
             {
-                AppendSourceLineChange(html, lineChange);
+                AppendSourceLineChange(html, lineChange, repoPath, liquidContext, version);
             }
             if (fileChange.Changes.Count > 6)
             {
@@ -1273,7 +1363,12 @@ internal static partial class MarkdownPreviewRenderer
         html.Append("</ul></section>");
     }
 
-    private static void AppendIfversionSourceChange(StringBuilder html, MarkdownIfversionChange change)
+    private static void AppendIfversionSourceChange(
+        StringBuilder html,
+        MarkdownIfversionChange change,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         html.Append("<li class=\"rsr-source-change\" data-change-kind=\"")
             .Append(WebUtility.HtmlEncode(BuildChangeKindSlug(change.Kind)))
@@ -1283,43 +1378,79 @@ internal static partial class MarkdownPreviewRenderer
             .Append("</span>");
         if (!string.IsNullOrWhiteSpace(change.BeforeExpression))
         {
-            AppendSourceLine(html, "変更前", "{% ifversion " + change.BeforeExpression + " %}");
+            AppendSourceLine(html, "変更前", "{% ifversion " + change.BeforeExpression + " %}", repoPath, liquidContext, version);
         }
         if (!string.IsNullOrWhiteSpace(change.BeforePreview))
         {
-            AppendSourceLine(html, "対象本文", change.BeforePreview);
+            AppendSourceLine(html, "対象本文", change.BeforePreview, repoPath, liquidContext, version);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterExpression))
         {
-            AppendSourceLine(html, "PR HEAD", "{% ifversion " + change.AfterExpression + " %}");
+            AppendSourceLine(html, "PR HEAD", "{% ifversion " + change.AfterExpression + " %}", repoPath, liquidContext, version);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterPreview)
             && !string.Equals(change.BeforePreview, change.AfterPreview, StringComparison.Ordinal))
         {
-            AppendSourceLine(html, "対象本文", change.AfterPreview);
+            AppendSourceLine(html, "対象本文", change.AfterPreview, repoPath, liquidContext, version);
         }
         html.Append("</li>");
     }
 
-    private static void AppendSourceLineChange(StringBuilder html, MarkdownSourceLineChange change)
+    private static void AppendSourceLineChange(
+        StringBuilder html,
+        MarkdownSourceLineChange change,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         if (!string.IsNullOrWhiteSpace(change.BeforeLine))
         {
-            AppendSourceLine(html, "変更前", change.BeforeLine);
+            AppendSourceLine(html, "変更前", change.BeforeLine, repoPath, liquidContext, version);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterLine))
         {
-            AppendSourceLine(html, "PR HEAD", change.AfterLine);
+            AppendSourceLine(html, "PR HEAD", change.AfterLine, repoPath, liquidContext, version);
         }
     }
 
-    private static void AppendSourceLine(StringBuilder html, string label, string line)
+    private static void AppendSourceLine(
+        StringBuilder html,
+        string label,
+        string line,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
+        var displayLine = RewriteAutotitlePlainTextLine(line, repoPath, liquidContext, version);
         html.Append("<p class=\"rsr-source-line\"><span class=\"rsr-source-line-label\">")
             .Append(WebUtility.HtmlEncode(label))
             .Append("</span><code>")
-            .Append(WebUtility.HtmlEncode(line))
+            .Append(WebUtility.HtmlEncode(displayLine))
             .Append("</code></p>");
+    }
+
+    private static string RewriteAutotitlePlainTextLine(
+        string line,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        if (string.IsNullOrEmpty(line) || liquidContext.PageTitles.Count == 0)
+        {
+            return line;
+        }
+
+        return AutotitleMarkdownLinkRegex().Replace(line, match =>
+        {
+            var rawTitle = ResolveAutotitleRawTitle(match.Groups["href"].Value, repoPath, liquidContext.PageTitles);
+            if (string.IsNullOrWhiteSpace(rawTitle))
+            {
+                return "the referenced docs page";
+            }
+
+            var titleText = EvaluateLiquidText(rawTitle, liquidContext, version).Trim();
+            return titleText.Length == 0 ? "the referenced docs page" : titleText;
+        });
     }
 
     private static string RenderFrontmatterDiff(IReadOnlyList<MarkdownFrontmatterChange>? changes)
@@ -1476,7 +1607,12 @@ internal static partial class MarkdownPreviewRenderer
         html.Append("</ul>");
     }
 
-    private static void AppendVersionChange(StringBuilder html, DocsVersionChangeSnippet change)
+    private static void AppendVersionChange(
+        StringBuilder html,
+        DocsVersionChangeSnippet change,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         html.Append("<div class=\"rsr-version-change\" data-change-kind=\"")
             .Append(WebUtility.HtmlEncode(BuildChangeKindSlug(change.Kind)))
@@ -1486,11 +1622,27 @@ internal static partial class MarkdownPreviewRenderer
             .Append("</span>");
         if (!string.IsNullOrWhiteSpace(change.BeforeExcerpt))
         {
-            AppendVersionChangeExcerpt(html, "変更前", change.BeforeExcerpt, change.AfterExcerpt, VersionChangeExcerptSide.Before);
+            AppendVersionChangeExcerpt(
+                html,
+                "変更前",
+                change.BeforeExcerpt,
+                change.AfterExcerpt,
+                VersionChangeExcerptSide.Before,
+                repoPath,
+                liquidContext,
+                version);
         }
         if (!string.IsNullOrWhiteSpace(change.AfterExcerpt))
         {
-            AppendVersionChangeExcerpt(html, "PR HEAD", change.AfterExcerpt, change.BeforeExcerpt, VersionChangeExcerptSide.After);
+            AppendVersionChangeExcerpt(
+                html,
+                "PR HEAD",
+                change.AfterExcerpt,
+                change.BeforeExcerpt,
+                VersionChangeExcerptSide.After,
+                repoPath,
+                liquidContext,
+                version);
         }
         html.Append("</div>");
     }
@@ -1500,7 +1652,10 @@ internal static partial class MarkdownPreviewRenderer
         string label,
         string excerpt,
         string? comparisonExcerpt,
-        VersionChangeExcerptSide side)
+        VersionChangeExcerptSide side,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
     {
         html.Append("<div class=\"rsr-version-change-line\"><span class=\"rsr-version-change-label\">")
             .Append(WebUtility.HtmlEncode(label))
@@ -1511,7 +1666,11 @@ internal static partial class MarkdownPreviewRenderer
         }
         else
         {
-            AppendVersionChangeExcerptText(html, excerpt, comparisonExcerpt, side);
+            var displayExcerpt = RewriteAutotitlePlainTextLine(excerpt, repoPath, liquidContext, version);
+            var displayComparisonExcerpt = comparisonExcerpt is null
+                ? null
+                : RewriteAutotitlePlainTextLine(comparisonExcerpt, repoPath, liquidContext, version);
+            AppendVersionChangeExcerptText(html, displayExcerpt, displayComparisonExcerpt, side);
         }
         html.Append("</div>");
     }
@@ -1843,19 +2002,61 @@ internal static partial class MarkdownPreviewRenderer
                 content[(headingMarkerLength + 1)..]);
             return true;
         }
-        if (content.StartsWith("- ", StringComparison.Ordinal))
+        var listMarkerLength = GetMarkdownListMarkerLength(content);
+        if (listMarkerLength > 0)
         {
-            parts = new RenderedDiffLineParts(RenderedDiffLineKind.ListItem, leading + "- ", content[2..]);
+            parts = new RenderedDiffLineParts(
+                RenderedDiffLineKind.ListItem,
+                leading + content[..listMarkerLength],
+                content[listMarkerLength..]);
             return true;
         }
         parts = new RenderedDiffLineParts(RenderedDiffLineKind.Paragraph, leading, content);
         return true;
     }
 
+    private static int GetMarkdownListMarkerLength(string content)
+    {
+        if (content.Length >= 2
+            && (content[0] is '-' or '*' or '+')
+            && char.IsWhiteSpace(content[1]))
+        {
+            return 2;
+        }
+
+        var digitLength = 0;
+        while (digitLength < content.Length && char.IsDigit(content[digitLength]))
+        {
+            digitLength++;
+        }
+        if (digitLength > 0
+            && digitLength + 1 < content.Length
+            && content[digitLength] is '.' or ')'
+            && char.IsWhiteSpace(content[digitLength + 1]))
+        {
+            return digitLength + 2;
+        }
+
+        return 0;
+    }
+
     private static string MarkRenderedDiffContent(string content, string markerClass, string? comparisonContent)
     {
         if (string.IsNullOrEmpty(comparisonContent))
         {
+            if (TryFindLastMarkdownLinkLabelRange(content, out var linkLabelRange))
+            {
+                var expandedRange = ExpandRenderedDiffRange(content, linkLabelRange);
+                if (expandedRange.Start > 0 && expandedRange.Length < content.Length)
+                {
+                    return content[..expandedRange.Start]
+                        + "<span class=\"" + markerClass + "\">"
+                        + content.Substring(expandedRange.Start, expandedRange.Length)
+                        + "</span>"
+                        + content[(expandedRange.Start + expandedRange.Length)..];
+                }
+            }
+
             return "<span class=\"" + markerClass + "\">" + content + "</span>";
         }
 
@@ -1864,6 +2065,7 @@ internal static partial class MarkdownPreviewRenderer
         {
             return content;
         }
+        changedRange = ExpandRenderedDiffRange(content, changedRange);
 
         return content[..changedRange.Start]
             + "<span class=\"" + markerClass + "\">"
@@ -1872,8 +2074,153 @@ internal static partial class MarkdownPreviewRenderer
             + content[(changedRange.Start + changedRange.Length)..];
     }
 
+    private static InlineChangedRange ExpandRenderedDiffRange(string content, InlineChangedRange changedRange)
+    {
+        if (changedRange.Length == 0
+            || !TryFindMarkdownLinkAroundRange(content, changedRange, out var linkRange))
+        {
+            return changedRange;
+        }
+
+        var start = FindSentenceStart(content, linkRange.LabelStart);
+        var sentencePrefix = content[start..linkRange.LabelStart].TrimStart();
+        if (sentencePrefix.StartsWith("For more information", StringComparison.OrdinalIgnoreCase)
+            || sentencePrefix.StartsWith("For more info", StringComparison.OrdinalIgnoreCase))
+        {
+            start = FindPreviousSentenceStart(content, start);
+        }
+
+        var end = FindSentenceEnd(content, linkRange.LinkEnd);
+        return end > start ? new InlineChangedRange(start, end - start) : changedRange;
+    }
+
+    private static bool TryFindMarkdownLinkAroundRange(
+        string content,
+        InlineChangedRange changedRange,
+        out MarkdownLinkRange linkRange)
+    {
+        linkRange = default;
+        var changedStart = changedRange.Start;
+        var changedEnd = changedRange.Start + changedRange.Length;
+        var labelStart = content.LastIndexOf('[', Math.Min(changedStart, content.Length - 1));
+        if (labelStart < 0)
+        {
+            return false;
+        }
+
+        var labelEnd = content.IndexOf("](", labelStart, StringComparison.Ordinal);
+        if (labelEnd < 0)
+        {
+            return false;
+        }
+
+        var linkEnd = content.IndexOf(')', labelEnd + 2);
+        if (linkEnd < 0)
+        {
+            return false;
+        }
+
+        if (changedEnd <= labelStart || changedStart >= linkEnd + 1)
+        {
+            return false;
+        }
+
+        linkRange = new MarkdownLinkRange(labelStart, labelEnd, linkEnd + 1);
+        return true;
+    }
+
+    private static bool TryFindLastMarkdownLinkLabelRange(string content, out InlineChangedRange labelRange)
+    {
+        labelRange = default;
+        var labelEnd = content.LastIndexOf("](", StringComparison.Ordinal);
+        if (labelEnd < 0)
+        {
+            return false;
+        }
+
+        var labelStart = content.LastIndexOf('[', labelEnd);
+        if (labelStart < 0 || labelStart + 1 >= labelEnd)
+        {
+            return false;
+        }
+
+        var linkEnd = content.IndexOf(')', labelEnd + 2);
+        if (linkEnd < 0)
+        {
+            return false;
+        }
+
+        labelRange = new InlineChangedRange(labelStart + 1, labelEnd - labelStart - 1);
+        return true;
+    }
+
+    private static int FindSentenceStart(string content, int index)
+    {
+        var cursor = Math.Min(index, content.Length);
+        while (cursor > 0)
+        {
+            var previous = content[cursor - 1];
+            if (previous is '.' or '!' or '?')
+            {
+                return SkipSentenceBoundaryWhitespace(content, cursor);
+            }
+            cursor--;
+        }
+        return 0;
+    }
+
+    private static int FindPreviousSentenceStart(string content, int sentenceStart)
+    {
+        var cursor = Math.Max(0, sentenceStart - 1);
+        while (cursor > 0 && char.IsWhiteSpace(content[cursor - 1]))
+        {
+            cursor--;
+        }
+        if (cursor > 0 && content[cursor - 1] is '.' or '!' or '?')
+        {
+            cursor--;
+        }
+        while (cursor > 0)
+        {
+            var previous = content[cursor - 1];
+            if (previous is '.' or '!' or '?')
+            {
+                return SkipSentenceBoundaryWhitespace(content, cursor);
+            }
+            cursor--;
+        }
+        return 0;
+    }
+
+    private static int FindSentenceEnd(string content, int index)
+    {
+        var cursor = Math.Min(index, content.Length);
+        while (cursor < content.Length)
+        {
+            var current = content[cursor];
+            if (current is '.' or '!' or '?')
+            {
+                return cursor + 1;
+            }
+            cursor++;
+        }
+        return content.Length;
+    }
+
+    private static int SkipSentenceBoundaryWhitespace(string content, int index)
+    {
+        var cursor = index;
+        while (cursor < content.Length && char.IsWhiteSpace(content[cursor]))
+        {
+            cursor++;
+        }
+        return cursor;
+    }
+
     private static string? FindComparableRenderedDiffContent(RenderedDiffLineParts currentParts, string[] comparisonLines)
     {
+        string? prefixOrSuffixMatch = null;
+        var prefixOrSuffixScore = 0;
         string? bestContent = null;
         var bestScore = 0;
         foreach (var comparisonLine in comparisonLines)
@@ -1881,6 +2228,19 @@ internal static partial class MarkdownPreviewRenderer
             if (!TryGetMarkableRenderedDiffParts(comparisonLine, out var comparisonParts)
                 || comparisonParts.Kind != currentParts.Kind)
             {
+                continue;
+            }
+
+            if (currentParts.Content.StartsWith(comparisonParts.Content, StringComparison.Ordinal)
+                || currentParts.Content.EndsWith(comparisonParts.Content, StringComparison.Ordinal)
+                || comparisonParts.Content.StartsWith(currentParts.Content, StringComparison.Ordinal)
+                || comparisonParts.Content.EndsWith(currentParts.Content, StringComparison.Ordinal))
+            {
+                if (comparisonParts.Content.Length > prefixOrSuffixScore)
+                {
+                    prefixOrSuffixScore = comparisonParts.Content.Length;
+                    prefixOrSuffixMatch = comparisonParts.Content;
+                }
                 continue;
             }
 
@@ -1893,11 +2253,18 @@ internal static partial class MarkdownPreviewRenderer
             }
         }
 
+        if (prefixOrSuffixMatch is not null)
+        {
+            return prefixOrSuffixMatch;
+        }
+
         var minimumScore = Math.Min(12, Math.Max(1, currentParts.Content.Length / 3));
         return bestScore >= minimumScore ? bestContent : null;
     }
 
     private readonly record struct RenderedDiffLineParts(RenderedDiffLineKind Kind, string Prefix, string Content);
+
+    private readonly record struct MarkdownLinkRange(int LabelStart, int LabelEnd, int LinkEnd);
 
     private enum RenderedDiffLineKind
     {

@@ -16,7 +16,7 @@ namespace RepoSyncRadar.App.Copilot.Audit;
 /// </summary>
 public sealed partial class ToolAuditHook
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false,
     };
@@ -158,11 +158,11 @@ public sealed partial class ToolAuditHook
         }
         try
         {
-            return JsonSerializer.Serialize(value, JsonOptions);
+            return JsonSerializer.Serialize(value, _jsonOptions);
         }
         catch (NotSupportedException ex)
         {
-            return JsonSerializer.Serialize(new { error = "serialize-failed", message = ex.Message }, JsonOptions);
+            return JsonSerializer.Serialize(new { error = "serialize-failed", message = ex.Message }, _jsonOptions);
         }
     }
 

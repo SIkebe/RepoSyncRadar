@@ -87,52 +87,53 @@ internal enum WebViewHistoryNavigationDirection
 /// </remarks>
 public partial class MainWindow : Window
 {
-    private const int DwmwaUseImmersiveDarkMode = 20;
-    private const int DwmwaBorderColor = 34;
-    private const int DwmwaCaptionColor = 35;
-    private const int DwmwaTextColor = 36;
-    private const int WmXbuttondown = 0x020B;
-    private const int WmAppcommand = 0x0319;
-    private const int WmInput = 0x00FF;
-    private const int Xbutton1 = 0x0001;
-    private const int Xbutton2 = 0x0002;
-    private const int AppcommandBrowserBackward = 1;
-    private const int AppcommandBrowserForward = 2;
-    private const int RidInput = 0x10000003;
-    private const int RimTypemouse = 0;
-    private const int RidevInputsink = 0x00000100;
-    private const ushort HidUsagePageGeneric = 0x01;
-    private const ushort HidUsageGenericMouse = 0x02;
-    private const ushort RiMouseButton4Down = 0x0040;
-    private const ushort RiMouseButton5Down = 0x0100;
+    private const int _dwmwaUseImmersiveDarkMode = 20;
+    private const int _dwmwaBorderColor = 34;
+    private const int _dwmwaCaptionColor = 35;
+    private const int _dwmwaTextColor = 36;
+    private const int _wmXbuttondown = 0x020B;
+    private const int _wmAppcommand = 0x0319;
+    private const int _wmInput = 0x00FF;
+    private const int _xbutton1 = 0x0001;
+    private const int _xbutton2 = 0x0002;
+    private const int _appcommandBrowserBackward = 1;
+    private const int _appcommandBrowserForward = 2;
+    private const int _ridInput = 0x10000003;
+    private const int _rimTypemouse = 0;
+    private const int _ridevInputsink = 0x00000100;
+    private const ushort _hidUsagePageGeneric = 0x01;
+    private const ushort _hidUsageGenericMouse = 0x02;
+    private const ushort _riMouseButton4Down = 0x0040;
+    private const ushort _riMouseButton5Down = 0x0100;
 
-    private static readonly Uri InitialDocsUri = new("https://docs.github.com/en");
+    private static readonly Uri _initialDocsUri = new("https://docs.github.com/en");
+    private static readonly Uri _blankNavigationUri = new("about:blank");
 
     /// <summary>
     /// Environment variable name. When set to a TCP port, BlazorWebView's WebView2
     /// will expose the Chrome DevTools Protocol on that port for E2E tests.
     /// </summary>
-    private const string BlazorCdpPortEnv = "REPOSYNCRADAR_BLAZOR_CDP_PORT";
+    private const string _blazorCdpPortEnv = "REPOSYNCRADAR_BLAZOR_CDP_PORT";
 
     /// <summary>
     /// Environment variable name. When set to a TCP port, DocsView's WebView2 will
     /// expose the Chrome DevTools Protocol on that port for E2E tests.
     /// </summary>
-    private const string DocsCdpPortEnv = "REPOSYNCRADAR_DOCS_CDP_PORT";
+    private const string _docsCdpPortEnv = "REPOSYNCRADAR_DOCS_CDP_PORT";
 
     /// <summary>
     /// Optional root folder for standalone WebView2 user data. E2E tests set this
     /// to a unique temp path so stale WebView2 processes cannot lock the shared
     /// production folders between app launches.
     /// </summary>
-    private const string WebViewUserDataRootEnv = "REPOSYNCRADAR_WEBVIEW_USER_DATA_ROOT";
+    private const string _webViewUserDataRootEnv = "REPOSYNCRADAR_WEBVIEW_USER_DATA_ROOT";
 
-    private static readonly GridLength DefaultWorkbenchColumnWidth = new(2, GridUnitType.Star);
-    private static readonly GridLength ExpandedWorkbenchSplitterColumnWidth = new(5);
+    private static readonly GridLength _defaultWorkbenchColumnWidth = new(2, GridUnitType.Star);
+    private static readonly GridLength _expandedWorkbenchSplitterColumnWidth = new(5);
     // BlazorWebView hosts a native child window, which can throw when arranged at exactly 0 width.
-    private static readonly GridLength CollapsedWorkbenchColumnWidth = new(1);
-    private static readonly GridLength CollapsedSplitterColumnWidth = new(0);
-    private static readonly TimeSpan PreviewFocusLayoutShieldDuration = TimeSpan.FromMilliseconds(120);
+    private static readonly GridLength _collapsedWorkbenchColumnWidth = new(1);
+    private static readonly GridLength _collapsedSplitterColumnWidth = new(0);
+    private static readonly TimeSpan _previewFocusLayoutShieldDuration = TimeSpan.FromMilliseconds(120);
 
     private readonly UrlAllowList _allowList;
     private readonly PreviewSession _previewSession;
@@ -140,11 +141,13 @@ public partial class MainWindow : Window
     private readonly IAppUserSettingsStore _userSettingsStore;
     private readonly ILogger<MainWindow> _logger;
     private PreviewComparisonRequest? _activePreviewDiffRequest;
+    private Uri? _activeSinglePageRequest;
+    private Uri? _pendingSinglePageAfterBlank;
     private int _previewDiffGeneration;
     private bool _beforePreviewDiffReady;
     private bool _afterPreviewDiffReady;
     private Uri? _openOfficialDocsUri;
-    private GridLength? _expandedWorkbenchColumnWidth = DefaultWorkbenchColumnWidth;
+    private GridLength? _expandedWorkbenchColumnWidth = _defaultWorkbenchColumnWidth;
     private bool _isPreviewFocusMode;
     private bool _previewFocusToggleMouseActivated;
     private bool? _pendingPreviewFocusMode;
@@ -161,7 +164,7 @@ public partial class MainWindow : Window
     // 1 回の XButton 押下で JS postMessage / PreviewMouseDown / WM_XBUTTONDOWN /
     // WM_APPCOMMAND / WM_INPUT の複数経路が重複発火するため、view ごとに最後の
     // 履歴ナビゲーション時刻を覚えて短時間の重複コールを 1 件にまとめる。
-    private static readonly TimeSpan WebViewHistoryNavigationDebounce = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan _webViewHistoryNavigationDebounce = TimeSpan.FromMilliseconds(250);
     private DateTime _docsViewLastHistoryNavigationAt;
     private DateTime _previewViewLastHistoryNavigationAt;
 
@@ -172,7 +175,7 @@ public partial class MainWindow : Window
         SourceInitialized += OnSourceInitialized;
         _previewFocusLayoutShieldTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
-            Interval = PreviewFocusLayoutShieldDuration,
+            Interval = _previewFocusLayoutShieldDuration,
         };
         _previewFocusLayoutShieldTimer.Tick += OnPreviewFocusLayoutShieldTimerTick;
 
@@ -212,11 +215,13 @@ public partial class MainWindow : Window
             _windowHwndSource = null;
             if (DocsView.CoreWebView2 is not null)
             {
+                DocsView.CoreWebView2.DOMContentLoaded -= OnDocsSurfaceDomContentLoaded;
                 DocsView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
                 RemoveDocsThemeDocumentScript(DocsView);
             }
             if (PreviewView.CoreWebView2 is not null)
             {
+                PreviewView.CoreWebView2.DOMContentLoaded -= OnDocsSurfaceDomContentLoaded;
                 PreviewView.CoreWebView2.WebMessageReceived -= OnPreviewScrollMessageReceived;
                 RemoveDocsThemeDocumentScript(PreviewView);
             }
@@ -243,7 +248,7 @@ public partial class MainWindow : Window
             // For E2E test runs the env var supplies a remote-debugging port. Production
             // builds without the env var get no CDP exposure (string.Empty leaves the
             // args clean).
-            AdditionalBrowserArguments = BuildBrowserArguments(DocsCdpPortEnv),
+            AdditionalBrowserArguments = BuildBrowserArguments(_docsCdpPortEnv),
         };
         PreviewView.CreationProperties = new CoreWebView2CreationProperties
         {
@@ -257,7 +262,7 @@ public partial class MainWindow : Window
         // Kick off DocsView initialization explicitly *after* CreationProperties
         // is set. Setting Source triggers the initialization pipeline. We also pin
         // the initial path to /en so the first navigation skips the locale redirect.
-        DocsView.Source = InitialDocsUri;
+        DocsView.Source = _initialDocsUri;
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -278,7 +283,7 @@ public partial class MainWindow : Window
             return IntPtr.Zero;
         }
 
-        if (message == WmInput
+        if (message == _wmInput
             && TryParseRawMouseHistoryNavigationMessage(lParam, out direction)
             && TryResolveDocsSurfaceUnderCursor(out view))
         {
@@ -300,9 +305,9 @@ public partial class MainWindow : Window
         {
             new RAWINPUTDEVICE
             {
-                usUsagePage = HidUsagePageGeneric,
-                usUsage = HidUsageGenericMouse,
-                dwFlags = RidevInputsink,
+                usUsagePage = _hidUsagePageGeneric,
+                usUsage = _hidUsageGenericMouse,
+                dwFlags = _ridevInputsink,
                 hwndTarget = handle,
             },
         };
@@ -327,7 +332,7 @@ public partial class MainWindow : Window
     /// <summary>
     /// Assigns BlazorWebView's internal WebView2 its own user-data folder and wires
     /// the same CDP-port opt-in. CDP is only active when
-    /// <see cref="BlazorCdpPortEnv"/> is set, so production builds keep it closed.
+    /// <see cref="_blazorCdpPortEnv"/> is set, so production builds keep it closed.
     /// </summary>
     private void OnBlazorViewInitializing(object? sender, BlazorWebViewInitializingEventArgs e)
     {
@@ -335,7 +340,7 @@ public partial class MainWindow : Window
         Directory.CreateDirectory(blazorUserDataFolder);
         e.UserDataFolder = blazorUserDataFolder;
 
-        var args = BuildBrowserArguments(BlazorCdpPortEnv);
+        var args = BuildBrowserArguments(_blazorCdpPortEnv);
         if (args.Length == 0)
         {
             return;
@@ -421,13 +426,13 @@ public partial class MainWindow : Window
             }
 
             WorkbenchPreviewSplitter.Visibility = Visibility.Collapsed;
-            WorkbenchColumn.Width = CollapsedWorkbenchColumnWidth;
-            WorkbenchPreviewSplitterColumn.Width = CollapsedSplitterColumnWidth;
+            WorkbenchColumn.Width = _collapsedWorkbenchColumnWidth;
+            WorkbenchPreviewSplitterColumn.Width = _collapsedSplitterColumnWidth;
         }
         else
         {
             WorkbenchColumn.Width = ResolveWorkbenchColumnRestoreWidth(_expandedWorkbenchColumnWidth);
-            WorkbenchPreviewSplitterColumn.Width = ExpandedWorkbenchSplitterColumnWidth;
+            WorkbenchPreviewSplitterColumn.Width = _expandedWorkbenchSplitterColumnWidth;
             WorkbenchPreviewSplitter.Visibility = Visibility.Visible;
         }
 
@@ -567,10 +572,10 @@ public partial class MainWindow : Window
         }
 
         var palette = ResolveAppChromeThemePalette(theme);
-        TrySetDwmWindowAttribute(handle, DwmwaUseImmersiveDarkMode, theme == DocsThemeMode.Dark ? 1 : 0);
-        TrySetDwmWindowAttribute(handle, DwmwaCaptionColor, ToColorRef(palette.HeaderBackground));
-        TrySetDwmWindowAttribute(handle, DwmwaTextColor, ToColorRef(palette.HeaderForeground));
-        TrySetDwmWindowAttribute(handle, DwmwaBorderColor, ToColorRef(palette.HeaderBorder));
+        TrySetDwmWindowAttribute(handle, _dwmwaUseImmersiveDarkMode, theme == DocsThemeMode.Dark ? 1 : 0);
+        TrySetDwmWindowAttribute(handle, _dwmwaCaptionColor, ToColorRef(palette.HeaderBackground));
+        TrySetDwmWindowAttribute(handle, _dwmwaTextColor, ToColorRef(palette.HeaderForeground));
+        TrySetDwmWindowAttribute(handle, _dwmwaBorderColor, ToColorRef(palette.HeaderBorder));
     }
 
     private async Task ApplyDocsThemeAsync(WebView2CompositionControl view)
@@ -616,7 +621,7 @@ public partial class MainWindow : Window
 
     private static string GetWebViewUserDataRoot()
     {
-        var configuredRoot = Environment.GetEnvironmentVariable(WebViewUserDataRootEnv);
+        var configuredRoot = Environment.GetEnvironmentVariable(_webViewUserDataRootEnv);
         if (!string.IsNullOrWhiteSpace(configuredRoot))
         {
             return Path.GetFullPath(configuredRoot);
@@ -657,6 +662,7 @@ public partial class MainWindow : Window
             CoreWebView2WebResourceContext.All);
         view.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
         view.CoreWebView2.Settings.IsWebMessageEnabled = true;
+        view.CoreWebView2.DOMContentLoaded += OnDocsSurfaceDomContentLoaded;
         view.CoreWebView2.WebMessageReceived += OnPreviewScrollMessageReceived;
         ApplyWebViewThemePreference(view, _docsTheme);
         _ = InstallMouseHistoryNavigationAsync(view);
@@ -837,8 +843,27 @@ public partial class MainWindow : Window
         }
 
         StopPreviewDiffTracking();
+        NavigateSinglePageRequest(url);
+    }
+
+    private void NavigateSinglePageRequest(Uri url)
+    {
+        _activeSinglePageRequest = url;
+        _pendingSinglePageAfterBlank = null;
         ShowSinglePageMode(BuildSinglePageHeaderLabel(url));
-        DocsView.Source = url;
+        ShowPreviewPaneStatus(
+            isBeforePane: true,
+            text: "ページを読み込み中…",
+            detail: url.AbsoluteUri);
+
+        if (ShouldResetBeforeSinglePageNavigation(url))
+        {
+            _pendingSinglePageAfterBlank = url;
+            NavigatePreviewPane(DocsView, _blankNavigationUri);
+            return;
+        }
+
+        NavigatePreviewPane(DocsView, url);
     }
 
     private void NavigatePreviewComparisonRequest(PreviewComparisonRequest request)
@@ -869,6 +894,13 @@ public partial class MainWindow : Window
         }
 
         view.Source = url;
+    }
+
+    internal static bool ShouldResetBeforeSinglePageNavigation(Uri url)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+
+        return string.Equals(url.Host, "github.com", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -989,6 +1021,10 @@ public partial class MainWindow : Window
     private void OnDocsViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
         _ = ApplyDocsThemeAsync(DocsView);
+        if (HandleSinglePageNavigationCompleted(DocsView, e))
+        {
+            return;
+        }
         OnPreviewDiffPaneNavigationCompleted(DocsView, isBeforePane: true, e);
     }
 
@@ -996,6 +1032,56 @@ public partial class MainWindow : Window
     {
         _ = ApplyDocsThemeAsync(PreviewView);
         OnPreviewDiffPaneNavigationCompleted(PreviewView, isBeforePane: false, e);
+    }
+
+    private void OnDocsSurfaceDomContentLoaded(object? sender, CoreWebView2DOMContentLoadedEventArgs e)
+    {
+        if (_activePreviewDiffRequest is not null
+            || _pendingSinglePageAfterBlank is not null
+            || !ReferenceEquals(sender, DocsView.CoreWebView2)
+            || _activeSinglePageRequest is not { } request
+            || !IsSameNavigationTarget(DocsView.Source, request))
+        {
+            return;
+        }
+
+        HidePreviewPaneStatus(isBeforePane: true);
+    }
+
+    private bool HandleSinglePageNavigationCompleted(
+        WebView2CompositionControl view,
+        CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (_activePreviewDiffRequest is not null || !ReferenceEquals(view, DocsView))
+        {
+            return false;
+        }
+
+        if (_pendingSinglePageAfterBlank is { } pending
+            && IsSameNavigationTarget(view.Source, _blankNavigationUri))
+        {
+            _pendingSinglePageAfterBlank = null;
+            NavigatePreviewPane(DocsView, pending);
+            return true;
+        }
+
+        if (_activeSinglePageRequest is not { } request
+            || !IsSameNavigationTarget(view.Source, request))
+        {
+            return false;
+        }
+
+        if (!e.IsSuccess)
+        {
+            ShowPreviewPaneStatus(
+                isBeforePane: true,
+                text: "ページの読み込みに失敗しました",
+                detail: $"WebView2: {e.WebErrorStatus}");
+            return true;
+        }
+
+        HidePreviewPaneStatus(isBeforePane: true);
+        return true;
     }
 
     private void OnPreviewDiffPaneNavigationCompleted(
@@ -1225,7 +1311,7 @@ public partial class MainWindow : Window
         var now = DateTime.UtcNow;
         if (ReferenceEquals(view, DocsView))
         {
-            if (now - _docsViewLastHistoryNavigationAt < WebViewHistoryNavigationDebounce)
+            if (now - _docsViewLastHistoryNavigationAt < _webViewHistoryNavigationDebounce)
             {
                 return false;
             }
@@ -1234,7 +1320,7 @@ public partial class MainWindow : Window
         }
         if (ReferenceEquals(view, PreviewView))
         {
-            if (now - _previewViewLastHistoryNavigationAt < WebViewHistoryNavigationDebounce)
+            if (now - _previewViewLastHistoryNavigationAt < _webViewHistoryNavigationDebounce)
             {
                 return false;
             }
@@ -2034,30 +2120,30 @@ public partial class MainWindow : Window
             out WebViewHistoryNavigationDirection direction)
         {
             direction = default;
-            if (message == WmXbuttondown)
+            if (message == _wmXbuttondown)
             {
                 var button = HiWord(wParam);
-                if (button == Xbutton1)
+                if (button == _xbutton1)
                 {
                     direction = WebViewHistoryNavigationDirection.Back;
                     return true;
                 }
-                if (button == Xbutton2)
+                if (button == _xbutton2)
                 {
                     direction = WebViewHistoryNavigationDirection.Forward;
                     return true;
                 }
             }
 
-            if (message == WmAppcommand)
+            if (message == _wmAppcommand)
             {
                 var command = HiWord(lParam) & ~0xF000;
-                if (command == AppcommandBrowserBackward)
+                if (command == _appcommandBrowserBackward)
                 {
                     direction = WebViewHistoryNavigationDirection.Back;
                     return true;
                 }
-                if (command == AppcommandBrowserForward)
+                if (command == _appcommandBrowserForward)
                 {
                     direction = WebViewHistoryNavigationDirection.Forward;
                     return true;
@@ -2072,12 +2158,12 @@ public partial class MainWindow : Window
             out WebViewHistoryNavigationDirection direction)
         {
             direction = default;
-            if ((buttonFlags & RiMouseButton4Down) != 0)
+            if ((buttonFlags & _riMouseButton4Down) != 0)
             {
                 direction = WebViewHistoryNavigationDirection.Back;
                 return true;
             }
-            if ((buttonFlags & RiMouseButton5Down) != 0)
+            if ((buttonFlags & _riMouseButton5Down) != 0)
             {
                 direction = WebViewHistoryNavigationDirection.Forward;
                 return true;
@@ -2093,7 +2179,7 @@ public partial class MainWindow : Window
             direction = default;
             uint size = 0;
             var headerSize = (uint)Marshal.SizeOf<RAWINPUTHEADER>();
-            _ = GetRawInputData(rawInputHandle, RidInput, IntPtr.Zero, ref size, headerSize);
+            _ = GetRawInputData(rawInputHandle, _ridInput, IntPtr.Zero, ref size, headerSize);
             if (size == 0)
             {
                 return false;
@@ -2102,14 +2188,14 @@ public partial class MainWindow : Window
             var buffer = Marshal.AllocHGlobal((int)size);
             try
             {
-                var copied = GetRawInputData(rawInputHandle, RidInput, buffer, ref size, headerSize);
+                var copied = GetRawInputData(rawInputHandle, _ridInput, buffer, ref size, headerSize);
                 if (copied != size)
                 {
                     return false;
                 }
 
                 var rawInput = Marshal.PtrToStructure<RAWINPUT>(buffer);
-                return rawInput.header.dwType == RimTypemouse
+                return rawInput.header.dwType == _rimTypemouse
                     && TryResolveRawMouseButtonFlags(rawInput.mouse.usButtonFlags, out direction);
             }
             finally
@@ -2185,7 +2271,7 @@ public partial class MainWindow : Window
             return savedWidth.Value;
         }
 
-        return DefaultWorkbenchColumnWidth;
+        return _defaultWorkbenchColumnWidth;
     }
 
     internal static string BuildPreviewFocusToggleText(bool isPreviewFocusMode)

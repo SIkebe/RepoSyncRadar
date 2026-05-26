@@ -8,7 +8,7 @@ public sealed class FileAppUserSettingsStore : IAppUserSettingsStore, IDisposabl
 {
     internal const string UserSettingsPathEnv = "REPOSYNCRADAR_USER_SETTINGS_PATH";
 
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
         Converters =
@@ -132,7 +132,7 @@ public sealed class FileAppUserSettingsStore : IAppUserSettingsStore, IDisposabl
             }
 
             var json = File.ReadAllText(settingsPath);
-            var settings = JsonSerializer.Deserialize<AppUserSettings>(json, JsonOptions);
+            var settings = JsonSerializer.Deserialize<AppUserSettings>(json, _jsonOptions);
             return Normalize(settings);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
@@ -152,7 +152,7 @@ public sealed class FileAppUserSettingsStore : IAppUserSettingsStore, IDisposabl
             Directory.CreateDirectory(directory);
         }
 
-        var json = JsonSerializer.Serialize(settings, JsonOptions);
+        var json = JsonSerializer.Serialize(settings, _jsonOptions);
         await File.WriteAllTextAsync(settingsPath, json, cancellationToken).ConfigureAwait(false);
     }
 

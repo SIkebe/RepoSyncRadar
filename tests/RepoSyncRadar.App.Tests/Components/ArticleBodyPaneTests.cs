@@ -16,7 +16,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 /// </summary>
 public class ArticleBodyPaneTests
 {
-    private const string Pathname = "/en/copilot/about-copilot";
+    private const string _pathname = "/en/copilot/about-copilot";
 
     [Fact]
     public void Renders_Iframe_With_Srcdoc()
@@ -24,10 +24,10 @@ public class ArticleBodyPaneTests
         const string articleHtml = "<h1>About Copilot</h1>";
         var apiClient = Substitute.For<IDocsApiClient>();
         apiClient
-            .GetArticleBodyAsync(Pathname, Arg.Any<CancellationToken>())
+            .GetArticleBodyAsync(_pathname, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(articleHtml));
 
-        using var cut = RenderPaneWith(apiClient, Pathname);
+        using var cut = RenderPaneWith(apiClient, _pathname);
 
         cut.WaitForAssertion(() =>
         {
@@ -43,11 +43,11 @@ public class ArticleBodyPaneTests
     {
         var apiClient = Substitute.For<IDocsApiClient>();
         apiClient
-            .GetArticleBodyAsync(Pathname, Arg.Any<CancellationToken>())
+            .GetArticleBodyAsync(_pathname, Arg.Any<CancellationToken>())
             .Returns<Task<string>>(_ => Task.FromException<string>(
-                new DocsArticleNotFoundException(Pathname, responseBody: null)));
+                new DocsArticleNotFoundException(_pathname, responseBody: null)));
 
-        using var cut = RenderPaneWith(apiClient, Pathname);
+        using var cut = RenderPaneWith(apiClient, _pathname);
 
         cut.WaitForAssertion(() =>
         {

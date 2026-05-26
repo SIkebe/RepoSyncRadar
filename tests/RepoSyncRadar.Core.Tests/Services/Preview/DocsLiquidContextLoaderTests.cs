@@ -157,6 +157,20 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadForMarkdownAsync_Loads_Reusables_With_Underscore_Directory()
+    {
+        WriteReusablesFile(Path.Combine("audit_log", "audit-log-enterprise-export-limit.md"), "Export limit details.");
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/exporting-audit-log-activity-for-your-enterprise.md",
+            "## Export limits\n\n{% data reusables.audit_log.audit-log-enterprise-export-limit %}",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("Export limit details.", context.Reusables["audit_log.audit-log-enterprise-export-limit"]);
+    }
+
+    [Fact]
     public async Task LoadForMarkdownAsync_Loads_Only_Referenced_Variable_Files()
     {
         WriteVariablesFile("product.yml", "prodname: GitHub");

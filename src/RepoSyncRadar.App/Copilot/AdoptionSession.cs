@@ -8,6 +8,7 @@ using Microsoft.Extensions.Localization;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Services;
+using RepoSyncRadar.Core.Services.Preview;
 
 namespace RepoSyncRadar.App.Copilot;
 
@@ -30,7 +31,7 @@ public sealed partial class AdoptionSession
     internal const int MaxRepairSourceChars = 20 * 1024;
     internal const string TruncatedMarker = "\n…[truncated by RepoSyncRadar — original diff exceeded 50KB]\n";
 
-    private static readonly JsonSerializerOptions DraftJsonOptions = new()
+    private static readonly JsonSerializerOptions _draftJsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
@@ -369,16 +370,8 @@ public sealed partial class AdoptionSession
 
     private static string TryBuildFallbackOfficialDocUrl(string path)
     {
-        const string contentPrefix = "content/";
-        const string markdownExtension = ".md";
-        if (!path.StartsWith(contentPrefix, StringComparison.Ordinal)
-            || !path.EndsWith(markdownExtension, StringComparison.OrdinalIgnoreCase))
-        {
-            return string.Empty;
-        }
-
-        var slug = path[contentPrefix.Length..^markdownExtension.Length].Trim('/');
-        return slug.Length == 0 ? string.Empty : $"https://docs.github.com/en/{slug}";
+        var route = PreviewPathMapper.Map(path, "en");
+        return route is null ? string.Empty : "https://docs.github.com" + route;
     }
 
     private static string ToAbsoluteDocsUrl(string url)
@@ -392,14 +385,35 @@ public sealed partial class AdoptionSession
         if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute))
         {
             return string.Equals(absolute.Host, "docs.github.com", StringComparison.OrdinalIgnoreCase)
-                ? absolute.AbsoluteUri
+                ? NormalizeDocsUri(absolute)
                 : string.Empty;
         }
         if (trimmed.StartsWith('/'))
         {
-            return "https://docs.github.com" + trimmed;
+            return Uri.TryCreate(new Uri("https://docs.github.com"), trimmed, out var relative)
+                ? NormalizeDocsUri(relative)
+                : string.Empty;
         }
         return string.Empty;
+    }
+
+    private static string NormalizeDocsUri(Uri uri)
+    {
+        var path = uri.AbsolutePath;
+        if (path.EndsWith("/index", StringComparison.OrdinalIgnoreCase))
+        {
+            path = path[..^"/index".Length];
+            if (path.Length == 0)
+            {
+                path = "/";
+            }
+        }
+
+        var builder = new UriBuilder(uri)
+        {
+            Path = path,
+        };
+        return builder.Uri.AbsoluteUri;
     }
 
     private static async Task<DraftBundle> ParseOrRepairBundleAsync(
@@ -577,7 +591,7 @@ public sealed partial class AdoptionSession
         DraftJson? parsed;
         try
         {
-            parsed = JsonSerializer.Deserialize<DraftJson>(payload, DraftJsonOptions);
+            parsed = JsonSerializer.Deserialize<DraftJson>(payload, _draftJsonOptions);
         }
         catch (JsonException ex)
         {

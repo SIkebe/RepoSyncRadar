@@ -15,8 +15,8 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 public sealed partial class DocsWorktreeManager
 {
-    private const string DeletePendingDirectoryName = ".delete-pending";
-    private const string MarkdownAssetCacheDirectoryName = ".markdown-assets";
+    private const string _deletePendingDirectoryName = ".delete-pending";
+    private const string _markdownAssetCacheDirectoryName = ".markdown-assets";
 
     private readonly IProcessRunner _runner;
     private readonly DocsRepositoryOptions _options;
@@ -873,8 +873,8 @@ public sealed partial class DocsWorktreeManager
         try
         {
             return Directory.EnumerateDirectories(_options.WorktreeRoot)
-                .Where(path => !string.Equals(Path.GetFileName(path), DeletePendingDirectoryName, StringComparison.OrdinalIgnoreCase))
-                .Where(path => !string.Equals(Path.GetFileName(path), MarkdownAssetCacheDirectoryName, StringComparison.OrdinalIgnoreCase))
+                .Where(path => !string.Equals(Path.GetFileName(path), _deletePendingDirectoryName, StringComparison.OrdinalIgnoreCase))
+                .Where(path => !string.Equals(Path.GetFileName(path), _markdownAssetCacheDirectoryName, StringComparison.OrdinalIgnoreCase))
                 .Where(path => !trackedPaths.Contains(path))
                 .ToArray();
         }
@@ -942,7 +942,7 @@ public sealed partial class DocsWorktreeManager
                 return false;
             }
 
-            var pendingRoot = Path.Combine(parent, DeletePendingDirectoryName);
+            var pendingRoot = Path.Combine(parent, _deletePendingDirectoryName);
             Directory.CreateDirectory(pendingRoot);
             pendingPath = Path.Combine(
                 pendingRoot,
@@ -964,7 +964,7 @@ public sealed partial class DocsWorktreeManager
             return;
         }
 
-        var pendingRoot = Path.Combine(_options.WorktreeRoot, DeletePendingDirectoryName);
+        var pendingRoot = Path.Combine(_options.WorktreeRoot, _deletePendingDirectoryName);
         if (!Directory.Exists(pendingRoot))
         {
             return;
