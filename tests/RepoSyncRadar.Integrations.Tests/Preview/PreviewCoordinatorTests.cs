@@ -687,6 +687,61 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Equal(new Uri($"http://127.0.0.1:4500/markdown/after?v={expectedSlug}&file=CHANGELOG.md"), link.AfterUrl);
     }
 
+    [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Defaults_To_First_Affected_Version()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-ghec-default.git");
+        var wtRoot = Path.Combine(_tempRoot, "wt-ghec-default");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onWorktreeAdd: (path, sha) =>
+            {
+                WriteRepoFile(path, "content/admin/audit.md", "---\ntitle: Audit\n---\n\n{% data reusables.audit_log.audit-log-enterprise-export-limit %}");
+                WriteRepoFile(path, "content/admin/audit-api.md", "---\ntitle: Using the audit log API\n---\n\nAPI page");
+                var reusable = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "{% ifversion ghec %}Old enterprise limit. See [AUTOTITLE](/admin/audit-api).{% endif %}"
+                    : "{% ifversion ghec %}New enterprise limit. See [AUTOTITLE](/admin/audit-api).{% endif %}";
+                WriteRepoFile(path, "data/reusables/audit_log/audit-log-enterprise-export-limit.md", reusable);
+            });
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", "content/admin/audit.md", cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Equal(DocsVersion.Ghec, link!.CurrentVersion);
+        Assert.Equal(new Uri("http://127.0.0.1:4500/markdown/after?v=ghec&file=content%2Fadmin%2Faudit.md"), link.AfterUrl);
+        Assert.Contains("enterprise limit.", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains(">Using the audit log API</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.DoesNotContain(">AUTOTITLE</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
+    }
+
     // §Step 19.9 regression: 同一ファイル・同一 sha でも version を切り替えれば
     // BeforeUrl / AfterUrl は別 URL を返さなければならない。これが満たされないと
     // WebView2 は Source 等価で navigation をスキップする。

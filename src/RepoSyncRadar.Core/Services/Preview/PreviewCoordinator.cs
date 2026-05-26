@@ -65,7 +65,8 @@ public interface IPreviewCoordinator
     /// worktrees, hosts both rendered pages on localhost, and returns before/after URLs.
     /// </summary>
     /// <param name="version">
-    /// 描画する <see cref="DocsVersion"/>。未指定なら <see cref="DocsVersionCatalog.Default"/> (= fpt)。
+    /// 描画する <see cref="DocsVersion"/>。未指定なら差分が出る最初の版を使う。
+    /// 差分が版依存でない場合は <see cref="DocsVersionCatalog.Default"/> (= fpt) を使う。
     /// <c>{% ifversion ... %}</c> がこの版で評価される。
     /// </param>
     Task<PreviewComparisonLink?> PrepareMarkdownComparisonPreviewAsync(
@@ -442,8 +443,6 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             throw new InvalidOperationException($"'{filePath}' は Markdown ファイルではありません。");
         }
 
-        var effectiveVersion = version ?? DocsVersionCatalog.Default;
-
         if (!_worktree.IsEnabled)
         {
             LogDisabled(_logger);
@@ -500,6 +499,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             afterMarkdown,
             afterLiquid);
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
+        var effectiveVersion = version ?? ResolveInitialMarkdownPreviewVersion(affectedVersions);
         progress?.Report("フロントマターの変更点を解析中…");
         var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
         progress?.Report("Liquid 条件と関連 data ファイルの差分を解析中…");
@@ -612,6 +612,15 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             || string.Equals(trimmedFilePath, trimmedRenderedPath, StringComparison.Ordinal)
             ? query
             : query + "&rendered=" + Uri.EscapeDataString(trimmedRenderedPath);
+    }
+
+    internal static DocsVersion ResolveInitialMarkdownPreviewVersion(IReadOnlyList<DocsVersion> affectedVersions)
+    {
+        ArgumentNullException.ThrowIfNull(affectedVersions);
+
+        return affectedVersions.Count > 0
+            ? affectedVersions[0]
+            : DocsVersionCatalog.Default;
     }
 
     private async Task<ReusablePreviewTarget?> TryResolveReusablePreviewTargetAsync(
