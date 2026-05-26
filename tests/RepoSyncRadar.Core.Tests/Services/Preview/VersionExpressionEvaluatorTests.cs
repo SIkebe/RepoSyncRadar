@@ -121,6 +121,28 @@ public sealed class VersionExpressionEvaluatorTests
         Assert.False(VersionExpressionEvaluator.Evaluate("copilot-feature and ghec", DocsVersion.Fpt));
     }
 
+    [Theory]
+    [InlineData("fpt", true)]
+    [InlineData("ghec", true)]
+    [InlineData("ghes-3.21", false)]
+    public void Known_Feature_Uses_Data_Feature_Version_Map(string slug, bool expected)
+    {
+        var features = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
+        {
+            ["enhanced-billing-platform"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["fpt"] = "*",
+                ["ghec"] = "*",
+                ["ghes"] = ">= 3.22",
+            },
+        };
+
+        Assert.Equal(expected, VersionExpressionEvaluator.Evaluate(
+            "enhanced-billing-platform",
+            DocsVersionCatalog.FromSlug(slug),
+            features));
+    }
+
     [Fact]
     public void Empty_Or_Whitespace_Expression_Returns_True()
     {

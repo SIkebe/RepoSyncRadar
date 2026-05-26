@@ -25,18 +25,26 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// <list type="bullet">
 ///   <item><c>fpt</c> / <c>ghec</c> / <c>ghes</c>: plan 一致。</item>
 ///   <item><c>ghae</c>: 廃止 plan として常に <c>false</c>。</item>
-///   <item>それ以外 (= feature flag 名): <b>保守的に <c>true</c></b> 扱い。
-///   <c>data/features/*.yml</c> を読まないので feature の真の版集合は分からないが、
-///   未知 feature を false にすると本文が消えてレビュアーが差分を見落とすため
-///   「念のため表示する」方針 (Phase B の見落とし防止と整合)。</item>
+///   <item>それ以外 (= feature flag 名): <c>data/features/*.yml</c> が読めていれば
+///   その <c>versions</c> mapping、読めていなければ保守的に <c>true</c>。</item>
 /// </list>
 /// </para>
 /// </summary>
 internal static class VersionExpressionEvaluator
 {
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> EmptyFeatures =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+
     public static bool Evaluate(string? expression, DocsVersion version)
+        => Evaluate(expression, version, EmptyFeatures);
+
+    public static bool Evaluate(
+        string? expression,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
     {
         ArgumentNullException.ThrowIfNull(version);
+        ArgumentNullException.ThrowIfNull(features);
         if (string.IsNullOrWhiteSpace(expression))
         {
             return true;
@@ -50,7 +58,7 @@ internal static class VersionExpressionEvaluator
                 return true;
             }
             var pos = 0;
-            var result = ParseOr(tokens, ref pos, version);
+            var result = ParseOr(tokens, ref pos, version, features);
             if (pos != tokens.Count)
             {
                 // 余ったトークン — 解析しきれていないので保守的に true。
@@ -186,41 +194,57 @@ internal static class VersionExpressionEvaluator
         return tokens;
     }
 
-    private static bool ParseOr(List<Token> tokens, ref int pos, DocsVersion version)
+    private static bool ParseOr(
+        List<Token> tokens,
+        ref int pos,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
     {
-        var left = ParseAnd(tokens, ref pos, version);
+        var left = ParseAnd(tokens, ref pos, version, features);
         while (pos < tokens.Count && tokens[pos].Kind == TokenKind.KeywordOr)
         {
             pos++;
-            var right = ParseAnd(tokens, ref pos, version);
+            var right = ParseAnd(tokens, ref pos, version, features);
             left = left || right;
         }
         return left;
     }
 
-    private static bool ParseAnd(List<Token> tokens, ref int pos, DocsVersion version)
+    private static bool ParseAnd(
+        List<Token> tokens,
+        ref int pos,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
     {
-        var left = ParseUnary(tokens, ref pos, version);
+        var left = ParseUnary(tokens, ref pos, version, features);
         while (pos < tokens.Count && tokens[pos].Kind == TokenKind.KeywordAnd)
         {
             pos++;
-            var right = ParseUnary(tokens, ref pos, version);
+            var right = ParseUnary(tokens, ref pos, version, features);
             left = left && right;
         }
         return left;
     }
 
-    private static bool ParseUnary(List<Token> tokens, ref int pos, DocsVersion version)
+    private static bool ParseUnary(
+        List<Token> tokens,
+        ref int pos,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
     {
         if (pos < tokens.Count && tokens[pos].Kind == TokenKind.KeywordNot)
         {
             pos++;
-            return !ParseUnary(tokens, ref pos, version);
+            return !ParseUnary(tokens, ref pos, version, features);
         }
-        return ParsePrimary(tokens, ref pos, version);
+        return ParsePrimary(tokens, ref pos, version, features);
     }
 
-    private static bool ParsePrimary(List<Token> tokens, ref int pos, DocsVersion version)
+    private static bool ParsePrimary(
+        List<Token> tokens,
+        ref int pos,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
     {
         if (pos >= tokens.Count)
         {
@@ -230,7 +254,7 @@ internal static class VersionExpressionEvaluator
         if (tok.Kind == TokenKind.LParen)
         {
             pos++;
-            var inner = ParseOr(tokens, ref pos, version);
+            var inner = ParseOr(tokens, ref pos, version, features);
             if (pos >= tokens.Count || tokens[pos].Kind != TokenKind.RParen)
             {
                 throw new FormatException("Missing ')'.");
@@ -253,7 +277,7 @@ internal static class VersionExpressionEvaluator
                 pos++;
                 return EvaluateComparison(tok.Value, op, rightVersion, version);
             }
-            return EvaluateIdentifier(tok.Value, version);
+            return EvaluateIdentifier(tok.Value, version, features);
         }
         throw new FormatException($"Unexpected token '{tok.Value}'.");
     }
@@ -266,16 +290,129 @@ internal static class VersionExpressionEvaluator
             or TokenKind.OpEq
             or TokenKind.OpNe;
 
-    private static bool EvaluateIdentifier(string ident, DocsVersion version)
+    private static bool EvaluateIdentifier(
+        string ident,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
         => ident switch
         {
             "fpt" => version.Plan == DocsPlan.Fpt,
             "ghec" => version.Plan == DocsPlan.Ghec,
             "ghes" => version.Plan == DocsPlan.Ghes,
             "ghae" => false,
-            // 未知 feature flag は保守的に true (本文表示)。
-            _ => true,
+            _ => EvaluateFeatureIdentifier(ident, version, features),
         };
+
+    private static bool EvaluateFeatureIdentifier(
+        string ident,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
+    {
+        if (!features.TryGetValue(ident, out var versions))
+        {
+            return true;
+        }
+
+        var planKey = version.Plan switch
+        {
+            DocsPlan.Fpt => "fpt",
+            DocsPlan.Ghec => "ghec",
+            DocsPlan.Ghes => "ghes",
+            _ => string.Empty,
+        };
+        if (planKey.Length == 0 || !versions.TryGetValue(planKey, out var value))
+        {
+            return false;
+        }
+        return EvaluateFeatureVersionValue(value, version);
+    }
+
+    private static bool EvaluateFeatureVersionValue(string? value, DocsVersion version)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return false;
+        }
+        if (string.Equals(trimmed, "*", StringComparison.Ordinal)
+            || string.Equals(trimmed, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+        if (string.Equals(trimmed, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        if (version.Plan != DocsPlan.Ghes || string.IsNullOrEmpty(version.GhesRelease))
+        {
+            return true;
+        }
+        return EvaluateGhesFeatureConstraint(trimmed, version.GhesRelease);
+    }
+
+    private static bool EvaluateGhesFeatureConstraint(string expression, string release)
+    {
+        var index = 0;
+        var sawConstraint = false;
+        while (index < expression.Length)
+        {
+            while (index < expression.Length && (char.IsWhiteSpace(expression[index]) || expression[index] == ','))
+            {
+                index++;
+            }
+            if (index >= expression.Length)
+            {
+                break;
+            }
+
+            var opStart = index;
+            if (expression[index] is '<' or '>' or '=' or '!')
+            {
+                index++;
+                if (index < expression.Length && expression[index] == '=')
+                {
+                    index++;
+                }
+            }
+            else
+            {
+                return true;
+            }
+            var op = expression[opStart..index];
+
+            while (index < expression.Length && char.IsWhiteSpace(expression[index]))
+            {
+                index++;
+            }
+            var versionStart = index;
+            while (index < expression.Length && (char.IsDigit(expression[index]) || expression[index] == '.'))
+            {
+                index++;
+            }
+            if (versionStart == index)
+            {
+                return true;
+            }
+
+            sawConstraint = true;
+            var cmp = CompareReleaseStrings(release, expression[versionStart..index]);
+            var matches = op switch
+            {
+                "<" => cmp < 0,
+                "<=" => cmp <= 0,
+                ">" => cmp > 0,
+                ">=" => cmp >= 0,
+                "=" => cmp == 0,
+                "!=" => cmp != 0,
+                _ => true,
+            };
+            if (!matches)
+            {
+                return false;
+            }
+        }
+        return sawConstraint;
+    }
 
     private static bool EvaluateComparison(string ident, TokenKind op, string rightVersion, DocsVersion version)
     {

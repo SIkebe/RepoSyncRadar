@@ -226,4 +226,35 @@ public sealed class DocsVersionImpactAnalyzerTests
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
+
+    [Fact]
+    public void Feature_Gated_Removal_Is_Detected_For_Ghes_Versions_Where_Feature_Is_Disabled()
+    {
+        var afterContext = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal),
+            new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
+            {
+                ["enhanced-billing-platform"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["fpt"] = "*",
+                    ["ghec"] = "*",
+                    ["ghes"] = ">= 3.22",
+                },
+            });
+
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            "Metered billing explanations. For more information, see [AUTOTITLE](/billing/concepts/billing-cycles).",
+            DocsLiquidContext.Empty,
+            "Metered billing explanations. {% ifversion enhanced-billing-platform %}For more information, see [AUTOTITLE](/billing/concepts/billing-cycles).{% endif %}",
+            afterContext);
+
+        var slugs = details.Select(static detail => detail.Version.Slug).ToArray();
+        Assert.DoesNotContain("fpt", slugs);
+        Assert.DoesNotContain("ghec", slugs);
+        Assert.Contains("ghes-3.21", slugs);
+        Assert.Contains("ghes-3.16", slugs);
+    }
 }

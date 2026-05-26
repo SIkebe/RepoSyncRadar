@@ -1498,6 +1498,27 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Gap_When_After_Removes_End_Of_Paragraph()
+    {
+        const string beforeMarkdown = "Metered billing explanations. For more information, see [Billing cycles](/billing/concepts/billing-cycles).";
+        const string afterMarkdown = "Metered billing explanations.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/actions/how-tos/get-support.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("rsr-rendered-diff-gap", html, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-removed rsr-rendered-diff-gap", html, StringComparison.Ordinal);
+        Assert.Contains("aria-hidden=\"true\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("aria-label=\"rendered diff gap\"", html, StringComparison.Ordinal);
+        Assert.Contains("Metered billing explanations.<span", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Does_Not_Show_Raw_Diff_Spans_Inside_Inline_Code()
     {
         const string beforeMarkdown = "`@github` Create a PR for the widget function.";

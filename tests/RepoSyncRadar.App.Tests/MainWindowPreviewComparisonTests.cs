@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using Microsoft.Web.WebView2.Core;
 using RepoSyncRadar.App;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Services.Preview;
@@ -58,6 +59,25 @@ public sealed class MainWindowPreviewComparisonTests
     public void ShouldResetBeforeSinglePageNavigation_Only_Targets_GitHub(string url, bool expected)
     {
         Assert.Equal(expected, MainWindow.ShouldResetBeforeSinglePageNavigation(new Uri(url)));
+    }
+
+    [Fact]
+    public void IsExpectedNavigationCompletion_Ignores_Stale_WebView2_Events()
+    {
+        Assert.False(MainWindow.IsExpectedNavigationCompletion(42, expectedNavigationId: null));
+        Assert.True(MainWindow.IsExpectedNavigationCompletion(42, expectedNavigationId: 42));
+        Assert.False(MainWindow.IsExpectedNavigationCompletion(41, expectedNavigationId: 42));
+    }
+
+    [Theory]
+    [InlineData(CoreWebView2WebErrorStatus.ConnectionAborted, true)]
+    [InlineData(CoreWebView2WebErrorStatus.OperationCanceled, true)]
+    [InlineData(CoreWebView2WebErrorStatus.CannotConnect, false)]
+    public void IsTransientSinglePageNavigationError_Identifies_Retryable_WebView2_Status(
+        CoreWebView2WebErrorStatus status,
+        bool expected)
+    {
+        Assert.Equal(expected, MainWindow.IsTransientSinglePageNavigationError(status));
     }
 
     [Fact]
