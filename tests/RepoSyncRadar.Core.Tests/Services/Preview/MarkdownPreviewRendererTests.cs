@@ -1513,6 +1513,8 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("rsr-rendered-diff-gap", html, StringComparison.Ordinal);
         Assert.Contains("rsr-rendered-diff-removed rsr-rendered-diff-gap", html, StringComparison.Ordinal);
+        Assert.Contains("aria-hidden=\"true\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("aria-label=\"rendered diff gap\"", html, StringComparison.Ordinal);
         Assert.Contains("Metered billing explanations.<span", html, StringComparison.Ordinal);
     }
 

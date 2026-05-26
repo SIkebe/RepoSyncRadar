@@ -2094,7 +2094,7 @@ internal static partial class MarkdownPreviewRenderer
         var gapClass = string.Equals(markerClass, "rsr-rendered-diff-added", StringComparison.Ordinal)
             ? "rsr-rendered-diff-removed"
             : "rsr-rendered-diff-added";
-        var marker = "<span class=\"" + gapClass + " rsr-rendered-diff-gap\" aria-label=\"rendered diff gap\"></span>";
+        var marker = "<span class=\"" + gapClass + " rsr-rendered-diff-gap\" aria-hidden=\"true\"></span>";
         marked = content[..insertionIndex] + marker + content[insertionIndex..];
         return true;
     }
