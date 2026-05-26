@@ -527,7 +527,8 @@ public sealed class MarkdownPreviewRendererTests
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
         Assert.Contains("href=\"/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/streaming-the-audit-log-for-your-enterprise\"", html, StringComparison.Ordinal);
-        Assert.Contains("<span class=\"rsr-rendered-diff-added\">Streaming the audit log for your enterprise</span></a>", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">If you intend", html, StringComparison.Ordinal);
+        Assert.Contains("Streaming the audit log for your enterprise</a>.</span>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("%3C/span%3E", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(">AUTOTITLE</span></a>", html, StringComparison.Ordinal);
     }
@@ -934,6 +935,33 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("<li><span class=\"rsr-rendered-diff-added\"><a href=\"https://docs.github.com/copilot/agent-loop\">Understanding the agent loop</a></span></li>", html, StringComparison.Ordinal);
         Assert.Contains("<li><span class=\"rsr-rendered-diff-added\"><a href=\"https://docs.github.com/copilot/telemetry\">Telemetry and observability</a></span></li>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<p>*", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Expands_Link_Label_Diff_To_Added_Sentence()
+    {
+        const string beforeMarkdown = """
+            Runs your workflow when you push a commit or tag, or when you create a repository from a template.
+
+            A similar paragraph elsewhere can mention the same branch behavior. This includes workflows that are not merged into the default branch. For more information, see [Secure use reference](/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-workflow-only-when-a-push-to-specific-branches-occurs).
+
+            For more information, see [Events that trigger workflows](/actions/reference/workflows-and-actions/events-that-trigger-workflows).
+            """;
+        const string afterMarkdown = """
+            Runs your workflow when you push a commit or tag, or when you create a repository from a template. This includes workflows that are not merged into the default branch. For more information, see [Events that trigger workflows](/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-workflow-only-when-a-push-to-specific-branches-occurs).
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/actions/reference/workflows-and-actions/events-that-trigger-workflows.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\"> This includes workflows", html, StringComparison.Ordinal);
+        Assert.Contains("Events that trigger workflows</a>.</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<a href=\"/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-workflow-only-when-a-push-to-specific-branches-occurs\"><span class=\"rsr-rendered-diff-added\">Events that trigger workflows</span></a>", html, StringComparison.Ordinal);
     }
 
     [Fact]

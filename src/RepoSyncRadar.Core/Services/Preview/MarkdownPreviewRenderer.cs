@@ -67,9 +67,6 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""<span\b(?<attrs>[^>]*)>\s*AUTOTITLE\s*</span>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex AutotitleSpanRegex();
 
-    [GeneratedRegex(@"\[(?<label>AUTOTITLE)\](?=\()", RegexOptions.IgnoreCase)]
-    private static partial Regex AutotitleMarkdownLabelRegex();
-
     [GeneratedRegex(@"\[AUTOTITLE\]\((?<href>[^\s)]+)\)?", RegexOptions.IgnoreCase)]
     private static partial Regex AutotitleMarkdownLinkRegex();
 
@@ -2045,13 +2042,21 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string MarkRenderedDiffContent(string content, string markerClass, string? comparisonContent)
     {
-        if (TryMarkAutotitleMarkdownLinkLabels(content, markerClass, out var markedAutotitleLinks))
-        {
-            return markedAutotitleLinks;
-        }
-
         if (string.IsNullOrEmpty(comparisonContent))
         {
+            if (TryFindLastMarkdownLinkLabelRange(content, out var linkLabelRange))
+            {
+                var expandedRange = ExpandRenderedDiffRange(content, linkLabelRange);
+                if (expandedRange.Start > 0 && expandedRange.Length < content.Length)
+                {
+                    return content[..expandedRange.Start]
+                        + "<span class=\"" + markerClass + "\">"
+                        + content.Substring(expandedRange.Start, expandedRange.Length)
+                        + "</span>"
+                        + content[(expandedRange.Start + expandedRange.Length)..];
+                }
+            }
+
             return "<span class=\"" + markerClass + "\">" + content + "</span>";
         }
 
@@ -2060,6 +2065,7 @@ internal static partial class MarkdownPreviewRenderer
         {
             return content;
         }
+        changedRange = ExpandRenderedDiffRange(content, changedRange);
 
         return content[..changedRange.Start]
             + "<span class=\"" + markerClass + "\">"
@@ -2068,28 +2074,153 @@ internal static partial class MarkdownPreviewRenderer
             + content[(changedRange.Start + changedRange.Length)..];
     }
 
-    private static bool TryMarkAutotitleMarkdownLinkLabels(string content, string markerClass, out string marked)
+    private static InlineChangedRange ExpandRenderedDiffRange(string content, InlineChangedRange changedRange)
     {
-        marked = content;
-        if (!content.Contains("[AUTOTITLE]", StringComparison.OrdinalIgnoreCase))
+        if (changedRange.Length == 0
+            || !TryFindMarkdownLinkAroundRange(content, changedRange, out var linkRange))
+        {
+            return changedRange;
+        }
+
+        var start = FindSentenceStart(content, linkRange.LabelStart);
+        var sentencePrefix = content[start..linkRange.LabelStart].TrimStart();
+        if (sentencePrefix.StartsWith("For more information", StringComparison.OrdinalIgnoreCase)
+            || sentencePrefix.StartsWith("For more info", StringComparison.OrdinalIgnoreCase))
+        {
+            start = FindPreviousSentenceStart(content, start);
+        }
+
+        var end = FindSentenceEnd(content, linkRange.LinkEnd);
+        return end > start ? new InlineChangedRange(start, end - start) : changedRange;
+    }
+
+    private static bool TryFindMarkdownLinkAroundRange(
+        string content,
+        InlineChangedRange changedRange,
+        out MarkdownLinkRange linkRange)
+    {
+        linkRange = default;
+        var changedStart = changedRange.Start;
+        var changedEnd = changedRange.Start + changedRange.Length;
+        var labelStart = content.LastIndexOf('[', Math.Min(changedStart, content.Length - 1));
+        if (labelStart < 0)
         {
             return false;
         }
 
-        var replaced = AutotitleMarkdownLabelRegex().Replace(
-            content,
-            match => string.Concat("[<span class=\"", markerClass, "\">", match.Groups["label"].Value, "</span>]"));
-        if (string.Equals(replaced, content, StringComparison.Ordinal))
+        var labelEnd = content.IndexOf("](", labelStart, StringComparison.Ordinal);
+        if (labelEnd < 0)
         {
             return false;
         }
 
-        marked = replaced;
+        var linkEnd = content.IndexOf(')', labelEnd + 2);
+        if (linkEnd < 0)
+        {
+            return false;
+        }
+
+        if (changedEnd <= labelStart || changedStart >= linkEnd + 1)
+        {
+            return false;
+        }
+
+        linkRange = new MarkdownLinkRange(labelStart, labelEnd, linkEnd + 1);
         return true;
+    }
+
+    private static bool TryFindLastMarkdownLinkLabelRange(string content, out InlineChangedRange labelRange)
+    {
+        labelRange = default;
+        var labelEnd = content.LastIndexOf("](", StringComparison.Ordinal);
+        if (labelEnd < 0)
+        {
+            return false;
+        }
+
+        var labelStart = content.LastIndexOf('[', labelEnd);
+        if (labelStart < 0 || labelStart + 1 >= labelEnd)
+        {
+            return false;
+        }
+
+        var linkEnd = content.IndexOf(')', labelEnd + 2);
+        if (linkEnd < 0)
+        {
+            return false;
+        }
+
+        labelRange = new InlineChangedRange(labelStart + 1, labelEnd - labelStart - 1);
+        return true;
+    }
+
+    private static int FindSentenceStart(string content, int index)
+    {
+        var cursor = Math.Min(index, content.Length);
+        while (cursor > 0)
+        {
+            var previous = content[cursor - 1];
+            if (previous is '.' or '!' or '?')
+            {
+                return SkipSentenceBoundaryWhitespace(content, cursor);
+            }
+            cursor--;
+        }
+        return 0;
+    }
+
+    private static int FindPreviousSentenceStart(string content, int sentenceStart)
+    {
+        var cursor = Math.Max(0, sentenceStart - 1);
+        while (cursor > 0 && char.IsWhiteSpace(content[cursor - 1]))
+        {
+            cursor--;
+        }
+        if (cursor > 0 && content[cursor - 1] is '.' or '!' or '?')
+        {
+            cursor--;
+        }
+        while (cursor > 0)
+        {
+            var previous = content[cursor - 1];
+            if (previous is '.' or '!' or '?')
+            {
+                return SkipSentenceBoundaryWhitespace(content, cursor);
+            }
+            cursor--;
+        }
+        return 0;
+    }
+
+    private static int FindSentenceEnd(string content, int index)
+    {
+        var cursor = Math.Min(index, content.Length);
+        while (cursor < content.Length)
+        {
+            var current = content[cursor];
+            if (current is '.' or '!' or '?')
+            {
+                return cursor + 1;
+            }
+            cursor++;
+        }
+        return content.Length;
+    }
+
+    private static int SkipSentenceBoundaryWhitespace(string content, int index)
+    {
+        var cursor = index;
+        while (cursor < content.Length && char.IsWhiteSpace(content[cursor]))
+        {
+            cursor++;
+        }
+        return cursor;
     }
 
     private static string? FindComparableRenderedDiffContent(RenderedDiffLineParts currentParts, string[] comparisonLines)
     {
+        string? prefixOrSuffixMatch = null;
+        var prefixOrSuffixScore = 0;
         string? bestContent = null;
         var bestScore = 0;
         foreach (var comparisonLine in comparisonLines)
@@ -2097,6 +2228,19 @@ internal static partial class MarkdownPreviewRenderer
             if (!TryGetMarkableRenderedDiffParts(comparisonLine, out var comparisonParts)
                 || comparisonParts.Kind != currentParts.Kind)
             {
+                continue;
+            }
+
+            if (currentParts.Content.StartsWith(comparisonParts.Content, StringComparison.Ordinal)
+                || currentParts.Content.EndsWith(comparisonParts.Content, StringComparison.Ordinal)
+                || comparisonParts.Content.StartsWith(currentParts.Content, StringComparison.Ordinal)
+                || comparisonParts.Content.EndsWith(currentParts.Content, StringComparison.Ordinal))
+            {
+                if (comparisonParts.Content.Length > prefixOrSuffixScore)
+                {
+                    prefixOrSuffixScore = comparisonParts.Content.Length;
+                    prefixOrSuffixMatch = comparisonParts.Content;
+                }
                 continue;
             }
 
@@ -2109,11 +2253,18 @@ internal static partial class MarkdownPreviewRenderer
             }
         }
 
+        if (prefixOrSuffixMatch is not null)
+        {
+            return prefixOrSuffixMatch;
+        }
+
         var minimumScore = Math.Min(12, Math.Max(1, currentParts.Content.Length / 3));
         return bestScore >= minimumScore ? bestContent : null;
     }
 
     private readonly record struct RenderedDiffLineParts(RenderedDiffLineKind Kind, string Prefix, string Content);
+
+    private readonly record struct MarkdownLinkRange(int LabelStart, int LabelEnd, int LinkEnd);
 
     private enum RenderedDiffLineKind
     {
