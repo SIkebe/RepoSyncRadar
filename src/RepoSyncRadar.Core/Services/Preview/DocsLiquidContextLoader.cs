@@ -119,20 +119,21 @@ internal static partial class DocsLiquidContextLoader
         var reusables = await LoadReferencedReusablesAsync(source, [markdown], cancellationToken).ConfigureAwait(false);
         var liquidSources = new string?[] { markdown }.Concat(reusables.Values).ToArray();
         var variables = await LoadReferencedVariablesAsync(source, liquidSources, cancellationToken).ConfigureAwait(false);
+        var expandedLiquidSources = liquidSources.Concat(variables.Values).ToArray();
         var dataSequences = await LoadReferencedDataSequencesAsync(
             source,
-                liquidSources,
+                expandedLiquidSources,
                 cancellationToken)
             .ConfigureAwait(false);
         var pageTitles = await LoadReferencedPageTitlesAsync(
             source,
                 repoPath,
-                liquidSources,
+                expandedLiquidSources,
                 cancellationToken)
             .ConfigureAwait(false);
         var features = await LoadReferencedFeaturesAsync(
             source,
-            liquidSources,
+            expandedLiquidSources,
             cancellationToken)
             .ConfigureAwait(false);
         if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0 && dataSequences.Count == 0 && features.Count == 0)
