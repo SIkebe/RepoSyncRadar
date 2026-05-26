@@ -32,11 +32,11 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 internal static class VersionExpressionEvaluator
 {
+    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> EmptyFeatures =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
+
     public static bool Evaluate(string? expression, DocsVersion version)
-        => Evaluate(
-            expression,
-            version,
-            new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal));
+        => Evaluate(expression, version, EmptyFeatures);
 
     public static bool Evaluate(
         string? expression,
