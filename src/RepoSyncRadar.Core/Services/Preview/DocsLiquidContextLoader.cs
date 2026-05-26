@@ -736,6 +736,21 @@ internal static partial class DocsLiquidContextLoader
         }
     }
 
+    private static string[] EnumerateFilesOrEmpty(
+        string directory,
+        string searchPattern,
+        SearchOption searchOption)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(directory, searchPattern, searchOption).ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
     private static async Task<IReadOnlyDictionary<string, string>> LoadVariablesAsync(
         string worktreePath,
         CancellationToken cancellationToken)
@@ -747,7 +762,7 @@ internal static partial class DocsLiquidContextLoader
         }
 
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var file in Directory.EnumerateFiles(variablesDir, "*.yml", SearchOption.AllDirectories))
+        foreach (var file in EnumerateFilesOrEmpty(variablesDir, "*.yml", SearchOption.AllDirectories))
         {
             cancellationToken.ThrowIfCancellationRequested();
             string yaml;
@@ -755,7 +770,7 @@ internal static partial class DocsLiquidContextLoader
             {
                 yaml = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 continue;
             }
@@ -874,7 +889,7 @@ internal static partial class DocsLiquidContextLoader
 
         var result = new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal);
         var dirLen = dataDir.Length + 1;
-        foreach (var file in Directory.EnumerateFiles(dataDir, "*.yml", SearchOption.AllDirectories))
+        foreach (var file in EnumerateFilesOrEmpty(dataDir, "*.yml", SearchOption.AllDirectories))
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (file.Length <= dirLen)
@@ -983,7 +998,7 @@ internal static partial class DocsLiquidContextLoader
         {
             yaml = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return;
         }
@@ -1077,7 +1092,7 @@ internal static partial class DocsLiquidContextLoader
         }
 
         var result = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
-        foreach (var file in Directory.EnumerateFiles(featuresDir, "*.yml", SearchOption.TopDirectoryOnly))
+        foreach (var file in EnumerateFilesOrEmpty(featuresDir, "*.yml", SearchOption.TopDirectoryOnly))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var featureId = Path.GetFileNameWithoutExtension(file);
@@ -1116,7 +1131,7 @@ internal static partial class DocsLiquidContextLoader
         {
             yaml = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return;
         }
@@ -1217,7 +1232,7 @@ internal static partial class DocsLiquidContextLoader
 
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         var dirLen = reusablesDir.Length + 1; // +1: trailing separator
-        foreach (var file in Directory.EnumerateFiles(reusablesDir, "*.md", SearchOption.AllDirectories))
+        foreach (var file in EnumerateFilesOrEmpty(reusablesDir, "*.md", SearchOption.AllDirectories))
         {
             cancellationToken.ThrowIfCancellationRequested();
             string content;
@@ -1225,7 +1240,7 @@ internal static partial class DocsLiquidContextLoader
             {
                 content = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 continue;
             }
