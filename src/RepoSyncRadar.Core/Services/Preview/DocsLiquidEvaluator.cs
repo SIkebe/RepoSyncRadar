@@ -52,11 +52,11 @@ internal static partial class DocsLiquidEvaluator
     private static partial Regex AssignTagRegex();
 
     // {% data variables.X.Y %} / {% data reusables.X.Y %} / {% data reusables.X.Y+arg %}
-    [GeneratedRegex(@"\{%-?\s*data\s+(?<expr>[A-Za-z0-9_.\-/+\[\]]+)\s*-?%\}")]
+    [GeneratedRegex(@"\{%-?\s*data\s+(?<expr>[A-Za-z0-9_.\-/+_\[\]]+)\s*-?%\}")]
     private static partial Regex DataTagRegex();
 
     // {% indented_data_reference reusables.X spaces=N %}
-    [GeneratedRegex(@"\{%-?\s*indented_data_reference\s+(?<expr>[A-Za-z0-9_.\-/+]+)(?:\s+spaces=(?<spaces>\d+))?\s*-?%\}")]
+    [GeneratedRegex(@"\{%-?\s*indented_data_reference\s+(?<expr>[A-Za-z0-9_.\-/+_]+)(?:\s+spaces=(?<spaces>\d+))?\s*-?%\}")]
     private static partial Regex IndentedDataRegex();
 
     // {% for entry in tables.copilot.models-and-pricing %}...{% endfor %}

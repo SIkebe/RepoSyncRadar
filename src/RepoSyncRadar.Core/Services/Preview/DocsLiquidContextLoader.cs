@@ -33,19 +33,19 @@ internal static partial class DocsLiquidContextLoader
     private const string _reusablesSubdir = "reusables";
     private const string _dataDir = "data";
 
-    [GeneratedRegex(@"\{%-?\s*(?:data|indented_data_reference)\s+reusables\.(?<key>[A-Za-z0-9_.\-/+]+)(?:\s+[^%]*)?-?%\}", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\{%-?\s*(?:data|indented_data_reference)\s+reusables\.(?<key>[A-Za-z0-9_.\-/+_]+)(?:\s+[^%]*)?-?%\}", RegexOptions.IgnoreCase)]
     private static partial Regex ReusableReferenceRegex();
 
     [GeneratedRegex(@"\[AUTOTITLE\]\((?<href>[^)]+)\)", RegexOptions.IgnoreCase)]
     private static partial Regex AutotitleLinkRegex();
 
-    [GeneratedRegex(@"\{%-?\s*for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\s+(?<expr>[A-Za-z0-9_.\-/]+)\s*-?%\}", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\{%-?\s*for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\s+(?<expr>[A-Za-z0-9_.\-/_]+)\s*-?%\}", RegexOptions.IgnoreCase)]
     private static partial Regex DataSequenceReferenceRegex();
 
-    [GeneratedRegex(@"\{%-?\s*data\s+variables\.(?<key>[A-Za-z0-9_.\-/+\[\]]+)\s*-?%\}", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\{%-?\s*data\s+variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+)\s*-?%\}", RegexOptions.IgnoreCase)]
     private static partial Regex DataVariableReferenceRegex();
 
-    [GeneratedRegex(@"\{\{-?\s*(?:site\.data\.)?variables\.(?<key>[A-Za-z0-9_.\-/\[\]]+)\s*-?\}\}", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\{\{-?\s*(?:site\.data\.)?variables\.(?<key>[A-Za-z0-9_.\-/_\[\]]+)\s*-?\}\}", RegexOptions.IgnoreCase)]
     private static partial Regex VariableReferenceRegex();
 
     public static async Task<DocsLiquidContext> LoadAsync(
