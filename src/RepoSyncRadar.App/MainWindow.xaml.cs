@@ -143,9 +143,14 @@ public partial class MainWindow : Window
     private PreviewComparisonRequest? _activePreviewDiffRequest;
     private Uri? _activeSinglePageRequest;
     private Uri? _pendingSinglePageAfterBlank;
+    private ulong? _activeSinglePageNavigationId;
+    private ulong? _pendingSinglePageBlankNavigationId;
+    private int _singlePageTransientRetryCount;
     private int _previewDiffGeneration;
     private bool _beforePreviewDiffReady;
     private bool _afterPreviewDiffReady;
+    private ulong? _beforePreviewDiffNavigationId;
+    private ulong? _afterPreviewDiffNavigationId;
     private Uri? _openOfficialDocsUri;
     private GridLength? _expandedWorkbenchColumnWidth = _defaultWorkbenchColumnWidth;
     private bool _isPreviewFocusMode;
@@ -850,6 +855,9 @@ public partial class MainWindow : Window
     {
         _activeSinglePageRequest = url;
         _pendingSinglePageAfterBlank = null;
+        _activeSinglePageNavigationId = null;
+        _pendingSinglePageBlankNavigationId = null;
+        _singlePageTransientRetryCount = 0;
         ShowSinglePageMode(BuildSinglePageHeaderLabel(url));
         ShowPreviewPaneStatus(
             isBeforePane: true,
@@ -980,6 +988,8 @@ public partial class MainWindow : Window
         _previewDiffGeneration++;
         _beforePreviewDiffReady = false;
         _afterPreviewDiffReady = false;
+        _beforePreviewDiffNavigationId = null;
+        _afterPreviewDiffNavigationId = null;
     }
 
     private void StopPreviewDiffTracking()
@@ -988,17 +998,42 @@ public partial class MainWindow : Window
         _previewDiffGeneration++;
         _beforePreviewDiffReady = false;
         _afterPreviewDiffReady = false;
+        _beforePreviewDiffNavigationId = null;
+        _afterPreviewDiffNavigationId = null;
         HidePreviewPaneStatus(isBeforePane: true);
         HidePreviewPaneStatus(isBeforePane: false);
     }
 
     private void OnDocsViewNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
-        => OnPreviewDiffPaneNavigationStarting(isBeforePane: true, e.Uri);
+    {
+        TrackSinglePageNavigationStarting(e.Uri, e.NavigationId);
+        OnPreviewDiffPaneNavigationStarting(isBeforePane: true, e.Uri, e.NavigationId);
+    }
 
     private void OnPreviewViewNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
-        => OnPreviewDiffPaneNavigationStarting(isBeforePane: false, e.Uri);
+        => OnPreviewDiffPaneNavigationStarting(isBeforePane: false, e.Uri, e.NavigationId);
 
-    private void OnPreviewDiffPaneNavigationStarting(bool isBeforePane, string navigationUri)
+    private void TrackSinglePageNavigationStarting(string navigationUri, ulong navigationId)
+    {
+        if (_activePreviewDiffRequest is not null
+            || !Uri.TryCreate(navigationUri, UriKind.Absolute, out var actualUrl))
+        {
+            return;
+        }
+
+        if (_pendingSinglePageAfterBlank is not null && IsSameNavigationTarget(actualUrl, _blankNavigationUri))
+        {
+            _pendingSinglePageBlankNavigationId = navigationId;
+            return;
+        }
+
+        if (_activeSinglePageRequest is { } request && IsSameNavigationTarget(actualUrl, request))
+        {
+            _activeSinglePageNavigationId = navigationId;
+        }
+    }
+
+    private void OnPreviewDiffPaneNavigationStarting(bool isBeforePane, string navigationUri, ulong navigationId)
     {
         if (_activePreviewDiffRequest is not { } request
             || !Uri.TryCreate(navigationUri, UriKind.Absolute, out var actualUrl))
@@ -1011,6 +1046,8 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        SetPreviewDiffNavigationId(isBeforePane, navigationId);
 
         ShowPreviewPaneStatus(
             isBeforePane,
@@ -1060,7 +1097,13 @@ public partial class MainWindow : Window
         if (_pendingSinglePageAfterBlank is { } pending
             && IsSameNavigationTarget(view.Source, _blankNavigationUri))
         {
+            if (!IsExpectedNavigationCompletion(e.NavigationId, _pendingSinglePageBlankNavigationId))
+            {
+                return true;
+            }
+
             _pendingSinglePageAfterBlank = null;
+            _pendingSinglePageBlankNavigationId = null;
             NavigatePreviewPane(DocsView, pending);
             return true;
         }
@@ -1071,8 +1114,27 @@ public partial class MainWindow : Window
             return false;
         }
 
+        if (!IsExpectedNavigationCompletion(e.NavigationId, _activeSinglePageNavigationId))
+        {
+            return true;
+        }
+
         if (!e.IsSuccess)
         {
+            if (ShouldRetrySinglePageNavigation(request, e.WebErrorStatus))
+            {
+                _singlePageTransientRetryCount++;
+                _pendingSinglePageAfterBlank = request;
+                _activeSinglePageNavigationId = null;
+                _pendingSinglePageBlankNavigationId = null;
+                ShowPreviewPaneStatus(
+                    isBeforePane: true,
+                    text: "ページを再読み込み中…",
+                    detail: $"WebView2: {e.WebErrorStatus}。GitHub ページをもう一度読み込みます。");
+                NavigatePreviewPane(DocsView, _blankNavigationUri);
+                return true;
+            }
+
             ShowPreviewPaneStatus(
                 isBeforePane: true,
                 text: "ページの読み込みに失敗しました",
@@ -1096,6 +1158,11 @@ public partial class MainWindow : Window
 
         var expectedUrl = isBeforePane ? request.BeforeUrl : request.AfterUrl;
         if (!IsSameNavigationTarget(view.Source, expectedUrl))
+        {
+            return;
+        }
+
+        if (!IsExpectedNavigationCompletion(e.NavigationId, GetPreviewDiffNavigationId(isBeforePane)))
         {
             return;
         }
@@ -1156,6 +1223,32 @@ public partial class MainWindow : Window
 
     private static bool IsMarkdownComparisonRequest(PreviewComparisonRequest request)
         => IsMarkdownPreviewUri(request.BeforeUrl) || IsMarkdownPreviewUri(request.AfterUrl);
+
+    private void SetPreviewDiffNavigationId(bool isBeforePane, ulong navigationId)
+    {
+        if (isBeforePane)
+        {
+            _beforePreviewDiffNavigationId = navigationId;
+            return;
+        }
+
+        _afterPreviewDiffNavigationId = navigationId;
+    }
+
+    private ulong? GetPreviewDiffNavigationId(bool isBeforePane)
+        => isBeforePane ? _beforePreviewDiffNavigationId : _afterPreviewDiffNavigationId;
+
+    internal static bool IsExpectedNavigationCompletion(ulong navigationId, ulong? expectedNavigationId)
+        => expectedNavigationId is not null && navigationId == expectedNavigationId.Value;
+
+    private bool ShouldRetrySinglePageNavigation(Uri request, CoreWebView2WebErrorStatus status)
+        => _singlePageTransientRetryCount == 0
+            && string.Equals(request.Host, "github.com", StringComparison.OrdinalIgnoreCase)
+            && IsTransientSinglePageNavigationError(status);
+
+    internal static bool IsTransientSinglePageNavigationError(CoreWebView2WebErrorStatus status)
+        => status is CoreWebView2WebErrorStatus.ConnectionAborted
+            or CoreWebView2WebErrorStatus.OperationCanceled;
 
     internal static bool IsMarkdownPreviewUri(Uri uri)
         => uri.AbsolutePath.StartsWith("/markdown/", StringComparison.Ordinal);
