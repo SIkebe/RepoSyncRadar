@@ -62,7 +62,7 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
-    public void IsExpectedNavigationCompletion_Ignores_Stale_WebView2_Completion()
+    public void IsExpectedNavigationCompletion_Ignores_Stale_WebView2_Events()
     {
         Assert.False(MainWindow.IsExpectedNavigationCompletion(42, expectedNavigationId: null));
         Assert.True(MainWindow.IsExpectedNavigationCompletion(42, expectedNavigationId: 42));

@@ -1082,6 +1082,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!IsExpectedNavigationCompletion(e.NavigationId, _activeSinglePageNavigationId))
+        {
+            return;
+        }
+
         HidePreviewPaneStatus(isBeforePane: true);
     }
 
