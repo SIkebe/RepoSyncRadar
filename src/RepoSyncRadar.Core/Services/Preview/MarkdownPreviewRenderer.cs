@@ -206,7 +206,7 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("pre{background:var(--rsr-pre-bg);border-radius:6px;overflow:auto;padding:16px;}pre code{background:transparent;padding:0;}");
         html.AppendLine("img,video{max-width:100%;height:auto;}picture{display:block;margin:0 0 1rem;}picture img{margin-bottom:0;}");
         html.AppendLine("blockquote{border-left:4px solid var(--rsr-blockquote-border);color:var(--rsr-muted);padding-left:1rem;}table{border-collapse:collapse;display:block;overflow:auto;}td,th{border:1px solid var(--rsr-border);padding:6px 13px;}th{background:var(--rsr-th-bg);}");
-        html.AppendLine(".rsr-rendered-diff-added{background:#2da44e24;border-radius:3px;box-shadow:0 0 0 2px #2da44e24;}.rsr-rendered-diff-removed{background:#cf222e24;border-radius:3px;box-shadow:0 0 0 2px #cf222e24;text-decoration-line:line-through;text-decoration-color:rgba(207,34,46,.85);text-decoration-thickness:1.2px;text-decoration-skip-ink:none;}");
+        html.AppendLine(".rsr-rendered-diff-added{background:#2da44e24;border-radius:3px;box-shadow:0 0 0 2px #2da44e24;}.rsr-rendered-diff-removed{background:#cf222e24;border-radius:3px;box-shadow:0 0 0 2px #cf222e24;text-decoration-line:line-through;text-decoration-color:rgba(207,34,46,.85);text-decoration-thickness:1.2px;text-decoration-skip-ink:none;}.rsr-rendered-diff-gap{display:inline-block;width:.55em;height:1.05em;margin:0 .12em;vertical-align:-.15em;text-decoration:none;}");
         html.AppendLine("td .rsr-rendered-diff-added,th .rsr-rendered-diff-added,td .rsr-rendered-diff-removed,th .rsr-rendered-diff-removed{display:block;margin:-6px -13px;padding:6px 13px;}");
         html.AppendLine(".rsr-diff-scrollbar{bottom:0;pointer-events:none;position:fixed;right:24px;top:0;width:10px;z-index:2147483647;}.rsr-diff-scrollbar-marker{border-radius:999px;box-shadow:0 0 0 1px rgba(255,255,255,.7),0 1px 3px rgba(0,0,0,.25);min-height:4px;position:absolute;right:0;width:10px;}.rsr-diff-scrollbar-marker--added{background:#2da44e;}.rsr-diff-scrollbar-marker--removed{background:#cf222e;}");
         html.AppendLine(".octicon{display:inline-block;vertical-align:text-bottom;fill:currentColor;overflow:visible;}");
@@ -2063,7 +2063,9 @@ internal static partial class MarkdownPreviewRenderer
         var changedRange = FindInlineChangedRange(content, comparisonContent);
         if (changedRange.Length == 0)
         {
-            return content;
+            return TryMarkRenderedDiffGap(content, comparisonContent, markerClass, changedRange.Start, out var marked)
+                ? marked
+                : content;
         }
         changedRange = ExpandRenderedDiffRange(content, changedRange);
 
@@ -2072,6 +2074,29 @@ internal static partial class MarkdownPreviewRenderer
             + content.Substring(changedRange.Start, changedRange.Length)
             + "</span>"
             + content[(changedRange.Start + changedRange.Length)..];
+    }
+
+    private static bool TryMarkRenderedDiffGap(
+        string content,
+        string comparisonContent,
+        string markerClass,
+        int insertionIndex,
+        out string marked)
+    {
+        marked = content;
+        if (content.Length >= comparisonContent.Length
+            || insertionIndex < 0
+            || insertionIndex > content.Length)
+        {
+            return false;
+        }
+
+        var gapClass = string.Equals(markerClass, "rsr-rendered-diff-added", StringComparison.Ordinal)
+            ? "rsr-rendered-diff-removed"
+            : "rsr-rendered-diff-added";
+        var marker = "<span class=\"" + gapClass + " rsr-rendered-diff-gap\" aria-label=\"rendered diff gap\"></span>";
+        marked = content[..insertionIndex] + marker + content[insertionIndex..];
+        return true;
     }
 
     private static InlineChangedRange ExpandRenderedDiffRange(string content, InlineChangedRange changedRange)
