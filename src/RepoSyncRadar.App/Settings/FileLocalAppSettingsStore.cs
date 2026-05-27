@@ -191,6 +191,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CloneUrl = GetString(configuration, "DocsRepository:CloneUrl", defaults.DocsRepository.CloneUrl),
                 WorktreeRoot = GetString(configuration, "DocsRepository:WorktreeRoot", defaults.DocsRepository.WorktreeRoot),
                 MaxWorktrees = GetInt(configuration, "DocsRepository:MaxWorktrees", defaults.DocsRepository.MaxWorktrees),
+                PrewarmOnStartup = GetBool(configuration, "DocsRepository:PrewarmOnStartup", defaults.DocsRepository.PrewarmOnStartup),
                 PreviewCommand = GetString(configuration, "DocsRepository:PreviewCommand", defaults.DocsRepository.PreviewCommand),
                 PreviewArguments = GetString(configuration, "DocsRepository:PreviewArguments", defaults.DocsRepository.PreviewArguments),
                 PreviewInstallArguments = GetString(configuration, "DocsRepository:PreviewInstallArguments", defaults.DocsRepository.PreviewInstallArguments),
@@ -257,6 +258,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CloneUrl = GetString(root, "DocsRepository", "CloneUrl", fallback.DocsRepository.CloneUrl),
                 WorktreeRoot = GetString(root, "DocsRepository", "WorktreeRoot", fallback.DocsRepository.WorktreeRoot),
                 MaxWorktrees = GetInt(root, "DocsRepository", "MaxWorktrees", fallback.DocsRepository.MaxWorktrees),
+                PrewarmOnStartup = GetBool(root, "DocsRepository", "PrewarmOnStartup", fallback.DocsRepository.PrewarmOnStartup),
                 PreviewCommand = GetString(root, "DocsRepository", "PreviewCommand", fallback.DocsRepository.PreviewCommand),
                 PreviewArguments = GetString(root, "DocsRepository", "PreviewArguments", fallback.DocsRepository.PreviewArguments),
                 PreviewInstallArguments = GetString(root, "DocsRepository", "PreviewInstallArguments", fallback.DocsRepository.PreviewInstallArguments),
@@ -324,6 +326,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         docsRepository["CloneUrl"] = settings.DocsRepository.CloneUrl;
         docsRepository["WorktreeRoot"] = settings.DocsRepository.WorktreeRoot;
         docsRepository["MaxWorktrees"] = settings.DocsRepository.MaxWorktrees;
+        docsRepository["PrewarmOnStartup"] = settings.DocsRepository.PrewarmOnStartup;
         docsRepository["PreviewCommand"] = settings.DocsRepository.PreviewCommand;
         docsRepository["PreviewArguments"] = settings.DocsRepository.PreviewArguments;
         docsRepository["PreviewInstallArguments"] = settings.DocsRepository.PreviewInstallArguments;
@@ -391,6 +394,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CloneUrl = TrimOrEmpty(settings.DocsRepository.CloneUrl),
                 WorktreeRoot = TrimOrEmpty(settings.DocsRepository.WorktreeRoot),
                 MaxWorktrees = settings.DocsRepository.MaxWorktrees,
+                PrewarmOnStartup = settings.DocsRepository.PrewarmOnStartup,
                 PreviewCommand = TrimOrEmpty(settings.DocsRepository.PreviewCommand),
                 PreviewArguments = TrimOrEmpty(settings.DocsRepository.PreviewArguments),
                 PreviewInstallArguments = TrimOrEmpty(settings.DocsRepository.PreviewInstallArguments),

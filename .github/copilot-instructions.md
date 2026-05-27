@@ -85,6 +85,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 - Official `docs.github.com` may already match a Repo sync PR if deployed. Visual comparison should use local preview of parent SHA vs PR HEAD, not production pages.
 - Preview worktrees and npm/Next dev servers are process-sensitive. Use existing `PreviewServerHost`, `DocsWorktreeManager`, `NextDevServerProcessCleaner`, and `PreviewPortAllocator` patterns instead of ad hoc process cleanup.
+- Startup docs preview prewarm is opt-in via `DocsRepository:PrewarmOnStartup`; the default must not clone/fetch `github/docs` until a preview action or predictive prewarm needs it.
 - github/docs preview needs `REQUEST_TIMEOUT=600000` because Windows ARM64 first-page compilation can exceed the default 15 seconds.
 
 ### WebView2 Behavior

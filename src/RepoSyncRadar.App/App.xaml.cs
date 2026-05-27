@@ -84,12 +84,10 @@ public partial class App : Application
             ShowStartupWarning,
             CancellationToken.None);
 
-        // Eager docs preview prewarm. Doing `git clone --bare` (1-2 minutes for
-        // github/docs) ahead of time means the user's first preview click
-        // skips the slowest non-npm step. Best-effort: if the network is down
-        // or the repo is misconfigured, the regular preview path will surface
-        // the error when the user clicks.
-        _ = PrewarmPreviewAsync(
+        // Optional docs preview prewarm. Keep this opt-in because the first bare
+        // clone of github/docs is a large network and disk operation.
+        _ = PrewarmPreviewOnStartupAsync(
+            Services.GetRequiredService<IOptions<DocsRepositoryOptions>>().Value,
             Services.GetRequiredService<IPreviewCoordinator>(),
             Services.GetRequiredService<ILogger<App>>());
 
@@ -157,6 +155,20 @@ public partial class App : Application
         {
             LogPreviewPrewarmFailed(logger, ex);
         }
+    }
+
+    internal static Task PrewarmPreviewOnStartupAsync(
+        DocsRepositoryOptions options,
+        IPreviewCoordinator coordinator,
+        ILogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(coordinator);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        return options.PrewarmOnStartup
+            ? PrewarmPreviewAsync(coordinator, logger)
+            : Task.CompletedTask;
     }
 
     internal static async Task CheckForUpdatesOnStartupAsync(

@@ -168,6 +168,10 @@
                     <input type="number" min="1" max="50" data-testid="settings-docsrepo-max-worktrees" value="@settings.DocsRepository.MaxWorktrees" disabled="@_saving" @oninput="e => settings.DocsRepository.MaxWorktrees = IntValue(e)" />
                 </label>
                 <label class="local-settings-field">
+                    <span>PrewarmOnStartup</span>
+                    <input type="checkbox" data-testid="settings-docsrepo-prewarm-on-startup" checked="@settings.DocsRepository.PrewarmOnStartup" disabled="@_saving" @onchange="e => settings.DocsRepository.PrewarmOnStartup = BoolValue(e)" />
+                </label>
+                <label class="local-settings-field">
                     <span>PreviewCommand</span>
                     <input data-testid="settings-docsrepo-preview-command" value="@settings.DocsRepository.PreviewCommand" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewCommand = StringValue(e)" />
                 </label>

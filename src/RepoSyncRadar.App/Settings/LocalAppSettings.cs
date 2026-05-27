@@ -159,6 +159,8 @@ public sealed class DocsRepositoryLocalAppSettings
 
     public int MaxWorktrees { get; set; } = 5;
 
+    public bool PrewarmOnStartup { get; set; }
+
     public string PreviewCommand { get; set; } = "npm";
 
     public string PreviewArguments { get; set; } = "run dev";
@@ -182,6 +184,7 @@ public sealed class DocsRepositoryLocalAppSettings
             CloneUrl = CloneUrl,
             WorktreeRoot = WorktreeRoot,
             MaxWorktrees = MaxWorktrees,
+            PrewarmOnStartup = PrewarmOnStartup,
             PreviewCommand = PreviewCommand,
             PreviewArguments = PreviewArguments,
             PreviewInstallArguments = PreviewInstallArguments,

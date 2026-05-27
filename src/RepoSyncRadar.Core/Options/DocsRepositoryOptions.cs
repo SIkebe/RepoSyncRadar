@@ -33,6 +33,9 @@ public sealed class DocsRepositoryOptions
     [Range(1, 50)]
     public int MaxWorktrees { get; set; } = 5;
 
+    /// <summary>Whether app startup should eagerly create/fetch the bare clone before the first preview action.</summary>
+    public bool PrewarmOnStartup { get; set; }
+
     /// <summary>Command that launches the preview server (e.g. <c>npm</c>).</summary>
     public string PreviewCommand { get; set; } = "npm";
 

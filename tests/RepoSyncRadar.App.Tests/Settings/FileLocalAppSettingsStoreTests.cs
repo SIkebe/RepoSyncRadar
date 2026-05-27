@@ -44,6 +44,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
                 ["GitHub:PullRequestTitleFilter"] = "Repo sync",
                 ["Copilot:DefaultModel"] = "gpt-config",
                 ["Copilot:OAuthScopes:0"] = "public_repo",
+                ["DocsRepository:PrewarmOnStartup"] = "true",
                 ["DocsRepository:PreviewEnvironment:PORT"] = "{port}",
             })
             .Build();
@@ -58,6 +59,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal(["docs.github.com", "api.github.com"], settings.Copilot.AllowedUrlHosts);
         Assert.Empty(settings.Copilot.OAuthScopes);
         Assert.Equal(["docs.github.com", "github.com"], settings.WebView.AllowedUrlHosts);
+        Assert.True(settings.DocsRepository.PrewarmOnStartup);
         Assert.Equal("{port}", settings.DocsRepository.PreviewEnvironment["PORT"]);
     }
 
@@ -92,6 +94,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.Copilot.AllowedUrlHosts = ["https://docs.github.com", "api.github.com"];
         settings.WebView.AllowedUrlHosts = ["https://github.com", "github.githubassets.com"];
         settings.DocsRepository.BareCloneDir = "C:\\github\\.cache\\docs.git";
+        settings.DocsRepository.PrewarmOnStartup = true;
         settings.DocsRepository.PreviewEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PORT"] = "{port}",
@@ -125,6 +128,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.False(root.GetProperty("Copilot").GetProperty("EnableSessionTelemetry").GetBoolean());
         Assert.Equal("docs.github.com", root.GetProperty("Copilot").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("github.com", root.GetProperty("WebView").GetProperty("AllowedUrlHosts")[0].GetString());
+        Assert.True(root.GetProperty("DocsRepository").GetProperty("PrewarmOnStartup").GetBoolean());
         Assert.Equal("600000", root.GetProperty("DocsRepository").GetProperty("PreviewEnvironment").GetProperty("REQUEST_TIMEOUT").GetString());
         Assert.True(root.GetProperty("Updates").GetProperty("Enabled").GetBoolean());
         Assert.Equal("https://github.com/example/RepoSyncRadar", root.GetProperty("Updates").GetProperty("FeedUrl").GetString());
