@@ -42,7 +42,7 @@ az deployment group create `
   --parameters infra/copilot-grafana/main.bicepparam namePrefix=$namePrefix location=$location
 ```
 
-The deployment output includes the Grafana endpoint and the Application Insights connection string. Treat the connection string as a secret because anyone with it can send telemetry into your Application Insights resource.
+The deployment output includes the Grafana endpoint. The Application Insights connection string is marked as secure in the Bicep template, so retrieve it from the Application Insights resource in the collector setup step below. Treat the connection string as a secret because anyone with it can send telemetry into your Application Insights resource.
 
 If you cannot open or administer the Grafana instance after deployment, assign yourself the Azure `Grafana Admin` role on the Managed Grafana resource. Azure Managed Grafana uses Azure RBAC for user access.
 
@@ -59,7 +59,7 @@ az role assignment create --assignee $assignee --role "Grafana Admin" --scope $g
 
 ## Run the OpenTelemetry Collector locally
 
-Copy `otel-collector-config.docker.sample.yaml` to a local ignored file such as `otel-collector-config.yaml`, then replace the connection string with the deployment output. Use `otel-collector-config.sample.yaml` instead only when running the collector directly on your workstation; that file binds receivers to `127.0.0.1` by default.
+Copy `otel-collector-config.docker.sample.yaml` to a local ignored file such as `otel-collector-config.yaml`, then replace the connection string with the value retrieved from the Application Insights resource. Use `otel-collector-config.sample.yaml` instead only when running the collector directly on your workstation; that file binds receivers to `127.0.0.1` by default.
 
 The local Docker example pins the OpenTelemetry Collector contrib image to `0.153.0`, which is the version validated with this setup. Update the pinned tag deliberately after testing a newer collector version.
 
@@ -75,14 +75,16 @@ New-Item -ItemType Directory -Force artifacts/copilot-grafana | Out-Null
 $configPath = 'artifacts/copilot-grafana/otel-collector-config.yaml'
 $placeholderConnectionString = 'InstrumentationKey=<YOUR-KEY>;IngestionEndpoint=https://<region>.in.applicationinsights.azure.com/;LiveEndpoint=https://<region>.livediagnostics.monitor.azure.com/;ApplicationId=<YOUR-APP-ID>'
 Copy-Item infra/copilot-grafana/otel-collector-config.docker.sample.yaml $configPath
-(Get-Content $configPath -Raw).Replace($placeholderConnectionString, $connectionString) `
-  | Set-Content $configPath -Encoding utf8NoBOM
+$configContent = (Get-Content $configPath -Raw).Replace($placeholderConnectionString, $connectionString)
+$utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+[System.IO.File]::WriteAllText((Resolve-Path $configPath).Path, $configContent, $utf8NoBom)
+$collectorConfigMount = "$((Resolve-Path $configPath).Path):/etc/otelcol-contrib/config.yaml"
 
 docker info --format "Docker Server {{.ServerVersion}}"
 docker run --rm -d --name otel-collector `
   -p 127.0.0.1:4318:4318 `
   -p 127.0.0.1:4317:4317 `
-  -v ${PWD}/artifacts/copilot-grafana/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml `
+  -v "${collectorConfigMount}" `
   otel/opentelemetry-collector-contrib:0.153.0
 
 docker ps --filter name=otel-collector --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
