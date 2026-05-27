@@ -118,6 +118,14 @@
                     <input type="checkbox" data-testid="settings-copilot-capture-content" checked="@settings.Copilot.CaptureContent" disabled="@_saving" @onchange="e => settings.Copilot.CaptureContent = BoolValue(e)" />
                     <span>CaptureContent</span>
                 </label>
+                <label class="local-settings-check">
+                    <input type="checkbox" data-testid="settings-copilot-enable-remote-sessions" checked="@settings.Copilot.EnableRemoteSessions" disabled="@_saving" @onchange="e => settings.Copilot.EnableRemoteSessions = BoolValue(e)" />
+                    <span>EnableRemoteSessions</span>
+                </label>
+                <label class="local-settings-check">
+                    <input type="checkbox" data-testid="settings-copilot-enable-session-telemetry" checked="@settings.Copilot.EnableSessionTelemetry" disabled="@_saving" @onchange="e => settings.Copilot.EnableSessionTelemetry = BoolValue(e)" />
+                    <span>EnableSessionTelemetry</span>
+                </label>
                 <label class="local-settings-field wide">
                     <span>OAuthClientId</span>
                     <input data-testid="settings-copilot-oauth-client-id" value="@settings.Copilot.OAuthClientId" disabled="@_saving" @oninput="e => settings.Copilot.OAuthClientId = NullableStringValue(e)" />
@@ -160,6 +168,10 @@
                     <input type="number" min="1" max="50" data-testid="settings-docsrepo-max-worktrees" value="@settings.DocsRepository.MaxWorktrees" disabled="@_saving" @oninput="e => settings.DocsRepository.MaxWorktrees = IntValue(e)" />
                 </label>
                 <label class="local-settings-field">
+                    <span>PrewarmOnStartup</span>
+                    <input type="checkbox" data-testid="settings-docsrepo-prewarm-on-startup" checked="@settings.DocsRepository.PrewarmOnStartup" disabled="@_saving" @onchange="e => settings.DocsRepository.PrewarmOnStartup = BoolValue(e)" />
+                </label>
+                <label class="local-settings-field">
                     <span>PreviewCommand</span>
                     <input data-testid="settings-docsrepo-preview-command" value="@settings.DocsRepository.PreviewCommand" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewCommand = StringValue(e)" />
                 </label>
@@ -194,6 +206,30 @@
                 <label class="local-settings-field">
                     <span>Microsoft</span>
                     <input data-testid="settings-logging-microsoft" value="@settings.Logging.MicrosoftLogLevel" disabled="@_saving" @oninput="e => settings.Logging.MicrosoftLogLevel = StringValue(e)" />
+                </label>
+            </fieldset>
+
+            <fieldset class="local-settings-group" data-testid="settings-local-updates">
+                <legend>Updates</legend>
+                <label class="local-settings-check">
+                    <input type="checkbox" data-testid="settings-updates-enabled" checked="@settings.Updates.Enabled" disabled="@_saving" @onchange="e => settings.Updates.Enabled = BoolValue(e)" />
+                    <span>Enabled</span>
+                </label>
+                <label class="local-settings-check">
+                    <input type="checkbox" data-testid="settings-updates-check-on-startup" checked="@settings.Updates.CheckOnStartup" disabled="@_saving" @onchange="e => settings.Updates.CheckOnStartup = BoolValue(e)" />
+                    <span>CheckOnStartup</span>
+                </label>
+                <label class="local-settings-field wide">
+                    <span>FeedUrl</span>
+                    <input data-testid="settings-updates-feed-url" placeholder="https://github.com/owner/repo" value="@settings.Updates.FeedUrl" disabled="@_saving" @oninput="e => settings.Updates.FeedUrl = StringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>Channel</span>
+                    <input data-testid="settings-updates-channel" placeholder="win-x64-stable" value="@settings.Updates.Channel" disabled="@_saving" @oninput="e => settings.Updates.Channel = NullableStringValue(e)" />
+                </label>
+                <label class="local-settings-field">
+                    <span>CheckTimeoutSeconds</span>
+                    <input type="number" min="5" max="1800" data-testid="settings-updates-timeout" value="@settings.Updates.CheckTimeoutSeconds" disabled="@_saving" @oninput="e => settings.Updates.CheckTimeoutSeconds = IntValue(e)" />
                 </label>
             </fieldset>
         </div>

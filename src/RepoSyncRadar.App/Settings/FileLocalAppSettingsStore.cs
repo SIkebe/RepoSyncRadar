@@ -175,6 +175,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CopilotHome = GetNullableString(configuration, "Copilot:CopilotHome"),
                 TelemetryFilePath = GetNullableString(configuration, "Copilot:TelemetryFilePath"),
                 CaptureContent = GetBool(configuration, "Copilot:CaptureContent", defaults.Copilot.CaptureContent),
+                EnableRemoteSessions = GetBool(configuration, "Copilot:EnableRemoteSessions", defaults.Copilot.EnableRemoteSessions),
+                EnableSessionTelemetry = GetBool(configuration, "Copilot:EnableSessionTelemetry", defaults.Copilot.EnableSessionTelemetry),
                 AllowedUrlHosts = GetStringList(configuration, "Copilot:AllowedUrlHosts", defaults.Copilot.AllowedUrlHosts),
                 OAuthClientId = GetNullableString(configuration, "Copilot:OAuthClientId"),
                 OAuthScopes = GetStringList(configuration, "Copilot:OAuthScopes", defaults.Copilot.OAuthScopes),
@@ -189,6 +191,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CloneUrl = GetString(configuration, "DocsRepository:CloneUrl", defaults.DocsRepository.CloneUrl),
                 WorktreeRoot = GetString(configuration, "DocsRepository:WorktreeRoot", defaults.DocsRepository.WorktreeRoot),
                 MaxWorktrees = GetInt(configuration, "DocsRepository:MaxWorktrees", defaults.DocsRepository.MaxWorktrees),
+                PrewarmOnStartup = GetBool(configuration, "DocsRepository:PrewarmOnStartup", defaults.DocsRepository.PrewarmOnStartup),
                 PreviewCommand = GetString(configuration, "DocsRepository:PreviewCommand", defaults.DocsRepository.PreviewCommand),
                 PreviewArguments = GetString(configuration, "DocsRepository:PreviewArguments", defaults.DocsRepository.PreviewArguments),
                 PreviewInstallArguments = GetString(configuration, "DocsRepository:PreviewInstallArguments", defaults.DocsRepository.PreviewInstallArguments),
@@ -200,6 +203,14 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultLogLevel = GetString(configuration, "Logging:LogLevel:Default", defaults.Logging.DefaultLogLevel),
                 MicrosoftLogLevel = GetString(configuration, "Logging:LogLevel:Microsoft", defaults.Logging.MicrosoftLogLevel),
+            },
+            Updates = new UpdatesLocalAppSettings
+            {
+                Enabled = GetBool(configuration, "Updates:Enabled", defaults.Updates.Enabled),
+                CheckOnStartup = GetBool(configuration, "Updates:CheckOnStartup", defaults.Updates.CheckOnStartup),
+                FeedUrl = GetString(configuration, "Updates:FeedUrl", defaults.Updates.FeedUrl),
+                Channel = GetNullableString(configuration, "Updates:Channel"),
+                CheckTimeoutSeconds = GetInt(configuration, "Updates:CheckTimeoutSeconds", defaults.Updates.CheckTimeoutSeconds),
             },
         };
     }
@@ -231,6 +242,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CopilotHome = GetNullableString(root, "Copilot", "CopilotHome", fallback.Copilot.CopilotHome),
                 TelemetryFilePath = GetNullableString(root, "Copilot", "TelemetryFilePath", fallback.Copilot.TelemetryFilePath),
                 CaptureContent = GetBool(root, "Copilot", "CaptureContent", fallback.Copilot.CaptureContent),
+                EnableRemoteSessions = GetBool(root, "Copilot", "EnableRemoteSessions", fallback.Copilot.EnableRemoteSessions),
+                EnableSessionTelemetry = GetBool(root, "Copilot", "EnableSessionTelemetry", fallback.Copilot.EnableSessionTelemetry),
                 AllowedUrlHosts = GetStringList(root, "Copilot", "AllowedUrlHosts", fallback.Copilot.AllowedUrlHosts),
                 OAuthClientId = GetNullableString(root, "Copilot", "OAuthClientId", fallback.Copilot.OAuthClientId),
                 OAuthScopes = GetStringList(root, "Copilot", "OAuthScopes", fallback.Copilot.OAuthScopes),
@@ -245,6 +258,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CloneUrl = GetString(root, "DocsRepository", "CloneUrl", fallback.DocsRepository.CloneUrl),
                 WorktreeRoot = GetString(root, "DocsRepository", "WorktreeRoot", fallback.DocsRepository.WorktreeRoot),
                 MaxWorktrees = GetInt(root, "DocsRepository", "MaxWorktrees", fallback.DocsRepository.MaxWorktrees),
+                PrewarmOnStartup = GetBool(root, "DocsRepository", "PrewarmOnStartup", fallback.DocsRepository.PrewarmOnStartup),
                 PreviewCommand = GetString(root, "DocsRepository", "PreviewCommand", fallback.DocsRepository.PreviewCommand),
                 PreviewArguments = GetString(root, "DocsRepository", "PreviewArguments", fallback.DocsRepository.PreviewArguments),
                 PreviewInstallArguments = GetString(root, "DocsRepository", "PreviewInstallArguments", fallback.DocsRepository.PreviewInstallArguments),
@@ -256,6 +270,14 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultLogLevel = GetString(root, "Logging", "LogLevel", "Default", fallback.Logging.DefaultLogLevel),
                 MicrosoftLogLevel = GetString(root, "Logging", "LogLevel", "Microsoft", fallback.Logging.MicrosoftLogLevel),
+            },
+            Updates = new UpdatesLocalAppSettings
+            {
+                Enabled = GetBool(root, "Updates", "Enabled", fallback.Updates.Enabled),
+                CheckOnStartup = GetBool(root, "Updates", "CheckOnStartup", fallback.Updates.CheckOnStartup),
+                FeedUrl = GetString(root, "Updates", "FeedUrl", fallback.Updates.FeedUrl),
+                Channel = GetNullableString(root, "Updates", "Channel", fallback.Updates.Channel),
+                CheckTimeoutSeconds = GetInt(root, "Updates", "CheckTimeoutSeconds", fallback.Updates.CheckTimeoutSeconds),
             },
         });
 
@@ -288,6 +310,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             ? null
             : settings.Copilot.TelemetryFilePath;
         copilot["CaptureContent"] = settings.Copilot.CaptureContent;
+        copilot["EnableRemoteSessions"] = settings.Copilot.EnableRemoteSessions;
+        copilot["EnableSessionTelemetry"] = settings.Copilot.EnableSessionTelemetry;
         copilot["AllowedUrlHosts"] = ToJsonArray(settings.Copilot.AllowedUrlHosts);
         copilot["OAuthClientId"] = string.IsNullOrWhiteSpace(settings.Copilot.OAuthClientId)
             ? string.Empty
@@ -302,6 +326,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         docsRepository["CloneUrl"] = settings.DocsRepository.CloneUrl;
         docsRepository["WorktreeRoot"] = settings.DocsRepository.WorktreeRoot;
         docsRepository["MaxWorktrees"] = settings.DocsRepository.MaxWorktrees;
+        docsRepository["PrewarmOnStartup"] = settings.DocsRepository.PrewarmOnStartup;
         docsRepository["PreviewCommand"] = settings.DocsRepository.PreviewCommand;
         docsRepository["PreviewArguments"] = settings.DocsRepository.PreviewArguments;
         docsRepository["PreviewInstallArguments"] = settings.DocsRepository.PreviewInstallArguments;
@@ -313,6 +338,15 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         var logLevel = GetOrReplaceObject(logging, "LogLevel");
         logLevel["Default"] = settings.Logging.DefaultLogLevel;
         logLevel["Microsoft"] = settings.Logging.MicrosoftLogLevel;
+
+        var updates = GetOrReplaceObject(root, "Updates");
+        updates["Enabled"] = settings.Updates.Enabled;
+        updates["CheckOnStartup"] = settings.Updates.CheckOnStartup;
+        updates["FeedUrl"] = settings.Updates.FeedUrl;
+        updates["Channel"] = string.IsNullOrWhiteSpace(settings.Updates.Channel)
+            ? null
+            : settings.Updates.Channel;
+        updates["CheckTimeoutSeconds"] = settings.Updates.CheckTimeoutSeconds;
     }
 
     private static LocalAppSettings Normalize(LocalAppSettings settings)
@@ -344,6 +378,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CopilotHome = NormalizeNullable(settings.Copilot.CopilotHome),
                 TelemetryFilePath = NormalizeNullable(settings.Copilot.TelemetryFilePath),
                 CaptureContent = settings.Copilot.CaptureContent,
+                EnableRemoteSessions = settings.Copilot.EnableRemoteSessions,
+                EnableSessionTelemetry = settings.Copilot.EnableSessionTelemetry,
                 AllowedUrlHosts = NormalizeHosts(settings.Copilot.AllowedUrlHosts),
                 OAuthClientId = NormalizeNullable(settings.Copilot.OAuthClientId),
                 OAuthScopes = NormalizeStringList(settings.Copilot.OAuthScopes),
@@ -358,6 +394,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CloneUrl = TrimOrEmpty(settings.DocsRepository.CloneUrl),
                 WorktreeRoot = TrimOrEmpty(settings.DocsRepository.WorktreeRoot),
                 MaxWorktrees = settings.DocsRepository.MaxWorktrees,
+                PrewarmOnStartup = settings.DocsRepository.PrewarmOnStartup,
                 PreviewCommand = TrimOrEmpty(settings.DocsRepository.PreviewCommand),
                 PreviewArguments = TrimOrEmpty(settings.DocsRepository.PreviewArguments),
                 PreviewInstallArguments = TrimOrEmpty(settings.DocsRepository.PreviewInstallArguments),
@@ -369,6 +406,14 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultLogLevel = TrimOrEmpty(settings.Logging.DefaultLogLevel),
                 MicrosoftLogLevel = TrimOrEmpty(settings.Logging.MicrosoftLogLevel),
+            },
+            Updates = new UpdatesLocalAppSettings
+            {
+                Enabled = settings.Updates.Enabled,
+                CheckOnStartup = settings.Updates.CheckOnStartup,
+                FeedUrl = TrimOrEmpty(settings.Updates.FeedUrl),
+                Channel = NormalizeNullable(settings.Updates.Channel),
+                CheckTimeoutSeconds = settings.Updates.CheckTimeoutSeconds,
             },
         };
 
@@ -435,6 +480,17 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         Require(settings.Logging.DefaultLogLevel, "Logging.LogLevel.Default", errors);
         Require(settings.Logging.MicrosoftLogLevel, "Logging.LogLevel.Microsoft", errors);
 
+        ValidateRange(settings.Updates.CheckTimeoutSeconds, 5, 1800, "Updates.CheckTimeoutSeconds", errors);
+        if (settings.Updates.Enabled)
+        {
+            Require(settings.Updates.FeedUrl, "Updates.FeedUrl", errors);
+            if (!Uri.TryCreate(settings.Updates.FeedUrl, UriKind.Absolute, out var updateUri)
+                || !IsAllowedUpdateFeedUri(updateUri))
+            {
+                errors.Add("Updates.FeedUrl は https の絶対 URL にしてください。ローカル検証では http://localhost、http://127.0.0.1、http://[::1] も許可されます。");
+            }
+        }
+
         if (errors.Count > 0)
         {
             throw new LocalAppSettingsValidationException(errors);
@@ -457,6 +513,10 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             return new JsonObject();
         }
     }
+
+    private static bool IsAllowedUpdateFeedUri(Uri uri)
+        => string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && uri.IsLoopback);
 
     private static JsonObject GetOrReplaceObject(JsonObject parent, string propertyName)
     {

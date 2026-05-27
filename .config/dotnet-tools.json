@@ -8,6 +8,13 @@
         "dotnet-ef"
       ],
       "rollForward": false
+    },
+    "vpk": {
+      "version": "1.0.1",
+      "commands": [
+        "vpk"
+      ],
+      "rollForward": false
     }
   }
 }

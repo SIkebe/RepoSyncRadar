@@ -1,30 +1,40 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 
 namespace RepoSyncRadar.Core.Options;
 
 /// <summary>
 /// Options for the optional local preview pipeline (IMPLEMENTATION_PLAN.md §Step 19).
-/// All paths/URLs default to <c>string.Empty</c> — when so configured, the preview
-/// pipeline is treated as disabled and every public surface becomes a no-op so that
-/// the rest of the app can still start.
+/// By default, preview cache/worktree files are stored under the user's local
+/// application data folder so installed builds can preview without manual path setup.
+/// When <see cref="BareCloneDir"/> or <see cref="PreviewCommand"/> is cleared, the
+/// preview pipeline is treated as disabled and every public surface becomes a no-op.
 /// </summary>
 public sealed class DocsRepositoryOptions
 {
     public const string SectionName = "DocsRepository";
 
+    private static readonly string _defaultPreviewRoot = Path.Combine(
+        System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+        "RepoSyncRadar",
+        "docs-preview");
+
     /// <summary>Filesystem path of the bare clone (<c>git clone --bare</c>).</summary>
-    public string BareCloneDir { get; set; } = string.Empty;
+    public string BareCloneDir { get; set; } = Path.Combine(_defaultPreviewRoot, "github-docs.git");
 
     /// <summary>URL passed to <c>git clone --bare</c>. Required when <see cref="BareCloneDir"/> is set.</summary>
-    public string CloneUrl { get; set; } = string.Empty;
+    public string CloneUrl { get; set; } = "https://github.com/github/docs.git";
 
     /// <summary>Directory under which transient worktrees are added.</summary>
-    public string WorktreeRoot { get; set; } = string.Empty;
+    public string WorktreeRoot { get; set; } = Path.Combine(_defaultPreviewRoot, "worktrees");
 
     /// <summary>Maximum number of worktrees to keep around. Oldest is evicted on overflow.</summary>
     [Range(1, 50)]
     public int MaxWorktrees { get; set; } = 5;
+
+    /// <summary>Whether app startup should eagerly create/fetch the bare clone before the first preview action.</summary>
+    public bool PrewarmOnStartup { get; set; }
 
     /// <summary>Command that launches the preview server (e.g. <c>npm</c>).</summary>
     public string PreviewCommand { get; set; } = "npm";

@@ -7,6 +7,7 @@ using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Audit;
 using RepoSyncRadar.App.Copilot.Tools;
 using RepoSyncRadar.App.Settings;
+using RepoSyncRadar.App.Updates;
 using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Services;
 
@@ -55,6 +56,8 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<ICopilotAgent, CopilotAgent>();
         services.TryAddSingleton<IReviewBroadcaster, ReviewBroadcaster>();
         services.TryAddSingleton<IPreviewNavigator, PreviewNavigator>();
+        services.TryAddSingleton<IVelopackUpdateManagerFactory, VelopackUpdateManagerFactory>();
+        services.TryAddSingleton<IAppUpdateService, AppUpdateService>();
 
         return services;
     }

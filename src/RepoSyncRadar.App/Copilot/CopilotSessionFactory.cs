@@ -272,6 +272,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             // Force the SDK to use the token we hand it instead of falling back to
             // whatever the bundled CLI / gh CLI happens to be signed in as.
             UseLoggedInUser = false,
+            EnableRemoteSessions = copilot.EnableRemoteSessions,
         };
 
         if (!string.IsNullOrWhiteSpace(copilot.CliPath))

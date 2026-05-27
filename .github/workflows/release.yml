@@ -1,0 +1,206 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer release version, for example 0.1.0 or 0.1.0-beta.1. Defaults to the current tag name when empty.
+        required: false
+        type: string
+      channelSuffix:
+        description: Velopack channel suffix appended to each runtime.
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - beta
+          - preview
+      draft:
+        description: Create or keep the GitHub Release as a draft.
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: Mark the GitHub Release as a prerelease.
+        required: true
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: pwsh
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release metadata
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      channel-suffix: ${{ steps.meta.outputs.channel_suffix }}
+      draft: ${{ steps.meta.outputs.draft }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - name: Resolve release metadata
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_CHANNEL_SUFFIX: ${{ inputs.channelSuffix }}
+          INPUT_DRAFT: ${{ inputs.draft }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          $version = $env:INPUT_VERSION
+          if ([string]::IsNullOrWhiteSpace($version)) {
+              $version = $env:REF_NAME
+          }
+
+          if ($version.StartsWith('v', [System.StringComparison]::OrdinalIgnoreCase)) {
+              $version = $version.Substring(1)
+          }
+
+          if ($version -notmatch '^\d+\.\d+\.\d+([\-+][0-9A-Za-z\-.+]+)?$') {
+              throw "Release version '$version' must be SemVer like 0.1.0 or 0.1.0-beta.1."
+          }
+
+          $channelSuffix = $env:INPUT_CHANNEL_SUFFIX
+          if ([string]::IsNullOrWhiteSpace($channelSuffix)) {
+              $channelSuffix = 'stable'
+          }
+
+          $draft = if ([string]::IsNullOrWhiteSpace($env:INPUT_DRAFT)) { 'true' } else { $env:INPUT_DRAFT.ToLowerInvariant() }
+          $prerelease = if ([string]::IsNullOrWhiteSpace($env:INPUT_PRERELEASE)) { ($version.Contains('-')).ToString().ToLowerInvariant() } else { $env:INPUT_PRERELEASE.ToLowerInvariant() }
+
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+          "channel_suffix=$channelSuffix" >> $env:GITHUB_OUTPUT
+          "draft=$draft" >> $env:GITHUB_OUTPUT
+          "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
+
+  build-test:
+    name: Build and test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore RepoSyncRadar.sln
+
+      - name: Build
+        run: dotnet build RepoSyncRadar.sln --no-restore -warnaserror
+
+      - name: Test
+        run: dotnet test RepoSyncRadar.sln --no-build -- --filter-not-trait Category=Manual
+
+  package:
+    name: Package ${{ matrix.runtime }}
+    needs:
+      - prepare
+      - build-test
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime:
+          - win-x64
+          - win-arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build Velopack release
+        run: |
+          $channel = '${{ matrix.runtime }}-${{ needs.prepare.outputs.channel-suffix }}'
+          $args = @(
+              '-Version', '${{ needs.prepare.outputs.version }}',
+              '-Runtime', '${{ matrix.runtime }}',
+              '-Channel', $channel,
+              '-Force'
+          )
+
+          ./scripts/Build-VelopackRelease.ps1 @args
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: velopack-${{ matrix.runtime }}
+          path: artifacts/release/velopack/${{ matrix.runtime }}/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - prepare
+      - package
+    runs-on: windows-latest
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: velopack-*
+          path: dist/release-assets
+          merge-multiple: true
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          DRAFT: ${{ needs.prepare.outputs.draft }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
+          @"
+          RepoSyncRadar $env:VERSION
+
+          Windows installers and Velopack update packages are attached for x64 and Arm64.
+          "@ | Set-Content -Path $notesPath -Encoding utf8NoBOM
+
+          $releaseArgs = @('release', 'create', $env:TAG, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath)
+          if ($env:DRAFT -eq 'true') {
+              $releaseArgs += '--draft'
+          }
+          if ($env:PRERELEASE -eq 'true') {
+              $releaseArgs += '--prerelease'
+          }
+
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -ne 0) {
+              gh @releaseArgs
+          }
+          else {
+              $editArgs = @('release', 'edit', $env:TAG, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath, "--draft=$env:DRAFT", "--prerelease=$env:PRERELEASE")
+              gh @editArgs
+          }
+
+          $assets = Get-ChildItem dist/release-assets -File | Sort-Object Name
+          if ($assets.Count -eq 0) {
+              throw 'No release assets were downloaded.'
+          }
+
+          gh release upload $env:TAG --clobber @($assets.FullName)

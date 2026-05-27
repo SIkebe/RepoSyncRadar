@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace RepoSyncRadar.App.Settings;
 
 public sealed class LocalAppSettings
@@ -16,6 +18,8 @@ public sealed class LocalAppSettings
 
     public LoggingLocalAppSettings Logging { get; set; } = new();
 
+    public UpdatesLocalAppSettings Updates { get; set; } = new();
+
     public LocalAppSettings Clone()
         => new()
         {
@@ -25,6 +29,7 @@ public sealed class LocalAppSettings
             WebView = WebView.Clone(),
             DocsRepository = DocsRepository.Clone(),
             Logging = Logging.Clone(),
+            Updates = Updates.Clone(),
         };
 }
 
@@ -87,6 +92,10 @@ public sealed class CopilotLocalAppSettings
 
     public bool CaptureContent { get; set; }
 
+    public bool EnableRemoteSessions { get; set; }
+
+    public bool EnableSessionTelemetry { get; set; } = true;
+
     public List<string> AllowedUrlHosts { get; set; } =
     [
         "docs.github.com",
@@ -107,6 +116,8 @@ public sealed class CopilotLocalAppSettings
             CopilotHome = CopilotHome,
             TelemetryFilePath = TelemetryFilePath,
             CaptureContent = CaptureContent,
+            EnableRemoteSessions = EnableRemoteSessions,
+            EnableSessionTelemetry = EnableSessionTelemetry,
             AllowedUrlHosts = [.. AllowedUrlHosts],
             OAuthClientId = OAuthClientId,
             OAuthScopes = [.. OAuthScopes],
@@ -135,13 +146,20 @@ public sealed class WebViewLocalAppSettings
 
 public sealed class DocsRepositoryLocalAppSettings
 {
-    public string BareCloneDir { get; set; } = string.Empty;
+    private static readonly string _defaultPreviewRoot = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "RepoSyncRadar",
+        "docs-preview");
 
-    public string CloneUrl { get; set; } = string.Empty;
+    public string BareCloneDir { get; set; } = Path.Combine(_defaultPreviewRoot, "github-docs.git");
 
-    public string WorktreeRoot { get; set; } = string.Empty;
+    public string CloneUrl { get; set; } = "https://github.com/github/docs.git";
+
+    public string WorktreeRoot { get; set; } = Path.Combine(_defaultPreviewRoot, "worktrees");
 
     public int MaxWorktrees { get; set; } = 5;
+
+    public bool PrewarmOnStartup { get; set; }
 
     public string PreviewCommand { get; set; } = "npm";
 
@@ -166,6 +184,7 @@ public sealed class DocsRepositoryLocalAppSettings
             CloneUrl = CloneUrl,
             WorktreeRoot = WorktreeRoot,
             MaxWorktrees = MaxWorktrees,
+            PrewarmOnStartup = PrewarmOnStartup,
             PreviewCommand = PreviewCommand,
             PreviewArguments = PreviewArguments,
             PreviewInstallArguments = PreviewInstallArguments,
@@ -186,6 +205,29 @@ public sealed class LoggingLocalAppSettings
         {
             DefaultLogLevel = DefaultLogLevel,
             MicrosoftLogLevel = MicrosoftLogLevel,
+        };
+}
+
+public sealed class UpdatesLocalAppSettings
+{
+    public bool Enabled { get; set; }
+
+    public bool CheckOnStartup { get; set; } = true;
+
+    public string FeedUrl { get; set; } = string.Empty;
+
+    public string? Channel { get; set; }
+
+    public int CheckTimeoutSeconds { get; set; } = 120;
+
+    public UpdatesLocalAppSettings Clone()
+        => new()
+        {
+            Enabled = Enabled,
+            CheckOnStartup = CheckOnStartup,
+            FeedUrl = FeedUrl,
+            Channel = Channel,
+            CheckTimeoutSeconds = CheckTimeoutSeconds,
         };
 }
 

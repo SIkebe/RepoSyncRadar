@@ -37,6 +37,12 @@ public sealed class CopilotOptions
     /// <summary>Whether telemetry should include message content. Default off for privacy.</summary>
     public bool CaptureContent { get; set; }
 
+    /// <summary>Enable SDK remote session URL support. Default off because installed builds may not run from a GitHub repository.</summary>
+    public bool EnableRemoteSessions { get; set; }
+
+    /// <summary>Enable Copilot's internal per-session telemetry. Set false to opt out.</summary>
+    public bool EnableSessionTelemetry { get; set; } = true;
+
     /// <summary>Hosts that <c>url</c> permission requests may target without UI confirmation.</summary>
     [Required]
     [MinLength(1)]

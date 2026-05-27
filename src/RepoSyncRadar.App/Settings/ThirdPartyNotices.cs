@@ -13,7 +13,7 @@ public static class ThirdPartyNotices
 {
     public static IReadOnlyList<ThirdPartyNotice> All { get; } =
     [
-        Mit("GitHub.Copilot.SDK", "1.0.0-beta.7", "Copyright (c) Microsoft Corporation. All rights reserved.", "https://github.com/github/copilot-sdk"),
+        Mit("GitHub.Copilot.SDK", "1.0.0-beta.8", "Copyright (c) Microsoft Corporation. All rights reserved.", "https://github.com/github/copilot-sdk"),
         new(
             "Markdig",
             "1.2.0",
@@ -47,6 +47,7 @@ public static class ThirdPartyNotices
             _webView2LicenseText),
         Mit("MudBlazor", "9.4.0", "Copyright 2026 MudBlazor", "https://mudblazor.com/"),
         Mit("Octokit", "14.0.0", "Copyright GitHub 2017", "https://github.com/octokit/octokit.net"),
+        Mit("Velopack", "1.0.1", "Copyright © Velopack Ltd. All rights reserved.", "https://github.com/velopack/velopack"),
         Mit("YamlDotNet", "17.1.0", "Copyright (c) Antoine Aubry and contributors", "https://github.com/aaubry/YamlDotNet/wiki"),
     ];
 

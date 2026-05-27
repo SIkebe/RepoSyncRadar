@@ -7,7 +7,7 @@ using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;
 
-#pragma warning disable GHCP001 // beta.7 exposes permission decisions through experimental RPC types.
+#pragma warning disable GHCP001 // beta.8 exposes permission decisions through experimental RPC types.
 
 /// <summary>
 /// Builds <see cref="SessionConfig"/> values for a given <see cref="SessionPurpose"/>.
@@ -43,6 +43,7 @@ internal static class SessionConfigBuilder
                 Content = SystemPromptFor(purpose),
             },
             OnPermissionRequest = permissionHandler,
+            EnableSessionTelemetry = copilot.EnableSessionTelemetry,
         };
 
         if (tools is { Count: > 0 })

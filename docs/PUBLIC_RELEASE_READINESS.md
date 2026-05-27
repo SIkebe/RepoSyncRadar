@@ -12,9 +12,10 @@ This checklist captures the current public-release blockers and must-fix follow-
 ## P0: Must Fix Before Any Public Release
 
 1. **Create a signed distribution path**
-   - Current state: Release publish succeeds, but there is no installer/update channel yet.
-   - Required: decide between Microsoft Store, MSIX, Velopack, or another installer; sign release artifacts; document installation and upgrade behavior.
-   - Evidence: no `.github/workflows` release workflow or `docs/RELEASE.md` exists yet.
+   - Current state: Release publish succeeds, and Velopack is the selected installer/update path.
+   - Required: sign release artifacts and validate the framework-dependent installer on clean x64/Arm64 machines.
+   - Evidence: `docs/RELEASE.md`, `scripts/Build-VelopackRelease.ps1`, and `.github/workflows/release.yml` describe and automate the current unsigned draft release path.
+   - Issue draft: create `Decide public code-signing path for Windows installer releases`. Azure Artifact Signing Basic was tested, but Public Trust identity validation is unavailable for the current Japan sold-to billing account. Candidate paths are Certum, SSL.com IV/OV, SignPath OSS, Microsoft Store, or another Authenticode-compatible provider.
 
 2. **Add CI and release automation**
    - Required: run build, automated tests excluding Manual, vulnerability scan, and publish smoke on PRs and release tags.

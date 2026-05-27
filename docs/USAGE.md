@@ -197,7 +197,7 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
 
 ### 5.1 ローカルプレビュー(Step 19 / 19.5)
 
-`DocsRepository` セクションを埋めておくと、PR HEAD の見た目を bare clone + worktree で確認できます。空のままなら **完全に no-op** で他機能には影響しません。
+`DocsRepository` セクションを埋めておくと、PR HEAD の見た目を bare clone + worktree で確認できます。空のままなら **完全に no-op** で他機能には影響しません。起動時に bare clone を事前作成したい場合だけ `DocsRepository:PrewarmOnStartup` を `true` にしてください。既定では、初回起動だけで `github/docs` の大きな clone/fetch は始まりません。
 
 #### 使い方
 

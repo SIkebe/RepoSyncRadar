@@ -44,6 +44,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
                 ["GitHub:PullRequestTitleFilter"] = "Repo sync",
                 ["Copilot:DefaultModel"] = "gpt-config",
                 ["Copilot:OAuthScopes:0"] = "public_repo",
+                ["DocsRepository:PrewarmOnStartup"] = "true",
                 ["DocsRepository:PreviewEnvironment:PORT"] = "{port}",
             })
             .Build();
@@ -58,6 +59,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal(["docs.github.com", "api.github.com"], settings.Copilot.AllowedUrlHosts);
         Assert.Empty(settings.Copilot.OAuthScopes);
         Assert.Equal(["docs.github.com", "github.com"], settings.WebView.AllowedUrlHosts);
+        Assert.True(settings.DocsRepository.PrewarmOnStartup);
         Assert.Equal("{port}", settings.DocsRepository.PreviewEnvironment["PORT"]);
     }
 
@@ -87,14 +89,21 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.Copilot.CopilotHome = " C:\\Users\\me\\.reposyncradar-copilot ";
         settings.Copilot.TelemetryFilePath = " C:\\logs\\copilot.jsonl ";
         settings.Copilot.CaptureContent = true;
+        settings.Copilot.EnableRemoteSessions = true;
+        settings.Copilot.EnableSessionTelemetry = false;
         settings.Copilot.AllowedUrlHosts = ["https://docs.github.com", "api.github.com"];
         settings.WebView.AllowedUrlHosts = ["https://github.com", "github.githubassets.com"];
         settings.DocsRepository.BareCloneDir = "C:\\github\\.cache\\docs.git";
+        settings.DocsRepository.PrewarmOnStartup = true;
         settings.DocsRepository.PreviewEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PORT"] = "{port}",
             ["REQUEST_TIMEOUT"] = "600000",
         };
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = " https://github.com/example/RepoSyncRadar ";
+        settings.Updates.Channel = " win-arm64-preview ";
+        settings.Updates.CheckTimeoutSeconds = 180;
         var events = new List<LocalAppSettings>();
         var store = new FileLocalAppSettingsStore(path);
         store.SettingsChanged += events.Add;
@@ -115,9 +124,16 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("C:\\Users\\me\\.reposyncradar-copilot", root.GetProperty("Copilot").GetProperty("CopilotHome").GetString());
         Assert.Equal("C:\\logs\\copilot.jsonl", root.GetProperty("Copilot").GetProperty("TelemetryFilePath").GetString());
         Assert.True(root.GetProperty("Copilot").GetProperty("CaptureContent").GetBoolean());
+        Assert.True(root.GetProperty("Copilot").GetProperty("EnableRemoteSessions").GetBoolean());
+        Assert.False(root.GetProperty("Copilot").GetProperty("EnableSessionTelemetry").GetBoolean());
         Assert.Equal("docs.github.com", root.GetProperty("Copilot").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("github.com", root.GetProperty("WebView").GetProperty("AllowedUrlHosts")[0].GetString());
+        Assert.True(root.GetProperty("DocsRepository").GetProperty("PrewarmOnStartup").GetBoolean());
         Assert.Equal("600000", root.GetProperty("DocsRepository").GetProperty("PreviewEnvironment").GetProperty("REQUEST_TIMEOUT").GetString());
+        Assert.True(root.GetProperty("Updates").GetProperty("Enabled").GetBoolean());
+        Assert.Equal("https://github.com/example/RepoSyncRadar", root.GetProperty("Updates").GetProperty("FeedUrl").GetString());
+        Assert.Equal("win-arm64-preview", root.GetProperty("Updates").GetProperty("Channel").GetString());
+        Assert.Equal(180, root.GetProperty("Updates").GetProperty("CheckTimeoutSeconds").GetInt32());
     }
 
     [Fact]
@@ -132,6 +148,51 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
             () => store.SaveAsync(settings, TestContext.Current.CancellationToken));
 
         Assert.Contains("DocsApi.BaseAddress", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaveAsync_Enabled_Updates_Without_FeedUrl_Throws_Validation_Error()
+    {
+        var path = Path.Combine(_tempRoot, "appsettings.local.json");
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = string.Empty;
+        var store = new FileLocalAppSettingsStore(path);
+
+        var ex = await Assert.ThrowsAsync<LocalAppSettingsValidationException>(
+            () => store.SaveAsync(settings, TestContext.Current.CancellationToken));
+
+        Assert.Contains("Updates.FeedUrl", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaveAsync_Enabled_Updates_With_Remote_Http_Feed_Throws_Validation_Error()
+    {
+        var path = Path.Combine(_tempRoot, "appsettings.local.json");
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "http://updates.example.com/reposyncradar";
+        var store = new FileLocalAppSettingsStore(path);
+
+        var ex = await Assert.ThrowsAsync<LocalAppSettingsValidationException>(
+            () => store.SaveAsync(settings, TestContext.Current.CancellationToken));
+
+        Assert.Contains("Updates.FeedUrl", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("https", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SaveAsync_Enabled_Updates_Allows_Loopback_Http_Feed()
+    {
+        var path = Path.Combine(_tempRoot, "appsettings.local.json");
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "http://127.0.0.1:4510/updates";
+        var store = new FileLocalAppSettingsStore(path);
+
+        await store.SaveAsync(settings, TestContext.Current.CancellationToken);
+
+        Assert.Equal("http://127.0.0.1:4510/updates", store.Current.Updates.FeedUrl);
     }
 
     public void Dispose()

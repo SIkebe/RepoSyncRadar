@@ -1,6 +1,6 @@
 # RepoSyncRadar Copilot Instructions
 
-RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter, Teams, and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0-beta.7.
+RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter, Teams, and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0-beta.8.
 
 Use these repository instructions as the starting point. When code or validated behavior contradicts them, follow the verified source and update this file after confirming the rule is stable.
 
@@ -44,11 +44,12 @@ Use these repository instructions as the starting point. When code or validated 
 ### SDK API
 
 - The app must read Copilot SDK final assistant text from `response?.Data?.Content`, not `response?.ToString()`.
-- `GitHub.Copilot.SDK` 1.0.0-beta.7 exposes `MessageOptions` prompt, attachments, mode, and headers. No public JSON schema or response-format property has been observed in the XML docs.
-- In `GitHub.Copilot.SDK` 1.0.0-beta.7, public C# types live under `GitHub.Copilot` / `GitHub.Copilot.Rpc`, client process settings use `CopilotClientOptions.Connection = RuntimeConnection.ForStdio(...)`, `BaseDirectory`, and `CopilotLogLevel`, and permission handlers use `Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>>` with `PermissionDecision.ApproveOnce()` / `Reject(...)` / `UserNotAvailable()`.
-- `GitHub.Copilot.SDK` 1.0.0-beta.7 nupkg includes `build/GitHub.Copilot.SDK.props` with `CopilotCliVersion=1.0.53-2`; do not pin `CopilotCliVersion` in `Directory.Build.props` unless a future package regresses.
-- In beta.7 hook payloads such as `PreToolUseHookInput.ToolArgs` and `PostToolUseHookInput.ToolResult` are `JsonElement?`; tests should create fixtures with `JsonSerializer.SerializeToElement(...)`.
-- In beta.7 `AssistantUsageData` no longer exposes `CopilotUsage`; use `Cost` and session `Usage.GetMetricsAsync()` for SDK-reported billing details, and keep `GHCP001` suppressions local to experimental SDK telemetry/permission types.
+- `GitHub.Copilot.SDK` 1.0.0-beta.8 exposes `MessageOptions` prompt, attachments, mode, and headers. No public JSON schema or response-format property has been observed in the XML docs.
+- In `GitHub.Copilot.SDK` 1.0.0-beta.8, public C# types live under `GitHub.Copilot` / `GitHub.Copilot.Rpc`, client process settings use `CopilotClientOptions.Connection = RuntimeConnection.ForStdio(...)`, `BaseDirectory`, and `CopilotLogLevel`, and permission handlers use `Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>>` with `PermissionDecision.ApproveOnce()` / `Reject(...)` / `UserNotAvailable()`.
+- `GitHub.Copilot.SDK` 1.0.0-beta.8 adds opt-in `CopilotClientOptions.EnableRemoteSessions` and per-session `SessionConfig.EnableSessionTelemetry`; keep both configurable and privacy-conscious.
+- `GitHub.Copilot.SDK` 1.0.0-beta.8 nupkg includes `build/GitHub.Copilot.SDK.props` with `CopilotCliVersion=1.0.55-1`; do not pin `CopilotCliVersion` in `Directory.Build.props` unless a future package regresses.
+- In beta.8 hook payloads such as `PreToolUseHookInput.ToolArgs`, `PostToolUseHookInput.ToolResult`, and `PreMcpToolCallHookInput.Arguments` are JSON values; tests should create fixtures with `JsonSerializer.SerializeToElement(...)` where needed.
+- In beta.8 `AssistantUsageData` does not expose legacy `CopilotUsage`; use `Cost` and session `Usage.GetMetricsAsync()` for SDK-reported billing details, and keep `GHCP001` suppressions local to experimental SDK telemetry/permission types.
 - For Copilot tool metadata such as `skip_permission`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { SkipPermission = true }, ...)` over magic-string `AdditionalProperties`.
 
 ### Client And Telemetry
@@ -84,6 +85,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 - Official `docs.github.com` may already match a Repo sync PR if deployed. Visual comparison should use local preview of parent SHA vs PR HEAD, not production pages.
 - Preview worktrees and npm/Next dev servers are process-sensitive. Use existing `PreviewServerHost`, `DocsWorktreeManager`, `NextDevServerProcessCleaner`, and `PreviewPortAllocator` patterns instead of ad hoc process cleanup.
+- Startup docs preview prewarm is opt-in via `DocsRepository:PrewarmOnStartup`; the default must not clone/fetch `github/docs` until a preview action or predictive prewarm needs it.
 - github/docs preview needs `REQUEST_TIMEOUT=600000` because Windows ARM64 first-page compilation can exceed the default 15 seconds.
 
 ### WebView2 Behavior

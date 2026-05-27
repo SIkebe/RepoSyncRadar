@@ -9,6 +9,7 @@
     <UseWindowsForms>false</UseWindowsForms>
     <RootNamespace>RepoSyncRadar.App</RootNamespace>
     <AssemblyName>RepoSyncRadar</AssemblyName>
+    <StartupObject>RepoSyncRadar.App.Program</StartupObject>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
@@ -24,6 +25,7 @@
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="MudBlazor" />
     <PackageReference Include="GitHub.Copilot.SDK" />
+    <PackageReference Include="Velopack" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Octokit" />
   </ItemGroup>
