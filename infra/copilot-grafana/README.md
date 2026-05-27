@@ -7,7 +7,7 @@ This folder creates the Azure side of the monitoring pipeline described in the M
 - Log Analytics workspace
 - Workspace-based Application Insights resource
 - Azure Managed Grafana 11, Standard SKU
-- A `Monitoring Reader` role assignment for Grafana's managed identity at the resource group scope
+- `Monitoring Reader` role assignments for Grafana's managed identity scoped to the Log Analytics workspace and Application Insights resource
 
 The OpenTelemetry Collector and VS Code GitHub Copilot telemetry settings are intentionally not deployed by Bicep because they run on your developer machine or on whichever shared host receives OTLP traffic.
 
@@ -42,7 +42,7 @@ az deployment group create `
   --parameters infra/copilot-grafana/main.bicepparam namePrefix=$namePrefix location=$location
 ```
 
-The deployment output includes the Grafana endpoint. The Application Insights connection string is marked as secure in the Bicep template, so retrieve it from the Application Insights resource in the collector setup step below. Treat the connection string as a secret because anyone with it can send telemetry into your Application Insights resource.
+The deployment output includes the Grafana endpoint. The Application Insights connection string is intentionally not output from the Bicep template, so retrieve it from the Application Insights resource in the collector setup step below. Treat the connection string as a secret because anyone with it can send telemetry into your Application Insights resource.
 
 If you cannot open or administer the Grafana instance after deployment, assign yourself the Azure `Grafana Admin` role on the Managed Grafana resource. Azure Managed Grafana uses Azure RBAC for user access.
 
