@@ -171,7 +171,7 @@ https://aka.ms/amg/dash/gh-copilot
 
 This link opens the Azure portal dashboard gallery, not a raw Grafana JSON file. The first view is a template preview. To keep and reuse the dashboard, select `Save As`, then save a copy to the subscription and resource group. From the saved copy, use `Copy to Managed Grafana` if you want it inside the Azure Managed Grafana instance created by this template.
 
-Choose the `Azure Monitor` data source and the Application Insights resource created by this template. Grafana should be able to query the Application Insights data because its managed identity has `Monitoring Reader` on the resource group.
+Choose the `Azure Monitor` data source and the Application Insights resource created by this template. Grafana should be able to query the Application Insights data because its managed identity has `Monitoring Reader` on the Log Analytics workspace and Application Insights resource.
 
 If the dashboard shows `No data` with panel errors such as `Invalid application identity provided`, wait a few minutes for Azure RBAC changes to propagate, then reload the dashboard. This can happen shortly after assigning `Grafana Admin` to your user or `Monitoring Reader` to the Managed Grafana identity. During the validated setup, data appeared after reloading with the following filters:
 
