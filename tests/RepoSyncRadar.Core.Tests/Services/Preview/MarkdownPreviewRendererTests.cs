@@ -1437,7 +1437,7 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("right:24px", html, StringComparison.Ordinal);
         Assert.Contains("width:10px", html, StringComparison.Ordinal);
         Assert.Contains(".rsr-rendered-diff-added,.rsr-rendered-diff-removed", html, StringComparison.Ordinal);
-        Assert.Contains("const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote'", html, StringComparison.Ordinal);
+        Assert.Contains("const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,.ghd-markdown-alert'", html, StringComparison.Ordinal);
         Assert.Contains("element.closest(blockSelector) || element", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", html, StringComparison.Ordinal);
         Assert.Contains("const documentHeight = Math.max(1, root.scrollHeight)", html, StringComparison.Ordinal);
@@ -1449,6 +1449,36 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("markerTop.toFixed(1)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", html, StringComparison.Ordinal);
         Assert.Contains("window.setTimeout(scheduleBuild, 250)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Highlights_Added_GitHub_Alert_Body()
+    {
+        const string beforeMarkdown = """
+            # Test with pytest
+
+            Existing guidance.
+            """;
+        const string afterMarkdown = """
+            # Test with pytest
+
+            > [!TIP]
+            > This example already produces a Cobertura XML coverage report (`--cov-report=xml`). To display coverage results directly on pull requests, upload the report using the `actions/upload-code-coverage` action.
+
+            Existing guidance.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/actions/tutorials/build-and-test-code/python.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-tip\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"rsr-rendered-diff-added\"", html, StringComparison.Ordinal);
+        Assert.Contains("This example already produces a Cobertura XML coverage report", html, StringComparison.Ordinal);
     }
 
     [Fact]

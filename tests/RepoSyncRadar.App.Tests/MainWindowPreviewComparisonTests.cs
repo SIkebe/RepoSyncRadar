@@ -535,6 +535,24 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_ExtractScript_Includes_GitHub_Alert_Blocks()
+    {
+        var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
+
+        Assert.Contains(".ghd-markdown-alert", script, StringComparison.Ordinal);
+        Assert.Contains("element.classList.contains('ghd-markdown-alert')", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ApplyPlanScript_Preserves_GitHub_Alert_Layout()
+    {
+        var script = PreviewDiffHighlighter.BuildApplyPlanScript("[1]", "\"after\"");
+
+        Assert.Contains(".ghd-markdown-alert.rsr-preview-diff-block", script, StringComparison.Ordinal);
+        Assert.Contains("padding: 8px 0 8px 14px", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildDocsThemeScript_Dark_Sets_Data_Color_Mode_Dark()
     {
         var script = MainWindow.BuildDocsThemeScript(DocsThemeMode.Dark);

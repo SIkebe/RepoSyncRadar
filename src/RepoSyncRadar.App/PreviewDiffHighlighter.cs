@@ -26,9 +26,9 @@ internal static class PreviewDiffHighlighter
 
     private const int _maxExtractionAttempts = 6;
 
-    private const string _extractBlocksScript = """
+    internal const string ExtractBlocksScriptForTests = """
 (() => {
-  const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
+  const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-markdown-alert';
   const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
   const root =
     document.querySelector('main article') ||
@@ -60,7 +60,7 @@ internal static class PreviewDiffHighlighter
       if (text.length < 2) {
         return false;
       }
-      return !element.querySelector(leafSelector);
+      return element.classList.contains('ghd-markdown-alert') || !element.querySelector(leafSelector);
     });
 
   return elements.map((element, index) => {
@@ -80,7 +80,7 @@ internal static class PreviewDiffHighlighter
 
         for (var attempt = 0; attempt < _maxExtractionAttempts; attempt++)
         {
-          var scriptResult = await view.ExecuteScriptAsync(_extractBlocksScript);
+          var scriptResult = await view.ExecuteScriptAsync(ExtractBlocksScriptForTests);
             var blocks = DeserializeBlocks(scriptResult);
           if (blocks.Count > 0 || attempt == _maxExtractionAttempts - 1)
             {
@@ -201,6 +201,11 @@ internal static class PreviewDiffHighlighter
   padding: 0.14rem 0.45rem 0.14rem 0.65rem !important;
   margin-left: -0.65rem !important;
   color: inherit !important;
+}
+.ghd-markdown-alert.rsr-preview-diff-block {
+  display: block !important;
+  margin-left: 0 !important;
+  padding: 8px 0 8px 14px !important;
 }
 .rsr-preview-diff-before {
   background-color: rgba(207, 34, 46, 0.18) !important;
