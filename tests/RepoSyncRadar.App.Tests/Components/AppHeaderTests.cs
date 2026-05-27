@@ -921,6 +921,36 @@ public sealed class AppHeaderTests
         });
     }
 
+    [Fact]
+    public void Settings_CheckForUpdates_When_Feed_Invalid_Shows_Service_Message()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var updateService = Substitute.For<IAppUpdateService>();
+        updateService.CheckAndDownloadAsync(Arg.Any<IProgress<int>>(), true, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new AppUpdateResult(
+                AppUpdateStatus.FeedNotConfigured,
+                Message: "Updates.FeedUrl must use https for remote feeds.")));
+        var sp = BuildServices(session, out _, out _, updateService: updateService);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-check-updates\"]")));
+        cut.Find("[data-testid=\"settings-check-updates\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[data-testid=\"settings-update-status\"]").TextContent;
+            Assert.Contains("Updates.FeedUrl must use https", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("Update feed is not configured", status, StringComparison.Ordinal);
+        });
+    }
+
     private static ServiceProvider BuildServices(
         IGitHubAuthSession session,
         out ICopilotAgent agent,

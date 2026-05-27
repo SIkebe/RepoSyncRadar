@@ -646,7 +646,9 @@
         => result.Status switch
         {
             AppUpdateStatus.Disabled => "Updates are disabled. Enable Updates in appsettings.local.json first.",
-            AppUpdateStatus.FeedNotConfigured => "Update feed is not configured.",
+            AppUpdateStatus.FeedNotConfigured => string.IsNullOrWhiteSpace(result.Message)
+                ? "Update feed is not configured."
+                : result.Message,
             AppUpdateStatus.NotInstalled => "This app is not installed by Velopack, so updates cannot be applied.",
             AppUpdateStatus.NoUpdate => string.IsNullOrWhiteSpace(result.CurrentVersion)
                 ? "No update is available."
