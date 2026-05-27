@@ -26,6 +26,7 @@ Pick a short, globally distinctive prefix and edit `main.bicepparam`. The defaul
 $resourceGroupName = 'rg-copilot-monitoring'
 $location = 'japaneast'
 $namePrefix = 'copilotmon'
+$namePrefixNormalized = $namePrefix.ToLowerInvariant()
 
 az login
 az account set --subscription "<subscription-id-or-name>"
@@ -51,7 +52,7 @@ $assignee = az ad signed-in-user show --query id --output tsv
 $grafanaId = az resource show `
   --resource-group $resourceGroupName `
   --resource-type Microsoft.Dashboard/grafana `
-  --name "$namePrefix-grafana" `
+  --name "$namePrefixNormalized-grafana" `
   --query id `
   --output tsv
 az role assignment create --assignee $assignee --role "Grafana Admin" --scope $grafanaId
@@ -67,7 +68,7 @@ The local Docker example pins the OpenTelemetry Collector contrib image to `0.15
 $connectionString = az resource show `
   --resource-group $resourceGroupName `
   --resource-type Microsoft.Insights/components `
-  --name "$namePrefix-appi" `
+  --name "$namePrefixNormalized-appi" `
   --query properties.ConnectionString `
   --output tsv
 
@@ -134,13 +135,13 @@ You can also verify from Azure CLI. The first run may prompt to install the `app
 
 ```powershell
 az monitor app-insights query `
-  --app "$namePrefix-appi" `
+  --app "$namePrefixNormalized-appi" `
   --resource-group $resourceGroupName `
   --analytics-query "dependencies | where timestamp > ago(24h) | summarize Count=count(), First=min(timestamp), Last=max(timestamp) by cloud_RoleName | order by Count desc" `
   --output table
 
 az monitor app-insights query `
-  --app "$namePrefix-appi" `
+  --app "$namePrefixNormalized-appi" `
   --resource-group $resourceGroupName `
   --analytics-query "customMetrics | where timestamp > ago(24h) | summarize Count=count() by name | order by Count desc | take 20" `
   --output table
@@ -151,7 +152,7 @@ For workspace-based Application Insights, the same metrics appear in the Log Ana
 ```powershell
 $workspaceId = az monitor log-analytics workspace show `
   --resource-group $resourceGroupName `
-  --workspace-name "$namePrefix-law" `
+  --workspace-name "$namePrefixNormalized-law" `
   --query customerId `
   --output tsv
 
