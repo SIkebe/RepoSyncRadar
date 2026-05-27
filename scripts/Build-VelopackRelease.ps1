@@ -60,7 +60,7 @@ try {
 
     $packArgs = @(
         'pack',
-        '--packId', 'RepoSyncRadar',
+        '--packId', 'SIkebe.RepoSyncRadar',
         '--packTitle', 'RepoSyncRadar',
         '--packVersion', $Version,
         '--packDir', $publishDir,

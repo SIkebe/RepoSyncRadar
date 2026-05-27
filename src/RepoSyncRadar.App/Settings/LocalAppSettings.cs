@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace RepoSyncRadar.App.Settings;
 
 public sealed class LocalAppSettings
@@ -138,11 +140,16 @@ public sealed class WebViewLocalAppSettings
 
 public sealed class DocsRepositoryLocalAppSettings
 {
-    public string BareCloneDir { get; set; } = string.Empty;
+    private static readonly string _defaultPreviewRoot = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "RepoSyncRadar",
+        "docs-preview");
 
-    public string CloneUrl { get; set; } = string.Empty;
+    public string BareCloneDir { get; set; } = Path.Combine(_defaultPreviewRoot, "github-docs.git");
 
-    public string WorktreeRoot { get; set; } = string.Empty;
+    public string CloneUrl { get; set; } = "https://github.com/github/docs.git";
+
+    public string WorktreeRoot { get; set; } = Path.Combine(_defaultPreviewRoot, "worktrees");
 
     public int MaxWorktrees { get; set; } = 5;
 

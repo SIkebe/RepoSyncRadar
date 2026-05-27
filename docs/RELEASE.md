@@ -28,6 +28,8 @@ For Windows on Arm:
 
 The script publishes the app and writes Velopack assets under `artifacts/release/velopack/<runtime>/`. The user-facing installer is `RepoSyncRadar-<channel>-Setup.exe`. The `.nupkg` files plus `releases.<channel>.json` form the update feed.
 
+The Velopack package id is `SIkebe.RepoSyncRadar` so the installer root does not collide with RepoSyncRadar's existing `%LOCALAPPDATA%\RepoSyncRadar` app-data folder.
+
 The script restores and uses the repo-local .NET tool manifest (`dotnet tool restore` / `dotnet tool run vpk`), so use `.config/dotnet-tools.json` to update the Velopack CLI version.
 
 When rebuilding the same version/channel locally, pass `-Force` to clear the previous local Velopack output first:
