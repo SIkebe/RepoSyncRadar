@@ -14,6 +14,8 @@ public sealed class LocalAppSettingsEditorTests
         var settings = LocalAppSettings.Default.Clone();
         settings.GitHub.Owner = "github-local";
         settings.Copilot.DefaultModel = "gpt-5.5";
+        settings.Copilot.EnableRemoteSessions = true;
+        settings.Copilot.EnableSessionTelemetry = false;
         settings.Copilot.AllowedUrlHosts = ["docs.github.com", "api.github.com"];
         settings.WebView.AllowedUrlHosts = ["docs.github.com", "github.com"];
         settings.Updates.Enabled = true;
@@ -33,6 +35,8 @@ public sealed class LocalAppSettingsEditorTests
         {
             Assert.Equal("github-local", cut.Find("[data-testid=\"settings-github-owner\"]").GetAttribute("value"));
             Assert.Equal("gpt-5.5", cut.Find("[data-testid=\"settings-copilot-model\"]").GetAttribute("value"));
+            Assert.True(cut.Find("[data-testid=\"settings-copilot-enable-remote-sessions\"]").HasAttribute("checked"));
+            Assert.False(cut.Find("[data-testid=\"settings-copilot-enable-session-telemetry\"]").HasAttribute("checked"));
             Assert.Contains("api.github.com", cut.Find("[data-testid=\"settings-copilot-allowed-hosts\"]").GetAttribute("value"), StringComparison.Ordinal);
             Assert.Contains("github.com", cut.Find("[data-testid=\"settings-webview-allowed-hosts\"]").GetAttribute("value"), StringComparison.Ordinal);
             Assert.Equal("https://github.com/example/RepoSyncRadar", cut.Find("[data-testid=\"settings-updates-feed-url\"]").GetAttribute("value"));
@@ -60,6 +64,8 @@ public sealed class LocalAppSettingsEditorTests
 
         cut.Find("[data-testid=\"settings-github-owner\"]").Input("contoso");
         cut.Find("[data-testid=\"settings-copilot-model\"]").Input("gpt-5.5");
+        cut.Find("[data-testid=\"settings-copilot-enable-remote-sessions\"]").Change(true);
+        cut.Find("[data-testid=\"settings-copilot-enable-session-telemetry\"]").Change(false);
         cut.Find("[data-testid=\"settings-copilot-allowed-hosts\"]").Input("docs.github.com\napi.github.com");
         cut.Find("[data-testid=\"settings-webview-allowed-hosts\"]").Input("docs.github.com\ngithub.com\ngithub.githubassets.com");
         cut.Find("[data-testid=\"settings-docsrepo-preview-environment\"]").Input("PORT={port}\nREQUEST_TIMEOUT=600000");
@@ -73,6 +79,8 @@ public sealed class LocalAppSettingsEditorTests
             Assert.NotNull(store.Saved);
             Assert.Equal("contoso", store.Saved.GitHub.Owner);
             Assert.Equal("gpt-5.5", store.Saved.Copilot.DefaultModel);
+            Assert.True(store.Saved.Copilot.EnableRemoteSessions);
+            Assert.False(store.Saved.Copilot.EnableSessionTelemetry);
             Assert.Equal(["docs.github.com", "api.github.com"], store.Saved.Copilot.AllowedUrlHosts);
             Assert.Equal(["docs.github.com", "github.com", "github.githubassets.com"], store.Saved.WebView.AllowedUrlHosts);
             Assert.Equal("600000", store.Saved.DocsRepository.PreviewEnvironment["REQUEST_TIMEOUT"]);

@@ -118,6 +118,14 @@
                     <input type="checkbox" data-testid="settings-copilot-capture-content" checked="@settings.Copilot.CaptureContent" disabled="@_saving" @onchange="e => settings.Copilot.CaptureContent = BoolValue(e)" />
                     <span>CaptureContent</span>
                 </label>
+                <label class="local-settings-check">
+                    <input type="checkbox" data-testid="settings-copilot-enable-remote-sessions" checked="@settings.Copilot.EnableRemoteSessions" disabled="@_saving" @onchange="e => settings.Copilot.EnableRemoteSessions = BoolValue(e)" />
+                    <span>EnableRemoteSessions</span>
+                </label>
+                <label class="local-settings-check">
+                    <input type="checkbox" data-testid="settings-copilot-enable-session-telemetry" checked="@settings.Copilot.EnableSessionTelemetry" disabled="@_saving" @onchange="e => settings.Copilot.EnableSessionTelemetry = BoolValue(e)" />
+                    <span>EnableSessionTelemetry</span>
+                </label>
                 <label class="local-settings-field wide">
                     <span>OAuthClientId</span>
                     <input data-testid="settings-copilot-oauth-client-id" value="@settings.Copilot.OAuthClientId" disabled="@_saving" @oninput="e => settings.Copilot.OAuthClientId = NullableStringValue(e)" />

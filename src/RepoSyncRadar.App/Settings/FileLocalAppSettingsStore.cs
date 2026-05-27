@@ -175,6 +175,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CopilotHome = GetNullableString(configuration, "Copilot:CopilotHome"),
                 TelemetryFilePath = GetNullableString(configuration, "Copilot:TelemetryFilePath"),
                 CaptureContent = GetBool(configuration, "Copilot:CaptureContent", defaults.Copilot.CaptureContent),
+                EnableRemoteSessions = GetBool(configuration, "Copilot:EnableRemoteSessions", defaults.Copilot.EnableRemoteSessions),
+                EnableSessionTelemetry = GetBool(configuration, "Copilot:EnableSessionTelemetry", defaults.Copilot.EnableSessionTelemetry),
                 AllowedUrlHosts = GetStringList(configuration, "Copilot:AllowedUrlHosts", defaults.Copilot.AllowedUrlHosts),
                 OAuthClientId = GetNullableString(configuration, "Copilot:OAuthClientId"),
                 OAuthScopes = GetStringList(configuration, "Copilot:OAuthScopes", defaults.Copilot.OAuthScopes),
@@ -239,6 +241,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CopilotHome = GetNullableString(root, "Copilot", "CopilotHome", fallback.Copilot.CopilotHome),
                 TelemetryFilePath = GetNullableString(root, "Copilot", "TelemetryFilePath", fallback.Copilot.TelemetryFilePath),
                 CaptureContent = GetBool(root, "Copilot", "CaptureContent", fallback.Copilot.CaptureContent),
+                EnableRemoteSessions = GetBool(root, "Copilot", "EnableRemoteSessions", fallback.Copilot.EnableRemoteSessions),
+                EnableSessionTelemetry = GetBool(root, "Copilot", "EnableSessionTelemetry", fallback.Copilot.EnableSessionTelemetry),
                 AllowedUrlHosts = GetStringList(root, "Copilot", "AllowedUrlHosts", fallback.Copilot.AllowedUrlHosts),
                 OAuthClientId = GetNullableString(root, "Copilot", "OAuthClientId", fallback.Copilot.OAuthClientId),
                 OAuthScopes = GetStringList(root, "Copilot", "OAuthScopes", fallback.Copilot.OAuthScopes),
@@ -304,6 +308,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             ? null
             : settings.Copilot.TelemetryFilePath;
         copilot["CaptureContent"] = settings.Copilot.CaptureContent;
+        copilot["EnableRemoteSessions"] = settings.Copilot.EnableRemoteSessions;
+        copilot["EnableSessionTelemetry"] = settings.Copilot.EnableSessionTelemetry;
         copilot["AllowedUrlHosts"] = ToJsonArray(settings.Copilot.AllowedUrlHosts);
         copilot["OAuthClientId"] = string.IsNullOrWhiteSpace(settings.Copilot.OAuthClientId)
             ? string.Empty
@@ -369,6 +375,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 CopilotHome = NormalizeNullable(settings.Copilot.CopilotHome),
                 TelemetryFilePath = NormalizeNullable(settings.Copilot.TelemetryFilePath),
                 CaptureContent = settings.Copilot.CaptureContent,
+                EnableRemoteSessions = settings.Copilot.EnableRemoteSessions,
+                EnableSessionTelemetry = settings.Copilot.EnableSessionTelemetry,
                 AllowedUrlHosts = NormalizeHosts(settings.Copilot.AllowedUrlHosts),
                 OAuthClientId = NormalizeNullable(settings.Copilot.OAuthClientId),
                 OAuthScopes = NormalizeStringList(settings.Copilot.OAuthScopes),

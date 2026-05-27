@@ -87,6 +87,8 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.Copilot.CopilotHome = " C:\\Users\\me\\.reposyncradar-copilot ";
         settings.Copilot.TelemetryFilePath = " C:\\logs\\copilot.jsonl ";
         settings.Copilot.CaptureContent = true;
+        settings.Copilot.EnableRemoteSessions = true;
+        settings.Copilot.EnableSessionTelemetry = false;
         settings.Copilot.AllowedUrlHosts = ["https://docs.github.com", "api.github.com"];
         settings.WebView.AllowedUrlHosts = ["https://github.com", "github.githubassets.com"];
         settings.DocsRepository.BareCloneDir = "C:\\github\\.cache\\docs.git";
@@ -119,6 +121,8 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("C:\\Users\\me\\.reposyncradar-copilot", root.GetProperty("Copilot").GetProperty("CopilotHome").GetString());
         Assert.Equal("C:\\logs\\copilot.jsonl", root.GetProperty("Copilot").GetProperty("TelemetryFilePath").GetString());
         Assert.True(root.GetProperty("Copilot").GetProperty("CaptureContent").GetBoolean());
+        Assert.True(root.GetProperty("Copilot").GetProperty("EnableRemoteSessions").GetBoolean());
+        Assert.False(root.GetProperty("Copilot").GetProperty("EnableSessionTelemetry").GetBoolean());
         Assert.Equal("docs.github.com", root.GetProperty("Copilot").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("github.com", root.GetProperty("WebView").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("600000", root.GetProperty("DocsRepository").GetProperty("PreviewEnvironment").GetProperty("REQUEST_TIMEOUT").GetString());

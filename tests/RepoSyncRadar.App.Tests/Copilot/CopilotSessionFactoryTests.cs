@@ -75,6 +75,7 @@ public sealed class CopilotSessionFactoryTests
             SessionIdleTimeoutSeconds = 120,
             TelemetryFilePath = " C:/logs/copilot-otel.jsonl ",
             CaptureContent = true,
+            EnableRemoteSessions = true,
         };
 
         var logger = NullLogger<CopilotSessionFactory>.Instance;
@@ -84,6 +85,7 @@ public sealed class CopilotSessionFactoryTests
         Assert.Same(logger, options.Logger);
         Assert.Equal("token-123", options.GitHubToken);
         Assert.Equal("debug", options.LogLevel?.Value);
+        Assert.True(options.EnableRemoteSessions);
         var stdio = Assert.IsType<StdioRuntimeConnection>(options.Connection);
         Assert.Equal("C:/tools/copilot.exe", stdio.Path);
         Assert.Equal("C:/data/copilot", options.BaseDirectory);

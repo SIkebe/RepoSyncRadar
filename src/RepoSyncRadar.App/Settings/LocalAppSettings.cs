@@ -92,6 +92,10 @@ public sealed class CopilotLocalAppSettings
 
     public bool CaptureContent { get; set; }
 
+    public bool EnableRemoteSessions { get; set; }
+
+    public bool EnableSessionTelemetry { get; set; } = true;
+
     public List<string> AllowedUrlHosts { get; set; } =
     [
         "docs.github.com",
@@ -112,6 +116,8 @@ public sealed class CopilotLocalAppSettings
             CopilotHome = CopilotHome,
             TelemetryFilePath = TelemetryFilePath,
             CaptureContent = CaptureContent,
+            EnableRemoteSessions = EnableRemoteSessions,
+            EnableSessionTelemetry = EnableSessionTelemetry,
             AllowedUrlHosts = [.. AllowedUrlHosts],
             OAuthClientId = OAuthClientId,
             OAuthScopes = [.. OAuthScopes],
