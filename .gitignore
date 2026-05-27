@@ -25,6 +25,7 @@ x86/
 *.vsidx
 .vs/
 .vscode/launch.json
+.vscode/settings.json
 .vscode/tasks.json
 project.lock.json
 project.fragment.lock.json
