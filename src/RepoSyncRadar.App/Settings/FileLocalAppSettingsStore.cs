@@ -201,6 +201,14 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 DefaultLogLevel = GetString(configuration, "Logging:LogLevel:Default", defaults.Logging.DefaultLogLevel),
                 MicrosoftLogLevel = GetString(configuration, "Logging:LogLevel:Microsoft", defaults.Logging.MicrosoftLogLevel),
             },
+            Updates = new UpdatesLocalAppSettings
+            {
+                Enabled = GetBool(configuration, "Updates:Enabled", defaults.Updates.Enabled),
+                CheckOnStartup = GetBool(configuration, "Updates:CheckOnStartup", defaults.Updates.CheckOnStartup),
+                FeedUrl = GetString(configuration, "Updates:FeedUrl", defaults.Updates.FeedUrl),
+                Channel = GetNullableString(configuration, "Updates:Channel"),
+                CheckTimeoutSeconds = GetInt(configuration, "Updates:CheckTimeoutSeconds", defaults.Updates.CheckTimeoutSeconds),
+            },
         };
     }
 
@@ -256,6 +264,14 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultLogLevel = GetString(root, "Logging", "LogLevel", "Default", fallback.Logging.DefaultLogLevel),
                 MicrosoftLogLevel = GetString(root, "Logging", "LogLevel", "Microsoft", fallback.Logging.MicrosoftLogLevel),
+            },
+            Updates = new UpdatesLocalAppSettings
+            {
+                Enabled = GetBool(root, "Updates", "Enabled", fallback.Updates.Enabled),
+                CheckOnStartup = GetBool(root, "Updates", "CheckOnStartup", fallback.Updates.CheckOnStartup),
+                FeedUrl = GetString(root, "Updates", "FeedUrl", fallback.Updates.FeedUrl),
+                Channel = GetNullableString(root, "Updates", "Channel", fallback.Updates.Channel),
+                CheckTimeoutSeconds = GetInt(root, "Updates", "CheckTimeoutSeconds", fallback.Updates.CheckTimeoutSeconds),
             },
         });
 
@@ -313,6 +329,15 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         var logLevel = GetOrReplaceObject(logging, "LogLevel");
         logLevel["Default"] = settings.Logging.DefaultLogLevel;
         logLevel["Microsoft"] = settings.Logging.MicrosoftLogLevel;
+
+        var updates = GetOrReplaceObject(root, "Updates");
+        updates["Enabled"] = settings.Updates.Enabled;
+        updates["CheckOnStartup"] = settings.Updates.CheckOnStartup;
+        updates["FeedUrl"] = settings.Updates.FeedUrl;
+        updates["Channel"] = string.IsNullOrWhiteSpace(settings.Updates.Channel)
+            ? null
+            : settings.Updates.Channel;
+        updates["CheckTimeoutSeconds"] = settings.Updates.CheckTimeoutSeconds;
     }
 
     private static LocalAppSettings Normalize(LocalAppSettings settings)
@@ -369,6 +394,14 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultLogLevel = TrimOrEmpty(settings.Logging.DefaultLogLevel),
                 MicrosoftLogLevel = TrimOrEmpty(settings.Logging.MicrosoftLogLevel),
+            },
+            Updates = new UpdatesLocalAppSettings
+            {
+                Enabled = settings.Updates.Enabled,
+                CheckOnStartup = settings.Updates.CheckOnStartup,
+                FeedUrl = TrimOrEmpty(settings.Updates.FeedUrl),
+                Channel = NormalizeNullable(settings.Updates.Channel),
+                CheckTimeoutSeconds = settings.Updates.CheckTimeoutSeconds,
             },
         };
 
@@ -434,6 +467,18 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
 
         Require(settings.Logging.DefaultLogLevel, "Logging.LogLevel.Default", errors);
         Require(settings.Logging.MicrosoftLogLevel, "Logging.LogLevel.Microsoft", errors);
+
+        ValidateRange(settings.Updates.CheckTimeoutSeconds, 5, 1800, "Updates.CheckTimeoutSeconds", errors);
+        if (settings.Updates.Enabled)
+        {
+            Require(settings.Updates.FeedUrl, "Updates.FeedUrl", errors);
+            if (!Uri.TryCreate(settings.Updates.FeedUrl, UriKind.Absolute, out var updateUri)
+                || (!string.Equals(updateUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(updateUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)))
+            {
+                errors.Add("Updates.FeedUrl は http/https の絶対 URL にしてください。");
+            }
+        }
 
         if (errors.Count > 0)
         {

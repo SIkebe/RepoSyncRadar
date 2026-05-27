@@ -16,6 +16,9 @@ public sealed class LocalAppSettingsEditorTests
         settings.Copilot.DefaultModel = "gpt-5.5";
         settings.Copilot.AllowedUrlHosts = ["docs.github.com", "api.github.com"];
         settings.WebView.AllowedUrlHosts = ["docs.github.com", "github.com"];
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "https://github.com/example/RepoSyncRadar";
+        settings.Updates.Channel = "win-arm64-preview";
         settings.DocsRepository.PreviewEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["PORT"] = "{port}",
@@ -32,6 +35,8 @@ public sealed class LocalAppSettingsEditorTests
             Assert.Equal("gpt-5.5", cut.Find("[data-testid=\"settings-copilot-model\"]").GetAttribute("value"));
             Assert.Contains("api.github.com", cut.Find("[data-testid=\"settings-copilot-allowed-hosts\"]").GetAttribute("value"), StringComparison.Ordinal);
             Assert.Contains("github.com", cut.Find("[data-testid=\"settings-webview-allowed-hosts\"]").GetAttribute("value"), StringComparison.Ordinal);
+            Assert.Equal("https://github.com/example/RepoSyncRadar", cut.Find("[data-testid=\"settings-updates-feed-url\"]").GetAttribute("value"));
+            Assert.Equal("win-arm64-preview", cut.Find("[data-testid=\"settings-updates-channel\"]").GetAttribute("value"));
             Assert.Contains("PORT={port}", cut.Find("[data-testid=\"settings-docsrepo-preview-environment\"]").GetAttribute("value"), StringComparison.Ordinal);
             Assert.Contains("通常は配布版に同梱", cut.Find("[data-testid=\"settings-copilot-oauth-client-id\"]").ParentElement!.TextContent, StringComparison.Ordinal);
         });
@@ -58,6 +63,9 @@ public sealed class LocalAppSettingsEditorTests
         cut.Find("[data-testid=\"settings-copilot-allowed-hosts\"]").Input("docs.github.com\napi.github.com");
         cut.Find("[data-testid=\"settings-webview-allowed-hosts\"]").Input("docs.github.com\ngithub.com\ngithub.githubassets.com");
         cut.Find("[data-testid=\"settings-docsrepo-preview-environment\"]").Input("PORT={port}\nREQUEST_TIMEOUT=600000");
+        cut.Find("[data-testid=\"settings-updates-enabled\"]").Change(true);
+        cut.Find("[data-testid=\"settings-updates-feed-url\"]").Input("https://github.com/example/RepoSyncRadar");
+        cut.Find("[data-testid=\"settings-updates-channel\"]").Input("win-x64-preview");
         cut.Find("[data-testid=\"settings-local-appsettings-save\"]").Click();
 
         cut.WaitForAssertion(() =>
@@ -68,6 +76,9 @@ public sealed class LocalAppSettingsEditorTests
             Assert.Equal(["docs.github.com", "api.github.com"], store.Saved.Copilot.AllowedUrlHosts);
             Assert.Equal(["docs.github.com", "github.com", "github.githubassets.com"], store.Saved.WebView.AllowedUrlHosts);
             Assert.Equal("600000", store.Saved.DocsRepository.PreviewEnvironment["REQUEST_TIMEOUT"]);
+            Assert.True(store.Saved.Updates.Enabled);
+            Assert.Equal("https://github.com/example/RepoSyncRadar", store.Saved.Updates.FeedUrl);
+            Assert.Equal("win-x64-preview", store.Saved.Updates.Channel);
             Assert.Contains("保存", cut.Find("[data-testid=\"settings-local-appsettings-status\"]").TextContent, StringComparison.Ordinal);
         });
     }

@@ -2,6 +2,7 @@
 @using RepoSyncRadar.App.Auth
 @using RepoSyncRadar.App.Copilot
 @using RepoSyncRadar.App.Settings
+@using RepoSyncRadar.App.Updates
 @using RepoSyncRadar.Core.Services
 @implements IDisposable
 
@@ -181,6 +182,32 @@
 
             <LocalAppSettingsEditor />
 
+            <section class="settings-section" data-testid="settings-update-check">
+                <header class="settings-subheader">
+                    <div>
+                        <h3>Updates</h3>
+                        <p class="settings-muted">Check for a Velopack release now. Downloaded updates apply on the next launch.</p>
+                    </div>
+                    <button type="button"
+                            class="toolbar-button compact secondary"
+                            data-testid="settings-check-updates"
+                            disabled="@_settingsUpdateBusy"
+                            @onclick="CheckForUpdatesNowAsync">@(_settingsUpdateBusy ? "Checking..." : "Check for updates")</button>
+                </header>
+                @if (_settingsUpdateProgress is { } updateProgress)
+                {
+                    <p class="settings-muted" data-testid="settings-update-progress">Downloading @updateProgress%</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(_settingsUpdateStatus))
+                {
+                    <p class="settings-muted" data-testid="settings-update-status">@_settingsUpdateStatus</p>
+                }
+                @if (!string.IsNullOrWhiteSpace(_settingsUpdateError))
+                {
+                    <p class="settings-error" data-testid="settings-update-error">@_settingsUpdateError</p>
+                }
+            </section>
+
             <section class="settings-section" data-testid="settings-copilot-usage">
                 <h3>@L["Settings.CopilotUsage"]</h3>
                 @if (!HasCopilotUsage(_copilotUsage))
@@ -337,6 +364,10 @@
     private readonly HashSet<string> _selectedIgnoreRulePatterns = new(StringComparer.Ordinal);
     private bool _settingsDeleteBusy;
     private string? _settingsDeleteStatus;
+    private bool _settingsUpdateBusy;
+    private int? _settingsUpdateProgress;
+    private string? _settingsUpdateStatus;
+    private string? _settingsUpdateError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -574,6 +605,57 @@
             _settingsThemeSaving = false;
         }
     }
+
+    private async Task CheckForUpdatesNowAsync()
+    {
+        if (_settingsUpdateBusy)
+        {
+            return;
+        }
+
+        _settingsUpdateBusy = true;
+        _settingsUpdateProgress = null;
+        _settingsUpdateStatus = "Checking for updates...";
+        _settingsUpdateError = null;
+        StateHasChanged();
+        try
+        {
+            var updateService = Services.GetRequiredService<IAppUpdateService>();
+            var progress = new Progress<int>(value =>
+            {
+                _settingsUpdateProgress = value;
+                _ = InvokeAsync(StateHasChanged);
+            });
+            var result = await updateService.CheckAndDownloadAsync(progress, ignoreCheckOnStartup: true, CancellationToken.None);
+            _settingsUpdateStatus = FormatUpdateResult(result);
+            _settingsUpdateProgress = result.Status == AppUpdateStatus.Downloaded ? 100 : null;
+        }
+        catch (Exception ex)
+        {
+            _settingsUpdateStatus = null;
+            _settingsUpdateProgress = null;
+            _settingsUpdateError = $"Update check failed: {ex.Message}";
+        }
+        finally
+        {
+            _settingsUpdateBusy = false;
+        }
+    }
+
+    private static string FormatUpdateResult(AppUpdateResult result)
+        => result.Status switch
+        {
+            AppUpdateStatus.Disabled => "Updates are disabled. Enable Updates in appsettings.local.json first.",
+            AppUpdateStatus.FeedNotConfigured => "Update feed is not configured.",
+            AppUpdateStatus.NotInstalled => "This app is not installed by Velopack, so updates cannot be applied.",
+            AppUpdateStatus.NoUpdate => string.IsNullOrWhiteSpace(result.CurrentVersion)
+                ? "No update is available."
+                : $"No update is available. Current version: {result.CurrentVersion}.",
+            AppUpdateStatus.Downloaded => string.IsNullOrWhiteSpace(result.AvailableVersion)
+                ? "Update downloaded. It will be applied on the next launch."
+                : $"Update {result.AvailableVersion} downloaded. It will be applied on the next launch.",
+            _ => result.Message ?? result.Status.ToString(),
+        };
 
     private async Task LoadIgnoreRulesAsync()
     {

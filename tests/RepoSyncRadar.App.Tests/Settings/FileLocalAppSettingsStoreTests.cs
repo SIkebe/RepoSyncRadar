@@ -95,6 +95,10 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
             ["PORT"] = "{port}",
             ["REQUEST_TIMEOUT"] = "600000",
         };
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = " https://github.com/example/RepoSyncRadar ";
+        settings.Updates.Channel = " win-arm64-preview ";
+        settings.Updates.CheckTimeoutSeconds = 180;
         var events = new List<LocalAppSettings>();
         var store = new FileLocalAppSettingsStore(path);
         store.SettingsChanged += events.Add;
@@ -118,6 +122,10 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("docs.github.com", root.GetProperty("Copilot").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("github.com", root.GetProperty("WebView").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("600000", root.GetProperty("DocsRepository").GetProperty("PreviewEnvironment").GetProperty("REQUEST_TIMEOUT").GetString());
+        Assert.True(root.GetProperty("Updates").GetProperty("Enabled").GetBoolean());
+        Assert.Equal("https://github.com/example/RepoSyncRadar", root.GetProperty("Updates").GetProperty("FeedUrl").GetString());
+        Assert.Equal("win-arm64-preview", root.GetProperty("Updates").GetProperty("Channel").GetString());
+        Assert.Equal(180, root.GetProperty("Updates").GetProperty("CheckTimeoutSeconds").GetInt32());
     }
 
     [Fact]
@@ -132,6 +140,21 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
             () => store.SaveAsync(settings, TestContext.Current.CancellationToken));
 
         Assert.Contains("DocsApi.BaseAddress", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaveAsync_Enabled_Updates_Without_FeedUrl_Throws_Validation_Error()
+    {
+        var path = Path.Combine(_tempRoot, "appsettings.local.json");
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = string.Empty;
+        var store = new FileLocalAppSettingsStore(path);
+
+        var ex = await Assert.ThrowsAsync<LocalAppSettingsValidationException>(
+            () => store.SaveAsync(settings, TestContext.Current.CancellationToken));
+
+        Assert.Contains("Updates.FeedUrl", ex.Message, StringComparison.Ordinal);
     }
 
     public void Dispose()

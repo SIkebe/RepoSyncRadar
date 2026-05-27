@@ -16,6 +16,8 @@ public sealed class LocalAppSettings
 
     public LoggingLocalAppSettings Logging { get; set; } = new();
 
+    public UpdatesLocalAppSettings Updates { get; set; } = new();
+
     public LocalAppSettings Clone()
         => new()
         {
@@ -25,6 +27,7 @@ public sealed class LocalAppSettings
             WebView = WebView.Clone(),
             DocsRepository = DocsRepository.Clone(),
             Logging = Logging.Clone(),
+            Updates = Updates.Clone(),
         };
 }
 
@@ -186,6 +189,29 @@ public sealed class LoggingLocalAppSettings
         {
             DefaultLogLevel = DefaultLogLevel,
             MicrosoftLogLevel = MicrosoftLogLevel,
+        };
+}
+
+public sealed class UpdatesLocalAppSettings
+{
+    public bool Enabled { get; set; }
+
+    public bool CheckOnStartup { get; set; } = true;
+
+    public string FeedUrl { get; set; } = string.Empty;
+
+    public string? Channel { get; set; }
+
+    public int CheckTimeoutSeconds { get; set; } = 120;
+
+    public UpdatesLocalAppSettings Clone()
+        => new()
+        {
+            Enabled = Enabled,
+            CheckOnStartup = CheckOnStartup,
+            FeedUrl = FeedUrl,
+            Channel = Channel,
+            CheckTimeoutSeconds = CheckTimeoutSeconds,
         };
 }
 

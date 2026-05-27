@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using RepoSyncRadar.App.Settings;
+using RepoSyncRadar.App.Updates;
 using RepoSyncRadar.Core;
 using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Data;
@@ -91,6 +92,11 @@ public partial class App : Application
         _ = PrewarmPreviewAsync(
             Services.GetRequiredService<IPreviewCoordinator>(),
             Services.GetRequiredService<ILogger<App>>());
+
+        _ = CheckForUpdatesOnStartupAsync(
+            Services.GetRequiredService<IAppUpdateService>(),
+            Services.GetRequiredService<ILogger<App>>(),
+            CancellationToken.None);
     }
 
     internal static IConfigurationBuilder ConfigureAppConfiguration(
@@ -150,6 +156,24 @@ public partial class App : Application
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogPreviewPrewarmFailed(logger, ex);
+        }
+    }
+
+    internal static async Task CheckForUpdatesOnStartupAsync(
+        IAppUpdateService updateService,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(updateService);
+        ArgumentNullException.ThrowIfNull(logger);
+        try
+        {
+            var result = await updateService.CheckAndDownloadAsync(null, cancellationToken: cancellationToken).ConfigureAwait(false);
+            LogStartupUpdateResult(logger, result.Status, result.CurrentVersion, result.AvailableVersion, result.Message);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogStartupUpdateFailed(logger, ex);
         }
     }
 
@@ -231,6 +255,14 @@ public partial class App : Application
     [LoggerMessage(EventId = 5, Level = LogLevel.Warning,
         Message = "Preview prewarm failed; the first preview click will fall back to the cold path.")]
     private static partial void LogPreviewPrewarmFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Information,
+        Message = "Startup update check completed: {Status}. Current={CurrentVersion}; Available={AvailableVersion}; Message={Message}")]
+    private static partial void LogStartupUpdateResult(ILogger logger, AppUpdateStatus status, string? currentVersion, string? availableVersion, string? message);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Warning,
+        Message = "Startup update check failed.")]
+    private static partial void LogStartupUpdateFailed(ILogger logger, Exception exception);
 
     /// <summary>
     /// Last-resort handler for any exception that escapes the BlazorWebView, a
