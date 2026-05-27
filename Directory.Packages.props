@@ -42,6 +42,10 @@
     <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.0-beta.7" />
   </ItemGroup>
 
+  <ItemGroup Label="Installer / Updates">
+    <PackageVersion Include="Velopack" Version="1.0.1" />
+  </ItemGroup>
+
   <ItemGroup Label="Testing">
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
