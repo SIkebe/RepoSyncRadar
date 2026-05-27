@@ -23,19 +23,23 @@ The OpenTelemetry Collector and VS Code GitHub Copilot telemetry settings are in
 Pick a short, globally distinctive prefix and edit `main.bicepparam`. The default prefix is only a placeholder.
 
 ```powershell
+$resourceGroupName = 'rg-copilot-monitoring'
+$location = 'japaneast'
+$namePrefix = 'copilotmon'
+
 az login
 az account set --subscription "<subscription-id-or-name>"
 az provider register --namespace Microsoft.Dashboard --wait
 az provider show --namespace Microsoft.Dashboard --query registrationState --output tsv
-az group create --name rg-copilot-monitoring --location japaneast
+az group create --name $resourceGroupName --location $location
 az deployment group what-if `
-  --resource-group rg-copilot-monitoring `
+  --resource-group $resourceGroupName `
   --template-file infra/copilot-grafana/main.bicep `
-  --parameters infra/copilot-grafana/main.bicepparam
+  --parameters infra/copilot-grafana/main.bicepparam namePrefix=$namePrefix location=$location
 az deployment group create `
-  --resource-group rg-copilot-monitoring `
+  --resource-group $resourceGroupName `
   --template-file infra/copilot-grafana/main.bicep `
-  --parameters infra/copilot-grafana/main.bicepparam
+  --parameters infra/copilot-grafana/main.bicepparam namePrefix=$namePrefix location=$location
 ```
 
 The deployment output includes the Grafana endpoint and the Application Insights connection string. Treat the connection string as a secret because anyone with it can send telemetry into your Application Insights resource.
@@ -45,9 +49,9 @@ If you cannot open or administer the Grafana instance after deployment, assign y
 ```powershell
 $assignee = az ad signed-in-user show --query id --output tsv
 $grafanaId = az resource show `
-  --resource-group rg-copilot-monitoring `
+  --resource-group $resourceGroupName `
   --resource-type Microsoft.Dashboard/grafana `
-  --name copilotmon-grafana `
+  --name "$namePrefix-grafana" `
   --query id `
   --output tsv
 az role assignment create --assignee $assignee --role "Grafana Admin" --scope $grafanaId
@@ -55,23 +59,24 @@ az role assignment create --assignee $assignee --role "Grafana Admin" --scope $g
 
 ## Run the OpenTelemetry Collector locally
 
-Copy `otel-collector-config.sample.yaml` to a local ignored file such as `otel-collector-config.yaml`, then replace the connection string with the deployment output.
+Copy `otel-collector-config.docker.sample.yaml` to a local ignored file such as `otel-collector-config.yaml`, then replace the connection string with the deployment output. Use `otel-collector-config.sample.yaml` instead only when running the collector directly on your workstation; that file binds receivers to `127.0.0.1` by default.
 
 The local Docker example pins the OpenTelemetry Collector contrib image to `0.153.0`, which is the version validated with this setup. Update the pinned tag deliberately after testing a newer collector version.
 
 ```powershell
 $connectionString = az resource show `
-  --resource-group rg-copilot-monitoring `
+  --resource-group $resourceGroupName `
   --resource-type Microsoft.Insights/components `
-  --name copilotmon-appi `
+  --name "$namePrefix-appi" `
   --query properties.ConnectionString `
   --output tsv
 
 New-Item -ItemType Directory -Force artifacts/copilot-grafana | Out-Null
-Copy-Item infra/copilot-grafana/otel-collector-config.sample.yaml artifacts/copilot-grafana/otel-collector-config.yaml
-(Get-Content artifacts/copilot-grafana/otel-collector-config.yaml) `
-  -replace 'InstrumentationKey=<YOUR-KEY>;IngestionEndpoint=https://<region>.in.applicationinsights.azure.com/;LiveEndpoint=https://<region>.livediagnostics.monitor.azure.com/;ApplicationId=<YOUR-APP-ID>', $connectionString `
-  | Set-Content artifacts/copilot-grafana/otel-collector-config.yaml -Encoding utf8NoBOM
+$configPath = 'artifacts/copilot-grafana/otel-collector-config.yaml'
+$placeholderConnectionString = 'InstrumentationKey=<YOUR-KEY>;IngestionEndpoint=https://<region>.in.applicationinsights.azure.com/;LiveEndpoint=https://<region>.livediagnostics.monitor.azure.com/;ApplicationId=<YOUR-APP-ID>'
+Copy-Item infra/copilot-grafana/otel-collector-config.docker.sample.yaml $configPath
+(Get-Content $configPath -Raw).Replace($placeholderConnectionString, $connectionString) `
+  | Set-Content $configPath -Encoding utf8NoBOM
 
 docker info --format "Docker Server {{.ServerVersion}}"
 docker run --rm -d --name otel-collector `
@@ -127,14 +132,14 @@ You can also verify from Azure CLI. The first run may prompt to install the `app
 
 ```powershell
 az monitor app-insights query `
-  --app copilotmon-appi `
-  --resource-group rg-copilot-monitoring `
+  --app "$namePrefix-appi" `
+  --resource-group $resourceGroupName `
   --analytics-query "dependencies | where timestamp > ago(24h) | summarize Count=count(), First=min(timestamp), Last=max(timestamp) by cloud_RoleName | order by Count desc" `
   --output table
 
 az monitor app-insights query `
-  --app copilotmon-appi `
-  --resource-group rg-copilot-monitoring `
+  --app "$namePrefix-appi" `
+  --resource-group $resourceGroupName `
   --analytics-query "customMetrics | where timestamp > ago(24h) | summarize Count=count() by name | order by Count desc | take 20" `
   --output table
 ```
@@ -143,8 +148,8 @@ For workspace-based Application Insights, the same metrics appear in the Log Ana
 
 ```powershell
 $workspaceId = az monitor log-analytics workspace show `
-  --resource-group rg-copilot-monitoring `
-  --workspace-name copilotmon-law `
+  --resource-group $resourceGroupName `
+  --workspace-name "$namePrefix-law" `
   --query customerId `
   --output tsv
 
@@ -170,8 +175,8 @@ If the dashboard shows `No data` with panel errors such as `Invalid application 
 
 - `Data Source`: `Azure Monitor`
 - `Subscription`: the subscription used for deployment
-- `Resource Group`: `rg-copilot-monitoring`
-- `Application Insights`: `copilotmon-appi`
+- `Resource Group`: the resource group used for deployment, for example `rg-copilot-monitoring`
+- `Application Insights`: the Application Insights resource created from the prefix, for example `copilotmon-appi`
 - `Source`: `VS Code Copilot`
 
 Use `Copy to Managed Grafana` from the saved dashboard if you want the dashboard to appear inside the Managed Grafana instance. The Azure Monitor data source in the Managed Grafana instance should be named `Azure Monitor` and use managed identity authentication.

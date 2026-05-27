@@ -3,7 +3,7 @@ targetScope = 'resourceGroup'
 @description('Azure region for all resources. Use a region where Azure Managed Grafana is available.')
 param location string = resourceGroup().location
 
-@description('Short lowercase prefix used in resource names. Keep it globally distinctive.')
+@description('Short prefix used in resource names. It is normalized to lowercase. Keep it globally distinctive.')
 @minLength(3)
 @maxLength(16)
 param namePrefix string
@@ -14,6 +14,7 @@ param namePrefix string
 param retentionInDays int = 30
 
 @description('Daily ingestion cap in GB. Use -1 for no cap.')
+@minValue(-1)
 param dailyQuotaGb int = 1
 
 @description('Tags applied to all resources.')
@@ -21,9 +22,10 @@ param tags object = {
   workload: 'github-copilot-monitoring'
 }
 
-var workspaceName = '${namePrefix}-law'
-var appInsightsName = '${namePrefix}-appi'
-var grafanaName = '${namePrefix}-grafana'
+var namePrefixNormalized = toLower(namePrefix)
+var workspaceName = '${namePrefixNormalized}-law'
+var appInsightsName = '${namePrefixNormalized}-appi'
+var grafanaName = '${namePrefixNormalized}-grafana'
 var monitoringReaderRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '43d0d8ad-25c7-4714-9337-8ba259a9fe05')
 
 resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -32,7 +34,7 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   tags: tags
   properties: {
     features: {
-      disableLocalAuth: false
+      disableLocalAuth: true
       enableLogAccessUsingOnlyResourcePermissions: true
     }
     publicNetworkAccessForIngestion: 'Enabled'
