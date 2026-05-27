@@ -85,7 +85,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Equal(4500, link!.Port);
         Assert.Equal(new Uri("http://localhost:4500/en/foo/bar"), link.Url);
         Assert.Equal(5, calls.Count);
-        Assert.StartsWith("RUN git clone --bare", calls[0], StringComparison.Ordinal);
+        Assert.StartsWith("RUN git -c maintenance.auto=false clone --bare", calls[0], StringComparison.Ordinal);
         Assert.StartsWith("RUN git cat-file -e deadbeefcafe^{commit}", calls[1], StringComparison.Ordinal);
         Assert.StartsWith("RUN git -c maintenance.auto=false fetch origin +refs/pull/123/head:refs/pull/123/head", calls[2], StringComparison.Ordinal);
         Assert.StartsWith("RUN git worktree add", calls[3], StringComparison.Ordinal);
@@ -873,7 +873,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
         await sut.PrewarmAsync(ct);
 
-        Assert.Contains(calls, c => c.StartsWith("git clone --bare", StringComparison.Ordinal));
+        Assert.Contains(calls, c => c.StartsWith("git -c maintenance.auto=false clone --bare", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -923,7 +923,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
         await sut.PredictivePrewarmAsync(prNumber: 4242, sha: "deadbeefcafe", cancellationToken: ct);
 
-        Assert.Contains(calls, c => c.StartsWith("git clone --bare", StringComparison.Ordinal));
+        Assert.Contains(calls, c => c.StartsWith("git -c maintenance.auto=false clone --bare", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("git -c maintenance.auto=false fetch origin +refs/pull/4242/head:refs/pull/4242/head", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("git rev-parse deadbeefcafe^", StringComparison.Ordinal));
         var worktreeAddCount = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));

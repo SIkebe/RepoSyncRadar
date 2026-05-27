@@ -71,7 +71,7 @@ public sealed partial class DocsWorktreeManager
         {
             Directory.CreateDirectory(parent);
         }
-        var args = string.Create(CultureInfo.InvariantCulture, $"clone --bare {_options.CloneUrl} {_options.BareCloneDir}");
+        var args = string.Create(CultureInfo.InvariantCulture, $"-c maintenance.auto=false clone --bare {_options.CloneUrl} {_options.BareCloneDir}");
         var result = await _runner.RunAsync("git", args, parent ?? Directory.GetCurrentDirectory(), cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
         {
@@ -125,7 +125,7 @@ public sealed partial class DocsWorktreeManager
             return;
         }
 
-        progress?.Report($"PR #{pullRequestNumber.ToString(CultureInfo.InvariantCulture)} を取得中… (git fetch)");
+        progress?.Report($"PR #{pullRequestNumber.ToString(CultureInfo.InvariantCulture)} を取得中… (初回や未取得のPRでは git fetch に数分かかることがあります)");
         await FetchPrAsync(pullRequestNumber, cancellationToken).ConfigureAwait(false);
     }
 

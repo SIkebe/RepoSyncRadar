@@ -260,7 +260,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
-        progress?.Report("リポジトリを準備中… (初回は git clone --bare で 1〜2 分)");
+        progress?.Report("リポジトリキャッシュを準備中… (初回は github/docs の取得に数分かかることがあります。次回以降はキャッシュを再利用します)");
         await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
 
         await _worktree.EnsureCommitAvailableAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
@@ -317,7 +317,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
-        progress?.Report("リポジトリを準備中… (初回は git clone --bare で 1〜2 分)");
+        progress?.Report("リポジトリキャッシュを準備中… (初回は github/docs の取得に数分かかることがあります。次回以降はキャッシュを再利用します)");
         await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
 
         await _worktree.EnsureCommitAvailableAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
@@ -758,7 +758,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         var gate = _preparedSessionLocks.GetOrAdd(key, static _ => new SemaphoreSlim(1, 1));
         if (gate.CurrentCount == 0)
         {
-            progress?.Report("このファイルの比較に必要な PR データを準備中です…");
+            progress?.Report("このファイルの比較に必要な PR データを準備中です… (初回は github/docs の取得とPRデータ取得で数分かかることがあります。次回以降はキャッシュを再利用します)");
         }
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -771,7 +771,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 return slow;
             }
 
-            progress?.Report("リポジトリを準備中… (初回は git clone --bare で 1〜2 分)");
+            progress?.Report("リポジトリキャッシュを準備中… (初回は github/docs の取得に数分かかることがあります。次回以降はキャッシュを再利用します)");
             await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
 
             await _worktree.EnsureCommitAvailableAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
