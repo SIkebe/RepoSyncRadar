@@ -28,8 +28,6 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $publishDir = [System.IO.Path]::Combine($repoRoot, $OutputRoot, 'publish', $Runtime)
 $releaseDir = [System.IO.Path]::Combine($repoRoot, $OutputRoot, 'velopack', $Runtime)
-$toolDir = [System.IO.Path]::Combine($repoRoot, 'artifacts', 'tools', 'vpk')
-$vpkExe = Join-Path $toolDir 'vpk.exe'
 
 if ([string]::IsNullOrWhiteSpace($Channel)) {
     $Channel = "$Runtime-stable"
@@ -47,7 +45,9 @@ try {
         Remove-Item $releaseDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    New-Item -ItemType Directory -Path $publishDir, $releaseDir, $toolDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $publishDir, $releaseDir -Force | Out-Null
+
+    dotnet tool restore
 
     dotnet publish src/RepoSyncRadar.App/RepoSyncRadar.App.csproj `
         -c $Configuration `
@@ -57,13 +57,6 @@ try {
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:DebugType=embedded `
         -o $publishDir
-
-    if (Test-Path $vpkExe) {
-        dotnet tool update vpk --version 1.0.1 --tool-path $toolDir
-    }
-    else {
-        dotnet tool install vpk --version 1.0.1 --tool-path $toolDir
-    }
 
     $packArgs = @(
         'pack',
@@ -90,7 +83,7 @@ try {
         $packArgs += @('--azureTrustedSignFile', $AzureTrustedSignFile)
     }
 
-    & $vpkExe --yes @packArgs
+    dotnet tool run vpk --yes @packArgs
 }
 finally {
     Pop-Location
