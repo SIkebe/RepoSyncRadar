@@ -1,7 +1,7 @@
 (function () {
-  const storageKey = "reposyncradar.sidebarWidth";
-  const defaultWidth = 240;
-  const minWidth = 180;
+  const storageKey = "reposyncradar.sidebarWidth.compactQueues";
+  const defaultWidth = 136;
+  const minWidth = 112;
   const minWorkbenchWidth = 360;
   const step = 24;
 

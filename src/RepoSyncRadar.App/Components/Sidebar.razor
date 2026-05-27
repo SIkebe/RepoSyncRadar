@@ -24,11 +24,11 @@
                     class="sidebar-item @(Selected == entry.Status ? "active" : null)"
                     data-status="@entry.Status"
                     data-testid="sidebar-item-@entry.Status"
+                    title="@BuildDescription(entry)"
                     aria-label="@BuildAriaLabel(entry)"
                     @onclick="() => OnSelectAsync(entry.Status)">
                 <span class="sidebar-copy">
                     <span class="label">@BuildLabel(entry)</span>
-                    <span class="description" data-testid="sidebar-description-@entry.Status">@BuildDescription(entry)</span>
                 </span>
                 <span class="count" data-testid="sidebar-count-@entry.Status">@CountFor(entry.Status)</span>
             </button>

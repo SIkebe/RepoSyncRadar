@@ -159,6 +159,24 @@ public sealed class ReviewActionsTests : IDisposable
     }
 
     [Fact]
+    public void Ignore_Similar_Directories_Is_Collapsed_By_Default_With_Suggestion_Count()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
+
+        var details = cut.Find("[data-testid=\"review-ignore-details\"]");
+        Assert.False(details.HasAttribute("open"));
+        Assert.Contains("候補 2 件", cut.Find("[data-testid=\"review-ignore-summary-count\"]").TextContent);
+    }
+
+    [Fact]
     public void Suggests_Ignore_Patterns_From_Selected_Files()
     {
         var repo = Substitute.For<IRadarRepository>();

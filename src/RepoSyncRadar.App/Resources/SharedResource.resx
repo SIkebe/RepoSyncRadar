@@ -162,6 +162,7 @@
   <data name="ReviewActions.Required" xml:space="preserve"><value>必須</value></data>
   <data name="ReviewActions.Suggestion.Covered" xml:space="preserve"><value>カバー済み</value></data>
   <data name="ReviewActions.Suggestion.Registered" xml:space="preserve"><value>登録済み</value></data>
+  <data name="ReviewActions.SuggestionCount" xml:space="preserve"><value>候補 {0} 件</value></data>
   <data name="ReviewActions.Suggestions" xml:space="preserve"><value>候補</value></data>
   <data name="ReviewActions.Title" xml:space="preserve"><value>レビュー判断</value></data>
   <data name="ReviewActions.Watch" xml:space="preserve"><value>注目する</value></data>
