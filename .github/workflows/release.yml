@@ -193,6 +193,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
               gh @releaseArgs
           }
+          else {
+              $editArgs = @('release', 'edit', $env:TAG, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath, "--draft=$env:DRAFT", "--prerelease=$env:PRERELEASE")
+              gh @editArgs
+          }
 
           $assets = Get-ChildItem dist/release-assets -File | Sort-Object Name
           if ($assets.Count -eq 0) {
