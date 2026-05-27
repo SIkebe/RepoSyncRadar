@@ -76,6 +76,14 @@ public sealed partial class AppUpdateService : IAppUpdateService
             return new AppUpdateResult(AppUpdateStatus.FeedNotConfigured);
         }
 
+        if (!Uri.TryCreate(settings.FeedUrl, UriKind.Absolute, out var feedUri)
+            || !IsAllowedUpdateFeedUri(feedUri))
+        {
+            return new AppUpdateResult(
+                AppUpdateStatus.FeedNotConfigured,
+                Message: "Updates.FeedUrl must use https for remote feeds. Loopback http is allowed for local smoke tests.");
+        }
+
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(settings.CheckTimeoutSeconds));
 
@@ -111,6 +119,10 @@ public sealed partial class AppUpdateService : IAppUpdateService
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information, Message = "Downloaded Velopack update. Current={CurrentVersion}; Available={AvailableVersion}")]
     private static partial void LogUpdateDownloaded(ILogger logger, string? currentVersion, string availableVersion);
+
+    private static bool IsAllowedUpdateFeedUri(Uri uri)
+        => string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && uri.IsLoopback);
 }
 
 public sealed class VelopackUpdateManagerFactory : IVelopackUpdateManagerFactory

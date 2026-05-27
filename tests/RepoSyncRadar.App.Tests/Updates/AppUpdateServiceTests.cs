@@ -93,6 +93,38 @@ public sealed class AppUpdateServiceTests
     }
 
     [Fact]
+    public async Task CheckAndDownloadAsync_When_Remote_Http_Feed_Is_Loaded_Does_Not_Create_Manager()
+    {
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "http://updates.example.com/RepoSyncRadar";
+        var factory = new FakeUpdateManagerFactory(new FakeUpdateManager { IsInstalled = true });
+        var service = new AppUpdateService(new FakeLocalAppSettingsStore(settings), factory, NullLogger<AppUpdateService>.Instance);
+
+        var result = await service.CheckAndDownloadAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(AppUpdateStatus.FeedNotConfigured, result.Status);
+        Assert.Contains("Updates.FeedUrl", result.Message, StringComparison.Ordinal);
+        Assert.Equal(0, factory.CreateCount);
+    }
+
+    [Fact]
+    public async Task CheckAndDownloadAsync_When_Loopback_Http_Feed_Is_Loaded_Creates_Manager()
+    {
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "http://127.0.0.1:4510/updates";
+        var factory = new FakeUpdateManagerFactory(new FakeUpdateManager { IsInstalled = true });
+        var service = new AppUpdateService(new FakeLocalAppSettingsStore(settings), factory, NullLogger<AppUpdateService>.Instance);
+
+        var result = await service.CheckAndDownloadAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(AppUpdateStatus.NoUpdate, result.Status);
+        Assert.Equal("http://127.0.0.1:4510/updates", factory.FeedUrl);
+        Assert.Equal(1, factory.CreateCount);
+    }
+
+    [Fact]
     public async Task CheckAndDownloadAsync_Applies_Timeout_To_Update_Check()
     {
         var settings = LocalAppSettings.Default.Clone();
