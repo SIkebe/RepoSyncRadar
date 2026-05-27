@@ -59,7 +59,7 @@ az role assignment create --assignee $assignee --role "Grafana Admin" --scope $g
 
 ## Run the OpenTelemetry Collector locally
 
-Copy `otel-collector-config.docker.sample.yaml` to a local ignored file such as `otel-collector-config.yaml`, then replace the connection string with the value retrieved from the Application Insights resource. Use `otel-collector-config.sample.yaml` instead only when running the collector directly on your workstation; that file binds receivers to `127.0.0.1` by default.
+Copy `otel-collector-config.docker.sample.yaml` to `artifacts/copilot-grafana/otel-collector-config.yaml`, which is under a git-ignored directory, then replace the connection string with the value retrieved from the Application Insights resource. Use `otel-collector-config.sample.yaml` instead only when running the collector directly on your workstation; that file binds receivers to `127.0.0.1` by default.
 
 The local Docker example pins the OpenTelemetry Collector contrib image to `0.153.0`, which is the version validated with this setup. Update the pinned tag deliberately after testing a newer collector version.
 
@@ -188,7 +188,7 @@ Use `Copy to Managed Grafana` from the saved dashboard if you want the dashboard
 Deleting the resource group removes the Azure resources:
 
 ```powershell
-az group delete --name rg-copilot-monitoring
+az group delete --name $resourceGroupName
 ```
 
 Stop the local collector when you no longer need it:
