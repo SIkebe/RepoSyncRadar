@@ -55,7 +55,7 @@ public class SidebarTests
     }
 
     [Fact]
-    public void Sidebar_Explains_Status_Buckets()
+    public void Sidebar_Exposes_Status_Descriptions_As_Titles()
     {
         var repo = Substitute.For<IRadarRepository>();
         repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
@@ -80,12 +80,12 @@ public class SidebarTests
         var cut = ctx.Render<Sidebar>(
             parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
 
-        Assert.Contains("まだ人が判断していない", cut.Find("[data-testid=\"sidebar-description-Unseen\"]").TextContent);
-        Assert.Contains("見逃さず", cut.Find("[data-testid=\"sidebar-description-Adopted\"]").TextContent);
-        Assert.Contains("低優先度", cut.Find("[data-testid=\"sidebar-description-Rejected\"]").TextContent);
-        Assert.Contains("アクティブ", cut.Find("[data-testid=\"sidebar-description-Archived\"]").TextContent);
-        Assert.Contains("保留", cut.Find("[data-testid=\"sidebar-description-Later\"]").TextContent);
-        Assert.DoesNotContain("title=", cut.Markup, StringComparison.Ordinal);
+        Assert.Contains("まだ人が判断していない", cut.Find("[data-testid=\"sidebar-item-Unseen\"]").GetAttribute("title"));
+        Assert.Contains("見逃さず", cut.Find("[data-testid=\"sidebar-item-Adopted\"]").GetAttribute("title"));
+        Assert.Contains("低優先度", cut.Find("[data-testid=\"sidebar-item-Rejected\"]").GetAttribute("title"));
+        Assert.Contains("アクティブ", cut.Find("[data-testid=\"sidebar-item-Archived\"]").GetAttribute("title"));
+        Assert.Contains("保留", cut.Find("[data-testid=\"sidebar-item-Later\"]").GetAttribute("title"));
+        Assert.Empty(cut.FindAll("[data-testid^=\"sidebar-description-\"]"));
         Assert.DoesNotContain("スキム済み", cut.Markup, StringComparison.Ordinal);
     }
 }

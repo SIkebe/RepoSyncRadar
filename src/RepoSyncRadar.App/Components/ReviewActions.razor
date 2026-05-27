@@ -72,8 +72,19 @@
         </div>
     </div>
 
-    <details class="review-ignore-panel" data-testid="review-ignore-details" open="@(_suggestedIgnorePatterns.Count > 0)">
-        <summary>@L["ReviewActions.IgnoreSimilarDirectories"]</summary>
+    <details class="review-ignore-panel" data-testid="review-ignore-details">
+        <summary>
+            <span class="review-ignore-summary-main">
+                <span class="review-ignore-chevron" aria-hidden="true">›</span>
+                <span>@L["ReviewActions.IgnoreSimilarDirectories"]</span>
+            </span>
+            <span class="review-ignore-summary-meta">
+                @if (_suggestedIgnorePatterns.Count > 0)
+                {
+                    <span class="review-ignore-summary-count" data-testid="review-ignore-summary-count">@L["ReviewActions.SuggestionCount", _suggestedIgnorePatterns.Count]</span>
+                }
+            </span>
+        </summary>
         <div class="review-ignore-content">
             @if (_suggestedIgnorePatterns.Count > 0)
             {

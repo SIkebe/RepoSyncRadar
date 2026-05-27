@@ -34,7 +34,7 @@
                 @L["Common.SelectedCount", CountSelectedVisible()]
             </span>
         </div>
-        <ul class="commit-rows">
+        <ul class="commit-rows" data-testid="commit-rows">
             @foreach (var commit in _commits)
             {
                 <li class="@BuildRowClass(commit)"

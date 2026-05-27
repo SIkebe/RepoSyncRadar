@@ -162,6 +162,7 @@
   <data name="ReviewActions.Required" xml:space="preserve"><value>required</value></data>
   <data name="ReviewActions.Suggestion.Covered" xml:space="preserve"><value>Covered</value></data>
   <data name="ReviewActions.Suggestion.Registered" xml:space="preserve"><value>Registered</value></data>
+  <data name="ReviewActions.SuggestionCount" xml:space="preserve"><value>{0} suggestion(s)</value></data>
   <data name="ReviewActions.Suggestions" xml:space="preserve"><value>Suggestions</value></data>
   <data name="ReviewActions.Title" xml:space="preserve"><value>Review Decision</value></data>
   <data name="ReviewActions.Watch" xml:space="preserve"><value>Watch</value></data>

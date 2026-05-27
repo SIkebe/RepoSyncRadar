@@ -34,14 +34,14 @@ html, body {
 
 .radar-shell {
     display: grid;
-    grid-template-columns: minmax(180px, var(--radar-sidebar-width, 240px)) 6px minmax(0, 1fr);
+    grid-template-columns: minmax(112px, var(--radar-sidebar-width, 136px)) 6px minmax(0, 1fr);
     height: 100%;
     min-width: 0;
 }
 
 .radar-sidebar-pane {
     border-right: 1px solid #e5e5e5;
-    padding: 0.75rem;
+    padding: 0.75rem 0.4rem;
     overflow-y: auto;
     background: #ffffff;
     min-width: 0;
@@ -164,9 +164,9 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
+    gap: 0.5rem;
     width: 100%;
-    padding: 0.5rem 0.75rem;
+    padding: 0.42rem 0.55rem;
     border: 1px solid transparent;
     border-radius: 4px;
     background: transparent;
@@ -186,12 +186,9 @@ html, body {
 .sidebar-item .label {
     font-weight: 600;
     line-height: 1.25;
-}
-
-.sidebar-item .description {
-    color: #666;
-    font-size: 0.75rem;
-    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .sidebar-item:hover {
@@ -228,7 +225,10 @@ html, body {
 .radar-commit-list .commit-rows {
     list-style: none;
     margin: 0;
-    padding: 0;
+    max-height: 11.75rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 0.15rem 0 0;
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
@@ -467,11 +467,16 @@ html, body {
 .commit-row.active {
     background: #e7f1ff;
     border-color: #b6d4ff;
+    box-shadow: inset 4px 0 0 #0969da;
 }
 
 .commit-row.selected {
     border-color: #80b6ff;
     box-shadow: inset 3px 0 0 #0969da;
+}
+
+.commit-row.active.selected {
+    box-shadow: inset 4px 0 0 #0969da;
 }
 
 .commit-row-select {
@@ -878,6 +883,12 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+}
+
+.radar-review-actions {
+    position: sticky;
+    top: 0;
+    z-index: 3;
 }
 
 .action-panel-header {
@@ -1497,10 +1508,85 @@ html, body {
 }
 
 .review-ignore-panel summary {
+    align-items: center;
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
     cursor: pointer;
-    color: #57606a;
+    color: #24292f;
+    display: flex;
+    gap: 0.45rem;
+    justify-content: space-between;
     font-size: 0.85rem;
-    font-weight: 600;
+    font-weight: 700;
+    min-width: 0;
+    padding: 0.42rem 0.55rem;
+    transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.review-ignore-panel summary::-webkit-details-marker {
+    display: none;
+}
+
+.review-ignore-panel summary::marker {
+    content: "";
+}
+
+.review-ignore-panel summary:hover {
+    background: #eef2f6;
+    border-color: #8c959f;
+}
+
+.review-ignore-panel summary:focus-visible {
+    border-color: #0969da;
+    box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.14);
+    outline: none;
+}
+
+.review-ignore-panel[open] summary {
+    background: #eaf3ff;
+    border-color: #80b6ff;
+}
+
+.review-ignore-summary-main {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.35rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.review-ignore-chevron {
+    color: #0969da;
+    flex: 0 0 auto;
+    font-size: 1.05rem;
+    font-weight: 800;
+    line-height: 1;
+    transform-origin: center;
+    transition: transform 120ms ease;
+}
+
+.review-ignore-panel[open] .review-ignore-chevron {
+    transform: rotate(90deg);
+}
+
+.review-ignore-summary-meta {
+    align-items: center;
+    display: inline-flex;
+    flex: 0 0 auto;
+    gap: 0.35rem;
+}
+
+.review-ignore-summary-count {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 999px;
+    color: #57606a;
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    padding: 0.12rem 0.42rem;
 }
 
 .review-ignore-content {
@@ -1915,6 +2001,11 @@ html, body {
     border-color: var(--radar-active-border) !important;
 }
 
+.radar-theme-dark .commit-row.active,
+.radar-theme-dark .commit-row.active.selected {
+    box-shadow: inset 4px 0 0 var(--radar-active-border) !important;
+}
+
 .radar-theme-dark .radar-commit-detail .commit-header .sha,
 .radar-theme-dark .toolbar-button,
 .radar-theme-dark .review-button,
@@ -1931,6 +2022,7 @@ html, body {
 .radar-theme-dark .third-party-notice-meta a,
 .radar-theme-dark .third-party-notice-details pre,
 .radar-theme-dark .review-input-action input,
+.radar-theme-dark .review-ignore-summary-count,
 .radar-theme-dark .review-suggestion-chip.already-ignored,
 .radar-theme-dark .review-archived-reason,
 .radar-theme-dark .commit-search-input,
@@ -1953,6 +2045,26 @@ html, body {
 .radar-theme-dark .batch-explanation-progress,
 .radar-theme-dark .preview-progress {
     background: var(--radar-panel-bg) !important;
+}
+
+.radar-theme-dark .review-ignore-panel summary {
+    background: var(--radar-panel-alt-bg) !important;
+    border-color: var(--radar-border) !important;
+    color: var(--radar-fg) !important;
+}
+
+.radar-theme-dark .review-ignore-panel summary:hover {
+    background: var(--radar-hover-bg) !important;
+    border-color: var(--radar-active-border) !important;
+}
+
+.radar-theme-dark .review-ignore-panel[open] summary {
+    background: var(--radar-active-bg) !important;
+    border-color: var(--radar-active-border) !important;
+}
+
+.radar-theme-dark .review-ignore-chevron {
+    color: var(--radar-active-border) !important;
 }
 
 .radar-theme-dark .radar-commit-detail .score-tile,

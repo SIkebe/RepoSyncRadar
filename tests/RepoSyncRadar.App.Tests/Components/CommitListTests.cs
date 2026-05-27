@@ -30,7 +30,23 @@ public class CommitListTests
 
         var rows = cut.FindAll("[data-testid=\"commit-row\"]");
         Assert.Equal(3, rows.Count);
+        Assert.NotNull(cut.Find("[data-testid=\"commit-rows\"]"));
         Assert.Empty(cut.FindAll("[data-testid=\"commit-list-empty\"]"));
+    }
+
+    [Fact]
+    public void CommitList_Marks_Selected_Row_As_Active()
+    {
+        var commits = new List<Commit>
+        {
+            MakeCommit("aaaaaaa1", "first"),
+            MakeCommit("bbbbbbb2", "second"),
+        };
+
+        using var cut = RenderListWith(commits, selectedSha: "bbbbbbb2");
+
+        var active = cut.Find("[data-sha=\"bbbbbbb2\"]");
+        Assert.Contains("active", active.ClassList);
     }
 
     [Fact]
@@ -193,6 +209,7 @@ public class CommitListTests
     private static IRenderedComponent<CommitList> RenderListWith(
         List<Commit> commits,
         CommitQueryFilter? filter = null,
+        string? selectedSha = null,
         Action<Commit>? onCommitSelected = null,
         Action<CommitSelectionChange>? onSelectionChanged = null)
     {
@@ -211,6 +228,7 @@ public class CommitListTests
             parameters => parameters
                 .AddCascadingValue<IServiceProvider>(sp)
                 .Add(c => c.Filter, filter)
+                .Add(c => c.SelectedSha, selectedSha)
                 .Add(c => c.OnCommitSelected, selected => onCommitSelected?.Invoke(selected))
                 .Add(c => c.SelectionChanged, change => onSelectionChanged?.Invoke(change)));
     }
