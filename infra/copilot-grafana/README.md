@@ -20,7 +20,7 @@ The OpenTelemetry Collector and VS Code GitHub Copilot telemetry settings are in
 
 ## Deploy
 
-Pick a short, globally distinctive prefix and edit `main.bicepparam`. The default prefix is only a placeholder.
+Pick a short, globally distinctive prefix and set the variables below. The sample `main.bicepparam` keeps defaults for other parameters, while the commands override `namePrefix` and `location` from the script.
 
 ```powershell
 $resourceGroupName = 'rg-copilot-monitoring'
