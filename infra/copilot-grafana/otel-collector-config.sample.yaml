@@ -2,8 +2,11 @@ receivers:
   otlp:
     protocols:
       http:
+        # Docker publishes this receiver to localhost only in the README example.
+        # If you run the collector directly on your workstation, prefer 127.0.0.1.
         endpoint: 0.0.0.0:4318
       grpc:
+        # Keep 0.0.0.0 for container use; restrict host exposure with Docker port binding.
         endpoint: 0.0.0.0:4317
 
 exporters:

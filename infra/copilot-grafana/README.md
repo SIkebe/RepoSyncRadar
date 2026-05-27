@@ -57,6 +57,8 @@ az role assignment create --assignee $assignee --role "Grafana Admin" --scope $g
 
 Copy `otel-collector-config.sample.yaml` to a local ignored file such as `otel-collector-config.yaml`, then replace the connection string with the deployment output.
 
+The local Docker example pins the OpenTelemetry Collector contrib image to `0.153.0`, which is the version validated with this setup. Update the pinned tag deliberately after testing a newer collector version.
+
 ```powershell
 $connectionString = az resource show `
   --resource-group rg-copilot-monitoring `
@@ -73,17 +75,17 @@ Copy-Item infra/copilot-grafana/otel-collector-config.sample.yaml artifacts/copi
 
 docker info --format "Docker Server {{.ServerVersion}}"
 docker run --rm -d --name otel-collector `
-  -p 4318:4318 `
-  -p 4317:4317 `
+  -p 127.0.0.1:4318:4318 `
+  -p 127.0.0.1:4317:4317 `
   -v ${PWD}/artifacts/copilot-grafana/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml `
-  otel/opentelemetry-collector-contrib:latest
+  otel/opentelemetry-collector-contrib:0.153.0
 
 docker ps --filter name=otel-collector --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
 
 If `docker info` cannot connect to `dockerDesktopLinuxEngine`, start Docker Desktop and retry after the daemon is ready.
 
-For a team setup, run the collector on a shared host instead of `localhost`, secure the endpoint, and point VS Code clients at that HTTPS endpoint.
+For a team setup, run the collector on a shared host instead of `localhost`, secure the endpoint, and point VS Code clients at that HTTPS endpoint. Exposing the collector on all host interfaces is an explicit opt-in: use firewall rules, TLS or a private network, and avoid publishing unauthenticated OTLP ports directly to untrusted networks.
 
 ## Configure VS Code GitHub Copilot telemetry
 
