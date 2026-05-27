@@ -89,9 +89,19 @@ resource grafana 'Microsoft.Dashboard/grafana@2023-09-01' = {
   }
 }
 
-resource grafanaMonitoringReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(resourceGroup().id, grafana.id, 'monitoring-reader')
-  scope: resourceGroup()
+resource grafanaWorkspaceMonitoringReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(workspace.id, grafana.id, 'monitoring-reader')
+  scope: workspace
+  properties: {
+    principalId: grafana.identity.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: monitoringReaderRoleDefinitionId
+  }
+}
+
+resource grafanaAppInsightsMonitoringReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(appInsights.id, grafana.id, 'monitoring-reader')
+  scope: appInsights
   properties: {
     principalId: grafana.identity.principalId
     principalType: 'ServicePrincipal'
@@ -103,6 +113,3 @@ output grafanaResourceName string = grafana.name
 output grafanaEndpoint string = grafana.properties.endpoint
 output logAnalyticsWorkspaceName string = workspace.name
 output applicationInsightsName string = appInsights.name
-
-@secure()
-output applicationInsightsConnectionString string = appInsights.properties.ConnectionString
