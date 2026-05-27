@@ -481,10 +481,9 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         {
             Require(settings.Updates.FeedUrl, "Updates.FeedUrl", errors);
             if (!Uri.TryCreate(settings.Updates.FeedUrl, UriKind.Absolute, out var updateUri)
-                || (!string.Equals(updateUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(updateUri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)))
+                || !IsAllowedUpdateFeedUri(updateUri))
             {
-                errors.Add("Updates.FeedUrl は http/https の絶対 URL にしてください。");
+                errors.Add("Updates.FeedUrl は https の絶対 URL にしてください。ローカル検証では http://localhost、http://127.0.0.1、http://[::1] も許可されます。");
             }
         }
 
@@ -510,6 +509,10 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             return new JsonObject();
         }
     }
+
+    private static bool IsAllowedUpdateFeedUri(Uri uri)
+        => string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || (string.Equals(uri.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) && uri.IsLoopback);
 
     private static JsonObject GetOrReplaceObject(JsonObject parent, string propertyName)
     {

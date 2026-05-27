@@ -161,6 +161,36 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Contains("Updates.FeedUrl", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task SaveAsync_Enabled_Updates_With_Remote_Http_Feed_Throws_Validation_Error()
+    {
+        var path = Path.Combine(_tempRoot, "appsettings.local.json");
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "http://updates.example.com/reposyncradar";
+        var store = new FileLocalAppSettingsStore(path);
+
+        var ex = await Assert.ThrowsAsync<LocalAppSettingsValidationException>(
+            () => store.SaveAsync(settings, TestContext.Current.CancellationToken));
+
+        Assert.Contains("Updates.FeedUrl", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("https", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SaveAsync_Enabled_Updates_Allows_Loopback_Http_Feed()
+    {
+        var path = Path.Combine(_tempRoot, "appsettings.local.json");
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "http://127.0.0.1:4510/updates";
+        var store = new FileLocalAppSettingsStore(path);
+
+        await store.SaveAsync(settings, TestContext.Current.CancellationToken);
+
+        Assert.Equal("http://127.0.0.1:4510/updates", store.Current.Updates.FeedUrl);
+    }
+
     public void Dispose()
     {
         try
