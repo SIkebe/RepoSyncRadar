@@ -80,7 +80,7 @@ public sealed partial class DocsWorktreeManager
     }
 
     /// <summary>
-    /// Runs <c>git fetch origin +refs/pull/{pr}/head:refs/pull/{pr}/head</c> against
+    /// Runs <c>git -c maintenance.auto=false fetch origin +refs/pull/{pr}/head:refs/pull/{pr}/head</c> against
     /// the bare clone so that the PR HEAD becomes a checkout-able ref.
     /// </summary>
     public async Task FetchPrAsync(int pullRequestNumber, CancellationToken cancellationToken = default)
@@ -93,7 +93,7 @@ public sealed partial class DocsWorktreeManager
         var refspec = string.Create(
             CultureInfo.InvariantCulture,
             $"+refs/pull/{pullRequestNumber}/head:refs/pull/{pullRequestNumber}/head");
-        var args = string.Create(CultureInfo.InvariantCulture, $"fetch origin {refspec}");
+        var args = string.Create(CultureInfo.InvariantCulture, $"-c maintenance.auto=false fetch origin {refspec}");
         var result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
         {

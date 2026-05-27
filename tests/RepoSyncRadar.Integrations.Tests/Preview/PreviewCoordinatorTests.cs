@@ -87,7 +87,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Equal(5, calls.Count);
         Assert.StartsWith("RUN git clone --bare", calls[0], StringComparison.Ordinal);
         Assert.StartsWith("RUN git cat-file -e deadbeefcafe^{commit}", calls[1], StringComparison.Ordinal);
-        Assert.StartsWith("RUN git fetch origin +refs/pull/123/head:refs/pull/123/head", calls[2], StringComparison.Ordinal);
+        Assert.StartsWith("RUN git -c maintenance.auto=false fetch origin +refs/pull/123/head:refs/pull/123/head", calls[2], StringComparison.Ordinal);
         Assert.StartsWith("RUN git worktree add", calls[3], StringComparison.Ordinal);
         Assert.StartsWith("START npm run dev -- --port 4500", calls[4], StringComparison.Ordinal);
         Assert.True(session.IsActive);
@@ -924,7 +924,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         await sut.PredictivePrewarmAsync(prNumber: 4242, sha: "deadbeefcafe", cancellationToken: ct);
 
         Assert.Contains(calls, c => c.StartsWith("git clone --bare", StringComparison.Ordinal));
-        Assert.Contains(calls, c => c.StartsWith("git fetch origin +refs/pull/4242/head:refs/pull/4242/head", StringComparison.Ordinal));
+        Assert.Contains(calls, c => c.StartsWith("git -c maintenance.auto=false fetch origin +refs/pull/4242/head:refs/pull/4242/head", StringComparison.Ordinal));
         Assert.Contains(calls, c => c.StartsWith("git rev-parse deadbeefcafe^", StringComparison.Ordinal));
         var worktreeAddCount = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));
         Assert.Equal(0, worktreeAddCount);
@@ -978,7 +978,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             });
 
         await sut.PredictivePrewarmAsync(prNumber: 123, sha: "headsha", cancellationToken: ct);
-        var prewarmFetchCount = calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal));
+        var prewarmFetchCount = calls.Count(c => c.StartsWith("git -c maintenance.auto=false fetch origin +refs/pull/", StringComparison.Ordinal));
         var prewarmWorktreeAddCount = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));
         Assert.Equal(1, prewarmFetchCount);
         Assert.Equal(0, prewarmWorktreeAddCount);
@@ -988,7 +988,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
         Assert.NotNull(link);
         // ユーザクリック後は fetch も worktree add も増えていないこと。
-        Assert.Equal(prewarmFetchCount, calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal)));
+        Assert.Equal(prewarmFetchCount, calls.Count(c => c.StartsWith("git -c maintenance.auto=false fetch origin +refs/pull/", StringComparison.Ordinal)));
         Assert.Equal(prewarmWorktreeAddCount, calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal)));
     }
 
@@ -1046,7 +1046,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var firstLink = await sut.PrepareMarkdownComparisonPreviewAsync(
             123, "headsha", "FILE1.md", cancellationToken: ct);
         Assert.NotNull(firstLink);
-        var fetchAfterFirst = calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal));
+        var fetchAfterFirst = calls.Count(c => c.StartsWith("git -c maintenance.auto=false fetch origin +refs/pull/", StringComparison.Ordinal));
         var worktreeAddAfterFirst = calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal));
         Assert.Equal(1, fetchAfterFirst);
         Assert.Equal(0, worktreeAddAfterFirst);
@@ -1060,7 +1060,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Contains("file=FILE1.md", firstLink.BeforeUrl.Query, StringComparison.Ordinal);
         Assert.Contains("file=FILE2.md", secondLink.BeforeUrl.Query, StringComparison.Ordinal);
         // 1/7 → 2/7 切替で git fetch / git worktree add が再走していないこと。
-        Assert.Equal(fetchAfterFirst, calls.Count(c => c.StartsWith("git fetch origin +refs/pull/", StringComparison.Ordinal)));
+        Assert.Equal(fetchAfterFirst, calls.Count(c => c.StartsWith("git -c maintenance.auto=false fetch origin +refs/pull/", StringComparison.Ordinal)));
         Assert.Equal(worktreeAddAfterFirst, calls.Count(c => c.StartsWith("git worktree add", StringComparison.Ordinal)));
     }
 
