@@ -87,7 +87,7 @@ public sealed partial class AppUpdateService : IAppUpdateService
 
         try
         {
-            var update = await manager.CheckForUpdatesAsync().ConfigureAwait(false);
+            var update = await manager.CheckForUpdatesAsync().WaitAsync(timeout.Token).ConfigureAwait(false);
             if (update is null)
             {
                 return new AppUpdateResult(AppUpdateStatus.NoUpdate, manager.CurrentVersion);

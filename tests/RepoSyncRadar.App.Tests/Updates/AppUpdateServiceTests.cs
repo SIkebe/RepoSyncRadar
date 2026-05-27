@@ -92,6 +92,28 @@ public sealed class AppUpdateServiceTests
         Assert.Equal(0, factory.CreateCount);
     }
 
+    [Fact]
+    public async Task CheckAndDownloadAsync_Applies_Timeout_To_Update_Check()
+    {
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "https://github.com/example/RepoSyncRadar";
+        settings.Updates.CheckTimeoutSeconds = 0;
+        var manager = new FakeUpdateManager
+        {
+            IsInstalled = true,
+            CheckResult = new TaskCompletionSource<UpdateInfo?>().Task,
+        };
+        var factory = new FakeUpdateManagerFactory(manager);
+        var service = new AppUpdateService(new FakeLocalAppSettingsStore(settings), factory, NullLogger<AppUpdateService>.Instance);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.CheckAndDownloadAsync(cancellationToken: TestContext.Current.CancellationToken));
+
+        Assert.Equal(1, manager.CheckCount);
+        Assert.Equal(0, manager.DownloadCount);
+    }
+
     private sealed class FakeLocalAppSettingsStore(LocalAppSettings settings) : ILocalAppSettingsStore
     {
         public string SettingsPath { get; } = "appsettings.local.json";
@@ -137,10 +159,12 @@ public sealed class AppUpdateServiceTests
 
         public int DownloadCount { get; private set; }
 
+        public Task<UpdateInfo?>? CheckResult { get; init; }
+
         public Task<UpdateInfo?> CheckForUpdatesAsync()
         {
             CheckCount++;
-            return Task.FromResult<UpdateInfo?>(null);
+            return CheckResult ?? Task.FromResult<UpdateInfo?>(null);
         }
 
         public Task DownloadUpdatesAsync(UpdateInfo updates, Action<int>? progress, CancellationToken cancellationToken)
