@@ -41,6 +41,27 @@ public sealed class DocsWorktreeManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task EnsureBareCloneAsync_Quotes_Clone_Url_And_Target_Path()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "user with space", "github docs.git");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var sut = BuildSut(runner, bareCloneDir: bare, cloneUrl: "https://example.invalid/docs.git");
+
+        await sut.EnsureBareCloneAsync(ct);
+
+        await runner.Received(1).RunAsync(
+            "git",
+            Arg.Is<string>(args => args.StartsWith("-c maintenance.auto=false clone --bare ", StringComparison.Ordinal)
+                && args.Contains("\"https://example.invalid/docs.git\"", StringComparison.Ordinal)
+                && args.Contains('"' + bare + '"', StringComparison.Ordinal)),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task FetchPrAsync_Builds_Correct_Refspec()
     {
         var ct = TestContext.Current.CancellationToken;

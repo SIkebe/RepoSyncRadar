@@ -71,7 +71,9 @@ public sealed partial class DocsWorktreeManager
         {
             Directory.CreateDirectory(parent);
         }
-        var args = string.Create(CultureInfo.InvariantCulture, $"-c maintenance.auto=false clone --bare {_options.CloneUrl} {_options.BareCloneDir}");
+        var args = string.Create(
+            CultureInfo.InvariantCulture,
+            $"-c maintenance.auto=false clone --bare {QuoteProcessArgument(_options.CloneUrl)} {QuoteProcessArgument(_options.BareCloneDir)}");
         var result = await _runner.RunAsync("git", args, parent ?? Directory.GetCurrentDirectory(), cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
         {
