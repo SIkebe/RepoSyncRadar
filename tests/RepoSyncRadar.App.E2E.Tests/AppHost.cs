@@ -143,6 +143,12 @@ public sealed class AppHost : IAsyncDisposable
 
     private static string ResolveAppExePath()
     {
+        var overridePath = Environment.GetEnvironmentVariable("REPOSYNCRADAR_E2E_APP_EXE_PATH");
+        if (!string.IsNullOrWhiteSpace(overridePath))
+        {
+            return Path.GetFullPath(overridePath);
+        }
+
         var meta = typeof(AppHost).Assembly
             .GetCustomAttributes<AssemblyMetadataAttribute>()
             .FirstOrDefault(a => string.Equals(a.Key, "RepoSyncRadarAppExePath", StringComparison.Ordinal));

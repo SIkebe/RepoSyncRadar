@@ -159,9 +159,15 @@ jobs:
               Runtime = '${{ matrix.runtime }}'
               Channel = $channel
               Force = $true
+              NoPortable = $true
+              NoLegacyManifest = $true
           }
 
           ./scripts/Build-VelopackRelease.ps1 @packageArgs
+
+      - name: Smoke test installed package
+        if: ${{ matrix.runtime == 'win-x64' }}
+        run: ./scripts/Test-VelopackInstalledE2E.ps1 -Runtime '${{ matrix.runtime }}' -CleanInstallRoot
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v7

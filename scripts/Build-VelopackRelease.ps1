@@ -15,6 +15,8 @@ param(
 
     [switch]$NoPortable,
 
+    [switch]$NoLegacyManifest,
+
     [string]$SignParams = '',
 
     [string]$AzureTrustedSignFile = ''
@@ -322,6 +324,11 @@ try {
     }
 
     Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList (@('tool', 'run', 'vpk', '--yes') + $packArgs)
+
+    if ($NoLegacyManifest) {
+        $legacyManifestPath = Join-Path $releaseDir "RELEASES-$Channel"
+        Remove-Item $legacyManifestPath -Force -ErrorAction SilentlyContinue
+    }
 }
 finally {
     Pop-Location
