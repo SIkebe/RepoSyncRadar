@@ -17,14 +17,16 @@ Do not use `--self-contained` for the default public installer unless an offline
 From the repository root:
 
 ```powershell
-./scripts/Build-VelopackRelease.ps1 -Version 0.1.0 -Runtime win-x64
+./scripts/Build-VelopackRelease.ps1 -Runtime win-x64
 ```
 
 For Windows on Arm:
 
 ```powershell
-./scripts/Build-VelopackRelease.ps1 -Version 0.1.0 -Runtime win-arm64
+./scripts/Build-VelopackRelease.ps1 -Runtime win-arm64
 ```
+
+The default app/package version is managed in `Directory.Build.props` as `RepoSyncRadarVersion`. Pass `-Version <semver>` only when intentionally overriding that single source, such as for a release tag or smoke build.
 
 The script publishes the app and writes Velopack assets under `artifacts/release/velopack/<runtime>/`. The user-facing installer is `RepoSyncRadar-<channel>-Setup.exe`. The `.nupkg` files plus `releases.<channel>.json` form the update feed.
 
@@ -35,7 +37,7 @@ The script restores and uses the repo-local .NET tool manifest (`dotnet tool res
 When rebuilding the same version/channel locally, pass `-Force` to clear the previous local Velopack output first:
 
 ```powershell
-./scripts/Build-VelopackRelease.ps1 -Version 0.1.0 -Runtime win-arm64 -Force
+./scripts/Build-VelopackRelease.ps1 -Runtime win-arm64 -Force
 ```
 
 ## Signing
@@ -46,7 +48,6 @@ With an existing `signtool.exe` parameter set:
 
 ```powershell
 ./scripts/Build-VelopackRelease.ps1 `
-  -Version 0.1.0 `
   -Runtime win-x64 `
   -SignParams '/td sha256 /fd sha256 /tr http://timestamp.digicert.com /n "Publisher Name"'
 ```
