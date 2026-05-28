@@ -58,6 +58,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<IPreviewNavigator, PreviewNavigator>();
         services.TryAddSingleton<IVelopackUpdateManagerFactory, VelopackUpdateManagerFactory>();
         services.TryAddSingleton<IAppUpdateService, AppUpdateService>();
+        services.TryAddSingleton<IAppVersionProvider, AppVersionProvider>();
 
         return services;
     }

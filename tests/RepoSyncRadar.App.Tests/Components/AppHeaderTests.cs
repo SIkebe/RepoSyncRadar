@@ -95,6 +95,48 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Renders_App_Version_Chip_From_VersionProvider()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.NotSignedIn));
+
+        var versionProvider = Substitute.For<IAppVersionProvider>();
+        versionProvider.DisplayVersion.Returns("1.2.3-test");
+
+        var sp = BuildServices(session, out _, out _, versionProvider: versionProvider);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        var chip = cut.Find("[data-testid=\"app-header-version\"]");
+        Assert.Equal("v1.2.3-test", chip.TextContent.Trim());
+        Assert.Equal("1.2.3-test", chip.GetAttribute("title"));
+    }
+
+    [Fact]
+    public void Renders_Fallback_Version_Chip_When_VersionProvider_Missing()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.NotSignedIn));
+
+        var sp = BuildServices(session, out _, out _);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        // No IAppVersionProvider registered → header should still render a chip
+        // with the static "0.0.0" default rather than crashing.
+        var chip = cut.Find("[data-testid=\"app-header-version\"]");
+        Assert.StartsWith("v", chip.TextContent.Trim(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Triage_Button_Calls_Agent_And_Publishes_Broadcaster()
     {
         var session = Substitute.For<IGitHubAuthSession>();
@@ -958,7 +1000,8 @@ public sealed class AppHeaderTests
         IRadarRepository? repo = null,
         IAppUserSettingsStore? settingsStore = null,
         ICopilotUsageTracker? usageTracker = null,
-        IAppUpdateService? updateService = null)
+        IAppUpdateService? updateService = null,
+        IAppVersionProvider? versionProvider = null)
     {
         agent = Substitute.For<ICopilotAgent>();
         broadcaster = Substitute.For<IReviewBroadcaster>();
@@ -980,7 +1023,7 @@ public sealed class AppHeaderTests
             resolvedSettingsStore.SaveDisplayCultureAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(Task.CompletedTask);
         }
-        return new ServiceCollection()
+        var services = new ServiceCollection()
             .AddLogging()
             .AddLocalization(options => options.ResourcesPath = "Resources")
             .AddSingleton(session)
@@ -990,8 +1033,14 @@ public sealed class AppHeaderTests
             .AddSingleton(resolvedSettingsStore)
             .AddSingleton(localSettingsStore)
             .AddSingleton(usageTracker ?? new CopilotUsageTracker())
-                .AddSingleton(updateService ?? Substitute.For<IAppUpdateService>())
-            .BuildServiceProvider();
+                .AddSingleton(updateService ?? Substitute.For<IAppUpdateService>());
+
+        if (versionProvider is not null)
+        {
+            services.AddSingleton(versionProvider);
+        }
+
+        return services.BuildServiceProvider();
     }
 
     private static string NormalizeText(string text)
