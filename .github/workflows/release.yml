@@ -188,6 +188,7 @@ jobs:
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           TAG: ${{ needs.prepare.outputs.tag }}
           VERSION: ${{ needs.prepare.outputs.version }}
           DRAFT: ${{ needs.prepare.outputs.draft }}
@@ -200,7 +201,7 @@ jobs:
           Windows installers and Velopack update packages are attached for x64 and Arm64.
           "@ | Set-Content -Path $notesPath -Encoding utf8NoBOM
 
-          $releaseArgs = @('release', 'create', $env:TAG, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath)
+          $releaseArgs = @('release', 'create', $env:TAG, '--repo', $env:REPOSITORY, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath)
           if ($env:DRAFT -eq 'true') {
               $releaseArgs += '--draft'
           }
@@ -208,12 +209,12 @@ jobs:
               $releaseArgs += '--prerelease'
           }
 
-          gh release view $env:TAG *> $null
+          gh release view $env:TAG --repo $env:REPOSITORY *> $null
           if ($LASTEXITCODE -ne 0) {
               gh @releaseArgs
           }
           else {
-              $editArgs = @('release', 'edit', $env:TAG, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath, "--draft=$env:DRAFT", "--prerelease=$env:PRERELEASE")
+              $editArgs = @('release', 'edit', $env:TAG, '--repo', $env:REPOSITORY, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath, "--draft=$env:DRAFT", "--prerelease=$env:PRERELEASE")
               gh @editArgs
           }
 
@@ -222,4 +223,4 @@ jobs:
               throw 'No release assets were downloaded.'
           }
 
-          gh release upload $env:TAG --clobber @($assets.FullName)
+          gh release upload $env:TAG --repo $env:REPOSITORY --clobber @($assets.FullName)
