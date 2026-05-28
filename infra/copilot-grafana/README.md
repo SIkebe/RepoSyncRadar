@@ -60,36 +60,32 @@ az role assignment create --assignee $assignee --role "Grafana Admin" --scope $g
 
 ## Run the OpenTelemetry Collector locally
 
-Copy `otel-collector-config.docker.sample.yaml` to `artifacts/copilot-grafana/otel-collector-config.yaml`, which is under a git-ignored directory, then replace the connection string with the value retrieved from the Application Insights resource. Use `otel-collector-config.sample.yaml` instead only when running the collector directly on your workstation; that file binds receivers to `127.0.0.1` by default.
+Use the helper script to create the git-ignored Docker collector config and start the local OpenTelemetry Collector container. The script uses `otel-collector-config.docker.sample.yaml`, writes `artifacts/copilot-grafana/otel-collector-config.yaml`, and publishes OTLP ports only on host `localhost`.
 
-The local Docker example pins the OpenTelemetry Collector contrib image to `0.153.0`, which is the version validated with this setup. Update the pinned tag deliberately after testing a newer collector version.
+The script pins the OpenTelemetry Collector contrib image to `0.153.0`, which is the version validated with this setup. Update the pinned tag deliberately after testing a newer collector version.
+
+Start the collector with one command. The script resolves the Application Insights connection string from Azure CLI:
 
 ```powershell
-$connectionString = az resource show `
-  --resource-group $resourceGroupName `
-  --resource-type Microsoft.Insights/components `
-  --name "$namePrefixNormalized-appi" `
-  --query properties.ConnectionString `
-  --output tsv
-
-New-Item -ItemType Directory -Force artifacts/copilot-grafana | Out-Null
-$configPath = 'artifacts/copilot-grafana/otel-collector-config.yaml'
-$placeholderConnectionString = 'InstrumentationKey=<YOUR-KEY>;IngestionEndpoint=https://<region>.in.applicationinsights.azure.com/;LiveEndpoint=https://<region>.livediagnostics.monitor.azure.com/;ApplicationId=<YOUR-APP-ID>'
-Copy-Item infra/copilot-grafana/otel-collector-config.docker.sample.yaml $configPath
-$configContent = (Get-Content $configPath -Raw).Replace($placeholderConnectionString, $connectionString)
-$utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
-[System.IO.File]::WriteAllText((Resolve-Path $configPath).Path, $configContent, $utf8NoBom)
-$collectorConfigMount = "$((Resolve-Path $configPath).Path):/etc/otelcol-contrib/config.yaml"
-
-docker info --format "Docker Server {{.ServerVersion}}"
-docker run --rm -d --name otel-collector `
-  -p 127.0.0.1:4318:4318 `
-  -p 127.0.0.1:4317:4317 `
-  -v "${collectorConfigMount}" `
-  otel/opentelemetry-collector-contrib:0.153.0
-
-docker ps --filter name=otel-collector --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+.\scripts\Start-CopilotTelemetryCollector.ps1 `
+  -ResourceGroup $resourceGroupName `
+  -AppInsightsName "$namePrefixNormalized-appi"
 ```
+
+After the config exists, restart the same local collector without re-resolving the connection string:
+
+```powershell
+.\scripts\Start-CopilotTelemetryCollector.ps1 -Restart
+```
+
+Stop the collector when you no longer need it. The container is started with `--rm`, so `docker stop` also removes it; use `-Force` to clean up a container that exited abnormally:
+
+```powershell
+.\scripts\Stop-CopilotTelemetryCollector.ps1
+.\scripts\Stop-CopilotTelemetryCollector.ps1 -Force
+```
+
+You can also pass `-ConnectionString` explicitly or set `APPLICATIONINSIGHTS_CONNECTION_STRING` if you do not want the script to call Azure CLI. Use `otel-collector-config.sample.yaml` instead only when running the collector directly on your workstation without Docker; that file binds receivers to `127.0.0.1` by default.
 
 If `docker info` cannot connect to `dockerDesktopLinuxEngine`, start Docker Desktop and retry after the daemon is ready.
 
