@@ -89,6 +89,8 @@ public sealed class MorningTriageSessionTests
         Assert.Contains("Evidence budget:", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("Scoring rubric:", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("Output requirements for `radar_score_commit`:", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("Processing order:", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("1 件ずつ", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("Stop rules:", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("変更内容", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("根拠", capturedPrompt, StringComparison.Ordinal);

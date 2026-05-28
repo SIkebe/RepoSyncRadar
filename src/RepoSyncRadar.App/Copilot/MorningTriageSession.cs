@@ -66,6 +66,11 @@ public sealed partial class MorningTriageSession
             - 「新しい」「重要」だけで済ませず、何が誰にどう効くかを書く。
             - 不明な場合は断定せず、`確認観点` に回す。
 
+            Processing order:
+            - コミットは 1 件ずつ順番に処理する。`radar_get_diff` → 必要なら `radar_resolve_url` / `radar_fetch_rendered` → `radar_score_commit` を 1 コミット分まとめて完了させてから、次のコミットに進む。
+            - 複数コミットへの `radar_get_diff` をまとめて並列に呼び出さない。1 件分析して結果が出るまで次の差分取得を始めない。
+            - これにより進捗 UI が 1 件単位で更新され、ユーザーが処理状況を追える。
+
             Stop rules:
             - 全件を処理したら短い完了報告だけ返す。
             - ツール呼び出しに必要な最小限の説明以外は返さない。
