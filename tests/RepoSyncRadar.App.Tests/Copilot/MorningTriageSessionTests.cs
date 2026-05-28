@@ -3,6 +3,8 @@ using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.Core.Data;
+using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Services;
 using Xunit;
 
@@ -81,7 +83,8 @@ public sealed class MorningTriageSessionTests
         Assert.Contains("github/docs", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("radar_list_commits", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("radar_score_commit", capturedPrompt, StringComparison.Ordinal);
-        Assert.Contains("radar_save_review", capturedPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("radar_save_review", capturedPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("スコア上位 5 件", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("DetailsJa", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("詳細分析", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("Goal:", capturedPrompt, StringComparison.Ordinal);
@@ -135,6 +138,92 @@ public sealed class MorningTriageSessionTests
     }
 
     [Fact]
+    public async Task Run_Uses_Two_Parallel_Sessions_For_Multiple_Unscored_Commits()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ingestion = Substitute.For<ICommitIngestionService>();
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IngestionReport(3, 3, 0)));
+
+        var repository = Substitute.For<IRadarRepository>();
+        repository.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Commit>>([
+                MakeCommit("aaa1111111111111111111111111111111111111", 1, "content/a.md"),
+                MakeCommit("bbb2222222222222222222222222222222222222", 2, "content/b.md"),
+                MakeCommit("ccc3333333333333333333333333333333333333", 3, "content/c.md"),
+            ]));
+
+        var prompts = new List<string>();
+        var session1 = Substitute.For<ICopilotSession>();
+        session1.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                prompts.Add(call.Arg<string>());
+                return Task.FromResult("done-1");
+            });
+        var session2 = Substitute.For<ICopilotSession>();
+        session2.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                prompts.Add(call.Arg<string>());
+                return Task.FromResult("done-2");
+            });
+
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(Arg.Any<SessionPurpose>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session1), Task.FromResult(session2));
+
+        var triage = new MorningTriageSession(
+            ingestion,
+            factory,
+            new TriageScoringProgressTracker(),
+            repository,
+            reviewBroadcaster: null,
+            NullLogger<MorningTriageSession>.Instance);
+
+        await triage.RunAsync(ct);
+
+        await factory.Received(2).CreateSessionAsync(SessionPurpose.Triage, Arg.Any<CancellationToken>());
+        await session1.Received(1).SendAsync(Arg.Any<string>(), MorningTriageSession.TriageSendTimeout, Arg.Any<CancellationToken>());
+        await session2.Received(1).SendAsync(Arg.Any<string>(), MorningTriageSession.TriageSendTimeout, Arg.Any<CancellationToken>());
+        Assert.Equal(2, prompts.Count);
+        Assert.Contains(prompts, prompt => prompt.Contains("aaa1111111111111111111111111111111111111", StringComparison.Ordinal)
+            && prompt.Contains("ccc3333333333333333333333333333333333333", StringComparison.Ordinal));
+        Assert.Contains(prompts, prompt => prompt.Contains("bbb2222222222222222222222222222222222222", StringComparison.Ordinal));
+        Assert.All(prompts, prompt =>
+        {
+            Assert.Contains("分割処理", prompt, StringComparison.Ordinal);
+            Assert.Contains("radar_score_commit", prompt, StringComparison.Ordinal);
+            Assert.Contains("レビュー状態を保存しない", prompt, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task Run_Skips_Copilot_Session_When_Repository_Has_No_Unscored_Commits()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ingestion = Substitute.For<ICommitIngestionService>();
+        ingestion.IngestAsync(Arg.Any<IProgress<CommitIngestionProgress>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IngestionReport(0, 0, 0)));
+        var repository = Substitute.For<IRadarRepository>();
+        repository.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Commit>>([]));
+        var factory = Substitute.For<ICopilotSessionFactory>();
+
+        var triage = new MorningTriageSession(
+            ingestion,
+            factory,
+            new TriageScoringProgressTracker(),
+            repository,
+            reviewBroadcaster: null,
+            NullLogger<MorningTriageSession>.Instance);
+
+        await triage.RunAsync(ct);
+
+        await factory.DidNotReceive().CreateSessionAsync(Arg.Any<SessionPurpose>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Run_Reports_Progress_Through_Stages()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -159,6 +248,30 @@ public sealed class MorningTriageSessionTests
         Assert.Contains(progress.Messages, message => message.Contains("セッション", StringComparison.Ordinal));
         Assert.Contains(progress.Messages, message => message.Contains("スコアリング", StringComparison.Ordinal));
         Assert.Contains(progress.Messages, message => message.Contains("完了", StringComparison.Ordinal));
+    }
+
+    private static Commit MakeCommit(string sha, int prNumber, string filePath)
+    {
+        return new Commit
+        {
+            Sha = sha,
+            PrNumber = prNumber,
+            Message = $"commit {sha}",
+            Author = "octocat",
+            AuthoredAt = new DateTime(2026, 5, 28, 0, 0, 0, DateTimeKind.Utc),
+            FetchedAt = new DateTime(2026, 5, 28, 0, 0, 0, DateTimeKind.Utc),
+            Files =
+            [
+                new CommitFile
+                {
+                    Sha = sha,
+                    Path = filePath,
+                    Status = "modified",
+                    Additions = 1,
+                    Deletions = 0,
+                },
+            ],
+        };
     }
 
     [Fact]

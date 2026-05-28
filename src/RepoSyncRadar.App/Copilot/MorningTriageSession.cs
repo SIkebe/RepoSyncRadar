@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.Core.Data;
+using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Services;
 
 namespace RepoSyncRadar.App.Copilot;
@@ -16,6 +18,7 @@ namespace RepoSyncRadar.App.Copilot;
 public sealed partial class MorningTriageSession
 {
     internal static readonly TimeSpan TriageSendTimeout = TimeSpan.FromMinutes(10);
+    internal const int ParallelTriageSessionCount = 2;
 
     /// <summary>The prompt body appended to the SDK system message (kept in code so unit tests can grep for the marker).</summary>
     internal const string TriagePrompt = """
@@ -27,10 +30,9 @@ public sealed partial class MorningTriageSession
             Success criteria:
             - `radar_list_commits` を `status="Unseen"`, `limit=50` で呼び、まだスコアリングされていない未確認コミット一覧を取得する。
             - 各コミットについて `radar_score_commit` でスコア・カテゴリ・読者・要約・理由・詳細分析を保存する。
-            - スコア上位 5 件と判断に迷う候補は未確認のまま残す。
-            - 明らかに不要な候補だけ `radar_save_review` で `Rejected` として保存する。
-            - `Rejected` は自動見送り候補を表す。`Archived` はユーザーが手動でアーカイブするときだけ使うため、Triage では使わない。
-            - 既に確立されたユーザー設定 (Ignore / Boost) を尊重し、無視対象はスキップする。
+            - 採点後の注目 / 保留 / 見送り判断はユーザーが一覧を見て行う。Morning Triage では任意判断でレビュー状態を保存しない。
+            - `Rejected` / `Archived` / `Later` / `Adopted` などのレビュー状態はユーザーの最終判断で保存する。ただし、登録済み Ignore ルールによる自動見送りは尊重する。
+            - 既に確立されたユーザー設定 (Ignore / Boost) を尊重し、自動見送り済みの無視対象はスキップする。
 
             Evidence budget:
             - まず `radar_get_diff` で差分を確認する。
@@ -80,6 +82,7 @@ public sealed partial class MorningTriageSession
     private readonly ICommitIngestionService _ingestion;
     private readonly ICopilotSessionFactory _sessionFactory;
     private readonly TriageScoringProgressTracker _scoringProgress;
+    private readonly IRadarRepository? _repository;
     private readonly IReviewBroadcaster? _reviewBroadcaster;
     private readonly ILogger<MorningTriageSession> _logger;
 
@@ -87,7 +90,7 @@ public sealed partial class MorningTriageSession
         ICommitIngestionService ingestion,
         ICopilotSessionFactory sessionFactory,
         ILogger<MorningTriageSession> logger)
-        : this(ingestion, sessionFactory, new TriageScoringProgressTracker(), reviewBroadcaster: null, logger)
+        : this(ingestion, sessionFactory, new TriageScoringProgressTracker(), repository: null, reviewBroadcaster: null, logger)
     {
     }
 
@@ -96,7 +99,7 @@ public sealed partial class MorningTriageSession
         ICopilotSessionFactory sessionFactory,
         TriageScoringProgressTracker scoringProgress,
         ILogger<MorningTriageSession> logger)
-        : this(ingestion, sessionFactory, scoringProgress, reviewBroadcaster: null, logger)
+        : this(ingestion, sessionFactory, scoringProgress, repository: null, reviewBroadcaster: null, logger)
     {
     }
 
@@ -104,6 +107,17 @@ public sealed partial class MorningTriageSession
         ICommitIngestionService ingestion,
         ICopilotSessionFactory sessionFactory,
         TriageScoringProgressTracker scoringProgress,
+        IReviewBroadcaster? reviewBroadcaster,
+        ILogger<MorningTriageSession> logger)
+        : this(ingestion, sessionFactory, scoringProgress, repository: null, reviewBroadcaster, logger)
+    {
+    }
+
+    public MorningTriageSession(
+        ICommitIngestionService ingestion,
+        ICopilotSessionFactory sessionFactory,
+        TriageScoringProgressTracker scoringProgress,
+        IRadarRepository? repository,
         IReviewBroadcaster? reviewBroadcaster,
         ILogger<MorningTriageSession> logger)
     {
@@ -115,6 +129,7 @@ public sealed partial class MorningTriageSession
         _ingestion = ingestion;
         _sessionFactory = sessionFactory;
         _scoringProgress = scoringProgress;
+        _repository = repository;
         _reviewBroadcaster = reviewBroadcaster;
         _logger = logger;
     }
@@ -137,14 +152,27 @@ public sealed partial class MorningTriageSession
         LogIngested(_logger, report.Total, report.Inserted, report.Skipped);
         progress?.Report($"取り込み完了: 取得 {report.Total} / 新規 {report.Inserted} / スキップ {report.Skipped}");
 
+        var scoringTargets = await LoadScoringTargetsAsync(cancellationToken).ConfigureAwait(false);
+        if (scoringTargets is { Count: 0 })
+        {
+            progress?.Report("今回の未スコア未確認コミットはありません。画面を更新しています…");
+            return report;
+        }
+
         progress?.Report("Copilot セッションを準備しています…");
+        using var scoringScope = _scoringProgress.Begin(progress);
+        if (scoringTargets is { Count: >= 2 })
+        {
+            await RunParallelScoringAsync(scoringTargets, progress, cancellationToken).ConfigureAwait(false);
+            return report;
+        }
+
         var session = await _sessionFactory.CreateSessionAsync(SessionPurpose.Triage, cancellationToken).ConfigureAwait(false);
         await using (session.ConfigureAwait(false))
         {
             try
             {
                 LogSending(_logger, session.SessionId);
-                using var scoringScope = _scoringProgress.Begin(progress);
                 progress?.Report("Copilot が未確認コミット一覧を取得し、スコアリングを開始しています…");
                 _ = await session.SendAsync(TriagePrompt, TriageSendTimeout, cancellationToken).ConfigureAwait(false);
                 progress?.Report("Triage が完了しました。画面を更新しています…");
@@ -166,6 +194,133 @@ public sealed partial class MorningTriageSession
         }
 
         return report;
+    }
+
+    private async Task<IReadOnlyList<Commit>?> LoadScoringTargetsAsync(CancellationToken cancellationToken)
+    {
+        if (_repository is null)
+        {
+            return null;
+        }
+
+        return await _repository.QueryCommitsAsync(
+            new CommitQueryFilter
+            {
+                Status = ReviewStatus.Unseen,
+                Limit = 50,
+                UnscoredOnly = true,
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RunParallelScoringAsync(
+        IReadOnlyList<Commit> commits,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        _scoringProgress.ReportCommitList(commits.Select(static commit => commit.Sha).ToArray());
+        var shards = SplitIntoShards(commits, ParallelTriageSessionCount);
+        var sessions = new List<ICopilotSession>(shards.Count);
+        try
+        {
+            foreach (var _ in shards)
+            {
+                var session = await _sessionFactory.CreateSessionAsync(SessionPurpose.Triage, cancellationToken).ConfigureAwait(false);
+                sessions.Add(session);
+                LogSending(_logger, session.SessionId);
+            }
+
+            progress?.Report($"Copilot が {shards.Count} セッションで未確認コミットを並列スコアリングしています…");
+            var tasks = sessions
+                .Zip(shards, static (session, shard) => (session, shard))
+                .Select(pair => pair.session.SendAsync(BuildShardPrompt(pair.shard), TriageSendTimeout, cancellationToken));
+            _ = await Task.WhenAll(tasks).ConfigureAwait(false);
+            progress?.Report("Triage が完了しました。画面を更新しています…");
+            foreach (var session in sessions)
+            {
+                LogFinished(_logger, session.SessionId);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            foreach (var session in sessions)
+            {
+                LogAborting(_logger, session.SessionId);
+            }
+            await AbortAllAsync(sessions).ConfigureAwait(false);
+            throw;
+        }
+        catch
+        {
+            await AbortAllAsync(sessions).ConfigureAwait(false);
+            throw;
+        }
+        finally
+        {
+            foreach (var session in sessions)
+            {
+                await session.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static List<IReadOnlyList<Commit>> SplitIntoShards(IReadOnlyList<Commit> commits, int shardCount)
+    {
+        var shards = Enumerable.Range(0, Math.Min(shardCount, commits.Count))
+            .Select(static _ => new List<Commit>())
+            .ToList();
+        for (var i = 0; i < commits.Count; i++)
+        {
+            shards[i % shards.Count].Add(commits[i]);
+        }
+
+        return shards.Select(static shard => (IReadOnlyList<Commit>)shard).ToList();
+    }
+
+    private static string BuildShardPrompt(IReadOnlyList<Commit> commits)
+    {
+        var items = string.Join("\n", commits.Select(static commit =>
+            $"- {commit.Sha} PR #{commit.PrNumber}: {FirstLine(commit.Message)}\n  Files: {string.Join(", ", commit.Files.Select(static file => file.Path))}"));
+
+        return $$"""
+            # Morning Triage shard
+
+            このセッションは Morning Triage の分割処理です。以下の SHA だけを採点してください。他の SHA は処理しないでください。
+
+            {{items}}
+
+            必須手順:
+            - `radar_list_commits` は呼ばない。対象 SHA はこのプロンプト内の一覧だけです。
+            - 各 SHA について `radar_get_diff` を呼び、差分を確認する。
+            - user-facing な変更、0.70 以上になりそうな変更、または差分だけで判断できない変更のみ `radar_resolve_url` / `radar_fetch_rendered` を使う。
+            - 各 SHA について必ず `radar_score_commit` を 1 回呼び、スコア・カテゴリ・読者・要約・理由・詳細分析を保存する。
+            - 採点後の注目 / 保留 / 見送り判断はユーザーが一覧を見て行う。Morning Triage では任意判断でレビュー状態を保存しない。
+            - 登録済み Ignore ルールによる自動見送りは尊重する。
+            - 全件を処理したら短く完了報告する。
+
+            出力要件:
+            - `SummaryJa`: 1 文、60 文字以内。
+            - `WhyJa`: 1 文、80 文字以内。
+            - `DetailsJa`: `変更内容` / `根拠` / `影響` / `確認観点` をこの順序で含める。
+            - 根拠に書けるのは差分またはレンダリング済み本文で確認した事実だけ。
+            """;
+    }
+
+    private static string FirstLine(string value)
+        => value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? value;
+
+    private static async Task AbortAllAsync(IReadOnlyList<ICopilotSession> sessions)
+    {
+        foreach (var session in sessions)
+        {
+            try
+            {
+                await session.AbortAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch
+            {
+            }
+        }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information,
