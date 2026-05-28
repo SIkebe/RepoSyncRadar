@@ -23,8 +23,9 @@ public sealed class AppHost : IAsyncDisposable
     private static readonly TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>
-    /// Environment overrides that force the optional preview pipeline OFF for any
-    /// fixture that does not explicitly need it. A developer's
+    /// Environment overrides that force the optional preview pipeline OFF and keep
+    /// startup auth non-interactive for any fixture that does not explicitly need
+    /// either behavior. A developer's
     /// <c>appsettings.Local.json</c> usually populates the <c>DocsRepository</c>
     /// section with a real <c>github/docs</c> bare clone path, which would let an
     /// accidental click on "ローカルプレビュー" shell out to <c>git clone --bare</c>
@@ -32,7 +33,9 @@ public sealed class AppHost : IAsyncDisposable
     /// composes configuration in the order JSON → JSON Local → env vars
     /// (<c>RADAR_</c> prefix), so these trailing entries win and flip
     /// <c>DocsWorktreeManager.IsEnabled</c> / <c>PreviewServerHost.IsEnabled</c> to
-    /// <c>false</c>.
+    /// <c>false</c>. The fake <c>COPILOT_GITHUB_TOKEN</c> value exercises the
+    /// debug-token branch of startup sign-in so CI does not enter OAuth Device Flow
+    /// before Blazor has rendered.
     /// </summary>
     public static IReadOnlyDictionary<string, string?> PreviewDisabledEnvironment { get; } =
         new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -41,6 +44,7 @@ public sealed class AppHost : IAsyncDisposable
             ["RADAR_DocsRepository__CloneUrl"] = string.Empty,
             ["RADAR_DocsRepository__WorktreeRoot"] = string.Empty,
             ["RADAR_DocsRepository__PreviewCommand"] = string.Empty,
+            ["COPILOT_GITHUB_TOKEN"] = "ghu_e2e_startup_auth_placeholder",
         };
 
     private readonly Process _process;
