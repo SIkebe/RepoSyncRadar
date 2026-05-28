@@ -104,11 +104,68 @@ function Test-CopilotCliBinary {
         [string]$BinaryPath,
 
         [Parameter(Mandatory = $true)]
-        [string]$ExpectedVersion
+        [string]$ExpectedVersion,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Platform
     )
 
     if (-not (Test-Path $BinaryPath)) {
         return $false
+    }
+
+    $fileInfo = Get-Item $BinaryPath
+    if ($fileInfo.Length -lt 1MB) {
+        return $false
+    }
+
+    $expectedMachine = switch ($Platform) {
+        'win32-x64' { 0x8664 }
+        'win32-arm64' { 0xAA64 }
+        default { throw "Unsupported Copilot CLI platform '$Platform'." }
+    }
+
+    $stream = [System.IO.File]::OpenRead($BinaryPath)
+    try {
+        if ($stream.Length -lt 0x40) {
+            return $false
+        }
+
+        $reader = [System.IO.BinaryReader]::new($stream)
+        try {
+            $stream.Position = 0x3C
+            $peHeaderOffset = $reader.ReadInt32()
+            if ($peHeaderOffset -lt 0 -or $stream.Length -lt ($peHeaderOffset + 6)) {
+                return $false
+            }
+
+            $stream.Position = $peHeaderOffset
+            $signature = $reader.ReadUInt32()
+            if ($signature -ne 0x00004550) {
+                return $false
+            }
+
+            $machine = $reader.ReadUInt16()
+            if ($machine -ne $expectedMachine) {
+                return $false
+            }
+        }
+        finally {
+            $reader.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+
+    $hostPlatform = switch ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture) {
+        'X64' { 'win32-x64' }
+        'Arm64' { 'win32-arm64' }
+        default { '' }
+    }
+
+    if ($hostPlatform -ne $Platform) {
+        return $true
     }
 
     $expectedVersionPrefix = $ExpectedVersion.Split('-')[0]
@@ -143,7 +200,7 @@ function Resolve-CopilotCliBinary {
     $archivePath = Join-Path $cacheDir 'copilot.tgz'
     $binaryPath = Join-Path $cacheDir $packageInfo.BinaryName
 
-    if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version) {
+    if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version -Platform $packageInfo.Platform) {
         return $binaryPath
     }
 
@@ -162,7 +219,7 @@ function Resolve-CopilotCliBinary {
             Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -TimeoutSec 600
             Invoke-NativeCommand -FilePath 'tar' -ArgumentList @('-xzf', $archivePath, '--strip-components=1', '-C', $cacheDir)
 
-            if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version) {
+            if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version -Platform $packageInfo.Platform) {
                 return $binaryPath
             }
 
