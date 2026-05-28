@@ -67,9 +67,10 @@ public sealed partial class MorningTriageSession
             - 不明な場合は断定せず、`確認観点` に回す。
 
             Processing order:
-            - コミットは 1 件ずつ順番に処理する。`radar_get_diff` → 必要なら `radar_resolve_url` / `radar_fetch_rendered` → `radar_score_commit` を 1 コミット分まとめて完了させてから、次のコミットに進む。
-            - 複数コミットへの `radar_get_diff` をまとめて並列に呼び出さない。1 件分析して結果が出るまで次の差分取得を始めない。
-            - これにより進捗 UI が 1 件単位で更新され、ユーザーが処理状況を追える。
+            - 処理速度のため、最大 10 件までのコミットは `radar_get_diff` で先読みしてよい。
+            - ただし 11 件以上の `radar_get_diff` をまとめて並列に呼び出さない。大きなバッチで差分取得を先行させない。
+            - 採点できたコミットから `radar_score_commit` をすぐ呼び、1 件ずつ保存する。複数件の採点結果をためてからまとめて保存しない。
+            - これにより分析はある程度まとめて進めつつ、進捗 UI とコミット一覧のスコアは 1 件単位で更新される。
 
             Stop rules:
             - 全件を処理したら短い完了報告だけ返す。
