@@ -116,6 +116,52 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
+    public async Task UpsertCommitsAsync_AutoRejects_New_Commits_Matching_Ignore_Rules()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        using (var seed = fixture.CreateContext())
+        {
+            seed.IgnoreRules.Add(new IgnoreRule
+            {
+                Pattern = "content/copilot/concepts/**",
+                Reason = "ignore-directory",
+                CreatedAt = new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Utc),
+            });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var ignored = MakeCommit("sha-ignored", prNumber: 1);
+        ignored.Files.Add(new CommitFile
+        {
+            Sha = ignored.Sha,
+            Path = "content/copilot/concepts/billing.md",
+            Status = "modified",
+            Additions = 1,
+            Deletions = 0,
+        });
+        var visible = MakeCommit("sha-visible", prNumber: 1);
+        visible.Files.Add(new CommitFile
+        {
+            Sha = visible.Sha,
+            Path = "content/actions/reference.md",
+            Status = "modified",
+            Additions = 1,
+            Deletions = 0,
+        });
+
+        await repository.UpsertCommitsAsync([ignored, visible], ct);
+
+        using var verify = fixture.CreateContext();
+        var review = await verify.Reviews.SingleAsync(r => r.Sha == ignored.Sha, ct);
+        Assert.Equal(ReviewStatus.Rejected, review.Status);
+        Assert.Equal("auto-ignored", review.Reason);
+        Assert.False(await verify.Reviews.AnyAsync(r => r.Sha == visible.Sha, ct));
+    }
+
+    [Fact]
     public async Task GetKnownShasAsync_Returns_Intersection()
     {
         using var fixture = new SqliteFixture();

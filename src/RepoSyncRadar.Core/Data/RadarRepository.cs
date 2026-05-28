@@ -90,8 +90,13 @@ public sealed class RadarRepository : IRadarRepository
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var existingSet = new HashSet<string>(existing, StringComparer.Ordinal);
+        var ignoreRules = await db.IgnoreRules
+            .AsNoTracking()
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
 
         var inserted = new List<string>(batch.Count);
+        var now = DateTime.UtcNow;
         foreach (var commit in batch)
         {
             if (existingSet.Contains(commit.Sha))
@@ -100,6 +105,16 @@ public sealed class RadarRepository : IRadarRepository
             }
             db.Commits.Add(commit);
             inserted.Add(commit.Sha);
+            if (MatchesIgnoreRule(commit, ignoreRules))
+            {
+                db.Reviews.Add(new Review
+                {
+                    Sha = commit.Sha,
+                    Status = ReviewStatus.Rejected,
+                    Reason = "auto-ignored",
+                    ReviewedAt = now,
+                });
+            }
         }
 
         if (inserted.Count > 0)
@@ -109,6 +124,28 @@ public sealed class RadarRepository : IRadarRepository
 
         return inserted;
     }
+
+    private static bool MatchesIgnoreRule(Commit commit, List<IgnoreRule> ignoreRules)
+    {
+        if (ignoreRules.Count == 0 || commit.Files.Count == 0)
+        {
+            return false;
+        }
+
+        return ignoreRules.Any(rule => commit.Files.Any(file => MatchesIgnorePattern(file.Path, rule.Pattern)));
+    }
+
+    private static bool MatchesIgnorePattern(string path, string pattern)
+    {
+        var normalizedPath = NormalizePath(path);
+        var prefix = NormalizePath(pattern).TrimEnd('*', '/');
+        return prefix.Length > 0
+            && (string.Equals(normalizedPath, prefix, StringComparison.Ordinal)
+                || normalizedPath.StartsWith(prefix + "/", StringComparison.Ordinal));
+    }
+
+    private static string NormalizePath(string path)
+        => path.Replace('\\', '/').Trim().Trim('/');
 
     public async Task SetReviewAsync(
         string sha,

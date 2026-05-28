@@ -1,8 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [ValidatePattern('^\d+\.\d+\.\d+([\-+][0-9A-Za-z\-.+]+)?$')]
-    [string]$Version,
+    [string]$Version = '',
 
     [ValidateSet('win-x64', 'win-arm64')]
     [string]$Runtime = 'win-x64',
@@ -28,6 +26,22 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $publishDir = [System.IO.Path]::Combine($repoRoot, $OutputRoot, 'publish', $Runtime)
 $releaseDir = [System.IO.Path]::Combine($repoRoot, $OutputRoot, 'velopack', $Runtime)
+
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    [xml]$buildProps = Get-Content (Join-Path $repoRoot 'Directory.Build.props')
+    $Version = $buildProps.Project.PropertyGroup |
+    ForEach-Object { $_.RepoSyncRadarVersion.InnerText } |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        Select-Object -First 1
+}
+
+if ($Version -notmatch '^\d+\.\d+\.\d+([\-+][0-9A-Za-z\-.+]+)?$') {
+    throw "Release version '$Version' must be SemVer like 0.1.0 or 0.1.0-beta.1."
+}
+
+if ($Version -match '^0\.0\.0([\-+]|$)') {
+    throw "Release version '$Version' must be 0.0.1 or greater for Velopack."
+}
 
 if ([string]::IsNullOrWhiteSpace($Channel)) {
     $Channel = "$Runtime-stable"
@@ -56,6 +70,7 @@ try {
         -p:PublishSingleFile=true `
         -p:IncludeNativeLibrariesForSelfExtract=true `
         -p:DebugType=embedded `
+        -p:RepoSyncRadarVersion=$Version `
         -o $publishDir
 
     $packArgs = @(

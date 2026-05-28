@@ -31,6 +31,8 @@ Use these repository instructions as the starting point. When code or validated 
 ## Coding Rules
 
 - Warnings are errors. `Directory.Build.props` enables nullable, analyzers, latest recommended analysis, and code style enforcement.
+- The app/package version is managed by `RepoSyncRadarVersion` in `Directory.Build.props`. Release packaging may override it with `-p:RepoSyncRadarVersion=<semver>` through `scripts/Build-VelopackRelease.ps1`; do not set ad hoc `<Version>` values in individual projects.
+- Write git commit messages in English.
 - Logging must use source-generated `[LoggerMessage]`. Do not call `_logger.LogDebug/LogInformation/LogWarning(...)` extension methods directly. Use `partial sealed class` methods such as `private static partial void LogXxx(ILogger logger, ...)`.
 - In xUnit tests, pass `TestContext.Current.CancellationToken` when calling cancellable APIs. For NSubstitute `Received`/`DidNotReceive`, use `Arg.Any<CancellationToken>()` or the real token.
 - App internals are already visible to `RepoSyncRadar.App.Tests` through `InternalsVisibleTo` in the App project.
@@ -66,7 +68,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 ### Triage Workflow
 
-- Morning Triage is triggered from `AppHeader` through `ICopilotAgent.RunMorningTriageAsync()`. Triage/Maintenance sessions register `RadarTools.CreateAll()` and `RadarWriteTools.CreateAll()`; write-like tools are permission-gated except `radar_score_commit` and `radar_save_review`, which `RadarPermissionPolicy` pre-approves for triage scoring/review persistence.
+- Morning Triage is triggered from `AppHeader` through `ICopilotAgent.RunMorningTriageAsync()`. Triage/Maintenance sessions register `RadarTools.CreateAll()` and `RadarWriteTools.CreateAll()`; write-like tools are permission-gated except `radar_score_commit`, which `RadarPermissionPolicy` pre-approves for scoring persistence. Final review decisions (`radar_save_review`) are user-owned and must not be auto-written by Morning Triage, but registered Ignore rules still auto-mark future matching commits as `Rejected` during ingestion.
 - Triage sends need the longer `MorningTriageSession.TriageSendTimeout` through `ICopilotSession.SendAsync(prompt, timeout, ct)`; the SDK default one-minute wait is too short.
 
 ## UI And Product Behavior

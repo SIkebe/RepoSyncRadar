@@ -1,0 +1,25 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        # Safe default for running the collector directly on a developer workstation.
+        endpoint: 127.0.0.1:4318
+      grpc:
+        # Safe default for running the collector directly on a developer workstation.
+        endpoint: 127.0.0.1:4317
+
+exporters:
+  azuremonitor:
+    connection_string: "InstrumentationKey=<YOUR-KEY>;IngestionEndpoint=https://<region>.in.applicationinsights.azure.com/;LiveEndpoint=https://<region>.livediagnostics.monitor.azure.com/;ApplicationId=<YOUR-APP-ID>"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [azuremonitor]
+    metrics:
+      receivers: [otlp]
+      exporters: [azuremonitor]
+    logs:
+      receivers: [otlp]
+      exporters: [azuremonitor]

@@ -109,7 +109,16 @@ jobs:
         run: dotnet build RepoSyncRadar.sln --no-restore -warnaserror
 
       - name: Test
-        run: dotnet test RepoSyncRadar.sln --no-build -- --filter-not-trait Category=Manual
+        run: dotnet test RepoSyncRadar.sln --no-build -- --filter-not-trait Category=Manual --output detailed
+
+      - name: Upload test result logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: tests/**/TestResults/**
+          if-no-files-found: warn
+          retention-days: 7
 
   package:
     name: Package ${{ matrix.runtime }}

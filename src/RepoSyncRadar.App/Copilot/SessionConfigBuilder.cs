@@ -76,7 +76,7 @@ internal static class SessionConfigBuilder
     {
         SessionPurpose.Triage =>
             "You are the RepoSyncRadar morning triage agent. Score newly synced commits, "
-            + "summarize them in Japanese, and pick the top 5 must-reads. Only call radar_* tools.",
+            + "summarize them in Japanese, and leave final review decisions to the user. Only call radar_* tools.",
         SessionPurpose.Adoption =>
             "You are the RepoSyncRadar focused-commit explainer and writer. Explain the diff in Japanese, "
             + "then produce shareable drafts for the chosen commit. Stay factual.",

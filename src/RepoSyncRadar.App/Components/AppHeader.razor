@@ -118,6 +118,9 @@
                    Size="Size.Small"
                    OnClick="ToggleSettingsAsync"
                    data-testid="app-header-settings">@L["Common.Settings"]</MudButton>
+        <span data-testid="app-header-version"
+              title="@_appVersion"
+              style="font-size:0.8em; opacity:0.7; font-variant-numeric:tabular-nums;">v@_appVersion</span>
     </div>
     </header>
 
@@ -369,6 +372,8 @@
     private string? _settingsUpdateStatus;
     private string? _settingsUpdateError;
 
+    private string _appVersion = "0.0.0";
+
     protected override async Task OnInitializedAsync()
     {
         _broadcaster = Services.GetService<IReviewBroadcaster>();
@@ -378,6 +383,11 @@
         {
             _copilotUsage = _usageTracker.GetSnapshot();
             _usageTracker.Changed += OnCopilotUsageChanged;
+        }
+
+        if (Services.GetService<IAppVersionProvider>() is { } versionProvider)
+        {
+            _appVersion = versionProvider.DisplayVersion;
         }
 
         await RefreshStateAsync();

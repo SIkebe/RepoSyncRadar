@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
+using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
@@ -21,6 +23,7 @@ public sealed class RadarWriteTools
 
     private readonly IDbContextFactory<RadarDbContext> _dbFactory;
     private readonly TriageScoringProgressTracker _triageProgress;
+    private readonly IReviewBroadcaster? _reviewBroadcaster;
 
     public RadarWriteTools(IDbContextFactory<RadarDbContext> dbFactory)
         : this(dbFactory, new TriageScoringProgressTracker())
@@ -30,11 +33,21 @@ public sealed class RadarWriteTools
     public RadarWriteTools(
         IDbContextFactory<RadarDbContext> dbFactory,
         TriageScoringProgressTracker triageProgress)
+        : this(dbFactory, triageProgress, reviewBroadcaster: null)
+    {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public RadarWriteTools(
+        IDbContextFactory<RadarDbContext> dbFactory,
+        TriageScoringProgressTracker triageProgress,
+        IReviewBroadcaster? reviewBroadcaster)
     {
         ArgumentNullException.ThrowIfNull(dbFactory);
         ArgumentNullException.ThrowIfNull(triageProgress);
         _dbFactory = dbFactory;
         _triageProgress = triageProgress;
+        _reviewBroadcaster = reviewBroadcaster;
     }
 
     /// <summary>Returns the five write tools as <see cref="AIFunction"/> instances.</summary>
@@ -84,6 +97,7 @@ public sealed class RadarWriteTools
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _reviewBroadcaster?.Publish();
         return new WriteResult(Error: null);
     }
 
@@ -136,6 +150,7 @@ public sealed class RadarWriteTools
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         _triageProgress.ReportScoreSaved(args.Sha);
+        _reviewBroadcaster?.Publish();
         return new WriteResult(Error: null);
     }
 

@@ -91,18 +91,30 @@ public class RadarPermissionPolicyTests
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
-    [Theory]
-    [InlineData("radar_score_commit")]
-    [InlineData("radar_save_review")]
-    public async Task TriageWriteCustomTool_Is_Approved_Without_Prompt(string toolName)
+    [Fact]
+    public async Task ScoreCommit_Is_Approved_Without_Prompt()
     {
         var prompt = Substitute.For<IPermissionPrompt>();
         var policy = CreatePolicy(prompt);
 
-        var result = await policy.HandleAsync(NewCustomTool("tc-triage-write", toolName), _invocation);
+        var result = await policy.HandleAsync(NewCustomTool("tc-triage-write", "radar_score_commit"), _invocation);
 
         Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SaveReview_Is_Prompted_Because_Final_Review_Decisions_Are_User_Owned()
+    {
+        var prompt = Substitute.For<IPermissionPrompt>();
+        prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+        var policy = CreatePolicy(prompt);
+
+        var result = await policy.HandleAsync(NewCustomTool("tc-save-review", "radar_save_review"), _invocation);
+
+        Assert.Equal(_approveOnceKind, result.Kind);
+        await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
