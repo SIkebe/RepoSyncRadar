@@ -154,14 +154,14 @@ jobs:
       - name: Build Velopack release
         run: |
           $channel = '${{ matrix.runtime }}-${{ needs.prepare.outputs.channel-suffix }}'
-          $args = @(
-              '-Version', '${{ needs.prepare.outputs.version }}',
-              '-Runtime', '${{ matrix.runtime }}',
-              '-Channel', $channel,
-              '-Force'
-          )
+          $packageArgs = @{
+              Version = '${{ needs.prepare.outputs.version }}'
+              Runtime = '${{ matrix.runtime }}'
+              Channel = $channel
+              Force = $true
+          }
 
-          ./scripts/Build-VelopackRelease.ps1 @args
+          ./scripts/Build-VelopackRelease.ps1 @packageArgs
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
