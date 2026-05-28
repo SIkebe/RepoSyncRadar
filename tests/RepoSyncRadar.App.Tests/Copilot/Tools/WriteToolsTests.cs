@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Tools;
 using RepoSyncRadar.Core.Data;
@@ -128,6 +129,51 @@ public sealed class WriteToolsTests
         Assert.Contains(progress.Messages, message => message.Contains("分析 1 / 2 件", StringComparison.Ordinal)
             && message.Contains("スコア保存 1 / 2 件", StringComparison.Ordinal)
             && message.Contains("aaa11111", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ScoreCommit_Publishes_Review_Broadcast_So_Commit_List_Refreshes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var broadcaster = new ReviewBroadcaster();
+        var publishCount = 0;
+        broadcaster.Reviewed += (_, _) => Interlocked.Increment(ref publishCount);
+
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("aaa", ct);
+        var tools = new RadarWriteTools(harness.DbFactory, new TriageScoringProgressTracker(), broadcaster);
+
+        var result = await tools.ScoreCommitAsync(new ScoreCommitArgs(
+            Sha: "aaa",
+            Score: 0.5,
+            Category: "docs-maintenance",
+            Audience: ["developer"],
+            SummaryJa: "要約",
+            WhyJa: "理由",
+            DetailsJa: "詳細",
+            Model: "gpt-test",
+            PromptHash: "hash"), ct);
+
+        Assert.Null(result.Error);
+        Assert.Equal(1, publishCount);
+    }
+
+    [Fact]
+    public async Task SaveReview_Publishes_Review_Broadcast()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var broadcaster = new ReviewBroadcaster();
+        var publishCount = 0;
+        broadcaster.Reviewed += (_, _) => Interlocked.Increment(ref publishCount);
+
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("aaa", ct);
+        var tools = new RadarWriteTools(harness.DbFactory, new TriageScoringProgressTracker(), broadcaster);
+
+        var result = await tools.SaveReviewAsync(new SaveReviewArgs("aaa", ReviewStatus.Rejected, "noise"), ct);
+
+        Assert.Null(result.Error);
+        Assert.Equal(1, publishCount);
     }
 
     [Fact]
