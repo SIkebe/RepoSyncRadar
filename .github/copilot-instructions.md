@@ -31,7 +31,7 @@ Use these repository instructions as the starting point. When code or validated 
 ## Coding Rules
 
 - Warnings are errors. `Directory.Build.props` enables nullable, analyzers, latest recommended analysis, and code style enforcement.
-- The app/package version is managed by `RepoSyncRadarVersion` in `Directory.Build.props`. Release packaging may override it with `-p:RepoSyncRadarVersion=<semver>` through `scripts/Build-VelopackRelease.ps1`; do not set ad hoc `<Version>` values in individual projects.
+- The app/package version is managed by `RepoSyncRadarVersion` in `Directory.Build.props`. The GitHub Actions release workflow reads that property and tag-triggered releases must match it. Local one-off packaging may override it with `-p:RepoSyncRadarVersion=<semver>` through `scripts/Build-VelopackRelease.ps1`; do not set ad hoc `<Version>` values in individual projects.
 - Write git commit messages in English.
 - Logging must use source-generated `[LoggerMessage]`. Do not call `_logger.LogDebug/LogInformation/LogWarning(...)` extension methods directly. Use `partial sealed class` methods such as `private static partial void LogXxx(ILogger logger, ...)`.
 - In xUnit tests, pass `TestContext.Current.CancellationToken` when calling cancellable APIs. For NSubstitute `Received`/`DidNotReceive`, use `Arg.Any<CancellationToken>()` or the real token.

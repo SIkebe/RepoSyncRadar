@@ -26,7 +26,7 @@ For Windows on Arm:
 ./scripts/Build-VelopackRelease.ps1 -Runtime win-arm64
 ```
 
-The default app/package version is managed in `Directory.Build.props` as `RepoSyncRadarVersion`. Pass `-Version <semver>` only when intentionally overriding that single source, such as for a release tag or smoke build.
+The default app/package version is managed in `Directory.Build.props` as `RepoSyncRadarVersion`. Pass `-Version <semver>` only for one-off local smoke builds where you intentionally do not want to edit the shared version file.
 
 The script publishes the app and writes Velopack assets under `artifacts/release/velopack/<runtime>/`. The user-facing installer is `RepoSyncRadar-<channel>-Setup.exe`. The `.nupkg` files plus `releases.<channel>.json` form the update feed.
 
@@ -69,12 +69,11 @@ The `Release` workflow builds, tests, packages `win-x64` and `win-arm64`, and up
 
 Trigger it manually from GitHub Actions with:
 
-- `version`: SemVer version such as `0.1.0`.
 - `channelSuffix`: `stable`, `beta`, or `preview`; this produces channels such as `win-x64-stable`.
 - `draft`: keep enabled until the release has been installed and smoke-tested.
 - `prerelease`: enable for beta/preview builds.
 
-Pushing a tag like `v0.1.0` also runs the workflow. Tag-triggered releases are created as drafts by default.
+The workflow reads the release version from `RepoSyncRadarVersion` in `Directory.Build.props`; update that file before running a release. Pushing a tag like `v0.1.0` also runs the workflow, and the tag version must match `RepoSyncRadarVersion`. Tag-triggered releases are created as drafts by default.
 
 The workflow currently creates unsigned draft release assets. For public releases, select an Authenticode-compatible signing provider and extend the workflow once that provider is available.
 

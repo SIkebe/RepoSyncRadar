@@ -3,10 +3,6 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: SemVer release version, for example 0.1.0 or 0.1.0-beta.1. Defaults to the current tag name when empty.
-        required: false
-        type: string
       channelSuffix:
         description: Velopack channel suffix appended to each runtime.
         required: true
@@ -53,27 +49,41 @@ jobs:
       draft: ${{ steps.meta.outputs.draft }}
       prerelease: ${{ steps.meta.outputs.prerelease }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Resolve release metadata
         id: meta
         env:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
-          INPUT_VERSION: ${{ inputs.version }}
           INPUT_CHANNEL_SUFFIX: ${{ inputs.channelSuffix }}
           INPUT_DRAFT: ${{ inputs.draft }}
           INPUT_PRERELEASE: ${{ inputs.prerelease }}
         run: |
-          $version = $env:INPUT_VERSION
-          if ([string]::IsNullOrWhiteSpace($version)) {
-              $version = $env:REF_NAME
-          }
+          [xml]$buildProps = Get-Content Directory.Build.props
+          $version = $buildProps.Project.PropertyGroup |
+              ForEach-Object { $_.RepoSyncRadarVersion.InnerText } |
+              Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+              Select-Object -First 1
 
-          if ($version.StartsWith('v', [System.StringComparison]::OrdinalIgnoreCase)) {
-              $version = $version.Substring(1)
+          if ([string]::IsNullOrWhiteSpace($version)) {
+              throw 'Directory.Build.props must define RepoSyncRadarVersion for release builds.'
           }
 
           if ($version -notmatch '^\d+\.\d+\.\d+([\-+][0-9A-Za-z\-.+]+)?$') {
-              throw "Release version '$version' must be SemVer like 0.1.0 or 0.1.0-beta.1."
+              throw "RepoSyncRadarVersion '$version' must be SemVer like 0.1.0 or 0.1.0-beta.1."
+          }
+
+          if ($env:EVENT_NAME -eq 'push') {
+              $tagVersion = $env:REF_NAME
+              if ($tagVersion.StartsWith('v', [System.StringComparison]::OrdinalIgnoreCase)) {
+                  $tagVersion = $tagVersion.Substring(1)
+              }
+
+              if ($tagVersion -ne $version) {
+                  throw "Release tag '$env:REF_NAME' must match RepoSyncRadarVersion '$version'."
+              }
           }
 
           $channelSuffix = $env:INPUT_CHANNEL_SUFFIX
