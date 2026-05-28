@@ -44,6 +44,13 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Lock the initial UI culture to the app's default ("ja") BEFORE the first
+        // Blazor render so IStringLocalizer<SharedResource> resolves the neutral
+        // ja-JP resx instead of the OS culture (e.g. en-US on GitHub Actions
+        // runners). AppHeader will reapply the user's saved DisplayCulture once
+        // settings finish loading; this just prevents an English first render.
+        AppDisplayCulture.Apply(null);
+
         // Install global unhandled-exception sinks BEFORE the host is built so that
         // exceptions during DI composition (or anywhere in the BlazorWebView) do not
         // tear down the WPF process. The previous behaviour was that any non-
