@@ -98,6 +98,34 @@ function Get-CopilotCliPackageInfo {
     }
 }
 
+function Test-CopilotCliBinary {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BinaryPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedVersion
+    )
+
+    if (-not (Test-Path $BinaryPath)) {
+        return $false
+    }
+
+    $expectedVersionPrefix = $ExpectedVersion.Split('-')[0]
+    try {
+        $versionOutput = & $BinaryPath --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            return $false
+        }
+    }
+    catch {
+        return $false
+    }
+
+    $versionText = $versionOutput -join [System.Environment]::NewLine
+    return $versionText.Contains("GitHub Copilot CLI $expectedVersionPrefix", [System.StringComparison]::Ordinal)
+}
+
 function Resolve-CopilotCliBinary {
     param(
         [Parameter(Mandatory = $true)]
@@ -115,29 +143,33 @@ function Resolve-CopilotCliBinary {
     $archivePath = Join-Path $cacheDir 'copilot.tgz'
     $binaryPath = Join-Path $cacheDir $packageInfo.BinaryName
 
-    if (Test-Path $binaryPath) {
+    if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version) {
         return $binaryPath
     }
 
-    New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+    if (Test-Path $cacheDir) {
+        Write-Warning "Discarding invalid cached Copilot CLI at '$cacheDir'."
+        Remove-Item $cacheDir -Recurse -Force
+    }
 
     $downloadUrl = "https://registry.npmjs.org/@github/copilot-$($packageInfo.Platform)/-/copilot-$($packageInfo.Platform)-$($packageInfo.Version).tgz"
     for ($attempt = 1; $attempt -le 3; $attempt++) {
-        Remove-Item $archivePath -Force -ErrorAction SilentlyContinue
+        Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
 
         try {
             Write-Host "Downloading Copilot CLI $($packageInfo.Version) for $($packageInfo.Platform) (attempt $attempt of 3)."
             Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -TimeoutSec 600
             Invoke-NativeCommand -FilePath 'tar' -ArgumentList @('-xzf', $archivePath, '--strip-components=1', '-C', $cacheDir)
 
-            if (Test-Path $binaryPath) {
+            if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version) {
                 return $binaryPath
             }
 
-            throw "Copilot CLI binary was not extracted to '$binaryPath'."
+            throw "Copilot CLI binary was not extracted or failed validation at '$binaryPath'."
         }
         catch {
-            Remove-Item $archivePath -Force -ErrorAction SilentlyContinue
+            Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
             if ($attempt -eq 3) {
                 throw
             }
