@@ -66,7 +66,9 @@ Keep the JSON manifests consistent with the `.nupkg` files that are actually ava
 
 ## GitHub Actions Release
 
-The `Release` workflow builds, tests, packages `win-x64` and `win-arm64`, installs the generated `win-x64` package on the runner, runs the WebView E2E smoke against the installed `current\RepoSyncRadar.exe`, and uploads the Velopack assets to a GitHub Release. The `win-arm64` package is built but not executed on GitHub-hosted x64 runners.
+The PR `CI` workflow runs the normal build/test gate and also builds the `win-x64` Velopack package, installs it on the runner, and runs the WebView E2E smoke against the installed `current\RepoSyncRadar.exe`. This keeps the installed-user-path validation before merge instead of waiting for a manual release from `main`.
+
+The `Release` workflow builds, tests, packages `win-x64` and `win-arm64`, installs the generated `win-x64` package on the runner, runs the same installed WebView E2E smoke, and uploads the Velopack assets to a GitHub Release. The `win-arm64` package is built but not executed on GitHub-hosted x64 runners.
 
 Trigger it manually from GitHub Actions with:
 

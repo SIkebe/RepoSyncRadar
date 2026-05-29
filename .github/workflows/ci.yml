@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build-test:
+    name: Build and test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore RepoSyncRadar.sln
+
+      - name: Build
+        run: dotnet build RepoSyncRadar.sln --no-restore -warnaserror
+
+      - name: Test
+        run: dotnet test RepoSyncRadar.sln --no-build -- --filter-not-trait Category=Manual --output detailed
+
+      - name: Upload test result logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results
+          path: tests/**/TestResults/**
+          if-no-files-found: warn
+          retention-days: 7
+
+  installed-package-e2e:
+    name: Installed package E2E
+    runs-on: windows-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+
+      - name: Build win-x64 Velopack package
+        run: |
+          ./scripts/Build-VelopackRelease.ps1 `
+            -Runtime win-x64 `
+            -Channel win-x64-ci `
+            -OutputRoot artifacts/ci-release `
+            -Force `
+            -NoPortable `
+            -NoLegacyManifest
+
+      - name: Smoke test installed package
+        run: ./scripts/Test-VelopackInstalledE2E.ps1 -Runtime win-x64 -ReleaseDir artifacts/ci-release/velopack/win-x64 -CleanInstallRoot
