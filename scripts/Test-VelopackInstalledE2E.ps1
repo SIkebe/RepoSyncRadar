@@ -76,13 +76,16 @@ if ($Runtime -ne 'win-x64') {
     throw "Installed E2E smoke currently requires an x64 Windows runner; '$Runtime' packages cannot be executed here."
 }
 
-$setupExe = Get-ChildItem -Path $ReleaseDir -Filter '*-Setup.exe' -File |
-    Sort-Object Name |
-    Select-Object -First 1
-
-if ($null -eq $setupExe) {
+[array]$setupCandidates = @(Get-ChildItem -Path $ReleaseDir -Filter '*-Setup.exe' -File)
+if ($setupCandidates.Count -eq 0) {
     throw "No Velopack setup executable was found under '$ReleaseDir'."
 }
+if ($setupCandidates.Count -gt 1) {
+    $candidateNames = ($setupCandidates | Sort-Object Name | ForEach-Object { $_.Name }) -join ', '
+    throw "Multiple Velopack setup executables were found under '$ReleaseDir': $candidateNames. Clean the release directory or pass a directory containing exactly one installer."
+}
+
+$setupExe = $setupCandidates[0]
 
 $installRoot = Join-Path $env:LOCALAPPDATA 'SIkebe.RepoSyncRadar'
 
