@@ -277,7 +277,7 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 - ユーザーが注目したコミット 1 件に対し、Twitter / 顧客向けの下書きを生成。
 - モデル: `claude-sonnet-4.5` を選好(文体表現力)。
 - 入力: 注目コミット + 差分 + 解決済み URL + 過去の注目例 5 件(few-shot)。
-- 出力: JSON で `{ twitter_ja, customer_ja }`。
+- 出力: JSON で `{ explanation, twitter, customer }`。
 
 ### 7.3 `MaintenanceSession`(任意 / 週次)
 
