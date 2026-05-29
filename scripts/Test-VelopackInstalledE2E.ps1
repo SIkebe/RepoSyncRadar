@@ -63,6 +63,8 @@ function Remove-DirectoryBestEffort {
                 Write-Warning "Could not remove '$Path' after $Attempts attempt(s): $($_.Exception.Message)"
                 return
             }
+
+            Start-Sleep -Milliseconds (250 * $attempt)
         }
     }
 }
