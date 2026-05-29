@@ -41,6 +41,32 @@ function Invoke-ProcessCommand {
     }
 }
 
+function Remove-DirectoryBestEffort {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [int]$Attempts = 3
+    )
+
+    for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+        if (-not (Test-Path $Path)) {
+            return
+        }
+
+        try {
+            Remove-Item $Path -Recurse -Force -ErrorAction Stop
+            return
+        }
+        catch {
+            if ($attempt -eq $Attempts) {
+                Write-Warning "Could not remove '$Path' after $Attempts attempt(s): $($_.Exception.Message)"
+                return
+            }
+        }
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ([string]::IsNullOrWhiteSpace($ReleaseDir)) {
     $ReleaseDir = [System.IO.Path]::Combine($repoRoot, 'artifacts', 'release', 'velopack', $Runtime)
@@ -62,7 +88,7 @@ $installRoot = Join-Path $env:LOCALAPPDATA 'SIkebe.RepoSyncRadar'
 
 Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 if ($CleanInstallRoot -and (Test-Path $installRoot)) {
-    Remove-Item $installRoot -Recurse -Force
+    Remove-DirectoryBestEffort -Path $installRoot
 }
 
 Invoke-ProcessCommand -FilePath $setupExe.FullName -ArgumentList @('--silent')
@@ -97,6 +123,6 @@ finally {
     Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 
     if ($CleanInstallRoot -and (Test-Path $installRoot)) {
-        Remove-Item $installRoot -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-DirectoryBestEffort -Path $installRoot
     }
 }
