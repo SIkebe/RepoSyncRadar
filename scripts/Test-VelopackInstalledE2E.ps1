@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('win-x64', 'win-arm64')]
+    [ValidateSet('win-x64')]
     [string]$Runtime = 'win-x64',
 
     [string]$ReleaseDir = '',
@@ -72,10 +72,6 @@ function Remove-DirectoryBestEffort {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ([string]::IsNullOrWhiteSpace($ReleaseDir)) {
     $ReleaseDir = [System.IO.Path]::Combine($repoRoot, 'artifacts', 'release', 'velopack', $Runtime)
-}
-
-if ($Runtime -ne 'win-x64') {
-    throw "Installed E2E smoke currently requires an x64 Windows runner; '$Runtime' packages cannot be executed here."
 }
 
 [array]$setupCandidates = @(Get-ChildItem -Path $ReleaseDir -Filter '*-Setup.exe' -File)
