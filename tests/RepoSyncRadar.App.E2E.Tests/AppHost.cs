@@ -87,6 +87,14 @@ public sealed class AppHost : IAsyncDisposable
         var exePath = ResolveAppExePath();
         if (!File.Exists(exePath))
         {
+            var overridePath = Environment.GetEnvironmentVariable("REPOSYNCRADAR_E2E_APP_EXE_PATH");
+            if (!string.IsNullOrWhiteSpace(overridePath))
+            {
+                throw new FileNotFoundException(
+                    $"App executable not found at '{exePath}'. REPOSYNCRADAR_E2E_APP_EXE_PATH is set to '{overridePath}'; verify it points to an installed RepoSyncRadar.exe or clear the override.",
+                    exePath);
+            }
+
             throw new FileNotFoundException(
                 $"App executable not found at '{exePath}'. Build the App project first.",
                 exePath);
