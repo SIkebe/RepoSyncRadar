@@ -18,7 +18,7 @@ This checklist captures the current public-release blockers and must-fix follow-
    - Issue draft: create `Decide public code-signing path for Windows installer releases`. Azure Artifact Signing Basic was tested, but Public Trust identity validation is unavailable for the current Japan sold-to billing account. Candidate paths are Certum, SSL.com IV/OV, SignPath OSS, Microsoft Store, or another Authenticode-compatible provider.
 
 2. **Add CI and release automation**
-   - Required: run build, automated tests excluding Manual, vulnerability scan, and publish smoke on PRs and release tags.
+   - Required: run build, automated tests excluding Manual, vulnerability scan, and publish smoke on PRs and manually dispatched release runs.
    - Minimum gate:
      - `dotnet build RepoSyncRadar.sln -warnaserror`
      - `dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual`

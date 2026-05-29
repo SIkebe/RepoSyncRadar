@@ -18,7 +18,7 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class AdoptionSessionTests
 {
     [Fact]
-    public async Task Generate_Returns_Three_Drafts()
+    public async Task Generate_Returns_Two_Drafts()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var harness = await WriteHarness.CreateAsync(ct);
@@ -31,7 +31,7 @@ public sealed class AdoptionSessionTests
         var session = Substitute.For<ICopilotSession>();
         session.SessionId.Returns("s1");
         session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -40,13 +40,13 @@ public sealed class AdoptionSessionTests
         var bundle = await sut.GenerateDraftsAsync("adopt-1", ct);
 
         Assert.Equal("tw", bundle.TwitterJa);
-        Assert.Equal("tm", bundle.TeamsJa);
+        Assert.Empty(bundle.TeamsJa);
         Assert.Equal("cu", bundle.CustomerJa);
         Assert.Equal("ex", bundle.ExplanationJa);
     }
 
     [Fact]
-    public async Task Generate_Persists_All_Three_Drafts()
+    public async Task Generate_Persists_Explanation_And_Two_Drafts()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var harness = await WriteHarness.CreateAsync(ct);
@@ -58,7 +58,7 @@ public sealed class AdoptionSessionTests
 
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"diff explanation\",\"twitter\":\"a\",\"teams\":\"b\",\"customer\":\"c\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"diff explanation\",\"twitter\":\"a\",\"customer\":\"c\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -68,11 +68,11 @@ public sealed class AdoptionSessionTests
 
         await using var db = harness.CreateDb();
         var drafts = await db.Drafts.AsNoTracking().Where(d => d.Sha == "adopt-2").ToListAsync(ct);
-        Assert.Equal(4, drafts.Count);
+        Assert.Equal(3, drafts.Count);
         Assert.Contains(drafts, d => d.Channel == "explanation" && d.Body == "diff explanation");
         Assert.Contains(drafts, d => d.Channel == "twitter" && d.Body == "a");
-        Assert.Contains(drafts, d => d.Channel == "teams" && d.Body == "b");
         Assert.Contains(drafts, d => d.Channel == "customer" && d.Body == "c");
+        Assert.DoesNotContain(drafts, d => d.Channel == "teams");
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class AdoptionSessionTests
             "\n```\n必要に応じて調整してください。");
 
         Assert.Equal("tw", bundle.TwitterJa);
-        Assert.Equal("tm", bundle.TeamsJa);
+        Assert.Empty(bundle.TeamsJa);
         Assert.Equal("cu", bundle.CustomerJa);
         Assert.Equal("ex {braced}", bundle.ExplanationJa);
     }
@@ -102,7 +102,7 @@ public sealed class AdoptionSessionTests
 
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("Here is the JSON:\n{\"explanation\":\"wrapped-ex\",\"twitter\":\"wrapped-tw\",\"teams\":\"wrapped-tm\",\"customer\":\"wrapped-cu\"}"));
+            .Returns(Task.FromResult("Here is the JSON:\n{\"explanation\":\"wrapped-ex\",\"twitter\":\"wrapped-tw\",\"customer\":\"wrapped-cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -131,8 +131,8 @@ public sealed class AdoptionSessionTests
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Do<string>(calls.Add), Arg.Any<CancellationToken>())
             .Returns(
-                Task.FromResult("差分解説: repair-ex\nTwitter: repair-tw\nTeams: repair-tm\n顧客向け: repair-cu"),
-                Task.FromResult("{\"explanation\":\"repair-ex\",\"twitter\":\"repair-tw\",\"teams\":\"repair-tm\",\"customer\":\"repair-cu\"}"));
+                Task.FromResult("差分解説: repair-ex\nTwitter: repair-tw\n顧客向け: repair-cu"),
+                Task.FromResult("{\"explanation\":\"repair-ex\",\"twitter\":\"repair-tw\",\"customer\":\"repair-cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -168,9 +168,6 @@ public sealed class AdoptionSessionTests
                 ## Twitter
                 labeled-tw
 
-                ## Teams
-                labeled-tm
-
                 ## 顧客向け
                 labeled-cu
                 """));
@@ -183,7 +180,7 @@ public sealed class AdoptionSessionTests
 
         Assert.Equal("labeled-ex", bundle.ExplanationJa);
         Assert.Equal("labeled-tw", bundle.TwitterJa);
-        Assert.Equal("labeled-tm", bundle.TeamsJa);
+        Assert.Empty(bundle.TeamsJa);
         Assert.Equal("labeled-cu", bundle.CustomerJa);
     }
 
@@ -223,7 +220,7 @@ public sealed class AdoptionSessionTests
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"\",\"teams\":\"\",\"customer\":\"\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"\",\"customer\":\"\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -280,7 +277,7 @@ public sealed class AdoptionSessionTests
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"https://docs.github.com/en/copilot/about-copilot\",\"teams\":\"https://docs.github.com/en/copilot/about-copilot\",\"customer\":\"https://docs.github.com/en/copilot/about-copilot\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"https://docs.github.com/en/copilot/about-copilot\",\"customer\":\"https://docs.github.com/en/copilot/about-copilot\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -291,7 +288,8 @@ public sealed class AdoptionSessionTests
         Assert.NotNull(capturedPrompt);
         Assert.Contains("## 公式ドキュメント URL", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("https://docs.github.com/en/copilot/about-copilot", capturedPrompt, StringComparison.Ordinal);
-        Assert.Contains("twitter / teams / customer には", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("twitter / customer には", capturedPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("teams", capturedPrompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -366,7 +364,7 @@ public sealed class AdoptionSessionTests
 
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -376,14 +374,14 @@ public sealed class AdoptionSessionTests
 
         const string expectedUrl = "https://docs.github.com/en/actions/learn-github-actions";
         Assert.Contains(expectedUrl, bundle.TwitterJa, StringComparison.Ordinal);
-        Assert.Contains(expectedUrl, bundle.TeamsJa, StringComparison.Ordinal);
+        Assert.Empty(bundle.TeamsJa);
         Assert.Contains(expectedUrl, bundle.CustomerJa, StringComparison.Ordinal);
 
         await using var verifyDb = harness.CreateDb();
         var drafts = await verifyDb.Drafts.AsNoTracking().Where(d => d.Sha == "url-append").ToListAsync(ct);
         Assert.Contains(drafts, d => d.Channel == "twitter" && d.Body.Contains(expectedUrl, StringComparison.Ordinal));
-        Assert.Contains(drafts, d => d.Channel == "teams" && d.Body.Contains(expectedUrl, StringComparison.Ordinal));
         Assert.Contains(drafts, d => d.Channel == "customer" && d.Body.Contains(expectedUrl, StringComparison.Ordinal));
+        Assert.DoesNotContain(drafts, d => d.Channel == "teams");
     }
 
     [Fact]
@@ -411,7 +409,7 @@ public sealed class AdoptionSessionTests
 
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -422,8 +420,7 @@ public sealed class AdoptionSessionTests
         const string expectedUrl = "https://docs.github.com/en/copilot/concepts/models";
         Assert.Contains(expectedUrl, bundle.TwitterJa, StringComparison.Ordinal);
         Assert.DoesNotContain("/models/index", bundle.TwitterJa, StringComparison.Ordinal);
-        Assert.Contains(expectedUrl, bundle.TeamsJa, StringComparison.Ordinal);
-        Assert.DoesNotContain("/models/index", bundle.TeamsJa, StringComparison.Ordinal);
+        Assert.Empty(bundle.TeamsJa);
         Assert.Contains(expectedUrl, bundle.CustomerJa, StringComparison.Ordinal);
         Assert.DoesNotContain("/models/index", bundle.CustomerJa, StringComparison.Ordinal);
     }
@@ -462,7 +459,7 @@ public sealed class AdoptionSessionTests
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -525,7 +522,7 @@ public sealed class AdoptionSessionTests
         var capturedPrompts = new List<string>();
         var session = Substitute.For<ICopilotSession>();
         session.SendAsync(Arg.Do<string>(capturedPrompts.Add), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}"));
+            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -547,9 +544,10 @@ public sealed class AdoptionSessionTests
         var drafts = await verifyDb.Drafts.AsNoTracking()
             .Where(d => d.Sha == "batch-1" || d.Sha == "batch-2")
             .ToListAsync(ct);
-        Assert.Equal(8, drafts.Count);
+        Assert.Equal(6, drafts.Count);
         Assert.Contains(drafts, d => d.Sha == "batch-1" && d.Channel == "explanation" && d.Body == "ex");
         Assert.Contains(drafts, d => d.Sha == "batch-2" && d.Channel == "explanation" && d.Body == "ex");
+        Assert.DoesNotContain(drafts, d => d.Channel == "teams");
     }
 
     [Fact]

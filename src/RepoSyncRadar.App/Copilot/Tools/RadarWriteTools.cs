@@ -165,6 +165,10 @@ public sealed class RadarWriteTools
         {
             return new WriteResult("channel is required.");
         }
+        if (!TryNormalizeDraftChannel(args.Channel, out var channel))
+        {
+            return new WriteResult($"Unsupported draft channel: {args.Channel}. Supported channels: twitter, customer.");
+        }
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         var commitExists = await db.Commits.AnyAsync(c => c.Sha == args.Sha, cancellationToken).ConfigureAwait(false);
@@ -176,13 +180,19 @@ public sealed class RadarWriteTools
         db.Drafts.Add(new Draft
         {
             Sha = args.Sha,
-            Channel = args.Channel,
+            Channel = channel,
             Body = args.Body ?? string.Empty,
             Posted = false,
             GeneratedAt = DateTime.UtcNow,
         });
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new WriteResult(Error: null);
+    }
+
+    private static bool TryNormalizeDraftChannel(string channel, out string normalized)
+    {
+        normalized = channel.Trim().ToLowerInvariant();
+        return normalized is "twitter" or "customer";
     }
 
     internal async Task<WriteResult> IgnoreRuleAsync(IgnoreRuleArgs args, CancellationToken cancellationToken)
@@ -278,7 +288,7 @@ public sealed class RadarWriteTools
             new AIFunctionFactoryOptions
             {
                 Name = "radar_post_draft",
-                Description = "Stores a media-specific draft (twitter / teams / customer) for a commit. Side-effecting.",
+                Description = "Stores a media-specific draft (twitter / customer) for a commit. Side-effecting.",
             });
     }
 

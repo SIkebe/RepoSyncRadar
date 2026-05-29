@@ -18,7 +18,7 @@ public interface ICopilotAgent
         IProgress<string>? progress,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Generates the media drafts and detailed diff explanation for a single focused commit.</summary>
+    /// <summary>Generates the sharing drafts and detailed diff explanation for a single focused commit.</summary>
     Task<DraftBundle> GenerateDraftsAsync(string commitSha, CancellationToken cancellationToken = default);
 
     /// <summary>Generates per-commit Japanese explanations and sharing drafts for multiple focused commits.</summary>

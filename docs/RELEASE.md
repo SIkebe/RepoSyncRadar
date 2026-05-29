@@ -94,7 +94,7 @@ Trigger it manually from GitHub Actions with:
 - `draft`: keep enabled for the dry-run smoke path. The workflow uploads all assets to a draft release and stops before publication, so maintainers can inspect the GitHub Release, download the installer, and run final checks. Rerun the workflow with `draft` disabled when you are ready to publish that existing draft; the workflow validates the attached asset names and publishes without re-uploading or replacing assets.
 - `prerelease`: enable for beta/preview builds.
 
-The workflow reads the release version from `RepoSyncRadarVersion` in `Directory.Build.props`; update that file before running a release. Pushing a tag like `v0.1.0` also runs the workflow, and the tag version must match `RepoSyncRadarVersion`. Tag-triggered releases are created as drafts by default.
+The workflow reads the release version from `RepoSyncRadarVersion` in `Directory.Build.props`; update that file before running a release. The workflow is intentionally manual-only, so pushing a tag or manually publishing an existing GitHub Release does not start another release build.
 
 The workflow currently creates unsigned release assets. For public releases, select an Authenticode-compatible signing provider and extend the workflow once that provider is available.
 

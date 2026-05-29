@@ -121,7 +121,7 @@
   <data name="CopilotUsage.Label.AiCredits" xml:space="preserve"><value>AI Credits</value></data>
   <data name="CopilotUsage.Label.PremiumRequestCost" xml:space="preserve"><value>Premium Request cost</value></data>
   <data name="CopilotUsage.Label.PremiumRequests" xml:space="preserve"><value>Premium Requests</value></data>
-  <data name="Drafts.BusyHint" xml:space="preserve"><value>When complete, the explanation, Twitter, Teams, and customer-facing fields will be updated.</value></data>
+  <data name="Drafts.BusyHint" xml:space="preserve"><value>When complete, the explanation, Twitter, and customer-facing fields will be updated.</value></data>
   <data name="Drafts.Channel.Customer" xml:space="preserve"><value>Customer-facing</value></data>
   <data name="Drafts.Channel.Explanation" xml:space="preserve"><value>Diff explanation</value></data>
   <data name="Drafts.ChannelEmpty" xml:space="preserve"><value>Not generated yet. Use the regenerate button above to create it.</value></data>

@@ -71,8 +71,8 @@ public sealed class AppHost : IAsyncDisposable
     /// <summary>
     /// Starts the App with an optional override for the SQLite database path and an
     /// optional set of environment variables. Tests that need to seed deterministic
-    /// Commits/Scoring/Drafts (e.g. to verify that the Score panel and the Teams
-    /// draft tab actually render) point <paramref name="dbPath"/> at a throwaway file
+    /// Commits/Scoring/Drafts (e.g. to verify that the Score panel and draft
+    /// sections render) point <paramref name="dbPath"/> at a throwaway file
     /// under <c>Path.GetTempPath()</c> so the developer's real
     /// <c>%LOCALAPPDATA%\RepoSyncRadar\radar.db</c> is left untouched. Pass
     /// <paramref name="environment"/> to inject <c>RADAR_*</c> overrides that flip

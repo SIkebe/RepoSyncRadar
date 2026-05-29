@@ -195,6 +195,22 @@ public sealed class WriteToolsTests
     }
 
     [Fact]
+    public async Task PostDraft_Rejects_Unsupported_Channel()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("aaa", ct);
+        var tools = harness.CreateTools();
+
+        var result = await tools.PostDraftAsync(new PostDraftArgs("aaa", "teams", Body: "body"), ct);
+
+        Assert.NotNull(result.Error);
+        Assert.Contains("Unsupported draft channel", result.Error, StringComparison.Ordinal);
+        await using var db = harness.CreateDb();
+        Assert.Equal(0, await db.Drafts.CountAsync(ct));
+    }
+
+    [Fact]
     public async Task IgnoreRule_Duplicate_Pattern_Returns_Error()
     {
         var ct = TestContext.Current.CancellationToken;

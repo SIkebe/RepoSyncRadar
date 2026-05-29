@@ -697,14 +697,14 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 ### 17.1 目的
 
-注目したコミットに対して **Twitter / Teams / 顧客向け** の共有文案を Adoption セッションで生成。`Drafts` テーブルに保存して UI に表示。
+注目したコミットに対して **Twitter / 顧客向け** の共有文案を Adoption セッションで生成。`Drafts` テーブルに保存して UI に表示。
 
 ### 17.2 スコープ
 
 - `RepoSyncRadar.App/Copilot/AdoptionSession.cs` が `ICopilotAgent.GenerateDraftsAsync` を実装
 - プロンプトに「過去 5 件の注目例(few-shot)」を含める
 - JSON Schema を `responseFormat` 相当で渡す(Copilot SDK の `Sampling`/`OutputSchema` を使う)
-- `Draft` 3 行(channel = twitter/teams/customer)を `radar_post_draft` 経由で保存
+- `Draft` 2 行(channel = twitter/customer)と差分解説を保存
 - 出力 UI: `RepoSyncRadar.App/Components/DraftsPanel.razor`(Copy / Regenerate)
 
 ### 17.3 テスト
@@ -713,8 +713,8 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 | テスト | 内容 |
 |---|---|
-| `Generate_Returns_Three_Drafts` | フェイク Session が 3 媒体を含む JSON を返すと `DraftBundle` が埋まる |
-| `Generate_Persists_All_Three_Drafts` | DB に 3 行 |
+| `Generate_Returns_Two_Drafts` | フェイク Session が 2 媒体を含む JSON を返すと `DraftBundle` が埋まる |
+| `Generate_Persists_Explanation_And_Two_Drafts` | DB に差分解説と 2 媒体の 3 行 |
 | `Generate_Includes_FewShot_Examples` | プロンプトに過去注目例の SHA が含まれる(5 件まで) |
 | `Generate_Rejects_Unadopted_Commit` | `ReviewStatus.Adopted` 以外は `InvalidOperationException` |
 | `Generate_Truncates_When_Diff_Too_Large` | 50 KB を超える diff は切り詰め + 注記 |
@@ -723,14 +723,14 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 | テスト | 内容 |
 |---|---|
-| `Renders_Three_Sections` | Twitter/Teams/Customer の 3 セクション |
+| `Renders_Draft_Sections_Without_Legacy_Teams` | legacy teams 行があっても Twitter/Customer/Explanation だけを表示 |
 | `Copy_Button_Invokes_Clipboard` | `IClipboard` スタブが呼ばれる |
 | `Regenerate_Calls_AdoptionSession_Again` | `ICopilotAgent.GenerateDraftsAsync` が再度呼ばれる |
 
 ### 17.4 完了基準
 
 - 上記 8 件が緑
-- 手動: 実 SDK で 1 コミットを注目へ移動 → 3 媒体下書き生成 → Clipboard コピー OK
+- 手動: 実 SDK で 1 コミットを注目へ移動 → 2 媒体下書き生成 → Clipboard コピー OK
 
 ---
 
