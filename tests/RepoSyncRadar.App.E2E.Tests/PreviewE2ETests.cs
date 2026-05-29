@@ -172,33 +172,7 @@ public sealed class PreviewE2ETests
     }
 
     private async Task<IPage> GetBlazorPageAsync()
-    {
-        var contexts = _fixture.BlazorBrowser.Contexts;
-        if (contexts.Count == 0)
-        {
-            throw new InvalidOperationException("Blazor browser has no contexts.");
-        }
-
-        var context = contexts[0];
-        var pages = context.Pages;
-        if (pages.Count == 0)
-        {
-            throw new InvalidOperationException("Blazor page not found over CDP.");
-        }
-
-        IPage page = pages[0];
-        foreach (var candidate in pages)
-        {
-            if (!candidate.Url.Contains("docs.github.com", StringComparison.OrdinalIgnoreCase))
-            {
-                page = candidate;
-                break;
-            }
-        }
-
-        await page.WaitForLoadStateAsync(LoadState.DOMContentLoaded);
-        return page;
-    }
+        => await E2EPageHelpers.GetBlazorPageAsync(_fixture.BlazorBrowser).ConfigureAwait(false);
 
     private async Task<IPage> GetDocsPageAsync()
     {
