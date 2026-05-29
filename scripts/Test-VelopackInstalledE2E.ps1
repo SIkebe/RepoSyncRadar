@@ -70,6 +70,7 @@ function Remove-DirectoryBestEffort {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$e2eProjectPath = [System.IO.Path]::Combine($repoRoot, 'tests', 'RepoSyncRadar.App.E2E.Tests', 'RepoSyncRadar.App.E2E.Tests.csproj')
 if ([string]::IsNullOrWhiteSpace($ReleaseDir)) {
     $ReleaseDir = [System.IO.Path]::Combine($repoRoot, 'artifacts', 'release', 'velopack', $Runtime)
 }
@@ -105,7 +106,7 @@ try {
     $env:REPOSYNCRADAR_E2E_APP_EXE_PATH = $installedExe
     Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList @(
         'test',
-        'tests/RepoSyncRadar.App.E2E.Tests/RepoSyncRadar.App.E2E.Tests.csproj',
+        $e2eProjectPath,
         '--',
         '--filter-trait',
         'Category=E2E',
