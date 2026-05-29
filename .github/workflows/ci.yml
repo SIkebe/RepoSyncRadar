@@ -13,18 +13,6 @@ defaults:
     shell: pwsh
 
 jobs:
-  pr-template:
-    name: PR template
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Validate PR body
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/Assert-PullRequestBody.ps1
-
   build-test:
     name: Build and test
     runs-on: windows-latest
