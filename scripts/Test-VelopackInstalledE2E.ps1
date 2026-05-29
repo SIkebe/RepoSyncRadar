@@ -46,7 +46,9 @@ function Remove-DirectoryBestEffort {
         [Parameter(Mandatory = $true)]
         [string]$Path,
 
-        [int]$Attempts = 3
+        [int]$Attempts = 3,
+
+        [switch]$ThrowOnFailure
     )
 
     for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
@@ -60,7 +62,12 @@ function Remove-DirectoryBestEffort {
         }
         catch {
             if ($attempt -eq $Attempts) {
-                Write-Warning "Could not remove '$Path' after $Attempts attempt(s): $($_.Exception.Message)"
+                $message = "Could not remove '$Path' after $Attempts attempt(s): $($_.Exception.Message)"
+                if ($ThrowOnFailure) {
+                    throw $message
+                }
+
+                Write-Warning $message
                 return
             }
 
@@ -90,7 +97,7 @@ $installRoot = Join-Path $env:LOCALAPPDATA 'SIkebe.RepoSyncRadar'
 
 Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 if ($CleanInstallRoot -and (Test-Path $installRoot)) {
-    Remove-DirectoryBestEffort -Path $installRoot
+    Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
 }
 
 Invoke-ProcessCommand -FilePath $setupExe.FullName -ArgumentList @('--silent')
@@ -125,6 +132,6 @@ finally {
     Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 
     if ($CleanInstallRoot -and (Test-Path $installRoot)) {
-        Remove-DirectoryBestEffort -Path $installRoot
+        Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
     }
 }
