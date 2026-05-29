@@ -43,6 +43,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+
   installed-package-e2e:
     name: Installed package E2E
     runs-on: windows-latest
@@ -68,3 +69,12 @@ jobs:
 
       - name: Smoke test installed package
         run: ./scripts/Test-VelopackInstalledE2E.ps1 -Runtime win-x64 -ReleaseDir artifacts/ci-release/velopack/win-x64 -CleanInstallRoot
+
+      - name: Upload installed-package test result logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: installed-package-test-results
+          path: tests/**/TestResults/**
+          if-no-files-found: warn
+          retention-days: 7
