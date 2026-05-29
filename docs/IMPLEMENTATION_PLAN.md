@@ -1206,6 +1206,8 @@ Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画で�
 | Playwright + 2 つの `IBrowser` 共有 | `AppHostFixture` | BlazorWebView 用と DocsView 用に CDP を 2 ポート開き、`Chromium.ConnectOverCDPAsync` で接続 |
 | 全 E2E クラスで 1 アプリ共有 | `E2ETests` (`[CollectionDefinition]`) | テスト実行毎に WPF を 1 回だけ起動。WebView2 の UDF ロック残留に起因する 2 回目起動失敗を回避 |
 | App 側の CDP 注入 hook | `MainWindow.xaml.cs` | 環境変数 `REPOSYNCRADAR_BLAZOR_CDP_PORT` / `REPOSYNCRADAR_DOCS_CDP_PORT` が **セットされた時だけ** `--remote-debugging-port=N` を WebView2 に渡す。本番ビルドは何も渡さない |
+| インストール済み exe の起動 override | `REPOSYNCRADAR_E2E_APP_EXE_PATH` | 通常は開発ビルドの `RepoSyncRadar.exe` を起動する。PR CI / Release workflow では Velopack インストール後の `current\RepoSyncRadar.exe` を指定して、実利用に近い経路を検証する |
+| インストール版 smoke wrapper | `scripts/Test-VelopackInstalledE2E.ps1` | `win-x64` の Setup.exe をサイレントインストールし、`REPOSYNCRADAR_E2E_APP_EXE_PATH` を設定して `Category=E2E` を実行する |
 
 ### C.2 セキュリティ (Production との分離)
 
@@ -1224,22 +1226,37 @@ E2E は **過去に起きたバグそのもの** を assertion で固定しま�
 | Razor 部分マウント | `BlazorShell_Mounts_With_Sidebar_And_CommitList` | 5 種の `sidebar-item-{status}` がすべて可視 |
 | DocsView の言語切替 | `DocsView_Loads_GitHub_Docs_In_English` | `final URL ⊃ docs.github.com` かつ `/en` を含み、`document.documentElement.lang` が `en` 始まり |
 
-### C.4 実行方法
+### C.4 カテゴリと実行戦略
+
+- 自動化された WPF/WebView2 E2E は `Category=E2E` を付けます。`Category=Manual` は付けません。`Manual` は人が OAuth/device flow、外部サービス、実リリース導線を目視確認するテストだけに予約します。
+- 通常の開発ビルド検証では、`dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual` により E2E も含めて実行されます。E2E を明示的に外したい環境では、追加で `--filter-not-trait Category=E2E` を使います。
+- PR の `CI` workflow では、通常 gate に加えて `installed-package-e2e` job を必須にします。この job は `win-x64` Velopack package を作成し、Setup.exe をインストールし、インストール済み `current\RepoSyncRadar.exe` に対して同じ `Category=E2E` テストを実行します。
+- Release workflow の package job でも `win-x64` のインストール版 smoke を再実行します。これは release-time の最終ガードであり、PR 前検証の代替ではありません。
+- GitHub-hosted runner は x64 なので、`win-arm64` package は生成までを検証対象とし、実行 smoke は行いません。
+- インストール版 smoke が失敗した場合は、PR CI / Release workflow とも `tests/**/TestResults/**` を artifact としてアップロードします。
+
+### C.5 実行方法
 
 ```powershell
-# 全テスト (E2E 含む)
-dotnet test -- --filter-not-trait Category=Manual
+# 通常 gate: Manual 以外を実行。E2E も含む
+dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual
 
-# E2E のみ
+# 開発ビルドの E2E のみ
 dotnet test tests/RepoSyncRadar.App.E2E.Tests -- --filter-trait Category=E2E
 
-# CI で E2E をスキップ (デスクトップセッションが無い場合)
-dotnet test -- --filter-not-trait Category=Manual --filter-not-trait Category=E2E
+# E2E を明示的にスキップしたい環境
+dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual --filter-not-trait Category=E2E
+
+# インストール版 smoke (win-x64 の Velopack package 作成後)
+./scripts/Test-VelopackInstalledE2E.ps1 `
+  -Runtime win-x64 `
+  -ReleaseDir artifacts/ci-release/velopack/win-x64 `
+  -CleanInstallRoot
 ```
 
-E2E は **対話的デスクトップセッション** を必要とします (WebView2 の OS-window を実際に開くため)。Windows ヘッドレス CI 上ではスキップしてください。
+E2E は WebView2 の OS window を実際に開くため、Windows のデスクトップセッションが必要です。GitHub Actions の `windows-latest` runner では現在の PR CI / Release workflow で実行できるため必須 gate にしています。自己ホスト runner やローカル環境でデスクトップセッションを用意できない場合だけ `Category=E2E` を明示的に除外してください。
 
-### C.5 Playwright ドライバ
+### C.6 Playwright ドライバ
 
 CDP **接続のみ** を行うので Playwright の付属ブラウザバイナリインストール (`playwright.ps1 install`) は不要です (`Microsoft.Playwright.dll` 内蔵のドライバスタブで足ります)。新規開発機でいきなり E2E を回してもインストール手順は発生しません。
 

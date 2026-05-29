@@ -28,7 +28,7 @@ For Windows on Arm:
 
 The default app/package version is managed in `Directory.Build.props` as `RepoSyncRadarVersion`. Pass `-Version <semver>` only for one-off local smoke builds where you intentionally do not want to edit the shared version file.
 
-The script publishes the app and writes Velopack assets under `artifacts/release/velopack/<runtime>/`. The user-facing installer is `RepoSyncRadar-<channel>-Setup.exe`. The `.nupkg` files plus `releases.<channel>.json` form the update feed.
+The script publishes the app and writes Velopack assets under `artifacts/release/velopack/<runtime>/`. The user-facing installer is `RepoSyncRadar-<channel>-Setup.exe`; portable bundles are intentionally disabled for official releases because the installed path is the validated user environment. The `.nupkg` files plus `releases.<channel>.json` and `assets.<channel>.json` form the update feed. Legacy `RELEASES-<channel>` manifests are not uploaded because RepoSyncRadar has no Squirrel-era client population to support.
 
 The Velopack package id is `SIkebe.RepoSyncRadar` so the installer root does not collide with RepoSyncRadar's existing `%LOCALAPPDATA%\RepoSyncRadar` app-data folder.
 
@@ -60,12 +60,15 @@ Upload these files from the runtime-specific Velopack output directory to the sa
 - `RepoSyncRadar-*-full.nupkg`
 - `RepoSyncRadar-*-delta.nupkg`, when present
 - `releases.<channel>.json`
+- `assets.<channel>.json`
 
-Keep `releases.<channel>.json` consistent with the `.nupkg` files that are actually available. Installed apps use that file to discover updates.
+Keep the JSON manifests consistent with the `.nupkg` files that are actually available. Installed apps use those files to discover updates.
 
 ## GitHub Actions Release
 
-The `Release` workflow builds, tests, packages `win-x64` and `win-arm64`, and uploads the Velopack assets to a GitHub Release.
+The PR `CI` workflow runs the normal build/test gate and also builds the `win-x64` Velopack package, installs it on the runner, and runs the WebView E2E smoke against the installed `current\RepoSyncRadar.exe`. This keeps the installed-user-path validation before merge instead of waiting for a manual release from `main`.
+
+The `Release` workflow builds, tests, packages `win-x64` and `win-arm64`, installs the generated `win-x64` package on the runner, runs the same installed WebView E2E smoke, and uploads the Velopack assets to a GitHub Release. The `win-arm64` package is built but not executed on GitHub-hosted x64 runners.
 
 Trigger it manually from GitHub Actions with:
 

@@ -159,9 +159,24 @@ jobs:
               Runtime = '${{ matrix.runtime }}'
               Channel = $channel
               Force = $true
+              NoPortable = $true
+              NoLegacyManifest = $true
           }
 
           ./scripts/Build-VelopackRelease.ps1 @packageArgs
+
+      - name: Smoke test installed package
+        if: ${{ matrix.runtime == 'win-x64' }}
+        run: ./scripts/Test-VelopackInstalledE2E.ps1 -Runtime '${{ matrix.runtime }}' -CleanInstallRoot
+
+      - name: Upload installed-package test result logs
+        if: ${{ matrix.runtime == 'win-x64' && failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: installed-package-test-results-${{ matrix.runtime }}
+          path: tests/**/TestResults/**
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v7
