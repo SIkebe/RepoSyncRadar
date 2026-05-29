@@ -1,6 +1,6 @@
 # RepoSyncRadar Copilot Instructions
 
-RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter, Teams, and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0-beta.9.
+RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0-beta.9.
 
 Use these repository instructions as the starting point. When code or validated behavior contradicts them, follow the verified source and update this file after confirming the rule is stable.
 
@@ -82,7 +82,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 - Keep WPF/Blazor UI dense, operational, and scannable. This is an internal work tool, not a marketing page.
 - Match existing CSS and component patterns before adding new abstractions. Do not nest decorative cards inside cards.
-- For user-facing sharing drafts, Twitter, Teams, and customer-facing text must include official `docs.github.com` URLs when a publishable docs URL is known. If Copilot omits the URL, preserve safety by appending it before saving.
+- For user-facing sharing drafts, Twitter and customer-facing text must include official `docs.github.com` URLs when a publishable docs URL is known. If Copilot omits the URL, preserve safety by appending it before saving.
 - Commit detail should show the useful first commit message line only. Do not surface `Co-authored-by`, `Signed-off-by`, `Reviewed-by`, or `Acked-by` trailers as prominent UI text.
 - Copilot usage UI must label units explicitly: AI Credits as `credits`, Premium Request cost as `PR`, request counts as `requests`, and token counts as `tokens`.
 - When SDK AI Credits are absent, fall back to the GitHub Docs model pricing table for usage estimates. Unknown models should remain unreported rather than guessed.

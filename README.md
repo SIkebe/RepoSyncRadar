@@ -11,7 +11,7 @@ RepoSyncRadar is a Windows desktop app for GitHub Enterprise Cloud administrator
 - Driven by the **GitHub Copilot SDK** ([`github/copilot-sdk`](https://github.com/github/copilot-sdk)) at its core
 - Reviews `github/docs` repo sync PRs for changes that may affect GitHub Enterprise Cloud administration and operations
 - Surfaces docs previews and file-path → public-URL mapping so reviewers can inspect the rendered impact
-- Generates operator-facing sharing drafts for Teams, customer notices, and short-form updates
+- Generates operator-facing sharing drafts for Twitter and customer-facing notices
 - Stores Focus / Hold / Rejected / Archive / Ignore / Boost data with **SQLite + EF Core**
 - Uses GitHub OAuth Device Flow by default; the public OAuth Client ID is bundled, and organizations can override it with their own OAuth App if policy requires it
 - **No submodules.** The app is a standalone repository; no local clone is needed for normal triage.
@@ -59,7 +59,7 @@ The original phase plan is tracked in [`docs/DESIGN.md`](docs/DESIGN.md) and the
 | 1 | Repo sync PR ingestion / commit display / official page embedding |
 | 2 | Copilot SDK integration / Morning Triage session |
 | 3 | Operational UI for Focus / Hold / Rejected / Archive / Ignore |
-| 4 | Channel-specific drafts (Twitter / external) |
+| 4 | Channel-specific drafts (Twitter / customer-facing) |
 | 5 | Local preview (bare clone + worktree) |
 | 6 | Distribution and auto-update |
 
