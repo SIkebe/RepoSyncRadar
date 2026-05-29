@@ -954,7 +954,9 @@ public sealed class DocsWorktreeManagerTests : IDisposable
 
         Assert.Equal(1, removed);
         Assert.False(Directory.Exists(stalePath));
-        Assert.True(Directory.Exists(Path.Combine(worktreeRoot, ".delete-pending")));
+        var pendingRoot = Path.Combine(worktreeRoot, ".delete-pending");
+        Assert.True(Directory.Exists(pendingRoot));
+        await WaitForBackgroundDeletesAsync(pendingRoot, ct);
     }
 
     private static DocsWorktreeManager BuildSut(
@@ -979,6 +981,21 @@ public sealed class DocsWorktreeManagerTests : IDisposable
             processCleaner ?? NoopPreviewServerProcessCleaner.Instance);
     }
 
+    private static async Task WaitForBackgroundDeletesAsync(string pendingRoot, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 20; attempt++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!Directory.Exists(pendingRoot) || !Directory.EnumerateDirectories(pendingRoot).Any())
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
+        }
+    }
+
     public void Dispose()
     {
         try
@@ -989,6 +1006,10 @@ public sealed class DocsWorktreeManagerTests : IDisposable
             }
         }
         catch (IOException)
+        {
+            // best effort
+        }
+        catch (UnauthorizedAccessException)
         {
             // best effort
         }
