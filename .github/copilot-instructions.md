@@ -58,6 +58,7 @@ Use these repository instructions as the starting point. When code or validated 
 - In beta.9 hook payloads such as `PreToolUseHookInput.ToolArgs`, `PostToolUseHookInput.ToolResult`, and `PreMcpToolCallHookInput.Arguments` are JSON values; tests should create fixtures with `JsonSerializer.SerializeToElement(...)` where needed.
 - In beta.9 `AssistantUsageData` does not expose legacy `CopilotUsage`; use `Cost` and session `Usage.GetMetricsAsync()` for SDK-reported billing details, and keep `GHCP001` suppressions local to experimental SDK telemetry/permission types.
 - For Copilot tool metadata such as `skip_permission`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { SkipPermission = true }, ...)` over magic-string `AdditionalProperties`.
+- For beta.9 tool filtering, use `ToolSet().AddCustom(toolName)` for RepoSyncRadar's registered radar tools instead of bare tool names, and explicitly disable ambient custom instructions, org-level custom agents, coauthor trailers, and scheduler integration in `SessionConfigBuilder` unless a feature needs them.
 
 ### Client And Telemetry
 

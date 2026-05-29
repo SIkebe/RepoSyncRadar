@@ -44,12 +44,22 @@ internal static class SessionConfigBuilder
             },
             OnPermissionRequest = permissionHandler,
             EnableSessionTelemetry = copilot.EnableSessionTelemetry,
+            SkipCustomInstructions = true,
+            CustomAgentsLocalOnly = true,
+            CoauthorEnabled = false,
+            ManageScheduleEnabled = false,
         };
 
         if (tools is { Count: > 0 })
         {
             config.Tools = tools.Cast<AIFunctionDeclaration>().ToList();
-            config.AvailableTools = tools.Select(static tool => tool.Name).ToList();
+            var availableTools = new ToolSet();
+            foreach (var tool in tools)
+            {
+                availableTools.AddCustom(tool.Name);
+            }
+
+            config.AvailableTools = availableTools;
         }
 
         if (auditHook is not null)
