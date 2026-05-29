@@ -35,6 +35,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Official release assets are installer/update-feed only: pass `-NoPortable -NoLegacyManifest` to `scripts/Build-VelopackRelease.ps1` so unvalidated portable bundles and legacy Squirrel `RELEASES-*` manifests are not published.
 - GitHub Releases are treated as immutable once published. The Release workflow uploads Velopack assets without `--clobber`, uses draft releases for asset attachment, and can publish an existing asset-bearing draft only after validating the expected asset names. Correct bad published assets with a new `RepoSyncRadarVersion` and tag.
 - Write git commit messages in English.
+- Before creating or updating a pull request, read `.github/PULL_REQUEST_TEMPLATE.md` and use every section in the PR body. Keep PR descriptions in English, and resolve each validation line by checking it or replacing it with `N/A - <reason>`.
 - Logging must use source-generated `[LoggerMessage]`. Do not call `_logger.LogDebug/LogInformation/LogWarning(...)` extension methods directly. Use `partial sealed class` methods such as `private static partial void LogXxx(ILogger logger, ...)`.
 - In xUnit tests, pass `TestContext.Current.CancellationToken` when calling cancellable APIs. For NSubstitute `Received`/`DidNotReceive`, use `Arg.Any<CancellationToken>()` or the real token.
 - WPF E2E fixtures should pass a dummy `COPILOT_GITHUB_TOKEN` into the App child process so eager startup sign-in does not enter GitHub OAuth Device Flow on CI.
