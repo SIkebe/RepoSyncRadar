@@ -8,7 +8,7 @@ using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
 
-#pragma warning disable GHCP001 // beta.8 exposes permission decisions through experimental RPC types.
+#pragma warning disable GHCP001 // beta.9 exposes permission decisions through experimental RPC types.
 
 public class SessionConfigBuilderTests
 {
@@ -37,6 +37,10 @@ public class SessionConfigBuilderTests
         Assert.Equal(SystemMessageMode.Append, config.SystemMessage!.Mode);
         Assert.False(string.IsNullOrWhiteSpace(config.SystemMessage.Content));
         Assert.Same(handler, config.OnPermissionRequest);
+        Assert.True(config.SkipCustomInstructions);
+        Assert.True(config.CustomAgentsLocalOnly);
+        Assert.False(config.CoauthorEnabled);
+        Assert.False(config.ManageScheduleEnabled);
     }
 
     [Fact]
@@ -67,7 +71,7 @@ public class SessionConfigBuilderTests
         Assert.NotNull(config.Tools);
         Assert.Single(config.Tools);
         Assert.Equal("radar_test", config.Tools.Single().Name);
-        Assert.Equal(["radar_test"], config.AvailableTools);
+        Assert.Equal(["custom:radar_test"], config.AvailableTools);
     }
 }
 #pragma warning restore GHCP001
