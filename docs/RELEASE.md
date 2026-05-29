@@ -64,6 +64,24 @@ Upload these files from the runtime-specific Velopack output directory to the sa
 
 Keep the JSON manifests consistent with the `.nupkg` files that are actually available. Installed apps use those files to discover updates.
 
+## Immutable GitHub Release Policy
+
+RepoSyncRadar follows GitHub's immutable release guidance. GitHub Docs state that, once an immutable release is published, the release assets and associated Git tag cannot be changed: the tag cannot be moved or deleted while the release exists, assets cannot be modified or deleted, and the same tag name cannot be reused after deleting an immutable release. See [Immutable releases](https://docs.github.com/en/code-security/supply-chain-security/understanding-your-software-supply-chain/immutable-releases) and [Managing releases in a repository](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
+
+The release workflow never replaces assets on an existing release and does not use `gh release upload --clobber`.
+
+The workflow creates or reuses only an empty draft release, uploads the complete Velopack asset set once, and then either leaves the release as a draft or publishes it by clearing the draft flag. This keeps the installer, `.nupkg` packages, `releases.<channel>.json`, and `assets.<channel>.json` from being split across multiple upload attempts after publication.
+
+Existing release behavior is intentionally strict:
+
+- If the tag has no GitHub Release, the workflow creates a draft release and uploads assets.
+- If the tag has an empty draft release, the workflow may reuse it.
+- If the tag has a published release, the workflow fails. Create a new `RepoSyncRadarVersion` and tag for corrected assets. Do not delete the published release with the expectation that the same tag can be reused.
+- If the tag has a draft release with assets and `draft` is disabled, the workflow validates that the attached asset names match the expected Velopack asset set and publishes the existing draft without replacing assets.
+- If the tag has a draft release with assets and `draft` is enabled, the workflow fails. Delete the draft before rerunning if those assets were never published, or rerun with `draft` disabled after smoke validation to publish the existing draft.
+
+For rollback, publish a newer corrective version rather than mutating the broken release. For example, if `v0.2.0` is published with bad assets, leave the release as historical record, fix the issue, set `RepoSyncRadarVersion` to `0.2.1`, tag `v0.2.1`, and publish a complete new Velopack feed for the affected channels. Installed clients should move forward to the corrected version through the update feed.
+
 ## GitHub Actions Release
 
 The PR `CI` workflow runs the normal build/test gate and also builds the `win-x64` Velopack package, installs it on the runner, and runs the WebView E2E smoke against the installed `current\RepoSyncRadar.exe`. This keeps the installed-user-path validation before merge instead of waiting for a manual release from `main`.
@@ -73,12 +91,12 @@ The `Release` workflow builds, tests, packages `win-x64` and `win-arm64`, instal
 Trigger it manually from GitHub Actions with:
 
 - `channelSuffix`: `stable`, `beta`, or `preview`; this produces channels such as `win-x64-stable`.
-- `draft`: keep enabled until the release has been installed and smoke-tested.
+- `draft`: keep enabled for the dry-run smoke path. The workflow uploads all assets to a draft release and stops before publication, so maintainers can inspect the GitHub Release, download the installer, and run final checks. Rerun the workflow with `draft` disabled when you are ready to publish that existing draft; the workflow validates the attached asset names and publishes without re-uploading or replacing assets.
 - `prerelease`: enable for beta/preview builds.
 
 The workflow reads the release version from `RepoSyncRadarVersion` in `Directory.Build.props`; update that file before running a release. Pushing a tag like `v0.1.0` also runs the workflow, and the tag version must match `RepoSyncRadarVersion`. Tag-triggered releases are created as drafts by default.
 
-The workflow currently creates unsigned draft release assets. For public releases, select an Authenticode-compatible signing provider and extend the workflow once that provider is available.
+The workflow currently creates unsigned release assets. For public releases, select an Authenticode-compatible signing provider and extend the workflow once that provider is available.
 
 ## App Update Settings
 

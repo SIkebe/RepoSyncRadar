@@ -13,7 +13,7 @@ on:
           - beta
           - preview
       draft:
-        description: Create or keep the GitHub Release as a draft.
+        description: Leave the validated GitHub Release as a draft instead of publishing it.
         required: true
         default: true
         type: boolean
@@ -100,8 +100,48 @@ jobs:
           "draft=$draft" >> $env:GITHUB_OUTPUT
           "prerelease=$prerelease" >> $env:GITHUB_OUTPUT
 
+  release-preflight:
+    name: Check release immutability preconditions
+    needs:
+      - prepare
+    runs-on: windows-latest
+    steps:
+      - name: Require a new release or empty draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          DRAFT: ${{ needs.prepare.outputs.draft }}
+        run: |
+          $releaseJson = gh release view $env:TAG --repo $env:REPOSITORY --json isDraft,assets 2>$null
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "No existing GitHub Release found for $env:TAG."
+              exit 0
+          }
+
+          $release = $releaseJson | ConvertFrom-Json
+          $assetCount = @($release.assets).Count
+
+          if (-not $release.isDraft) {
+              throw "GitHub Release '$env:TAG' is already published. Immutable release policy requires a new RepoSyncRadarVersion/tag for corrected assets."
+          }
+
+          if ($assetCount -gt 0) {
+              if ($env:DRAFT -ne 'true') {
+                Write-Host "Found draft GitHub Release '$env:TAG' with $assetCount asset(s); the publish job will validate and publish it without replacing assets."
+                exit 0
+              }
+
+              throw "Draft GitHub Release '$env:TAG' already has $assetCount asset(s). Delete the draft before rerunning, or use a new RepoSyncRadarVersion/tag for corrected assets."
+          }
+
+          Write-Host "Found an empty draft GitHub Release for $env:TAG; it can be reused."
+
   build-test:
     name: Build and test
+    needs:
+      - prepare
+      - release-preflight
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -200,7 +240,7 @@ jobs:
           path: dist/release-assets
           merge-multiple: true
 
-      - name: Create or update GitHub Release
+      - name: Create draft release and upload immutable assets
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -208,6 +248,7 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
           DRAFT: ${{ needs.prepare.outputs.draft }}
           PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          CHANNEL_SUFFIX: ${{ needs.prepare.outputs.channel-suffix }}
         run: |
           $notesPath = Join-Path $env:RUNNER_TEMP 'release-notes.md'
           @"
@@ -216,26 +257,77 @@ jobs:
           Windows installers and Velopack update packages are attached for x64 and Arm64.
           "@ | Set-Content -Path $notesPath -Encoding utf8NoBOM
 
-          $releaseArgs = @('release', 'create', $env:TAG, '--repo', $env:REPOSITORY, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath)
-          if ($env:DRAFT -eq 'true') {
-              $releaseArgs += '--draft'
-          }
-          if ($env:PRERELEASE -eq 'true') {
-              $releaseArgs += '--prerelease'
-          }
-
-          gh release view $env:TAG --repo $env:REPOSITORY *> $null
-          if ($LASTEXITCODE -ne 0) {
-              gh @releaseArgs
-          }
-          else {
-              $editArgs = @('release', 'edit', $env:TAG, '--repo', $env:REPOSITORY, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath, "--draft=$env:DRAFT", "--prerelease=$env:PRERELEASE")
-              gh @editArgs
-          }
-
           $assets = Get-ChildItem dist/release-assets -File | Sort-Object Name
           if ($assets.Count -eq 0) {
               throw 'No release assets were downloaded.'
           }
 
-          gh release upload $env:TAG --repo $env:REPOSITORY --clobber @($assets.FullName)
+          foreach ($runtime in @('win-x64', 'win-arm64')) {
+              $channel = "$runtime-$env:CHANNEL_SUFFIX"
+              $requiredPatterns = @(
+                  "RepoSyncRadar-$channel-Setup.exe",
+                  "RepoSyncRadar-$channel-*-full.nupkg",
+                  "releases.$channel.json",
+                  "assets.$channel.json"
+              )
+
+              foreach ($pattern in $requiredPatterns) {
+                  if (-not ($assets | Where-Object { $_.Name -like $pattern })) {
+                      throw "Missing required Velopack release asset matching '$pattern'."
+                  }
+              }
+          }
+
+          $releaseArgs = @('release', 'create', $env:TAG, '--repo', $env:REPOSITORY, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath, '--draft')
+          if ($env:PRERELEASE -eq 'true') {
+              $releaseArgs += '--prerelease'
+          }
+
+          $releaseJson = gh release view $env:TAG --repo $env:REPOSITORY --json isDraft,assets 2>$null
+          if ($LASTEXITCODE -ne 0) {
+              gh @releaseArgs
+          }
+          else {
+              $release = $releaseJson | ConvertFrom-Json
+              $assetCount = @($release.assets).Count
+
+              if (-not $release.isDraft) {
+                  throw "GitHub Release '$env:TAG' was published before asset upload. Use a new RepoSyncRadarVersion/tag for corrected assets."
+              }
+
+                if ($assetCount -gt 0) {
+                  if ($env:DRAFT -eq 'true') {
+                    throw "Draft GitHub Release '$env:TAG' already has $assetCount asset(s). Delete the draft before rerunning, or use a new RepoSyncRadarVersion/tag for corrected assets."
+                  }
+
+                  $expectedAssetNames = @($assets | ForEach-Object { $_.Name } | Sort-Object)
+                  $releaseAssetNames = @($release.assets | ForEach-Object { $_.name } | Sort-Object)
+
+                  $missingAssetNames = @($expectedAssetNames | Where-Object { $releaseAssetNames -notcontains $_ })
+                  if ($missingAssetNames.Count -gt 0) {
+                    throw "Draft GitHub Release '$env:TAG' is missing expected asset(s): $($missingAssetNames -join ', '). Delete the draft before rerunning, or upload a complete new version/tag."
+                  }
+
+                  $unexpectedAssetNames = @($releaseAssetNames | Where-Object { $expectedAssetNames -notcontains $_ })
+                  if ($unexpectedAssetNames.Count -gt 0) {
+                    throw "Draft GitHub Release '$env:TAG' has unexpected asset(s): $($unexpectedAssetNames -join ', '). Delete the draft before rerunning, or upload a complete new version/tag."
+                  }
+
+                  Write-Host "Existing draft assets match the expected Velopack asset names; publishing without re-uploading assets."
+
+                  $publishArgs = @('release', 'edit', $env:TAG, '--repo', $env:REPOSITORY, '--draft=false', "--prerelease=$env:PRERELEASE")
+                  gh @publishArgs
+                  exit 0
+              }
+
+              $editArgs = @('release', 'edit', $env:TAG, '--repo', $env:REPOSITORY, '--target', '${{ github.sha }}', '--title', "RepoSyncRadar $env:VERSION", '--notes-file', $notesPath, '--draft=true', "--prerelease=$env:PRERELEASE")
+              gh @editArgs
+          }
+
+          $uploadArgs = @('release', 'upload', $env:TAG, '--repo', $env:REPOSITORY) + @($assets.FullName)
+          gh @uploadArgs
+
+          if ($env:DRAFT -ne 'true') {
+              $publishArgs = @('release', 'edit', $env:TAG, '--repo', $env:REPOSITORY, '--draft=false', "--prerelease=$env:PRERELEASE")
+              gh @publishArgs
+          }
