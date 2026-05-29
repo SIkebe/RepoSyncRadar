@@ -56,7 +56,6 @@
     {
         @RenderChannel("explanation", L["Drafts.Channel.Explanation"], _bundle?.ExplanationJa, large: true)
         @RenderChannel("twitter", "Twitter", _bundle?.TwitterJa)
-        @RenderChannel("teams", "Teams", _bundle?.TeamsJa)
         @RenderChannel("customer", L["Drafts.Channel.Customer"], _bundle?.CustomerJa)
         @if (!string.IsNullOrEmpty(_status))
         {
@@ -146,7 +145,7 @@
         }
         _bundle = new DraftBundle(
             FindDraft(drafts, "twitter"),
-            FindDraft(drafts, "teams"),
+            string.Empty,
             FindDraft(drafts, "customer"),
             FindDraft(drafts, "explanation"));
     }

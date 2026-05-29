@@ -121,7 +121,7 @@
   <data name="CopilotUsage.Label.AiCredits" xml:space="preserve"><value>AI Credits</value></data>
   <data name="CopilotUsage.Label.PremiumRequestCost" xml:space="preserve"><value>Premium Request コスト</value></data>
   <data name="CopilotUsage.Label.PremiumRequests" xml:space="preserve"><value>Premium Requests</value></data>
-  <data name="Drafts.BusyHint" xml:space="preserve"><value>完了すると差分解説、Twitter、Teams、顧客向けの各欄を更新します。</value></data>
+  <data name="Drafts.BusyHint" xml:space="preserve"><value>完了すると差分解説、Twitter、顧客向けの各欄を更新します。</value></data>
   <data name="Drafts.Channel.Customer" xml:space="preserve"><value>顧客向け</value></data>
   <data name="Drafts.Channel.Explanation" xml:space="preserve"><value>差分解説</value></data>
   <data name="Drafts.ChannelEmpty" xml:space="preserve"><value>まだ生成されていません。上部の再生成ボタンで作成できます。</value></data>

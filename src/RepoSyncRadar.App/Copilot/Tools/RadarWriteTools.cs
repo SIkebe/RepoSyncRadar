@@ -278,7 +278,7 @@ public sealed class RadarWriteTools
             new AIFunctionFactoryOptions
             {
                 Name = "radar_post_draft",
-                Description = "Stores a media-specific draft (twitter / teams / customer) for a commit. Side-effecting.",
+                Description = "Stores a media-specific draft (twitter / customer) for a commit. Side-effecting.",
             });
     }
 

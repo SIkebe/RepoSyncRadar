@@ -18,7 +18,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 public sealed class DraftsPanelTests
 {
     [Fact]
-    public async Task Renders_Three_Sections()
+    public async Task Renders_Draft_Sections_Without_Legacy_Teams()
     {
         var ct = Xunit.TestContext.Current.CancellationToken;
         await using var harness = await WriteHarness.CreateAsync(ct);
@@ -52,13 +52,13 @@ public sealed class DraftsPanelTests
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("[data-testid=\"drafts-section-twitter\"]"));
-            Assert.NotNull(cut.Find("[data-testid=\"drafts-section-teams\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"drafts-section-customer\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"drafts-section-explanation\"]"));
             Assert.Contains("TW", cut.Find("[data-testid=\"drafts-body-twitter\"]").TextContent);
-            Assert.Contains("TM", cut.Find("[data-testid=\"drafts-body-teams\"]").TextContent);
             Assert.Contains("CU", cut.Find("[data-testid=\"drafts-body-customer\"]").TextContent);
             Assert.Contains("EX", cut.Find("[data-testid=\"drafts-body-explanation\"]").TextContent);
+            Assert.Empty(cut.FindAll("[data-testid=\"drafts-section-teams\"]"));
+            Assert.DoesNotContain("TM", cut.Markup, StringComparison.Ordinal);
         });
     }
 

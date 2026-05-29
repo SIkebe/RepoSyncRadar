@@ -17,8 +17,8 @@ namespace RepoSyncRadar.App.Copilot;
 /// focused commit:
 /// <list type="number">
 ///   <item><description>Loads the commit, its diff, and up to five previously focused commits as few-shot context.</description></item>
-///   <item><description>Sends an Adoption session prompt asking Copilot to return JSON with a diff explanation and twitter/teams/customer drafts.</description></item>
-///   <item><description>Persists the explanation and three drafts to the local <c>radar.db</c>.</description></item>
+///   <item><description>Sends an Adoption session prompt asking Copilot to return JSON with a diff explanation and twitter/customer drafts.</description></item>
+///   <item><description>Persists the explanation and two drafts to the local <c>radar.db</c>.</description></item>
 /// </list>
 /// Diffs larger than <see cref="MaxDiffBytes"/> are truncated with a marker so the prompt
 /// stays bounded.
@@ -212,14 +212,14 @@ public sealed partial class AdoptionSession
         var sb = new StringBuilder();
         sb.AppendLine("# 注目コミット — 差分解説と共有文案生成");
         sb.AppendLine();
-        sb.AppendLine("以下のコミットを注目対象にしました。差分を読まなくても変更点を理解できる日本語解説と、Twitter / Teams / 顧客向けの 3 つの日本語下書きを生成してください。");
+        sb.AppendLine("以下のコミットを注目対象にしました。差分を読まなくても変更点を理解できる日本語解説と、Twitter / 顧客向けの 2 つの日本語下書きを生成してください。");
         sb.AppendLine();
         sb.AppendLine("## 入出力");
         sb.AppendLine("- 出力は **必ず JSON のみ**。説明文や Markdown コードブロックは禁止。");
-        sb.AppendLine("- スキーマ: `{ \"explanation\": string, \"twitter\": string, \"teams\": string, \"customer\": string }`");
+        sb.AppendLine("- スキーマ: `{ \"explanation\": string, \"twitter\": string, \"customer\": string }`");
         sb.AppendLine("- explanation は 1200〜2000 文字程度。差分の細部を読まなくても変更点を理解できる密度にする。");
-        sb.AppendLine("- twitter は 140 文字以内、teams は 800 文字以内、customer は 1600 文字以内を目安。");
-        sb.AppendLine("- twitter / teams / customer には、必ず下記の公式ドキュメント URL を 1 つ以上含める。");
+        sb.AppendLine("- twitter は 140 文字以内、customer は 1600 文字以内を目安。");
+        sb.AppendLine("- twitter / customer には、必ず下記の公式ドキュメント URL を 1 つ以上含める。");
         sb.AppendLine();
         sb.AppendLine("## explanation の要件");
         sb.AppendLine("- 次の見出しをこの順序で含める: `何が変わったか`, `差分の見方`, `重要なポイント`, `影響と次に見るべき点`。");
@@ -307,7 +307,7 @@ public sealed partial class AdoptionSession
 
         return new DraftBundle(
             TwitterJa: EnsureOfficialDocUrl(bundle.TwitterJa, url),
-            TeamsJa: EnsureOfficialDocUrl(bundle.TeamsJa, url),
+            TeamsJa: string.Empty,
             CustomerJa: EnsureOfficialDocUrl(bundle.CustomerJa, url),
             ExplanationJa: bundle.ExplanationJa);
     }
@@ -463,7 +463,7 @@ public sealed partial class AdoptionSession
         sb.AppendLine("前回の応答はアプリで処理できる JSON ではありませんでした。");
         sb.AppendLine("前回の内容から、次のスキーマに合う JSON object だけを返してください。");
         sb.AppendLine("説明文、Markdown、コードブロック、前置き、後置きは禁止です。");
-        sb.AppendLine("スキーマ: { \"explanation\": string, \"twitter\": string, \"teams\": string, \"customer\": string }");
+        sb.AppendLine("スキーマ: { \"explanation\": string, \"twitter\": string, \"customer\": string }");
         sb.AppendLine();
         sb.AppendLine("前回の応答:");
         sb.AppendLine("```text");
@@ -494,11 +494,10 @@ public sealed partial class AdoptionSession
 
         bundle = new DraftBundle(
             TwitterJa: ValueFor(sections, "twitter"),
-            TeamsJa: ValueFor(sections, "teams"),
+            TeamsJa: string.Empty,
             CustomerJa: ValueFor(sections, "customer"),
             ExplanationJa: ValueFor(sections, "explanation"));
         return !string.IsNullOrWhiteSpace(bundle.TwitterJa)
-            || !string.IsNullOrWhiteSpace(bundle.TeamsJa)
             || !string.IsNullOrWhiteSpace(bundle.CustomerJa)
             || !string.IsNullOrWhiteSpace(bundle.ExplanationJa);
     }
@@ -557,7 +556,6 @@ public sealed partial class AdoptionSession
         {
             "差分解説" or "解説" or "explanation" or "diff explanation" => "explanation",
             "twitter" or "x" or "tweet" or "twitter向け" or "twitter 用" or "twitter用" => "twitter",
-            "teams" or "teams向け" or "teams 用" or "teams用" => "teams",
             "顧客向け" or "顧客" or "customer" or "customer-facing" or "customer facing" => "customer",
             _ => string.Empty,
         };
@@ -604,7 +602,7 @@ public sealed partial class AdoptionSession
 
         return new DraftBundle(
             parsed.Twitter ?? string.Empty,
-            parsed.Teams ?? string.Empty,
+            string.Empty,
             parsed.Customer ?? string.Empty,
             parsed.Explanation ?? string.Empty);
     }
@@ -732,7 +730,6 @@ public sealed partial class AdoptionSession
         var entries = new[]
         {
             new Draft { Sha = sha, Channel = "twitter", Body = bundle.TwitterJa, Posted = false, GeneratedAt = nowUtc },
-            new Draft { Sha = sha, Channel = "teams", Body = bundle.TeamsJa, Posted = false, GeneratedAt = nowUtc },
             new Draft { Sha = sha, Channel = "customer", Body = bundle.CustomerJa, Posted = false, GeneratedAt = nowUtc },
             new Draft { Sha = sha, Channel = "explanation", Body = bundle.ExplanationJa, Posted = false, GeneratedAt = nowUtc },
         };
@@ -743,7 +740,6 @@ public sealed partial class AdoptionSession
     private sealed class DraftJson
     {
         public string? Twitter { get; set; }
-        public string? Teams { get; set; }
         public string? Customer { get; set; }
         public string? Explanation { get; set; }
     }

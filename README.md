@@ -59,7 +59,7 @@ The original phase plan is tracked in [`docs/DESIGN.md`](docs/DESIGN.md) and the
 | 1 | Repo sync PR ingestion / commit display / official page embedding |
 | 2 | Copilot SDK integration / Morning Triage session |
 | 3 | Operational UI for Focus / Hold / Rejected / Archive / Ignore |
-| 4 | Channel-specific drafts (Twitter / Teams / external) |
+| 4 | Channel-specific drafts (Twitter / external) |
 | 5 | Local preview (bare clone + worktree) |
 | 6 | Distribution and auto-update |
 
