@@ -28,7 +28,7 @@ For Windows on Arm:
 
 The default app/package version is managed in `Directory.Build.props` as `RepoSyncRadarVersion`. Pass `-Version <semver>` only for one-off local smoke builds where you intentionally do not want to edit the shared version file.
 
-The script publishes the app and writes Velopack assets under `artifacts/release/velopack/<runtime>/`. The user-facing installer is `RepoSyncRadar-<channel>-Setup.exe`; portable bundles are intentionally disabled for official releases because the installed path is the validated user environment. The `.nupkg` files plus `releases.<channel>.json` and `assets.<channel>.json` form the update feed. Legacy `RELEASES-<channel>` manifests are not uploaded because RepoSyncRadar has no Squirrel-era client population to support.
+The script publishes the app and writes Velopack assets under `artifacts/release/velopack/<runtime>/`. The user-facing installer is `SIkebe.RepoSyncRadar-<channel>-Setup.exe`; portable bundles are intentionally disabled for official releases because the installed path is the validated user environment. The `.nupkg` files plus `releases.<channel>.json` and `assets.<channel>.json` form the update feed. Legacy `RELEASES-<channel>` manifests are not uploaded because RepoSyncRadar has no Squirrel-era client population to support.
 
 The Velopack package id is `SIkebe.RepoSyncRadar` so the installer root does not collide with RepoSyncRadar's existing `%LOCALAPPDATA%\RepoSyncRadar` app-data folder.
 
@@ -56,9 +56,9 @@ With an existing `signtool.exe` parameter set:
 
 Upload these files from the runtime-specific Velopack output directory to the same release feed location:
 
-- `RepoSyncRadar-*-Setup.exe`
-- `RepoSyncRadar-*-full.nupkg`
-- `RepoSyncRadar-*-delta.nupkg`, when present
+- `SIkebe.RepoSyncRadar-*-Setup.exe`
+- `SIkebe.RepoSyncRadar-*-full.nupkg`
+- `SIkebe.RepoSyncRadar-*-delta.nupkg`, when present
 - `releases.<channel>.json`
 - `assets.<channel>.json`
 

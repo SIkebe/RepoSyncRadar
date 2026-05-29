@@ -265,8 +265,8 @@ jobs:
           foreach ($runtime in @('win-x64', 'win-arm64')) {
               $channel = "$runtime-$env:CHANNEL_SUFFIX"
               $requiredPatterns = @(
-                  "RepoSyncRadar-$channel-Setup.exe",
-                  "RepoSyncRadar-$channel-*-full.nupkg",
+                  "SIkebe.RepoSyncRadar-$channel-Setup.exe",
+                  "SIkebe.RepoSyncRadar-*-$channel-full.nupkg",
                   "releases.$channel.json",
                   "assets.$channel.json"
               )
