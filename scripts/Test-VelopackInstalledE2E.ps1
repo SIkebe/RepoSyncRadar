@@ -26,6 +26,21 @@ function Invoke-NativeCommand {
     }
 }
 
+function Invoke-ProcessCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$ArgumentList
+    )
+
+    $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -NoNewWindow -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "$FilePath failed with exit code $($process.ExitCode)."
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 if ([string]::IsNullOrWhiteSpace($ReleaseDir)) {
     $ReleaseDir = [System.IO.Path]::Combine($repoRoot, 'artifacts', 'release', 'velopack', $Runtime)
@@ -50,7 +65,7 @@ if ($CleanInstallRoot -and (Test-Path $installRoot)) {
     Remove-Item $installRoot -Recurse -Force
 }
 
-Invoke-NativeCommand -FilePath $setupExe.FullName -ArgumentList @('--silent')
+Invoke-ProcessCommand -FilePath $setupExe.FullName -ArgumentList @('--silent')
 Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 
 $installedExe = Join-Path $installRoot 'current\RepoSyncRadar.exe'
