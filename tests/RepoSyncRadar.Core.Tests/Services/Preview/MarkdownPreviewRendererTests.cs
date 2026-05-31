@@ -473,6 +473,30 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Rewrites_Autotitle_Markdown_Link_And_Preserves_Title_Attribute()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/copilot/concepts/billing/budgets-for-usage-based-billing"] = "Budgets for usage-based billing",
+            });
+
+        var markdown = "See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing \"Budget controls\").";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/billing/concepts/budgets-and-alerts.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        Assert.Contains("<a href=\"/copilot/concepts/billing/budgets-for-usage-based-billing\" title=\"Budget controls\">Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Rewrites_Autotitle_Link_Text_When_Diff_Span_Wraps_Body()
     {
         var context = new DocsLiquidContext(
@@ -494,6 +518,113 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("<span class=\"rsr-rendered-diff-added\">Using the audit log API for your enterprise</span></a>", html, StringComparison.Ordinal);
         Assert.DoesNotContain(">AUTOTITLE</span></a>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderedDiff_Rewrites_Autotitle_When_Changed_List_Item_Adds_Link()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["copilot/concepts/billing/budgets-for-usage-based-billing"] = "Budgets for usage-based billing",
+            });
+        const string beforeMarkdown = """
+            ## Types and scopes
+
+            * **Scope**: Defines whether the budget applies to the whole account, or to a subset of repositories, organizations, or cost centers (enterprise only).
+            """;
+        const string afterMarkdown = """
+            ## Types and scopes
+
+            * **Scope**: Defines whether the budget applies to the whole account, or to a subset of repositories, organizations, cost centers (enterprise only), or users. User-scoped budgets are currently only supported for Copilot AI credits. See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing).
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/billing/concepts/budgets-and-alerts.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("href=\"/copilot/concepts/billing/budgets-for-usage-based-billing\"", html, StringComparison.Ordinal);
+        Assert.Contains("Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rewrites_Autotitle_Markdown_Links_Only_Outside_Code()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["copilot/concepts/billing/budgets-for-usage-based-billing"] = "Budgets for usage-based billing",
+            });
+        const string beforeMarkdown = """
+            ## Types and scopes
+
+            Existing guidance.
+            """;
+        const string afterMarkdown = """
+            ## Types and scopes
+
+            See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing).
+
+            Use `[AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing)` in docs examples.
+
+            ```markdown
+            See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing).
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/billing/concepts/budgets-and-alerts.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<a href=\"/copilot/concepts/billing/budgets-for-usage-based-billing\">Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
+        Assert.Contains("<code>[AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing)</code>", html, StringComparison.Ordinal);
+        Assert.Contains("See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing).", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<code>&lt;a href=", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderedDiff_Does_Not_Expand_Autotitle_Link_Range_From_Earlier_Bracketed_Text()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/new-target"] = "New target",
+            });
+        const string beforeMarkdown = """
+            Use [preview]. See [AUTOTITLE](/old-target).
+            """;
+        const string afterMarkdown = """
+            Use [preview]. See [AUTOTITLE](/new-target).
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("Use [preview]. <span class=\"rsr-rendered-diff-added\">See <a href=\"/new-target\">New target</a>.</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">Use [preview]", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -908,6 +1039,34 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Preserves_GitHub_Alert_List_Item_When_Diff_Marked()
+    {
+        const string beforeMarkdown = """
+            > [!NOTE]
+            > * Larger runners are always charged for.
+            > * The storage amounts shown are shared with GitHub Packages.
+            """;
+        const string afterMarkdown = """
+            > [!NOTE]
+            > * Larger runners are always charged for.
+            > * The storage amounts shown are shared with GitHub Packages.
+            > * Copilot code review consumes GitHub Actions minutes on private repositories. For public repositories, GitHub Actions minutes remain free.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/billing/concepts/product-billing/github-actions.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", html, StringComparison.Ordinal);
+        Assert.Contains("<li><span class=\"rsr-rendered-diff-added\">Copilot code review consumes GitHub Actions minutes on private repositories. For public repositories, GitHub Actions minutes remain free.</span></li>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<p><span class=\"rsr-rendered-diff-added\">* Copilot code review", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_Asterisk_List_When_Diff_Marked()
     {
         const string beforeMarkdown = """
@@ -959,7 +1118,7 @@ public sealed class MarkdownPreviewRendererTests
             diffAgainstMarkdown: beforeMarkdown,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
-        Assert.Contains("<span class=\"rsr-rendered-diff-added\"> This includes workflows", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">This includes workflows", html, StringComparison.Ordinal);
         Assert.Contains("Events that trigger workflows</a>.</span>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<a href=\"/actions/reference/workflows-and-actions/events-that-trigger-workflows#running-your-workflow-only-when-a-push-to-specific-branches-occurs\"><span class=\"rsr-rendered-diff-added\">Events that trigger workflows</span></a>", html, StringComparison.Ordinal);
     }

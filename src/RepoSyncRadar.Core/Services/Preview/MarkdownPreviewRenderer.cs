@@ -70,6 +70,9 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex(@"\[AUTOTITLE\]\((?<href>[^\s)]+)\)?", RegexOptions.IgnoreCase)]
     private static partial Regex AutotitleMarkdownLinkRegex();
 
+    [GeneratedRegex("""\[(?<label><span\b(?<attrs>[^>]*)>\s*AUTOTITLE\s*</span>|AUTOTITLE)\]\((?<destination><[^>\r\n]+>|[^\s)]+)(?<suffix>(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\))""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex FullAutotitleMarkdownLinkRegex();
+
     [GeneratedRegex("""<[^>]+>""", RegexOptions.Singleline)]
     private static partial Regex HtmlTagRegex();
 
@@ -158,7 +161,12 @@ internal static partial class MarkdownPreviewRenderer
                 diffSide);
             var liquidBlocksRendered = RenderOfficialLiquidBlocks(diffMarked);
             var githubAlertsRendered = RenderGitHubAlertBlocks(liquidBlocksRendered);
-            var liquidNeutralized = NeutralizeLiquid(githubAlertsRendered);
+            var autotitleMarkdownRewritten = RewriteAutotitleMarkdownLinks(
+                githubAlertsRendered,
+                trimmedRepoPath,
+                effectiveLiquidContext,
+                effectiveVersion);
+            var liquidNeutralized = NeutralizeLiquid(autotitleMarkdownRewritten);
             body = Markdown.ToHtml(liquidNeutralized, _pipeline);
             body = RestoreEscapedRenderedDiffMarkers(body);
             if (!HasVisibleBodyMarkup(body))
@@ -789,6 +797,171 @@ internal static partial class MarkdownPreviewRenderer
 
             return string.Concat("<a", attrs, ">", replacementBody, "</a>");
         });
+    }
+
+    private static string RewriteAutotitleMarkdownLinks(
+        string markdown,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        if (string.IsNullOrEmpty(markdown) || liquidContext.PageTitles.Count == 0)
+        {
+            return markdown;
+        }
+
+        return RewriteAutotitleMarkdownLinksOutsideMarkdownCode(markdown, repoPath, liquidContext, version);
+    }
+
+    private static string RewriteAutotitleMarkdownLinksOutsideMarkdownCode(
+        string content,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        var lines = SplitMarkdownLines(content);
+        var rewritten = new StringBuilder(content.Length + 64);
+        var inCodeFence = false;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (index > 0)
+            {
+                rewritten.Append('\n');
+            }
+
+            var line = lines[index];
+            var trimmed = line.TrimStart();
+            var isCodeFence = trimmed.StartsWith("```", StringComparison.Ordinal)
+                || trimmed.StartsWith("~~~", StringComparison.Ordinal);
+            rewritten.Append(inCodeFence || isCodeFence
+                ? line
+                : RewriteAutotitleMarkdownLinksOutsideInlineCode(line, repoPath, liquidContext, version));
+            if (isCodeFence)
+            {
+                inCodeFence = !inCodeFence;
+            }
+        }
+        return rewritten.ToString();
+    }
+
+    private static string RewriteAutotitleMarkdownLinksOutsideInlineCode(
+        string line,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        var rewritten = new StringBuilder(line.Length + 32);
+        var cursor = 0;
+        while (cursor < line.Length)
+        {
+            var tickStart = line.IndexOf('`', cursor);
+            if (tickStart < 0)
+            {
+                rewritten.Append(RewriteAutotitleMarkdownLinkSegment(line[cursor..], repoPath, liquidContext, version));
+                break;
+            }
+
+            rewritten.Append(RewriteAutotitleMarkdownLinkSegment(line[cursor..tickStart], repoPath, liquidContext, version));
+            var tickEnd = FindInlineCodeEnd(line, tickStart);
+            if (tickEnd < 0)
+            {
+                rewritten.Append(line[tickStart..]);
+                break;
+            }
+
+            rewritten.Append(line[tickStart..tickEnd]);
+            cursor = tickEnd;
+        }
+        return rewritten.ToString();
+    }
+
+    private static string RewriteAutotitleMarkdownLinkSegment(
+        string content,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+        => FullAutotitleMarkdownLinkRegex().Replace(content, match =>
+        {
+            var destination = match.Groups["destination"].Value;
+            var href = destination.Length >= 2 && destination[0] == '<' && destination[^1] == '>'
+                ? destination[1..^1]
+                : destination;
+            var rawTitle = ResolveAutotitleRawTitle(href, repoPath, liquidContext.PageTitles);
+            if (string.IsNullOrWhiteSpace(rawTitle))
+            {
+                return match.Value;
+            }
+
+            var titleText = EvaluateLiquidText(rawTitle, liquidContext, version).Trim();
+            if (titleText.Length == 0)
+            {
+                return match.Value;
+            }
+
+            var titleAttribute = ExtractMarkdownLinkTitleAttribute(match.Groups["suffix"].Value);
+            var attrs = match.Groups["attrs"].Value;
+            if (attrs.Length > 0)
+            {
+                return string.Concat(
+                    "<a href=\"",
+                    WebUtility.HtmlEncode(href),
+                    "\"",
+                    titleAttribute,
+                    "><span",
+                    attrs,
+                    ">",
+                    WebUtility.HtmlEncode(titleText),
+                    "</span></a>");
+            }
+
+            return string.Concat(
+                "<a href=\"",
+                WebUtility.HtmlEncode(href),
+                "\"",
+                titleAttribute,
+                ">",
+                WebUtility.HtmlEncode(titleText),
+                "</a>");
+        });
+
+    private static string ExtractMarkdownLinkTitleAttribute(string suffix)
+    {
+        var title = ExtractMarkdownLinkTitle(suffix);
+        return title is null
+            ? string.Empty
+            : string.Concat(" title=\"", WebUtility.HtmlEncode(title), "\"");
+    }
+
+    private static string? ExtractMarkdownLinkTitle(string suffix)
+    {
+        if (string.IsNullOrWhiteSpace(suffix))
+        {
+            return null;
+        }
+
+        var trimmed = suffix.Trim();
+        if (trimmed.EndsWith(')'))
+        {
+            trimmed = trimmed[..^1].TrimEnd();
+        }
+        if (trimmed.Length < 2)
+        {
+            return null;
+        }
+
+        if (trimmed[0] is '"' or '\'')
+        {
+            var quote = trimmed[0];
+            var end = trimmed.IndexOf(quote, 1);
+            return end > 1 ? trimmed[1..end] : null;
+        }
+
+        if (trimmed[0] == '(' && trimmed[^1] == ')' && trimmed.Length > 2)
+        {
+            return trimmed[1..^1];
+        }
+
+        return null;
     }
 
     private static bool IsAutotitleLinkBody(string innerHtml)
@@ -1984,6 +2157,15 @@ internal static partial class MarkdownPreviewRenderer
                 parts = default;
                 return false;
             }
+            var quotedListMarkerLength = GetMarkdownListMarkerLength(quoted);
+            if (quotedListMarkerLength > 0)
+            {
+                parts = new RenderedDiffLineParts(
+                    RenderedDiffLineKind.QuoteListItem,
+                    leading + "> " + quoted[..quotedListMarkerLength],
+                    quoted[quotedListMarkerLength..]);
+                return true;
+            }
             parts = new RenderedDiffLineParts(RenderedDiffLineKind.Quote, leading + "> ", quoted);
             return true;
         }
@@ -2127,31 +2309,57 @@ internal static partial class MarkdownPreviewRenderer
         linkRange = default;
         var changedStart = changedRange.Start;
         var changedEnd = changedRange.Start + changedRange.Length;
-        var labelStart = content.LastIndexOf('[', Math.Min(changedStart, content.Length - 1));
-        if (labelStart < 0)
+        var searchStart = 0;
+        while (searchStart < content.Length)
         {
-            return false;
+            var labelEnd = content.IndexOf("](", searchStart, StringComparison.Ordinal);
+            if (labelEnd < 0)
+            {
+                return false;
+            }
+
+            var labelStart = content.LastIndexOf('[', labelEnd);
+            if (labelStart < 0 || ContainsLineBreak(content, labelStart, labelEnd))
+            {
+                searchStart = labelEnd + 2;
+                continue;
+            }
+
+            var nestedLabelEnd = content.IndexOf(']', labelStart, labelEnd - labelStart);
+            if (nestedLabelEnd >= 0)
+            {
+                searchStart = labelEnd + 2;
+                continue;
+            }
+
+            var linkEnd = content.IndexOf(')', labelEnd + 2);
+            if (linkEnd < 0)
+            {
+                return false;
+            }
+
+            if (changedEnd > labelStart && changedStart < linkEnd + 1)
+            {
+                linkRange = new MarkdownLinkRange(labelStart, labelEnd, linkEnd + 1);
+                return true;
+            }
+
+            searchStart = labelEnd + 2;
         }
 
-        var labelEnd = content.IndexOf("](", labelStart, StringComparison.Ordinal);
-        if (labelEnd < 0)
-        {
-            return false;
-        }
+        return false;
+    }
 
-        var linkEnd = content.IndexOf(')', labelEnd + 2);
-        if (linkEnd < 0)
+    private static bool ContainsLineBreak(string value, int start, int end)
+    {
+        for (var index = start; index < end; index++)
         {
-            return false;
+            if (value[index] is '\r' or '\n')
+            {
+                return true;
+            }
         }
-
-        if (changedEnd <= labelStart || changedStart >= linkEnd + 1)
-        {
-            return false;
-        }
-
-        linkRange = new MarkdownLinkRange(labelStart, labelEnd, linkEnd + 1);
-        return true;
+        return false;
     }
 
     private static bool TryFindLastMarkdownLinkLabelRange(string content, out InlineChangedRange labelRange)
@@ -2296,6 +2504,7 @@ internal static partial class MarkdownPreviewRenderer
         Paragraph,
         Heading,
         ListItem,
+        QuoteListItem,
         Quote,
     }
 
