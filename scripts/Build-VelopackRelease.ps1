@@ -9,6 +9,9 @@ param(
 
     [string]$Configuration = 'Release',
 
+    [ValidateSet('FrameworkDependent', 'SelfContainedPartialTrim')]
+    [string]$PublishMode = 'SelfContainedPartialTrim',
+
     [string]$OutputRoot = 'artifacts/release',
 
     [switch]$Force,
@@ -264,9 +267,16 @@ if ([string]::IsNullOrWhiteSpace($Channel)) {
     $Channel = "$Runtime-stable"
 }
 
-$framework = switch ($Runtime) {
-    'win-x64' { 'net10.0-x64-desktop,webview2' }
-    'win-arm64' { 'net10.0-arm64-desktop,webview2' }
+$isSelfContainedPartialTrim = $PublishMode -eq 'SelfContainedPartialTrim'
+
+if ($isSelfContainedPartialTrim) {
+    $framework = 'webview2'
+}
+else {
+    $framework = switch ($Runtime) {
+        'win-x64' { 'net10.0-x64-desktop,webview2' }
+        'win-arm64' { 'net10.0-arm64-desktop,webview2' }
+    }
 }
 
 Push-Location $repoRoot
@@ -283,13 +293,13 @@ try {
 
     $copilotCliBinaryPath = Resolve-CopilotCliBinary -RepoRoot $repoRoot -OutputRoot $OutputRoot -Runtime $Runtime
 
-    Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList @(
+    $publishArgs = @(
         'publish',
         'src/RepoSyncRadar.App/RepoSyncRadar.App.csproj',
         '--no-restore',
         '-c', $Configuration,
         '-r', $Runtime,
-        '--self-contained', 'false',
+        '--self-contained', $isSelfContainedPartialTrim.ToString().ToLowerInvariant(),
         '-p:PublishSingleFile=true',
         '-p:IncludeNativeLibrariesForSelfExtract=true',
         '-p:DebugType=embedded',
@@ -297,6 +307,19 @@ try {
         "-p:RepoSyncRadarVersion=$Version",
         '-o', $publishDir
     )
+
+    if ($isSelfContainedPartialTrim) {
+        $publishArgs += @(
+            '-p:EnableCompressionInSingleFile=true',
+            '-p:PublishTrimmed=true',
+            '-p:IsTrimmable=false',
+            '-p:TrimMode=partial',
+            '-p:_SuppressWpfTrimError=true',
+            '-p:BuiltInComInteropSupport=true'
+        )
+    }
+
+    Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList $publishArgs
 
     $packArgs = @(
         'pack',
