@@ -8,7 +8,7 @@ using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
 
-#pragma warning disable GHCP001 // beta.9 exposes permission decisions through experimental RPC types.
+#pragma warning disable GHCP001 // beta.10 exposes permission decisions through experimental RPC types.
 
 public class SessionConfigBuilderTests
 {
@@ -41,6 +41,7 @@ public class SessionConfigBuilderTests
         Assert.True(config.CustomAgentsLocalOnly);
         Assert.False(config.CoauthorEnabled);
         Assert.False(config.ManageScheduleEnabled);
+        Assert.Equal(McpOAuthTokenStorageMode.InMemory, config.McpOAuthTokenStorage);
     }
 
     [Fact]

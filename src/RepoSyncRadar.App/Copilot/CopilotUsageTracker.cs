@@ -118,7 +118,7 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
         Changed?.Invoke();
     }
 
-#pragma warning disable GHCP001 // beta.9 exposes usage cost and metrics as experimental SDK telemetry.
+#pragma warning disable GHCP001 // beta.10 exposes usage cost and metrics as experimental SDK telemetry.
     internal static CopilotUsageRecord FromAssistantUsage(
         AssistantUsageEvent usage,
         SessionPurpose purpose,
