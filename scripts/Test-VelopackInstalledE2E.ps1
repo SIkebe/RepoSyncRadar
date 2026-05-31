@@ -97,6 +97,16 @@ function Get-ShortcutTargetPath {
     }
 }
 
+function Get-DirectoryPrefix {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    return $fullPath + [System.IO.Path]::DirectorySeparatorChar
+}
+
 function Assert-StartMenuShortcut {
     param(
         [Parameter(Mandatory = $true)]
@@ -109,7 +119,7 @@ function Assert-StartMenuShortcut {
         throw "Installed RepoSyncRadar Start Menu shortcut was not found under '$startMenuRoot'."
     }
 
-    $installRootFullPath = [System.IO.Path]::GetFullPath($InstallRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $installRootPrefix = Get-DirectoryPrefix -Path $InstallRoot
     foreach ($shortcut in $shortcutCandidates) {
         $targetPath = Get-ShortcutTargetPath -ShortcutPath $shortcut.FullName
         if ([string]::IsNullOrWhiteSpace($targetPath) -or -not (Test-Path $targetPath)) {
@@ -117,7 +127,7 @@ function Assert-StartMenuShortcut {
         }
 
         $targetFullPath = [System.IO.Path]::GetFullPath($targetPath)
-        if ($targetFullPath.StartsWith($installRootFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+        if ($targetFullPath.StartsWith($installRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
             return
         }
     }
@@ -133,7 +143,7 @@ function Remove-StartMenuShortcutsBestEffort {
     )
 
     $startMenuRoot = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu'
-    $installRootFullPath = [System.IO.Path]::GetFullPath($InstallRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $installRootPrefix = Get-DirectoryPrefix -Path $InstallRoot
     $shortcutCandidates = @(Get-ChildItem -Path $startMenuRoot -Filter 'RepoSyncRadar.lnk' -File -Recurse -ErrorAction SilentlyContinue)
     foreach ($shortcut in $shortcutCandidates) {
         try {
@@ -143,7 +153,7 @@ function Remove-StartMenuShortcutsBestEffort {
             }
 
             $targetFullPath = [System.IO.Path]::GetFullPath($targetPath)
-            if ($targetFullPath.StartsWith($installRootFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            if ($targetFullPath.StartsWith($installRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
                 Remove-Item $shortcut.FullName -Force -ErrorAction Stop
             }
         }
