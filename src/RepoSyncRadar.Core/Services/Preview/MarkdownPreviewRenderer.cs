@@ -70,6 +70,9 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex(@"\[AUTOTITLE\]\((?<href>[^\s)]+)\)?", RegexOptions.IgnoreCase)]
     private static partial Regex AutotitleMarkdownLinkRegex();
 
+    [GeneratedRegex("""\[(?<label><span\b(?<attrs>[^>]*)>\s*AUTOTITLE\s*</span>|AUTOTITLE)\]\((?<destination><[^>\r\n]+>|[^\s)]+)(?<suffix>(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\))""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex FullAutotitleMarkdownLinkRegex();
+
     [GeneratedRegex("""<[^>]+>""", RegexOptions.Singleline)]
     private static partial Regex HtmlTagRegex();
 
@@ -158,7 +161,12 @@ internal static partial class MarkdownPreviewRenderer
                 diffSide);
             var liquidBlocksRendered = RenderOfficialLiquidBlocks(diffMarked);
             var githubAlertsRendered = RenderGitHubAlertBlocks(liquidBlocksRendered);
-            var liquidNeutralized = NeutralizeLiquid(githubAlertsRendered);
+            var autotitleMarkdownRewritten = RewriteAutotitleMarkdownLinks(
+                githubAlertsRendered,
+                trimmedRepoPath,
+                effectiveLiquidContext,
+                effectiveVersion);
+            var liquidNeutralized = NeutralizeLiquid(autotitleMarkdownRewritten);
             body = Markdown.ToHtml(liquidNeutralized, _pipeline);
             body = RestoreEscapedRenderedDiffMarkers(body);
             if (!HasVisibleBodyMarkup(body))
@@ -788,6 +796,57 @@ internal static partial class MarkdownPreviewRenderer
                 : string.Concat("<span class=\"", diffClass, "\">", titleHtml, "</span>");
 
             return string.Concat("<a", attrs, ">", replacementBody, "</a>");
+        });
+    }
+
+    private static string RewriteAutotitleMarkdownLinks(
+        string markdown,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        if (string.IsNullOrEmpty(markdown) || liquidContext.PageTitles.Count == 0)
+        {
+            return markdown;
+        }
+
+        return FullAutotitleMarkdownLinkRegex().Replace(markdown, match =>
+        {
+            var destination = match.Groups["destination"].Value;
+            var href = destination.Length >= 2 && destination[0] == '<' && destination[^1] == '>'
+                ? destination[1..^1]
+                : destination;
+            var rawTitle = ResolveAutotitleRawTitle(href, repoPath, liquidContext.PageTitles);
+            if (string.IsNullOrWhiteSpace(rawTitle))
+            {
+                return match.Value;
+            }
+
+            var titleText = EvaluateLiquidText(rawTitle, liquidContext, version).Trim();
+            if (titleText.Length == 0)
+            {
+                return match.Value;
+            }
+
+            var attrs = match.Groups["attrs"].Value;
+            if (attrs.Length > 0)
+            {
+                return string.Concat(
+                    "<a href=\"",
+                    WebUtility.HtmlEncode(href),
+                    "\"><span",
+                    attrs,
+                    ">",
+                    WebUtility.HtmlEncode(titleText),
+                    "</span></a>");
+            }
+
+            return string.Concat(
+                "<a href=\"",
+                WebUtility.HtmlEncode(href),
+                "\">",
+                WebUtility.HtmlEncode(titleText),
+                "</a>");
         });
     }
 
@@ -1984,6 +2043,15 @@ internal static partial class MarkdownPreviewRenderer
                 parts = default;
                 return false;
             }
+            var quotedListMarkerLength = GetMarkdownListMarkerLength(quoted);
+            if (quotedListMarkerLength > 0)
+            {
+                parts = new RenderedDiffLineParts(
+                    RenderedDiffLineKind.QuoteListItem,
+                    leading + "> " + quoted[..quotedListMarkerLength],
+                    quoted[quotedListMarkerLength..]);
+                return true;
+            }
             parts = new RenderedDiffLineParts(RenderedDiffLineKind.Quote, leading + "> ", quoted);
             return true;
         }
@@ -2127,31 +2195,37 @@ internal static partial class MarkdownPreviewRenderer
         linkRange = default;
         var changedStart = changedRange.Start;
         var changedEnd = changedRange.Start + changedRange.Length;
-        var labelStart = content.LastIndexOf('[', Math.Min(changedStart, content.Length - 1));
-        if (labelStart < 0)
+        var searchStart = 0;
+        while (searchStart < content.Length)
         {
-            return false;
+            var labelStart = content.IndexOf('[', searchStart);
+            if (labelStart < 0)
+            {
+                return false;
+            }
+
+            var labelEnd = content.IndexOf("](", labelStart, StringComparison.Ordinal);
+            if (labelEnd < 0)
+            {
+                return false;
+            }
+
+            var linkEnd = content.IndexOf(')', labelEnd + 2);
+            if (linkEnd < 0)
+            {
+                return false;
+            }
+
+            if (changedEnd > labelStart && changedStart < linkEnd + 1)
+            {
+                linkRange = new MarkdownLinkRange(labelStart, labelEnd, linkEnd + 1);
+                return true;
+            }
+
+            searchStart = labelStart + 1;
         }
 
-        var labelEnd = content.IndexOf("](", labelStart, StringComparison.Ordinal);
-        if (labelEnd < 0)
-        {
-            return false;
-        }
-
-        var linkEnd = content.IndexOf(')', labelEnd + 2);
-        if (linkEnd < 0)
-        {
-            return false;
-        }
-
-        if (changedEnd <= labelStart || changedStart >= linkEnd + 1)
-        {
-            return false;
-        }
-
-        linkRange = new MarkdownLinkRange(labelStart, labelEnd, linkEnd + 1);
-        return true;
+        return false;
     }
 
     private static bool TryFindLastMarkdownLinkLabelRange(string content, out InlineChangedRange labelRange)
@@ -2296,6 +2370,7 @@ internal static partial class MarkdownPreviewRenderer
         Paragraph,
         Heading,
         ListItem,
+        QuoteListItem,
         Quote,
     }
 
