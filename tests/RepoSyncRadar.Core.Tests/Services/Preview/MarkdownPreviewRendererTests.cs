@@ -532,6 +532,48 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Rewrites_Autotitle_Markdown_Links_Only_Outside_Code()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["copilot/concepts/billing/budgets-for-usage-based-billing"] = "Budgets for usage-based billing",
+            });
+        const string beforeMarkdown = """
+            ## Types and scopes
+
+            Existing guidance.
+            """;
+        const string afterMarkdown = """
+            ## Types and scopes
+
+            See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing).
+
+            Use `[AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing)` in docs examples.
+
+            ```markdown
+            See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing).
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/billing/concepts/budgets-and-alerts.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<a href=\"/copilot/concepts/billing/budgets-for-usage-based-billing\">Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
+        Assert.Contains("<code>[AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing)</code>", html, StringComparison.Ordinal);
+        Assert.Contains("See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing).", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<code>&lt;a href=", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderedDiff_Does_Not_Insert_Span_Into_Autotitle_Link_Destination()
     {
         var context = new DocsLiquidContext(

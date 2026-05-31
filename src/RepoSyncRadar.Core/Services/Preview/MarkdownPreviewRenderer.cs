@@ -810,7 +810,77 @@ internal static partial class MarkdownPreviewRenderer
             return markdown;
         }
 
-        return FullAutotitleMarkdownLinkRegex().Replace(markdown, match =>
+        return RewriteAutotitleMarkdownLinksOutsideMarkdownCode(markdown, repoPath, liquidContext, version);
+    }
+
+    private static string RewriteAutotitleMarkdownLinksOutsideMarkdownCode(
+        string content,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        var lines = SplitMarkdownLines(content);
+        var rewritten = new StringBuilder(content.Length + 64);
+        var inCodeFence = false;
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (index > 0)
+            {
+                rewritten.Append('\n');
+            }
+
+            var line = lines[index];
+            var trimmed = line.TrimStart();
+            var isCodeFence = trimmed.StartsWith("```", StringComparison.Ordinal)
+                || trimmed.StartsWith("~~~", StringComparison.Ordinal);
+            rewritten.Append(inCodeFence || isCodeFence
+                ? line
+                : RewriteAutotitleMarkdownLinksOutsideInlineCode(line, repoPath, liquidContext, version));
+            if (isCodeFence)
+            {
+                inCodeFence = !inCodeFence;
+            }
+        }
+        return rewritten.ToString();
+    }
+
+    private static string RewriteAutotitleMarkdownLinksOutsideInlineCode(
+        string line,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+    {
+        var rewritten = new StringBuilder(line.Length + 32);
+        var cursor = 0;
+        while (cursor < line.Length)
+        {
+            var tickStart = line.IndexOf('`', cursor);
+            if (tickStart < 0)
+            {
+                rewritten.Append(RewriteAutotitleMarkdownLinkSegment(line[cursor..], repoPath, liquidContext, version));
+                break;
+            }
+
+            rewritten.Append(RewriteAutotitleMarkdownLinkSegment(line[cursor..tickStart], repoPath, liquidContext, version));
+            var tickEnd = FindInlineCodeEnd(line, tickStart);
+            if (tickEnd < 0)
+            {
+                rewritten.Append(line[tickStart..]);
+                break;
+            }
+
+            rewritten.Append(line[tickStart..tickEnd]);
+            cursor = tickEnd;
+        }
+        return rewritten.ToString();
+    }
+
+    private static string RewriteAutotitleMarkdownLinkSegment(
+        string content,
+        string repoPath,
+        DocsLiquidContext liquidContext,
+        DocsVersion version)
+        => FullAutotitleMarkdownLinkRegex().Replace(content, match =>
         {
             var destination = match.Groups["destination"].Value;
             var href = destination.Length >= 2 && destination[0] == '<' && destination[^1] == '>'
@@ -848,7 +918,6 @@ internal static partial class MarkdownPreviewRenderer
                 WebUtility.HtmlEncode(titleText),
                 "</a>");
         });
-    }
 
     private static bool IsAutotitleLinkBody(string innerHtml)
     {
