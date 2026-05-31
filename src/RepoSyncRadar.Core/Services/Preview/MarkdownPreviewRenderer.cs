@@ -898,13 +898,16 @@ internal static partial class MarkdownPreviewRenderer
                 return match.Value;
             }
 
+            var titleAttribute = ExtractMarkdownLinkTitleAttribute(match.Groups["suffix"].Value);
             var attrs = match.Groups["attrs"].Value;
             if (attrs.Length > 0)
             {
                 return string.Concat(
                     "<a href=\"",
                     WebUtility.HtmlEncode(href),
-                    "\"><span",
+                    "\"",
+                    titleAttribute,
+                    "><span",
                     attrs,
                     ">",
                     WebUtility.HtmlEncode(titleText),
@@ -914,10 +917,52 @@ internal static partial class MarkdownPreviewRenderer
             return string.Concat(
                 "<a href=\"",
                 WebUtility.HtmlEncode(href),
-                "\">",
+                "\"",
+                titleAttribute,
+                ">",
                 WebUtility.HtmlEncode(titleText),
                 "</a>");
         });
+
+    private static string ExtractMarkdownLinkTitleAttribute(string suffix)
+    {
+        var title = ExtractMarkdownLinkTitle(suffix);
+        return title is null
+            ? string.Empty
+            : string.Concat(" title=\"", WebUtility.HtmlEncode(title), "\"");
+    }
+
+    private static string? ExtractMarkdownLinkTitle(string suffix)
+    {
+        if (string.IsNullOrWhiteSpace(suffix))
+        {
+            return null;
+        }
+
+        var trimmed = suffix.Trim();
+        if (trimmed.EndsWith(')'))
+        {
+            trimmed = trimmed[..^1].TrimEnd();
+        }
+        if (trimmed.Length < 2)
+        {
+            return null;
+        }
+
+        if (trimmed[0] is '"' or '\'')
+        {
+            var quote = trimmed[0];
+            var end = trimmed.IndexOf(quote, 1);
+            return end > 1 ? trimmed[1..end] : null;
+        }
+
+        if (trimmed[0] == '(' && trimmed[^1] == ')' && trimmed.Length > 2)
+        {
+            return trimmed[1..^1];
+        }
+
+        return null;
+    }
 
     private static bool IsAutotitleLinkBody(string innerHtml)
     {
@@ -2267,16 +2312,24 @@ internal static partial class MarkdownPreviewRenderer
         var searchStart = 0;
         while (searchStart < content.Length)
         {
-            var labelStart = content.IndexOf('[', searchStart);
-            if (labelStart < 0)
+            var labelEnd = content.IndexOf("](", searchStart, StringComparison.Ordinal);
+            if (labelEnd < 0)
             {
                 return false;
             }
 
-            var labelEnd = content.IndexOf("](", labelStart, StringComparison.Ordinal);
-            if (labelEnd < 0)
+            var labelStart = content.LastIndexOf('[', labelEnd);
+            if (labelStart < 0 || ContainsLineBreak(content, labelStart, labelEnd))
             {
-                return false;
+                searchStart = labelEnd + 2;
+                continue;
+            }
+
+            var nestedLabelEnd = content.IndexOf(']', labelStart, labelEnd - labelStart);
+            if (nestedLabelEnd >= 0)
+            {
+                searchStart = labelEnd + 2;
+                continue;
             }
 
             var linkEnd = content.IndexOf(')', labelEnd + 2);
@@ -2291,9 +2344,21 @@ internal static partial class MarkdownPreviewRenderer
                 return true;
             }
 
-            searchStart = labelStart + 1;
+            searchStart = labelEnd + 2;
         }
 
+        return false;
+    }
+
+    private static bool ContainsLineBreak(string value, int start, int end)
+    {
+        for (var index = start; index < end; index++)
+        {
+            if (value[index] is '\r' or '\n')
+            {
+                return true;
+            }
+        }
         return false;
     }
 

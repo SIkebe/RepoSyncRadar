@@ -473,6 +473,30 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Rewrites_Autotitle_Markdown_Link_And_Preserves_Title_Attribute()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/copilot/concepts/billing/budgets-for-usage-based-billing"] = "Budgets for usage-based billing",
+            });
+
+        var markdown = "See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing \"Budget controls\").";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/billing/concepts/budgets-and-alerts.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        Assert.Contains("<a href=\"/copilot/concepts/billing/budgets-for-usage-based-billing\" title=\"Budget controls\">Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Rewrites_Autotitle_Link_Text_When_Diff_Span_Wraps_Body()
     {
         var context = new DocsLiquidContext(
@@ -571,6 +595,36 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("<code>[AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing)</code>", html, StringComparison.Ordinal);
         Assert.Contains("See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing).", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<code>&lt;a href=", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderedDiff_Does_Not_Expand_Autotitle_Link_Range_From_Earlier_Bracketed_Text()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/new-target"] = "New target",
+            });
+        const string beforeMarkdown = """
+            Use [preview]. See [AUTOTITLE](/old-target).
+            """;
+        const string afterMarkdown = """
+            Use [preview]. See [AUTOTITLE](/new-target).
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("Use [preview]. <span class=\"rsr-rendered-diff-added\">See <a href=\"/new-target\">New target</a>.</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">Use [preview]", html, StringComparison.Ordinal);
     }
 
     [Fact]
