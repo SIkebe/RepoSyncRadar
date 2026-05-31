@@ -246,6 +246,7 @@ function Resolve-CopilotCliBinary {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $publishDir = [System.IO.Path]::Combine($repoRoot, $OutputRoot, 'publish', $Runtime)
 $releaseDir = [System.IO.Path]::Combine($repoRoot, $OutputRoot, 'velopack', $Runtime)
+$iconPath = [System.IO.Path]::Combine($repoRoot, 'src', 'RepoSyncRadar.App', 'Assets', 'AppIcon.ico')
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
     [xml]$buildProps = Get-Content (Join-Path $repoRoot 'Directory.Build.props')
@@ -292,6 +293,9 @@ try {
     Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList @('restore', 'src/RepoSyncRadar.App/RepoSyncRadar.App.csproj', '-r', $Runtime)
 
     $copilotCliBinaryPath = Resolve-CopilotCliBinary -RepoRoot $repoRoot -OutputRoot $OutputRoot -Runtime $Runtime
+    if (-not (Test-Path $iconPath)) {
+        throw "Application icon was not found at '$iconPath'."
+    }
 
     $publishArgs = @(
         'publish',
@@ -328,9 +332,11 @@ try {
         '--packVersion', $Version,
         '--packDir', $publishDir,
         '--mainExe', 'RepoSyncRadar.exe',
+        '--icon', $iconPath,
         '--runtime', $Runtime,
         '--channel', $Channel,
         '--framework', $framework,
+        '--shortcuts', 'StartMenuRoot',
         '--outputDir', $releaseDir
     )
 
