@@ -13,7 +13,7 @@ This checklist captures the current public-release blockers and must-fix follow-
 
 1. **Create a signed distribution path**
    - Current state: Release publish succeeds, and Velopack is the selected installer/update path.
-   - Required: sign release artifacts and validate the framework-dependent installer on clean x64/Arm64 machines.
+   - Required: sign release artifacts and validate the self-contained partial-trim installer on clean x64/Arm64 machines.
    - Evidence: `docs/RELEASE.md`, `scripts/Build-VelopackRelease.ps1`, and `.github/workflows/release.yml` describe and automate the current unsigned draft release path.
    - Issue draft: create `Decide public code-signing path for Windows installer releases`. Azure Artifact Signing Basic was tested, but Public Trust identity validation is unavailable for the current Japan sold-to billing account. Candidate paths are Certum, SSL.com IV/OV, SignPath OSS, Microsoft Store, or another Authenticode-compatible provider.
 
