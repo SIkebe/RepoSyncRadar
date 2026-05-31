@@ -76,6 +76,83 @@ function Remove-DirectoryBestEffort {
     }
 }
 
+function Get-ShortcutTargetPath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ShortcutPath
+    )
+
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $null
+    try {
+        $shortcut = $shell.CreateShortcut($ShortcutPath)
+        return [string]$shortcut.TargetPath
+    }
+    finally {
+        if ($null -ne $shortcut) {
+            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shortcut) | Out-Null
+        }
+
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+    }
+}
+
+function Assert-StartMenuShortcut {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$InstallRoot
+    )
+
+    $startMenuRoot = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu'
+    $shortcutCandidates = @(Get-ChildItem -Path $startMenuRoot -Filter 'RepoSyncRadar.lnk' -File -Recurse -ErrorAction SilentlyContinue)
+    if ($shortcutCandidates.Count -eq 0) {
+        throw "Installed RepoSyncRadar Start Menu shortcut was not found under '$startMenuRoot'."
+    }
+
+    $installRootFullPath = [System.IO.Path]::GetFullPath($InstallRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    foreach ($shortcut in $shortcutCandidates) {
+        $targetPath = Get-ShortcutTargetPath -ShortcutPath $shortcut.FullName
+        if ([string]::IsNullOrWhiteSpace($targetPath) -or -not (Test-Path $targetPath)) {
+            continue
+        }
+
+        $targetFullPath = [System.IO.Path]::GetFullPath($targetPath)
+        if ($targetFullPath.StartsWith($installRootFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return
+        }
+    }
+
+    $candidatePaths = ($shortcutCandidates | Sort-Object FullName | ForEach-Object { $_.FullName }) -join ', '
+    throw "RepoSyncRadar Start Menu shortcut was found, but none targets '$InstallRoot'. Candidate shortcut(s): $candidatePaths"
+}
+
+function Remove-StartMenuShortcutsBestEffort {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$InstallRoot
+    )
+
+    $startMenuRoot = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu'
+    $installRootFullPath = [System.IO.Path]::GetFullPath($InstallRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $shortcutCandidates = @(Get-ChildItem -Path $startMenuRoot -Filter 'RepoSyncRadar.lnk' -File -Recurse -ErrorAction SilentlyContinue)
+    foreach ($shortcut in $shortcutCandidates) {
+        try {
+            $targetPath = Get-ShortcutTargetPath -ShortcutPath $shortcut.FullName
+            if ([string]::IsNullOrWhiteSpace($targetPath)) {
+                continue
+            }
+
+            $targetFullPath = [System.IO.Path]::GetFullPath($targetPath)
+            if ($targetFullPath.StartsWith($installRootFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+                Remove-Item $shortcut.FullName -Force -ErrorAction Stop
+            }
+        }
+        catch {
+            Write-Warning "Could not remove Start Menu shortcut '$($shortcut.FullName)': $($_.Exception.Message)"
+        }
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $e2eProjectPath = [System.IO.Path]::Combine($repoRoot, 'tests', 'RepoSyncRadar.App.E2E.Tests', 'RepoSyncRadar.App.E2E.Tests.csproj')
 if ([string]::IsNullOrWhiteSpace($ReleaseDir)) {
@@ -108,6 +185,8 @@ if (-not (Test-Path $installedExe)) {
     throw "Installed RepoSyncRadar.exe was not found at '$installedExe'."
 }
 
+Assert-StartMenuShortcut -InstallRoot $installRoot
+
 $previousAppExe = $env:REPOSYNCRADAR_E2E_APP_EXE_PATH
 try {
     $env:REPOSYNCRADAR_E2E_APP_EXE_PATH = $installedExe
@@ -132,6 +211,7 @@ finally {
     Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 
     if ($CleanInstallRoot -and (Test-Path $installRoot)) {
+        Remove-StartMenuShortcutsBestEffort -InstallRoot $installRoot
         Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
     }
 }

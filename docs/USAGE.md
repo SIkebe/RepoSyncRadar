@@ -13,9 +13,10 @@ GitHub Enterprise Cloud 管理者が `github/docs` の Repo sync PR を確認し
 3. [画面の構成](#3-画面の構成)
 4. [毎日のワークフロー](#4-毎日のワークフロー510-分)
 5. [オプション機能](#5-オプション機能)
-6. [既知の制約と運用 Tips](#6-既知の制約と運用-tips)
-7. [ビルド・テストのワンライナー](#7-ビルドテストのワンライナー)
-8. [さらに深く知るには](#8-さらに深く知るには)
+6. [自動更新](#6-自動更新)
+7. [既知の制約と運用 Tips](#7-既知の制約と運用-tips)
+8. [ビルド・テストのワンライナー](#8-ビルドテストのワンライナー)
+9. [さらに深く知るには](#9-さらに深く知るには)
 
 ---
 
@@ -256,19 +257,58 @@ worktree ごとに作業ディレクトリが分かれるため、`npm install` 
 
 ---
 
-## 6. 既知の制約と運用 Tips
+## 6. 自動更新
+
+インストーラー版の RepoSyncRadar は Velopack で配布され、同じチャンネルに新しいリリースが公開されるとアプリ起動時に更新を確認できます。開発ビルドを `dotnet run` で起動している場合は自動更新の対象外です。
+
+### 6.1 利用者が知っておくこと
+
+- 自動更新は既定では控えめな動作です。更新が見つかるとバックグラウンドでダウンロードし、実行中の作業セッションを強制終了しません。
+- ダウンロード済み更新は次回起動時に Velopack が適用します。すぐ反映したい場合は、作業を保存してアプリを閉じ、もう一度起動してください。
+- 更新元はチャンネル単位です。通常利用は `win-x64-stable` または `win-arm64-stable` を使い、検証版だけ `beta` / `preview` 系チャンネルを使います。
+- 企業・組織内で独自配布する場合は、配布元の GitHub Release または静的ファイル置き場に、インストーラーだけでなく `.nupkg` と `releases.<channel>.json` / `assets.<channel>.json` を同じ更新フィードとして配置してください。
+
+### 6.2 設定
+
+配布版では release defaults で設定します。ローカル検証や社内配布で上書きしたい場合は `appsettings.local.json` に `Updates` セクションを追加します。
+
+```jsonc
+{
+   "Updates": {
+      "Enabled": true,
+      "CheckOnStartup": true,
+      "FeedUrl": "https://github.com/<owner>/<repo>",
+      "Channel": "win-x64-stable",
+      "CheckTimeoutSeconds": 120
+   }
+}
+```
+
+| 設定 | 用途 |
+|---|---|
+| `Enabled` | 更新確認機能そのものを有効化します。公開更新フィードが確定するまでは無効にできます。 |
+| `CheckOnStartup` | アプリ起動時に更新確認します。無効なら手動確認 UI / 将来の運用導線だけで確認します。 |
+| `FeedUrl` | Velopack 更新フィードの場所です。GitHub Releases を使う場合はリポジトリ URL を指定します。 |
+| `Channel` | 受け取るリリース系列です。CPU アーキテクチャと配布段階を合わせます。 |
+| `CheckTimeoutSeconds` | 更新確認のタイムアウトです。ネットワークが遅い環境では長めにします。 |
+
+配布・リリース作成側の詳細仕様は [RELEASE.md](RELEASE.md) を参照してください。
+
+---
+
+## 7. 既知の制約と運用 Tips
 
 | 項目 | 状態 |
 |---|---|
 | 自動投稿 | **しない方針**(下書きまで。最終確認は人間) |
 | 多言語 | 日本語のみ。英訳は媒体下書きの中で副次的に出るのみ |
 | クラウド同期 | なし。`radar.db` を持ち運ぶ運用 |
-| Velopack 自己更新 | **Step 20 で実装予定**。現状は `git pull && dotnet build` |
+| Velopack 自己更新 | インストーラー版のみ対象。開発ビルドは `git pull && dotnet build` で更新 |
 | GitHub 認証 | OAuth Device Flow で 1 度サインイン → DPAPI 暗号化トークンを `%LocalAppData%\RepoSyncRadar\github-token.bin` に保管。Copilot SDK と Octokit (`github/docs` 読み取り) で同じトークンを共有。 |
 
 ---
 
-## 7. ビルド・テストのワンライナー
+## 8. ビルド・テストのワンライナー
 
 ```powershell
 # 厳格ビルド(警告=エラー)
@@ -283,9 +323,10 @@ dotnet test --no-build -- --filter-not-trait Category=Manual
 
 ---
 
-## 8. さらに深く知るには
+## 9. さらに深く知るには
 
 - 設計の出発点と意思決定ログ → [DESIGN.md](DESIGN.md)
+- 配布・自動更新の詳細仕様 → [RELEASE.md](RELEASE.md)
 - ステップ別の実装範囲・テスト件数 → [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 - Razor コンポーネントの構造 → [../src/RepoSyncRadar.App/Components/](../src/RepoSyncRadar.App/Components/)
 - Copilot セッション層 → [../src/RepoSyncRadar.App/Copilot/](../src/RepoSyncRadar.App/Copilot/)
