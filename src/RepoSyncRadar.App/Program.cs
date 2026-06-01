@@ -99,7 +99,7 @@ internal static class WindowsStartMenuShortcutRepair
         var installRootPrefix = Path.GetFullPath(installRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
         var expectedFullPath = Path.GetFullPath(expectedShortcutPath);
-        foreach (var shortcutPath in Directory.EnumerateFiles(startMenuPrograms, "*RepoSyncRadar*.lnk", SearchOption.AllDirectories))
+        foreach (var shortcutPath in EnumerateCandidateShortcutPaths(startMenuPrograms))
         {
             if (string.Equals(Path.GetFullPath(shortcutPath), expectedFullPath, StringComparison.OrdinalIgnoreCase))
             {
@@ -117,6 +117,54 @@ internal static class WindowsStartMenuShortcutRepair
             {
                 TryDeleteFile(shortcutPath);
             }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateCandidateShortcutPaths(string startMenuPrograms)
+    {
+        foreach (var shortcutPath in EnumerateShortcutPaths(startMenuPrograms))
+        {
+            yield return shortcutPath;
+        }
+
+        foreach (var directory in EnumerateRepoSyncRadarShortcutDirectories(startMenuPrograms))
+        {
+            foreach (var shortcutPath in EnumerateShortcutPaths(directory))
+            {
+                yield return shortcutPath;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateRepoSyncRadarShortcutDirectories(string startMenuPrograms)
+    {
+        IEnumerable<string> directories;
+        try
+        {
+            directories = Directory.EnumerateDirectories(startMenuPrograms)
+                .Where(path => Path.GetFileName(path).Contains("RepoSyncRadar", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        }
+        catch (Exception ex) when (IsNonFatalException(ex))
+        {
+            yield break;
+        }
+
+        foreach (var directory in directories)
+        {
+            yield return directory;
+        }
+    }
+
+    private static string[] EnumerateShortcutPaths(string directory)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(directory, "*RepoSyncRadar*.lnk", SearchOption.TopDirectoryOnly).ToArray();
+        }
+        catch (Exception ex) when (IsNonFatalException(ex))
+        {
+            return [];
         }
     }
 
@@ -214,9 +262,20 @@ internal static class WindowsStartMenuShortcutRepair
 
     private static void ReleaseComObject(object? value)
     {
-        if (value is not null && Marshal.IsComObject(value))
+        if (value is null)
         {
-            Marshal.ReleaseComObject(value);
+            return;
+        }
+
+        try
+        {
+            if (Marshal.IsComObject(value))
+            {
+                Marshal.FinalReleaseComObject(value);
+            }
+        }
+        catch (Exception ex) when (IsNonFatalException(ex))
+        {
         }
     }
 

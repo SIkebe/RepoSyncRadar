@@ -326,6 +326,10 @@ finally {
     foreach ($seededShortcutPath in $seededShortcutPaths) {
         Remove-Item $seededShortcutPath -Force -ErrorAction SilentlyContinue
     }
+    $seededShortcutFolder = Join-Path ([System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs)) 'RepoSyncRadar Old'
+    if (Test-Path $seededShortcutFolder) {
+        Remove-Item $seededShortcutFolder -Force -ErrorAction SilentlyContinue
+    }
 
     if ($CleanInstallRoot -and (Test-Path $installRoot)) {
         Remove-StartMenuShortcutsBestEffort -InstallRoot $installRoot
