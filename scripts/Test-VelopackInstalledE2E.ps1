@@ -147,33 +147,24 @@ function Assert-StartMenuShortcut {
     )
 
     $startMenuRoot = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs)
-    $shortcutCandidates = @(Get-ChildItem -Path $startMenuRoot -Filter 'RepoSyncRadar.lnk' -File -Recurse -ErrorAction SilentlyContinue)
-    if ($shortcutCandidates.Count -eq 0) {
-        throw "Installed RepoSyncRadar Start Menu shortcut was not found under '$startMenuRoot'."
-    }
-
     $installRootPrefix = Get-DirectoryPrefix -Path $InstallRoot
-    $matchedShortcut = $null
-    foreach ($shortcut in $shortcutCandidates) {
-        $targetPath = Get-ShortcutTargetPath -ShortcutPath $shortcut.FullName
-        if ([string]::IsNullOrWhiteSpace($targetPath) -or -not (Test-Path $targetPath)) {
-            continue
-        }
-
-        $targetFullPath = [System.IO.Path]::GetFullPath($targetPath)
-        if ($targetFullPath.StartsWith($installRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-            $matchedShortcut = $shortcut
-            break
-        }
+    $expectedShortcutPath = Join-Path $startMenuRoot 'RepoSyncRadar.lnk'
+    if (-not (Test-Path $expectedShortcutPath)) {
+        throw "Installed RepoSyncRadar Start Menu shortcut was not found at '$expectedShortcutPath'."
     }
 
-    if ($null -eq $matchedShortcut) {
-        $candidatePaths = ($shortcutCandidates | Sort-Object FullName | ForEach-Object { $_.FullName }) -join ', '
-        throw "RepoSyncRadar Start Menu shortcut was found, but none targets '$InstallRoot'. Candidate shortcut(s): $candidatePaths"
+    $expectedTargetPath = Get-ShortcutTargetPath -ShortcutPath $expectedShortcutPath
+    if ([string]::IsNullOrWhiteSpace($expectedTargetPath) -or -not (Test-Path $expectedTargetPath)) {
+        throw "Installed RepoSyncRadar Start Menu shortcut target was not found: '$expectedShortcutPath' -> '$expectedTargetPath'."
+    }
+
+    $expectedTargetFullPath = [System.IO.Path]::GetFullPath($expectedTargetPath)
+    if (-not $expectedTargetFullPath.StartsWith($installRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Installed RepoSyncRadar Start Menu shortcut does not target '$InstallRoot': '$expectedShortcutPath' -> '$expectedTargetPath'."
     }
 
     $staleShortcutCandidates = @(Get-ChildItem -Path $startMenuRoot -Filter '*RepoSyncRadar*.lnk' -File -Recurse -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -ne $matchedShortcut.FullName })
+        Where-Object { $_.FullName -ne $expectedShortcutPath })
     $staleShortcuts = @(foreach ($shortcut in $staleShortcutCandidates) {
         try {
             $targetPath = Get-ShortcutTargetPath -ShortcutPath $shortcut.FullName
