@@ -188,6 +188,29 @@ public sealed class AppUpdateServiceTests
         Assert.Equal(0, manager.ApplyCount);
     }
 
+    [Fact]
+    public void TryCreateGitHubSource_When_GitHub_Repo_Url_Returns_Source()
+    {
+        var created = VelopackUpdateManagerAdapter.TryCreateGitHubSource(
+            "https://github.com/SIkebe/RepoSyncRadar",
+            out var source);
+
+        Assert.True(created);
+        Assert.NotNull(source);
+    }
+
+    [Theory]
+    [InlineData("https://github.com/SIkebe/RepoSyncRadar/releases/latest/download")]
+    [InlineData("https://example.com/releases")]
+    [InlineData("http://github.com/SIkebe/RepoSyncRadar")]
+    public void TryCreateGitHubSource_When_Not_GitHub_Repo_Url_Returns_False(string feedUrl)
+    {
+        var created = VelopackUpdateManagerAdapter.TryCreateGitHubSource(feedUrl, out var source);
+
+        Assert.False(created);
+        Assert.Null(source);
+    }
+
     private sealed class FakeLocalAppSettingsStore(LocalAppSettings settings) : ILocalAppSettingsStore
     {
         public string SettingsPath { get; } = "appsettings.local.json";

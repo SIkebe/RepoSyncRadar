@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using RepoSyncRadar.App.Settings;
 using Velopack;
 using Velopack.Exceptions;
+using Velopack.Sources;
 
 namespace RepoSyncRadar.App.Updates;
 
@@ -260,7 +261,9 @@ internal sealed class VelopackUpdateManagerAdapter : IVelopackUpdateManager
         var options = string.IsNullOrWhiteSpace(channel)
             ? null
             : new UpdateOptions { ExplicitChannel = channel };
-        _manager = new UpdateManager(feedUrl, options);
+        _manager = TryCreateGitHubSource(feedUrl, out var source)
+            ? new UpdateManager(source, options)
+            : new UpdateManager(feedUrl, options);
     }
 
     public bool IsInstalled => _manager.IsInstalled;
@@ -284,5 +287,25 @@ internal sealed class VelopackUpdateManagerAdapter : IVelopackUpdateManager
         }
 
         _manager.ApplyUpdatesAndRestart(pendingUpdate, []);
+    }
+
+    internal static bool TryCreateGitHubSource(string feedUrl, out GithubSource source)
+    {
+        source = default!;
+        if (!Uri.TryCreate(feedUrl, UriKind.Absolute, out var uri)
+            || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var pathSegments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (pathSegments.Length != 2)
+        {
+            return false;
+        }
+
+        source = new GithubSource(feedUrl, accessToken: null, prerelease: true, downloader: null);
+        return true;
     }
 }
