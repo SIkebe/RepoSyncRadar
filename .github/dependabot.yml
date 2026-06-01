@@ -12,6 +12,14 @@ updates:
       dependencies:
         patterns:
           - "*"
+  - package-ecosystem: nuget
+    directory: "/.config"
+    schedule:
+      interval: daily
+    groups:
+      dotnet-tools:
+        patterns:
+          - "*"
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
