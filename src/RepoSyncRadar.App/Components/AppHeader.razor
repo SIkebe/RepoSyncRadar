@@ -82,12 +82,12 @@
                             class="toolbar-button compact primary"
                             data-testid="app-header-update-restart"
                             disabled="@_appUpdateRestartBusy"
-                            @onclick="RestartForUpdateAsync">@(_appUpdateRestartBusy ? "Restarting..." : "Restart now")</button>
+                                @onclick="RestartForUpdateAsync">@(_appUpdateRestartBusy ? L["AppHeader.Update.Restarting"] : L["AppHeader.Update.RestartNow"])</button>
                     <button type="button"
                             class="toolbar-button compact secondary"
                             data-testid="app-header-update-later"
                             disabled="@_appUpdateRestartBusy"
-                            @onclick="DismissUpdatePrompt">Later</button>
+                                @onclick="DismissUpdatePrompt">@L["AppHeader.Update.Later"]</button>
                 }
             </span>
         }
@@ -213,18 +213,18 @@
             <section class="settings-section" data-testid="settings-update-check">
                 <header class="settings-subheader">
                     <div>
-                        <h3>Updates</h3>
-                        <p class="settings-muted">Check for a Velopack release now. Downloaded updates apply on the next launch.</p>
+                        <h3>@L["AppHeader.Update.Title"]</h3>
+                        <p class="settings-muted">@L["AppHeader.Update.Description"]</p>
                     </div>
                     <button type="button"
                             class="toolbar-button compact secondary"
                             data-testid="settings-check-updates"
                             disabled="@_settingsUpdateBusy"
-                            @onclick="CheckForUpdatesNowAsync">@(_settingsUpdateBusy ? "Checking..." : "Check for updates")</button>
+                            @onclick="CheckForUpdatesNowAsync">@(_settingsUpdateBusy ? L["AppHeader.Update.CheckingButton"] : L["AppHeader.Update.CheckButton"])</button>
                 </header>
                 @if (_settingsUpdateProgress is { } updateProgress)
                 {
-                    <p class="settings-muted" data-testid="settings-update-progress">Downloading @updateProgress%</p>
+                    <p class="settings-muted" data-testid="settings-update-progress">@L["AppHeader.Update.DownloadingPercent", updateProgress]</p>
                 }
                 @if (!string.IsNullOrWhiteSpace(_settingsUpdateStatus))
                 {
@@ -678,7 +678,7 @@
 
         _settingsUpdateBusy = true;
         _settingsUpdateProgress = null;
-        _settingsUpdateStatus = "Checking for updates...";
+        _settingsUpdateStatus = L["AppHeader.Update.Checking"];
         _settingsUpdateError = null;
         StateHasChanged();
         try
@@ -697,7 +697,7 @@
         {
             _settingsUpdateStatus = null;
             _settingsUpdateProgress = null;
-            _settingsUpdateError = $"Update check failed: {ex.Message}";
+            _settingsUpdateError = L["AppHeader.Update.CheckFailedWithMessage", ex.Message];
         }
         finally
         {
@@ -705,20 +705,20 @@
         }
     }
 
-    private static string FormatUpdateResult(AppUpdateResult result)
+    private string FormatUpdateResult(AppUpdateResult result)
         => result.Status switch
         {
-            AppUpdateStatus.Disabled => "Updates are disabled. Enable Updates in appsettings.local.json first.",
+            AppUpdateStatus.Disabled => L["AppHeader.Update.Disabled"],
             AppUpdateStatus.FeedNotConfigured => string.IsNullOrWhiteSpace(result.Message)
-                ? "Update feed is not configured."
+                ? L["AppHeader.Update.FeedNotConfigured"]
                 : result.Message,
-            AppUpdateStatus.NotInstalled => "This app is not installed by Velopack, so updates cannot be applied.",
+            AppUpdateStatus.NotInstalled => L["AppHeader.Update.NotInstalled"],
             AppUpdateStatus.NoUpdate => string.IsNullOrWhiteSpace(result.CurrentVersion)
-                ? "No update is available."
-                : $"No update is available. Current version: {result.CurrentVersion}.",
+                ? L["AppHeader.Update.NoUpdate"]
+                : L["AppHeader.Update.NoUpdateWithVersion", result.CurrentVersion],
             AppUpdateStatus.Downloaded => string.IsNullOrWhiteSpace(result.AvailableVersion)
-                ? "Update downloaded. It will be applied on the next launch."
-                : $"Update {result.AvailableVersion} downloaded. It will be applied on the next launch.",
+                ? L["AppHeader.Update.Downloaded"]
+                : L["AppHeader.Update.DownloadedWithVersion", result.AvailableVersion],
             _ => result.Message ?? result.Status.ToString(),
         };
 
@@ -740,19 +740,19 @@
             StringComparison.Ordinal);
     }
 
-    private static string FormatHeaderUpdateActivity(AppUpdateActivity? activity)
+    private string FormatHeaderUpdateActivity(AppUpdateActivity? activity)
         => activity?.Status switch
         {
-            AppUpdateActivityStatus.Checking => "Checking for updates...",
+            AppUpdateActivityStatus.Checking => L["AppHeader.Update.Checking"],
             AppUpdateActivityStatus.Downloading => activity.Progress is { } progress
-                ? $"Downloading update {progress}%"
-                : "Downloading update...",
+                ? L["AppHeader.Update.DownloadingPercent", progress]
+                : L["AppHeader.Update.Downloading"],
             AppUpdateActivityStatus.Downloaded => string.IsNullOrWhiteSpace(activity.AvailableVersion)
-                ? "Update ready. Restart to apply it now?"
-                : $"Update {activity.AvailableVersion} ready. Restart to apply it now?",
+                ? L["AppHeader.Update.ReadyToRestart"]
+                : L["AppHeader.Update.ReadyToRestartWithVersion", activity.AvailableVersion],
             AppUpdateActivityStatus.Failed => string.IsNullOrWhiteSpace(activity.Message)
-                ? "Update check failed."
-                : $"Update check failed: {activity.Message}",
+                ? L["AppHeader.Update.CheckFailed"]
+                : L["AppHeader.Update.CheckFailedWithMessage", activity.Message],
             _ => string.Empty,
         };
 
@@ -771,12 +771,12 @@
             await Task.Yield();
             if (!_updateService.TryApplyDownloadedUpdateAndRestart())
             {
-                _appUpdateRestartError = "No downloaded update is ready to apply.";
+                _appUpdateRestartError = L["AppHeader.Update.NotReadyToApply"];
             }
         }
         catch (Exception ex)
         {
-            _appUpdateRestartError = $"Restart failed: {ex.Message}";
+            _appUpdateRestartError = L["AppHeader.Update.RestartFailed", ex.Message];
         }
         finally
         {
