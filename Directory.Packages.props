@@ -43,7 +43,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Installer / Updates">
-    <PackageVersion Include="Velopack" Version="1.0.1" />
+    <PackageVersion Include="Velopack" Version="1.1.1" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">
