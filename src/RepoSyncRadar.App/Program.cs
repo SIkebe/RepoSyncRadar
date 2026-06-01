@@ -108,11 +108,6 @@ internal static class WindowsStartMenuShortcutRepair
             var targetPath = TryGetShortcutTargetPath(shortcutPath);
             if (string.IsNullOrWhiteSpace(targetPath))
             {
-                if (fileName.StartsWith("SIkebe.RepoSyncRadar", StringComparison.OrdinalIgnoreCase))
-                {
-                    TryDeleteFile(shortcutPath);
-                }
-
                 continue;
             }
 

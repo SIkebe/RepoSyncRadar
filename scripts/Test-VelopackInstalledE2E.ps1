@@ -89,11 +89,24 @@ function Get-ShortcutTargetPath {
         return [string]$shortcut.TargetPath
     }
     finally {
-        if ($null -ne $shortcut) {
-            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shortcut) | Out-Null
-        }
+        Release-ComObjectBestEffort -ComObject $shortcut
+        Release-ComObjectBestEffort -ComObject $shell
+    }
+}
 
-        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+function Release-ComObjectBestEffort {
+    param(
+        [object]$ComObject
+    )
+
+    if ($null -eq $ComObject) {
+        return
+    }
+
+    try {
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($ComObject) | Out-Null
+    }
+    catch {
     }
 }
 
@@ -122,11 +135,8 @@ function New-Shortcut {
         $shortcut.Save()
     }
     finally {
-        if ($null -ne $shortcut) {
-            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shortcut) | Out-Null
-        }
-
-        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+        Release-ComObjectBestEffort -ComObject $shortcut
+        Release-ComObjectBestEffort -ComObject $shell
     }
 }
 
