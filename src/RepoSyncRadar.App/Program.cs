@@ -45,12 +45,7 @@ internal static class WindowsStartMenuShortcutRepair
             return;
         }
 
-        var startMenuPrograms = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Microsoft",
-            "Windows",
-            "Start Menu",
-            "Programs");
+        var startMenuPrograms = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
         if (string.IsNullOrWhiteSpace(startMenuPrograms))
         {
             return;
@@ -69,7 +64,7 @@ internal static class WindowsStartMenuShortcutRepair
         var directory = Path.GetDirectoryName(processPath);
         if (string.IsNullOrWhiteSpace(directory))
         {
-            return processPath;
+            return Path.GetFullPath(".");
         }
 
         return string.Equals(Path.GetFileName(directory), "current", StringComparison.OrdinalIgnoreCase)

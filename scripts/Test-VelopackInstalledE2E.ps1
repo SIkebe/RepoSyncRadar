@@ -146,7 +146,7 @@ function Assert-StartMenuShortcut {
         [string]$InstallRoot
     )
 
-    $startMenuRoot = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu'
+    $startMenuRoot = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs)
     $shortcutCandidates = @(Get-ChildItem -Path $startMenuRoot -Filter 'RepoSyncRadar.lnk' -File -Recurse -ErrorAction SilentlyContinue)
     if ($shortcutCandidates.Count -eq 0) {
         throw "Installed RepoSyncRadar Start Menu shortcut was not found under '$startMenuRoot'."
@@ -209,7 +209,7 @@ function Remove-StartMenuShortcutsBestEffort {
         [string]$InstallRoot
     )
 
-    $startMenuRoot = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu'
+    $startMenuRoot = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs)
     $installRootPrefix = Get-DirectoryPrefix -Path $InstallRoot
     $shortcutCandidates = @(Get-ChildItem -Path $startMenuRoot -Filter 'RepoSyncRadar.lnk' -File -Recurse -ErrorAction SilentlyContinue)
     foreach ($shortcut in $shortcutCandidates) {
@@ -239,7 +239,7 @@ function Add-StaleStartMenuShortcutForSmoke {
         [string]$Runtime
     )
 
-    $startMenuRoot = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+    $startMenuRoot = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs)
     New-Item -ItemType Directory -Path $startMenuRoot -Force | Out-Null
     $staleShortcutPath = Join-Path $startMenuRoot "SIkebe.RepoSyncRadar-$Runtime-stable-Setup.lnk"
     $targetPath = Join-Path $InstallRoot 'RepoSyncRadar.exe'
