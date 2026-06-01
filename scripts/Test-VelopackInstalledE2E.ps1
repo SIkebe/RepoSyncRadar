@@ -97,6 +97,39 @@ function Get-ShortcutTargetPath {
     }
 }
 
+function New-Shortcut {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$ShortcutPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$TargetPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$WorkingDirectory,
+
+        [Parameter(Mandatory = $true)]
+        [string]$IconLocation
+    )
+
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $null
+    try {
+        $shortcut = $shell.CreateShortcut($ShortcutPath)
+        $shortcut.TargetPath = $TargetPath
+        $shortcut.WorkingDirectory = $WorkingDirectory
+        $shortcut.IconLocation = $IconLocation
+        $shortcut.Save()
+    }
+    finally {
+        if ($null -ne $shortcut) {
+            [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shortcut) | Out-Null
+        }
+
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+    }
+}
+
 function Get-DirectoryPrefix {
     param(
         [Parameter(Mandatory = $true)]
@@ -120,6 +153,7 @@ function Assert-StartMenuShortcut {
     }
 
     $installRootPrefix = Get-DirectoryPrefix -Path $InstallRoot
+    $matchedShortcut = $null
     foreach ($shortcut in $shortcutCandidates) {
         $targetPath = Get-ShortcutTargetPath -ShortcutPath $shortcut.FullName
         if ([string]::IsNullOrWhiteSpace($targetPath) -or -not (Test-Path $targetPath)) {
@@ -128,12 +162,45 @@ function Assert-StartMenuShortcut {
 
         $targetFullPath = [System.IO.Path]::GetFullPath($targetPath)
         if ($targetFullPath.StartsWith($installRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
-            return
+            $matchedShortcut = $shortcut
+            break
         }
     }
 
-    $candidatePaths = ($shortcutCandidates | Sort-Object FullName | ForEach-Object { $_.FullName }) -join ', '
-    throw "RepoSyncRadar Start Menu shortcut was found, but none targets '$InstallRoot'. Candidate shortcut(s): $candidatePaths"
+    if ($null -eq $matchedShortcut) {
+        $candidatePaths = ($shortcutCandidates | Sort-Object FullName | ForEach-Object { $_.FullName }) -join ', '
+        throw "RepoSyncRadar Start Menu shortcut was found, but none targets '$InstallRoot'. Candidate shortcut(s): $candidatePaths"
+    }
+
+    $staleShortcutCandidates = @(Get-ChildItem -Path $startMenuRoot -Filter '*RepoSyncRadar*.lnk' -File -Recurse -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -ne $matchedShortcut.FullName })
+    $staleShortcuts = @(foreach ($shortcut in $staleShortcutCandidates) {
+        try {
+            $targetPath = Get-ShortcutTargetPath -ShortcutPath $shortcut.FullName
+            if ([string]::IsNullOrWhiteSpace($targetPath)) {
+                if ($shortcut.Name.StartsWith('SIkebe.RepoSyncRadar', [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $shortcut.FullName
+                }
+
+                continue
+            }
+
+            $targetFullPath = [System.IO.Path]::GetFullPath($targetPath)
+            if ($targetFullPath.StartsWith($installRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $shortcut.FullName
+            }
+        }
+        catch {
+            if ($shortcut.Name.StartsWith('SIkebe.RepoSyncRadar', [System.StringComparison]::OrdinalIgnoreCase)) {
+                $shortcut.FullName
+            }
+        }
+    })
+
+    if ($staleShortcuts.Count -gt 0) {
+        $staleShortcutList = ($staleShortcuts | Sort-Object) -join ', '
+        throw "Stale RepoSyncRadar Start Menu shortcut(s) were found: $staleShortcutList"
+    }
 }
 
 function Remove-StartMenuShortcutsBestEffort {
@@ -163,6 +230,26 @@ function Remove-StartMenuShortcutsBestEffort {
     }
 }
 
+function Add-StaleStartMenuShortcutForSmoke {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$InstallRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Runtime
+    )
+
+    $startMenuRoot = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+    New-Item -ItemType Directory -Path $startMenuRoot -Force | Out-Null
+    $staleShortcutPath = Join-Path $startMenuRoot "SIkebe.RepoSyncRadar-$Runtime-stable-Setup.lnk"
+    $targetPath = Join-Path $InstallRoot 'RepoSyncRadar.exe'
+    New-Shortcut `
+        -ShortcutPath $staleShortcutPath `
+        -TargetPath $targetPath `
+        -WorkingDirectory $InstallRoot `
+        -IconLocation $targetPath
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $e2eProjectPath = [System.IO.Path]::Combine($repoRoot, 'tests', 'RepoSyncRadar.App.E2E.Tests', 'RepoSyncRadar.App.E2E.Tests.csproj')
 if ([string]::IsNullOrWhiteSpace($ReleaseDir)) {
@@ -185,6 +272,9 @@ $installRoot = Join-Path $env:LOCALAPPDATA 'SIkebe.RepoSyncRadar'
 Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 if ($CleanInstallRoot -and (Test-Path $installRoot)) {
     Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
+}
+if ($CleanInstallRoot) {
+    Add-StaleStartMenuShortcutForSmoke -InstallRoot $installRoot -Runtime $Runtime
 }
 
 Invoke-ProcessCommand -FilePath $setupExe.FullName -ArgumentList @('--silent')
