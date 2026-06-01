@@ -193,6 +193,7 @@ public sealed class AppUpdateServiceTests
     {
         var created = VelopackUpdateManagerAdapter.TryCreateGitHubSource(
             "https://github.com/SIkebe/RepoSyncRadar",
+            "win-arm64-stable",
             out var source);
 
         Assert.True(created);
@@ -205,10 +206,23 @@ public sealed class AppUpdateServiceTests
     [InlineData("http://github.com/SIkebe/RepoSyncRadar")]
     public void TryCreateGitHubSource_When_Not_GitHub_Repo_Url_Returns_False(string feedUrl)
     {
-        var created = VelopackUpdateManagerAdapter.TryCreateGitHubSource(feedUrl, out var source);
+        var created = VelopackUpdateManagerAdapter.TryCreateGitHubSource(feedUrl, "win-arm64-stable", out var source);
 
         Assert.False(created);
         Assert.Null(source);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("win-arm64-stable", false)]
+    [InlineData("win-x64-beta", true)]
+    [InlineData("win-arm64-preview", true)]
+    public void ShouldIncludeGitHubPrereleases_Follows_Channel(string? channel, bool expected)
+    {
+        var includePrerelease = VelopackUpdateManagerAdapter.ShouldIncludeGitHubPrereleases(channel);
+
+        Assert.Equal(expected, includePrerelease);
     }
 
     private sealed class FakeLocalAppSettingsStore(LocalAppSettings settings) : ILocalAppSettingsStore

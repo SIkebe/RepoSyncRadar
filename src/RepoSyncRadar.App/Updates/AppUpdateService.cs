@@ -261,7 +261,7 @@ internal sealed class VelopackUpdateManagerAdapter : IVelopackUpdateManager
         var options = string.IsNullOrWhiteSpace(channel)
             ? null
             : new UpdateOptions { ExplicitChannel = channel };
-        _manager = TryCreateGitHubSource(feedUrl, out var source)
+        _manager = TryCreateGitHubSource(feedUrl, channel, out var source)
             ? new UpdateManager(source, options)
             : new UpdateManager(feedUrl, options);
     }
@@ -289,7 +289,7 @@ internal sealed class VelopackUpdateManagerAdapter : IVelopackUpdateManager
         _manager.ApplyUpdatesAndRestart(pendingUpdate, []);
     }
 
-    internal static bool TryCreateGitHubSource(string feedUrl, out GithubSource source)
+    internal static bool TryCreateGitHubSource(string feedUrl, string? channel, out GithubSource source)
     {
         source = default!;
         if (!Uri.TryCreate(feedUrl, UriKind.Absolute, out var uri)
@@ -305,7 +305,12 @@ internal sealed class VelopackUpdateManagerAdapter : IVelopackUpdateManager
             return false;
         }
 
-        source = new GithubSource(feedUrl, accessToken: null, prerelease: true, downloader: null);
+        source = new GithubSource(feedUrl, accessToken: null, prerelease: ShouldIncludeGitHubPrereleases(channel), downloader: null);
         return true;
     }
+
+    internal static bool ShouldIncludeGitHubPrereleases(string? channel)
+        => !string.IsNullOrWhiteSpace(channel)
+            && (channel.Contains("beta", StringComparison.OrdinalIgnoreCase)
+                || channel.Contains("preview", StringComparison.OrdinalIgnoreCase));
 }
