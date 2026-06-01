@@ -170,6 +170,11 @@ public partial class App : Application
                 "The local appsettings path must point to an appsettings.local.json file.");
         }
 
+        if (optional && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
         configuration.AddJsonFile(
             new PhysicalFileProvider(directory),
             fileName,
