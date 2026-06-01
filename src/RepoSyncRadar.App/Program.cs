@@ -34,6 +34,7 @@ internal static class WindowsStartMenuShortcutRepair
         }
         catch (Exception ex) when (IsNonFatalException(ex))
         {
+            // Shortcut repair must never fail Velopack install/update hooks.
         }
     }
 
@@ -68,6 +69,7 @@ internal static class WindowsStartMenuShortcutRepair
         }
         catch (Exception ex) when (IsNonFatalException(ex))
         {
+            // Stale cleanup is best-effort; always try to create the expected shortcut.
         }
 
         CreateShortcut(expectedShortcutPath, shortcutTarget, Path.GetDirectoryName(shortcutTarget)!, shortcutTarget);
