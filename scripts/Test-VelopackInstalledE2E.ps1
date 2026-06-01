@@ -248,6 +248,14 @@ function Add-StaleStartMenuShortcutForSmoke {
         -TargetPath $targetPath `
         -WorkingDirectory $InstallRoot `
         -IconLocation $targetPath
+
+    $staleShortcutFolder = Join-Path $startMenuRoot 'RepoSyncRadar Old'
+    New-Item -ItemType Directory -Path $staleShortcutFolder -Force | Out-Null
+    New-Shortcut `
+        -ShortcutPath (Join-Path $staleShortcutFolder 'RepoSyncRadar.lnk') `
+        -TargetPath $targetPath `
+        -WorkingDirectory $InstallRoot `
+        -IconLocation $targetPath
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path

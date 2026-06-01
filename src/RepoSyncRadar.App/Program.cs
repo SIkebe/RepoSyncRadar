@@ -55,8 +55,9 @@ internal static class WindowsStartMenuShortcutRepair
         var shortcutTarget = ResolveShortcutTarget(processPath, installRoot);
         Directory.CreateDirectory(startMenuPrograms);
 
-        RemoveStaleRepoSyncRadarShortcuts(startMenuPrograms, installRoot);
-        CreateShortcut(Path.Combine(startMenuPrograms, ShortcutName), shortcutTarget, Path.GetDirectoryName(shortcutTarget)!, shortcutTarget);
+        var expectedShortcutPath = Path.Combine(startMenuPrograms, ShortcutName);
+        RemoveStaleRepoSyncRadarShortcuts(startMenuPrograms, installRoot, expectedShortcutPath);
+        CreateShortcut(expectedShortcutPath, shortcutTarget, Path.GetDirectoryName(shortcutTarget)!, shortcutTarget);
     }
 
     private static string ResolveInstallRoot(string processPath)
@@ -78,14 +79,15 @@ internal static class WindowsStartMenuShortcutRepair
         return File.Exists(rootStub) ? rootStub : processPath;
     }
 
-    private static void RemoveStaleRepoSyncRadarShortcuts(string startMenuPrograms, string installRoot)
+    private static void RemoveStaleRepoSyncRadarShortcuts(string startMenuPrograms, string installRoot, string expectedShortcutPath)
     {
         var installRootPrefix = Path.GetFullPath(installRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
             + Path.DirectorySeparatorChar;
+        var expectedFullPath = Path.GetFullPath(expectedShortcutPath);
         foreach (var shortcutPath in Directory.EnumerateFiles(startMenuPrograms, "*RepoSyncRadar*.lnk", SearchOption.AllDirectories))
         {
             var fileName = Path.GetFileName(shortcutPath);
-            if (string.Equals(fileName, ShortcutName, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(Path.GetFullPath(shortcutPath), expectedFullPath, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
