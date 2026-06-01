@@ -242,6 +242,8 @@ function Add-StaleStartMenuShortcutForSmoke {
     $startMenuRoot = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs)
     New-Item -ItemType Directory -Path $startMenuRoot -Force | Out-Null
     $staleShortcutPath = Join-Path $startMenuRoot "SIkebe.RepoSyncRadar-$Runtime-stable-Setup.lnk"
+    $staleShortcutFolder = Join-Path $startMenuRoot 'RepoSyncRadar Old'
+    $sameNameStaleShortcutPath = Join-Path $staleShortcutFolder 'RepoSyncRadar.lnk'
     $targetPath = Join-Path $InstallRoot 'RepoSyncRadar.exe'
     New-Shortcut `
         -ShortcutPath $staleShortcutPath `
@@ -249,13 +251,14 @@ function Add-StaleStartMenuShortcutForSmoke {
         -WorkingDirectory $InstallRoot `
         -IconLocation $targetPath
 
-    $staleShortcutFolder = Join-Path $startMenuRoot 'RepoSyncRadar Old'
     New-Item -ItemType Directory -Path $staleShortcutFolder -Force | Out-Null
     New-Shortcut `
-        -ShortcutPath (Join-Path $staleShortcutFolder 'RepoSyncRadar.lnk') `
+        -ShortcutPath $sameNameStaleShortcutPath `
         -TargetPath $targetPath `
         -WorkingDirectory $InstallRoot `
         -IconLocation $targetPath
+
+    return @($staleShortcutPath, $sameNameStaleShortcutPath)
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -281,22 +284,23 @@ Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 if ($CleanInstallRoot -and (Test-Path $installRoot)) {
     Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
 }
+$seededShortcutPaths = @()
 if ($CleanInstallRoot) {
-    Add-StaleStartMenuShortcutForSmoke -InstallRoot $installRoot -Runtime $Runtime
+    $seededShortcutPaths = @(Add-StaleStartMenuShortcutForSmoke -InstallRoot $installRoot -Runtime $Runtime)
 }
-
-Invoke-ProcessCommand -FilePath $setupExe.FullName -ArgumentList @('--silent')
-Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
-
-$installedExe = Join-Path $installRoot 'current\RepoSyncRadar.exe'
-if (-not (Test-Path $installedExe)) {
-    throw "Installed RepoSyncRadar.exe was not found at '$installedExe'."
-}
-
-Assert-StartMenuShortcut -InstallRoot $installRoot
 
 $previousAppExe = $env:REPOSYNCRADAR_E2E_APP_EXE_PATH
 try {
+    Invoke-ProcessCommand -FilePath $setupExe.FullName -ArgumentList @('--silent')
+    Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
+
+    $installedExe = Join-Path $installRoot 'current\RepoSyncRadar.exe'
+    if (-not (Test-Path $installedExe)) {
+        throw "Installed RepoSyncRadar.exe was not found at '$installedExe'."
+    }
+
+    Assert-StartMenuShortcut -InstallRoot $installRoot
+
     $env:REPOSYNCRADAR_E2E_APP_EXE_PATH = $installedExe
     Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList @(
         'test',
@@ -317,6 +321,10 @@ finally {
     }
 
     Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
+
+    foreach ($seededShortcutPath in $seededShortcutPaths) {
+        Remove-Item $seededShortcutPath -Force -ErrorAction SilentlyContinue
+    }
 
     if ($CleanInstallRoot -and (Test-Path $installRoot)) {
         Remove-StartMenuShortcutsBestEffort -InstallRoot $installRoot

@@ -32,10 +32,16 @@ internal static class WindowsStartMenuShortcutRepair
         {
             RepairCore();
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or COMException or TargetInvocationException or InvalidOperationException)
+        catch (Exception ex) when (IsNonFatalException(ex))
         {
         }
     }
+
+    private static bool IsNonFatalException(Exception exception)
+        => exception is not OutOfMemoryException
+            and not StackOverflowException
+            and not AccessViolationException
+            and not AppDomainUnloadedException;
 
     private static void RepairCore()
     {
