@@ -99,7 +99,6 @@ internal static class WindowsStartMenuShortcutRepair
         var expectedFullPath = Path.GetFullPath(expectedShortcutPath);
         foreach (var shortcutPath in Directory.EnumerateFiles(startMenuPrograms, "*RepoSyncRadar*.lnk", SearchOption.AllDirectories))
         {
-            var fileName = Path.GetFileName(shortcutPath);
             if (string.Equals(Path.GetFullPath(shortcutPath), expectedFullPath, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
