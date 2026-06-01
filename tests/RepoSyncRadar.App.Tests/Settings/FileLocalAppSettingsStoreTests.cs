@@ -195,6 +195,45 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("http://127.0.0.1:4510/updates", store.Current.Updates.FeedUrl);
     }
 
+    [Fact]
+    public void ResolveDefaultSettingsPath_When_Not_In_Project_Uses_LocalAppData()
+    {
+        var basePath = Path.Combine(_tempRoot, "installed", "current");
+        var localAppData = Path.Combine(_tempRoot, "local-app-data");
+        Directory.CreateDirectory(basePath);
+
+        var path = FileLocalAppSettingsStore.ResolveDefaultSettingsPath(basePath, null, localAppData);
+
+        Assert.Equal(
+            Path.Combine(localAppData, "RepoSyncRadar", "appsettings.local.json"),
+            path);
+    }
+
+    [Fact]
+    public async Task TryCopyLegacyLocalSettings_When_User_Settings_Missing_Copies_Base_Local_Settings()
+    {
+        var basePath = Path.Combine(_tempRoot, "installed", "current");
+        var userSettingsPath = Path.Combine(_tempRoot, "local-app-data", "RepoSyncRadar", "appsettings.local.json");
+        Directory.CreateDirectory(basePath);
+        await File.WriteAllTextAsync(
+            Path.Combine(basePath, "appsettings.local.json"),
+            """
+            {
+              "Updates": {
+                "Enabled": true,
+                "FeedUrl": "https://github.com/example/RepoSyncRadar"
+              }
+            }
+            """,
+            TestContext.Current.CancellationToken);
+
+        FileLocalAppSettingsStore.TryCopyLegacyLocalSettings(userSettingsPath, basePath);
+
+        Assert.True(File.Exists(userSettingsPath));
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(userSettingsPath, TestContext.Current.CancellationToken));
+        Assert.True(document.RootElement.GetProperty("Updates").GetProperty("Enabled").GetBoolean());
+    }
+
     public void Dispose()
     {
         try

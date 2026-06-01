@@ -84,6 +84,63 @@ public class StartupSignInTests
     }
 
     [Fact]
+    public async Task ConfigureAppConfiguration_Reads_Default_User_Local_Appsettings_Path()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "rsr-startup-config-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        var basePath = Path.Combine(tempRoot, "app");
+        var localAppData = Path.Combine(tempRoot, "local-app-data");
+        var userLocalPath = Path.Combine(localAppData, "RepoSyncRadar", "appsettings.local.json");
+        Directory.CreateDirectory(basePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(userLocalPath)!);
+        await File.WriteAllTextAsync(
+            Path.Combine(basePath, "appsettings.json"),
+            """
+            {
+              "Updates": {
+                "Enabled": false
+              }
+            }
+            """,
+            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(
+            userLocalPath,
+            """
+            {
+              "Updates": {
+                "Enabled": true,
+                "FeedUrl": "https://github.com/example/RepoSyncRadar"
+              }
+            }
+            """,
+            TestContext.Current.CancellationToken);
+        try
+        {
+            var configuration = (IConfigurationRoot)App.ConfigureAppConfiguration(
+                new ConfigurationBuilder(),
+                basePath,
+                null,
+                localAppData).Build();
+
+            Assert.True(configuration.GetValue<bool>("Updates:Enabled"));
+            Assert.Equal("https://github.com/example/RepoSyncRadar", configuration["Updates:FeedUrl"]);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
+    [Fact]
     public async Task TrySignInOnStartupAsync_WhenClientIdMissing_WarnsUserAndSkipsProvider()
     {
         // ClientId is the smoking gun for "I started the app and nothing happened" —

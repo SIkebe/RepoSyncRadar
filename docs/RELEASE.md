@@ -106,7 +106,7 @@ The workflow currently creates unsigned release assets. For public releases, sel
 
 ## App Update Settings
 
-Velopack startup hooks are installed in the app entry point, and the app can check/download updates in the background on startup. Updates are opt-in until the public update feed is finalized. Configure `appsettings.local.json` or release defaults with:
+Velopack startup hooks are installed in the app entry point, and the app can check/download updates in the background on startup. Updates are opt-in until the public update feed is finalized. Configure release defaults or the per-user `%LocalAppData%\RepoSyncRadar\appsettings.local.json` file with:
 
 ```json
 {
