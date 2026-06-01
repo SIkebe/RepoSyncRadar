@@ -47,7 +47,7 @@ public static class ThirdPartyNotices
             _webView2LicenseText),
         Mit("MudBlazor", "9.4.0", "Copyright 2026 MudBlazor", "https://mudblazor.com/"),
         Mit("Octokit", "14.0.0", "Copyright GitHub 2017", "https://github.com/octokit/octokit.net"),
-        Mit("Velopack", "1.0.1", "Copyright © Velopack Ltd. All rights reserved.", "https://github.com/velopack/velopack"),
+        Mit("Velopack", "1.1.1", "Copyright © Velopack Ltd. All rights reserved.", "https://github.com/velopack/velopack"),
         Mit("YamlDotNet", "17.1.0", "Copyright (c) Antoine Aubry and contributors", "https://github.com/aaubry/YamlDotNet/wiki"),
     ];
 
