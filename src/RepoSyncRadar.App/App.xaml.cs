@@ -103,12 +103,24 @@ public partial class App : Application
         => ConfigureAppConfiguration(
             configuration,
             basePath,
-            Environment.GetEnvironmentVariable(FileLocalAppSettingsStore.LocalSettingsPathEnv));
+            Environment.GetEnvironmentVariable(FileLocalAppSettingsStore.LocalSettingsPathEnv),
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
 
     internal static IConfigurationBuilder ConfigureAppConfiguration(
         IConfigurationBuilder configuration,
         string basePath,
         string? localSettingsPath)
+        => ConfigureAppConfiguration(
+            configuration,
+            basePath,
+            localSettingsPath,
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+
+    internal static IConfigurationBuilder ConfigureAppConfiguration(
+        IConfigurationBuilder configuration,
+        string basePath,
+        string? localSettingsPath,
+        string localApplicationDataPath)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentException.ThrowIfNullOrWhiteSpace(basePath);
@@ -119,27 +131,55 @@ public partial class App : Application
 
         if (string.IsNullOrWhiteSpace(localSettingsPath))
         {
-            configuration.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true);
+            var resolvedLocalSettingsPath = FileLocalAppSettingsStore.ResolveDefaultSettingsPath(
+                basePath,
+                localSettingsPath,
+                localApplicationDataPath);
+            FileLocalAppSettingsStore.TryCopyLegacyLocalSettings(resolvedLocalSettingsPath, basePath);
+
+            AddJsonFileFromPath(
+                configuration,
+                FileLocalAppSettingsStore.TryResolveLegacyLocalSettingsPath(basePath),
+                optional: true);
+            AddJsonFileFromPath(configuration, resolvedLocalSettingsPath, optional: true);
         }
         else
         {
-            var fullPath = Path.GetFullPath(localSettingsPath);
-            var directory = Path.GetDirectoryName(fullPath);
-            var fileName = Path.GetFileName(fullPath);
-            if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName))
-            {
-                throw new InvalidOperationException(
-                    $"{FileLocalAppSettingsStore.LocalSettingsPathEnv} must point to an appsettings.local.json file.");
-            }
-
-            configuration.AddJsonFile(
-                new PhysicalFileProvider(directory),
-                fileName,
-                optional: true,
-                reloadOnChange: true);
+            AddJsonFileFromPath(configuration, localSettingsPath, optional: true);
         }
 
         return configuration.AddEnvironmentVariables("RADAR_");
+    }
+
+    private static void AddJsonFileFromPath(
+        IConfigurationBuilder configuration,
+        string? path,
+        bool optional)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        var fullPath = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(fullPath);
+        var fileName = Path.GetFileName(fullPath);
+        if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new InvalidOperationException(
+                "The local appsettings path must point to an appsettings.local.json file.");
+        }
+
+        if (optional && !Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        configuration.AddJsonFile(
+            new PhysicalFileProvider(directory),
+            fileName,
+            optional: optional,
+            reloadOnChange: true);
     }
 
     internal static async Task PrewarmPreviewAsync(IPreviewCoordinator coordinator, ILogger logger)

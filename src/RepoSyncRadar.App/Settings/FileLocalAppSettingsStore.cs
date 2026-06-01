@@ -9,6 +9,7 @@ namespace RepoSyncRadar.App.Settings;
 public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposable
 {
     internal const string LocalSettingsPathEnv = "REPOSYNCRADAR_LOCAL_APPSETTINGS_PATH";
+    internal const string SettingsFileName = "appsettings.local.json";
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
@@ -33,30 +34,88 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
     public event Action<LocalAppSettings>? SettingsChanged;
 
     public static FileLocalAppSettingsStore CreateDefault(IConfiguration configuration)
-        => new(ResolveDefaultSettingsPath(), configuration);
+    {
+        var settingsPath = ResolveDefaultSettingsPath();
+        TryCopyLegacyLocalSettings(settingsPath, AppContext.BaseDirectory);
+        return new(settingsPath, configuration);
+    }
 
     public static string ResolveDefaultSettingsPath()
+        => ResolveDefaultSettingsPath(
+            AppContext.BaseDirectory,
+            Environment.GetEnvironmentVariable(LocalSettingsPathEnv),
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+
+    internal static string ResolveDefaultSettingsPath(
+        string baseDirectory,
+        string? configuredPath,
+        string localApplicationDataPath)
     {
-        var configuredPath = Environment.GetEnvironmentVariable(LocalSettingsPathEnv);
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
+        ArgumentException.ThrowIfNullOrWhiteSpace(localApplicationDataPath);
+
         if (!string.IsNullOrWhiteSpace(configuredPath))
         {
             return Path.GetFullPath(configuredPath);
         }
 
-        var projectPath = TryResolveProjectLocalSettingsPath(AppContext.BaseDirectory);
+        var projectPath = TryResolveProjectLocalSettingsPath(baseDirectory);
         if (!string.IsNullOrWhiteSpace(projectPath))
         {
             return projectPath;
         }
 
-        var lowerPath = Path.Combine(AppContext.BaseDirectory, "appsettings.local.json");
+        return Path.Combine(localApplicationDataPath, "RepoSyncRadar", SettingsFileName);
+    }
+
+    internal static string? TryResolveLegacyLocalSettingsPath(string baseDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
+
+        var lowerPath = Path.Combine(baseDirectory, SettingsFileName);
         if (File.Exists(lowerPath))
         {
             return lowerPath;
         }
 
-        var legacyCasePath = Path.Combine(AppContext.BaseDirectory, "appsettings.Local.json");
-        return File.Exists(legacyCasePath) ? legacyCasePath : lowerPath;
+        var legacyCasePath = Path.Combine(baseDirectory, "appsettings.Local.json");
+        return File.Exists(legacyCasePath) ? legacyCasePath : null;
+    }
+
+    internal static void TryCopyLegacyLocalSettings(string settingsPath, string baseDirectory)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
+
+        var fullSettingsPath = Path.GetFullPath(settingsPath);
+        if (File.Exists(fullSettingsPath))
+        {
+            return;
+        }
+
+        var legacyPath = TryResolveLegacyLocalSettingsPath(baseDirectory);
+        if (string.IsNullOrWhiteSpace(legacyPath)
+            || string.Equals(Path.GetFullPath(legacyPath), fullSettingsPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            var directory = Path.GetDirectoryName(fullSettingsPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            File.Copy(legacyPath, fullSettingsPath, overwrite: false);
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     public async Task<LocalAppSettings> LoadAsync(CancellationToken cancellationToken = default)
@@ -115,7 +174,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             var projectFile = Path.Combine(directory.FullName, "RepoSyncRadar.App.csproj");
             if (File.Exists(projectFile))
             {
-                return Path.Combine(directory.FullName, "appsettings.local.json");
+                return Path.Combine(directory.FullName, SettingsFileName);
             }
 
             directory = directory.Parent;

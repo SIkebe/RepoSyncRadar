@@ -59,7 +59,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 
 ### 2.3 設定ファイルを書く
 
-[src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。一般配布版ではそのまま起動できます。環境固有の値や独自 OAuth App の Client ID だけ、同フォルダに `appsettings.local.json` を作って追記します(`.gitignore` 済み)。
+[src/RepoSyncRadar.App/appsettings.json](../src/RepoSyncRadar.App/appsettings.json) は **コミット済みの既定値** です。一般配布版ではそのまま起動できます。環境固有の値や独自 OAuth App の Client ID だけ、開発時は同フォルダの `appsettings.local.json`、インストール版は `%LocalAppData%\RepoSyncRadar\appsettings.local.json` に追記します。
 
 ```jsonc
 {
@@ -107,7 +107,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 >
 > **デバッグ override**: 環境変数 `COPILOT_GITHUB_TOKEN` を立てると OAuth フローを省略してその値を Copilot SDK / Octokit に渡します(`GH_TOKEN` / `GITHUB_TOKEN` のような汎用 PAT 変数は意図的に **読まない** — 他ツールのトークンの誤用を防ぐため)。
 
-起動後はヘッダー右側の **設定** から、`appsettings.local.json` の `GitHub` / `DocsApi` / `Copilot` / `DocsRepository` / `Logging` の値を表示・変更できます。保存した内容はローカル設定ファイルに書き戻され、次回起動時に確実に反映されます。同じ設定パネルで、直接参照している NuGet パッケージのサードパーティ ライセンスも確認できます。
+起動後はヘッダー右側の **設定** から、ローカル `appsettings.local.json` の `GitHub` / `DocsApi` / `Copilot` / `DocsRepository` / `Logging` / `Updates` の値を表示・変更できます。保存した内容はローカル設定ファイルに書き戻され、次回起動時に確実に反映されます。インストール版の保存先はアプリ更新で差し替わらない `%LocalAppData%\RepoSyncRadar\appsettings.local.json` です。同じ設定パネルで、直接参照している NuGet パッケージのサードパーティ ライセンスも確認できます。
 
 設定パネルの **Copilot 使用量** では、SDK の usage event / session metrics が返す AI Credits を優先して表示します。SDK が AI Credits を返さず、モデル名と token breakdown だけが得られる場合は、GitHub Docs の [Models and pricing for GitHub Copilot](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing) にある per 1M token 単価から概算します。公式価格表にないモデルは、誤った見積もりを避けるため `credits 未報告` のままにします。
 
@@ -271,7 +271,7 @@ worktree ごとに作業ディレクトリが分かれるため、`npm install` 
 
 ### 6.2 設定
 
-配布版では release defaults で設定します。ローカル検証や社内配布で上書きしたい場合は `appsettings.local.json` に `Updates` セクションを追加します。
+配布版では release defaults で設定します。ローカル検証や社内配布で上書きしたい場合は、開発時はプロジェクト直下、インストール版は `%LocalAppData%\RepoSyncRadar\appsettings.local.json` の `Updates` セクションを編集します。
 
 ```jsonc
 {
