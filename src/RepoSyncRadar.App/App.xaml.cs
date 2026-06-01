@@ -167,7 +167,7 @@ public partial class App : Application
         if (string.IsNullOrWhiteSpace(directory) || string.IsNullOrWhiteSpace(fileName))
         {
             throw new InvalidOperationException(
-                $"{FileLocalAppSettingsStore.LocalSettingsPathEnv} must point to an appsettings.local.json file.");
+                "The local appsettings path must point to an appsettings.local.json file.");
         }
 
         configuration.AddJsonFile(
