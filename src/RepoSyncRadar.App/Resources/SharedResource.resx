@@ -18,6 +18,29 @@
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage 失敗</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage は失敗しました。詳細はエラーを確認してください。</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Triage を開始しています…</value></data>
+  <data name="AppHeader.Update.CheckButton" xml:space="preserve"><value>アップデートを確認</value></data>
+  <data name="AppHeader.Update.CheckFailed" xml:space="preserve"><value>アップデート確認に失敗しました。</value></data>
+  <data name="AppHeader.Update.CheckFailedWithMessage" xml:space="preserve"><value>アップデート確認に失敗しました: {0}</value></data>
+  <data name="AppHeader.Update.Checking" xml:space="preserve"><value>アップデートを確認中…</value></data>
+  <data name="AppHeader.Update.CheckingButton" xml:space="preserve"><value>確認中…</value></data>
+  <data name="AppHeader.Update.Description" xml:space="preserve"><value>Velopack リリースを今すぐ確認します。ダウンロード済み更新は次回起動時に適用されます。</value></data>
+  <data name="AppHeader.Update.Disabled" xml:space="preserve"><value>アップデートは無効です。先に appsettings.local.json で Updates を有効にしてください。</value></data>
+  <data name="AppHeader.Update.Downloaded" xml:space="preserve"><value>アップデートをダウンロードしました。次回起動時に適用されます。</value></data>
+  <data name="AppHeader.Update.DownloadedWithVersion" xml:space="preserve"><value>アップデート {0} をダウンロードしました。次回起動時に適用されます。</value></data>
+  <data name="AppHeader.Update.Downloading" xml:space="preserve"><value>アップデートをダウンロード中…</value></data>
+  <data name="AppHeader.Update.DownloadingPercent" xml:space="preserve"><value>アップデートをダウンロード中 {0}%</value></data>
+  <data name="AppHeader.Update.FeedNotConfigured" xml:space="preserve"><value>アップデートフィードが設定されていません。</value></data>
+  <data name="AppHeader.Update.Later" xml:space="preserve"><value>後で</value></data>
+  <data name="AppHeader.Update.NoUpdate" xml:space="preserve"><value>利用可能なアップデートはありません。</value></data>
+  <data name="AppHeader.Update.NoUpdateWithVersion" xml:space="preserve"><value>利用可能なアップデートはありません。現在のバージョン: {0}。</value></data>
+  <data name="AppHeader.Update.NotInstalled" xml:space="preserve"><value>このアプリは Velopack でインストールされていないため、アップデートを適用できません。</value></data>
+  <data name="AppHeader.Update.NotReadyToApply" xml:space="preserve"><value>適用可能なダウンロード済みアップデートがありません。</value></data>
+  <data name="AppHeader.Update.ReadyToRestart" xml:space="preserve"><value>アップデートの準備ができました。今すぐ再起動して適用しますか?</value></data>
+  <data name="AppHeader.Update.ReadyToRestartWithVersion" xml:space="preserve"><value>アップデート {0} の準備ができました。今すぐ再起動して適用しますか?</value></data>
+  <data name="AppHeader.Update.RestartFailed" xml:space="preserve"><value>再起動に失敗しました: {0}</value></data>
+  <data name="AppHeader.Update.Restarting" xml:space="preserve"><value>再起動中…</value></data>
+  <data name="AppHeader.Update.RestartNow" xml:space="preserve"><value>今すぐ再起動</value></data>
+  <data name="AppHeader.Update.Title" xml:space="preserve"><value>アップデート</value></data>
   <data name="AdoptionSession.BatchIncludesNonFocused" xml:space="preserve"><value>注目以外のコミットが含まれています: {0}.</value></data>
   <data name="AdoptionSession.BatchRequiresAtLeastTwo" xml:space="preserve"><value>個別解説は 2 件以上の注目コミットを選択して生成してください。</value></data>
   <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>記事の取得に失敗しました ({0}): {1}</value></data>

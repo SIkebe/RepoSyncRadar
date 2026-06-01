@@ -959,7 +959,7 @@ public sealed class AppHeaderTests
         cut.WaitForAssertion(() =>
         {
             updateService.Received(1).CheckAndDownloadAsync(Arg.Any<IProgress<int>>(), true, Arg.Any<CancellationToken>());
-            Assert.Contains("No update", cut.Find("[data-testid=\"settings-update-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("利用可能なアップデートはありません", cut.Find("[data-testid=\"settings-update-status\"]").TextContent, StringComparison.Ordinal);
         });
     }
 
@@ -989,8 +989,68 @@ public sealed class AppHeaderTests
         {
             var status = cut.Find("[data-testid=\"settings-update-status\"]").TextContent;
             Assert.Contains("Updates.FeedUrl must use https", status, StringComparison.Ordinal);
-            Assert.DoesNotContain("Update feed is not configured", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("アップデートフィードが設定されていません", status, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public void Header_Shows_Background_Update_Download_Progress()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var updateService = new FakeAppUpdateService();
+        var sp = BuildServices(session, out _, out _, updateService: updateService);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        updateService.Publish(new AppUpdateActivity(
+            AppUpdateActivityStatus.Downloading,
+            42,
+            "0.1.0",
+            "0.2.0"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[data-testid=\"app-header-update-status\"]").TextContent;
+            Assert.Contains("アップデートをダウンロード中 42%", status, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Header_Shows_Restart_Prompt_When_Update_Downloaded()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var updateService = new FakeAppUpdateService { RestartResult = true };
+        var sp = BuildServices(session, out _, out _, updateService: updateService);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        updateService.Publish(new AppUpdateActivity(
+            AppUpdateActivityStatus.Downloaded,
+            100,
+            "0.1.0",
+            "0.2.0"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[data-testid=\"app-header-update-status\"]").TextContent;
+            Assert.Contains("アップデート 0.2.0 の準備ができました", status, StringComparison.Ordinal);
+            Assert.NotNull(cut.Find("[data-testid=\"app-header-update-restart\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"app-header-update-later\"]"));
+        });
+
+        cut.Find("[data-testid=\"app-header-update-restart\"]").Click();
+
+        cut.WaitForAssertion(() => Assert.Equal(1, updateService.RestartCount));
     }
 
     private static ServiceProvider BuildServices(
@@ -1041,6 +1101,35 @@ public sealed class AppHeaderTests
         }
 
         return services.BuildServiceProvider();
+    }
+
+    private sealed class FakeAppUpdateService : IAppUpdateService
+    {
+        public AppUpdateActivity? CurrentActivity { get; private set; }
+
+        public event Action? ActivityChanged;
+
+        public bool RestartResult { get; init; }
+
+        public int RestartCount { get; private set; }
+
+        public Task<AppUpdateResult> CheckAndDownloadAsync(
+            IProgress<int>? progress = null,
+            bool ignoreCheckOnStartup = false,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new AppUpdateResult(AppUpdateStatus.NoUpdate));
+
+        public bool TryApplyDownloadedUpdateAndRestart()
+        {
+            RestartCount++;
+            return RestartResult;
+        }
+
+        public void Publish(AppUpdateActivity activity)
+        {
+            CurrentActivity = activity;
+            ActivityChanged?.Invoke();
+        }
     }
 
     private static string NormalizeText(string text)

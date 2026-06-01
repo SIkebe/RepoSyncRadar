@@ -120,7 +120,7 @@ Velopack startup hooks are installed in the app entry point, and the app can che
 }
 ```
 
-When an update is found, the app downloads it and lets Velopack apply it on the next launch. It does not force-restart the user's running session.
+When an update is found, the app downloads it in the background, surfaces header progress, and prompts the user to restart now or later after the download completes. It does not force-restart the user's running session.
 
 Unsigned draft releases are acceptable for update-flow smoke tests. Broad public distribution remains blocked on selecting a code-signing path.
 

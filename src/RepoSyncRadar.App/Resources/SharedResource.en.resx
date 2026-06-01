@@ -18,6 +18,29 @@
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage failed</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage failed. Check the error details.</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Starting triage...</value></data>
+  <data name="AppHeader.Update.CheckButton" xml:space="preserve"><value>Check for updates</value></data>
+  <data name="AppHeader.Update.CheckFailed" xml:space="preserve"><value>Update check failed.</value></data>
+  <data name="AppHeader.Update.CheckFailedWithMessage" xml:space="preserve"><value>Update check failed: {0}</value></data>
+  <data name="AppHeader.Update.Checking" xml:space="preserve"><value>Checking for updates...</value></data>
+  <data name="AppHeader.Update.CheckingButton" xml:space="preserve"><value>Checking...</value></data>
+  <data name="AppHeader.Update.Description" xml:space="preserve"><value>Check for a Velopack release now. Downloaded updates apply on the next launch.</value></data>
+  <data name="AppHeader.Update.Disabled" xml:space="preserve"><value>Updates are disabled. Enable Updates in appsettings.local.json first.</value></data>
+  <data name="AppHeader.Update.Downloaded" xml:space="preserve"><value>Update downloaded. It will be applied on the next launch.</value></data>
+  <data name="AppHeader.Update.DownloadedWithVersion" xml:space="preserve"><value>Update {0} downloaded. It will be applied on the next launch.</value></data>
+  <data name="AppHeader.Update.Downloading" xml:space="preserve"><value>Downloading update...</value></data>
+  <data name="AppHeader.Update.DownloadingPercent" xml:space="preserve"><value>Downloading update {0}%</value></data>
+  <data name="AppHeader.Update.FeedNotConfigured" xml:space="preserve"><value>Update feed is not configured.</value></data>
+  <data name="AppHeader.Update.Later" xml:space="preserve"><value>Later</value></data>
+  <data name="AppHeader.Update.NoUpdate" xml:space="preserve"><value>No update is available.</value></data>
+  <data name="AppHeader.Update.NoUpdateWithVersion" xml:space="preserve"><value>No update is available. Current version: {0}.</value></data>
+  <data name="AppHeader.Update.NotInstalled" xml:space="preserve"><value>This app is not installed by Velopack, so updates cannot be applied.</value></data>
+  <data name="AppHeader.Update.NotReadyToApply" xml:space="preserve"><value>No downloaded update is ready to apply.</value></data>
+  <data name="AppHeader.Update.ReadyToRestart" xml:space="preserve"><value>Update ready. Restart to apply it now?</value></data>
+  <data name="AppHeader.Update.ReadyToRestartWithVersion" xml:space="preserve"><value>Update {0} ready. Restart to apply it now?</value></data>
+  <data name="AppHeader.Update.RestartFailed" xml:space="preserve"><value>Restart failed: {0}</value></data>
+  <data name="AppHeader.Update.Restarting" xml:space="preserve"><value>Restarting...</value></data>
+  <data name="AppHeader.Update.RestartNow" xml:space="preserve"><value>Restart now</value></data>
+  <data name="AppHeader.Update.Title" xml:space="preserve"><value>Updates</value></data>
   <data name="AdoptionSession.BatchIncludesNonFocused" xml:space="preserve"><value>The selection includes commits that are not watched: {0}.</value></data>
   <data name="AdoptionSession.BatchRequiresAtLeastTwo" xml:space="preserve"><value>Select at least two watched commits to generate individual explanations.</value></data>
   <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>Failed to fetch article ({0}): {1}</value></data>

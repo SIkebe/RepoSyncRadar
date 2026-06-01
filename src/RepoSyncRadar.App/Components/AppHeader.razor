@@ -70,6 +70,31 @@
         {
             <span data-testid="app-header-error" style="color:#ef4444; font-size:0.85em;">@_lastError</span>
         }
+        @if (ShouldShowHeaderUpdateActivity(_appUpdateActivity))
+        {
+            <span class="app-header-update-status"
+                  data-testid="app-header-update-status"
+                  aria-label="@FormatHeaderUpdateActivity(_appUpdateActivity)">
+                <span data-testid="app-header-update-message">@FormatHeaderUpdateActivity(_appUpdateActivity)</span>
+                @if (_appUpdateActivity?.Status == AppUpdateActivityStatus.Downloaded)
+                {
+                    <button type="button"
+                            class="toolbar-button compact primary"
+                            data-testid="app-header-update-restart"
+                            disabled="@_appUpdateRestartBusy"
+                                @onclick="RestartForUpdateAsync">@(_appUpdateRestartBusy ? L["AppHeader.Update.Restarting"] : L["AppHeader.Update.RestartNow"])</button>
+                    <button type="button"
+                            class="toolbar-button compact secondary"
+                            data-testid="app-header-update-later"
+                            disabled="@_appUpdateRestartBusy"
+                                @onclick="DismissUpdatePrompt">@L["AppHeader.Update.Later"]</button>
+                }
+            </span>
+        }
+        @if (!string.IsNullOrWhiteSpace(_appUpdateRestartError))
+        {
+            <span data-testid="app-header-update-error" style="color:#ef4444; font-size:0.85em;">@_appUpdateRestartError</span>
+        }
         @if (_triageStatus is not null)
         {
             @if (BuildTriageProgressView(_triageStatus) is { } triageProgress)
@@ -188,18 +213,18 @@
             <section class="settings-section" data-testid="settings-update-check">
                 <header class="settings-subheader">
                     <div>
-                        <h3>Updates</h3>
-                        <p class="settings-muted">Check for a Velopack release now. Downloaded updates apply on the next launch.</p>
+                        <h3>@L["AppHeader.Update.Title"]</h3>
+                        <p class="settings-muted">@L["AppHeader.Update.Description"]</p>
                     </div>
                     <button type="button"
                             class="toolbar-button compact secondary"
                             data-testid="settings-check-updates"
                             disabled="@_settingsUpdateBusy"
-                            @onclick="CheckForUpdatesNowAsync">@(_settingsUpdateBusy ? "Checking..." : "Check for updates")</button>
+                            @onclick="CheckForUpdatesNowAsync">@(_settingsUpdateBusy ? L["AppHeader.Update.CheckingButton"] : L["AppHeader.Update.CheckButton"])</button>
                 </header>
                 @if (_settingsUpdateProgress is { } updateProgress)
                 {
-                    <p class="settings-muted" data-testid="settings-update-progress">Downloading @updateProgress%</p>
+                    <p class="settings-muted" data-testid="settings-update-progress">@L["AppHeader.Update.DownloadingPercent", updateProgress]</p>
                 }
                 @if (!string.IsNullOrWhiteSpace(_settingsUpdateStatus))
                 {
@@ -371,6 +396,11 @@
     private int? _settingsUpdateProgress;
     private string? _settingsUpdateStatus;
     private string? _settingsUpdateError;
+    private IAppUpdateService? _updateService;
+    private AppUpdateActivity? _appUpdateActivity;
+    private bool _appUpdateRestartBusy;
+    private string? _appUpdateRestartError;
+    private string? _dismissedDownloadedUpdateVersion;
 
     private string _appVersion = "0.0.0";
 
@@ -378,11 +408,18 @@
     {
         _broadcaster = Services.GetService<IReviewBroadcaster>();
         _usageTracker = Services.GetService<ICopilotUsageTracker>();
+        _updateService = Services.GetService<IAppUpdateService>();
         _displayCulture = AppDisplayCulture.Apply(DisplayCulture).Name;
         if (_usageTracker is not null)
         {
             _copilotUsage = _usageTracker.GetSnapshot();
             _usageTracker.Changed += OnCopilotUsageChanged;
+        }
+
+        if (_updateService is not null)
+        {
+            _appUpdateActivity = _updateService.CurrentActivity;
+            _updateService.ActivityChanged += OnAppUpdateActivityChanged;
         }
 
         if (Services.GetService<IAppVersionProvider>() is { } versionProvider)
@@ -432,6 +469,22 @@
 
     private void ResetCopilotUsage()
         => _usageTracker?.Reset();
+
+    private void OnAppUpdateActivityChanged()
+    {
+        if (_updateService is null)
+        {
+            return;
+        }
+
+        _appUpdateActivity = _updateService.CurrentActivity;
+        if (_appUpdateActivity?.Status != AppUpdateActivityStatus.Downloaded)
+        {
+            _dismissedDownloadedUpdateVersion = null;
+        }
+
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     private async Task RefreshStateAsync()
     {
@@ -625,7 +678,7 @@
 
         _settingsUpdateBusy = true;
         _settingsUpdateProgress = null;
-        _settingsUpdateStatus = "Checking for updates...";
+        _settingsUpdateStatus = L["AppHeader.Update.Checking"];
         _settingsUpdateError = null;
         StateHasChanged();
         try
@@ -644,7 +697,7 @@
         {
             _settingsUpdateStatus = null;
             _settingsUpdateProgress = null;
-            _settingsUpdateError = $"Update check failed: {ex.Message}";
+            _settingsUpdateError = L["AppHeader.Update.CheckFailedWithMessage", ex.Message];
         }
         finally
         {
@@ -652,22 +705,97 @@
         }
     }
 
-    private static string FormatUpdateResult(AppUpdateResult result)
+    private string FormatUpdateResult(AppUpdateResult result)
         => result.Status switch
         {
-            AppUpdateStatus.Disabled => "Updates are disabled. Enable Updates in appsettings.local.json first.",
+            AppUpdateStatus.Disabled => L["AppHeader.Update.Disabled"],
             AppUpdateStatus.FeedNotConfigured => string.IsNullOrWhiteSpace(result.Message)
-                ? "Update feed is not configured."
+                ? L["AppHeader.Update.FeedNotConfigured"]
                 : result.Message,
-            AppUpdateStatus.NotInstalled => "This app is not installed by Velopack, so updates cannot be applied.",
+            AppUpdateStatus.NotInstalled => L["AppHeader.Update.NotInstalled"],
             AppUpdateStatus.NoUpdate => string.IsNullOrWhiteSpace(result.CurrentVersion)
-                ? "No update is available."
-                : $"No update is available. Current version: {result.CurrentVersion}.",
+                ? L["AppHeader.Update.NoUpdate"]
+                : L["AppHeader.Update.NoUpdateWithVersion", result.CurrentVersion],
             AppUpdateStatus.Downloaded => string.IsNullOrWhiteSpace(result.AvailableVersion)
-                ? "Update downloaded. It will be applied on the next launch."
-                : $"Update {result.AvailableVersion} downloaded. It will be applied on the next launch.",
+                ? L["AppHeader.Update.Downloaded"]
+                : L["AppHeader.Update.DownloadedWithVersion", result.AvailableVersion],
             _ => result.Message ?? result.Status.ToString(),
         };
+
+    private bool ShouldShowHeaderUpdateActivity(AppUpdateActivity? activity)
+    {
+        if (activity is null)
+        {
+            return false;
+        }
+
+        if (activity.Status != AppUpdateActivityStatus.Downloaded)
+        {
+            return true;
+        }
+
+        return !string.Equals(
+            _dismissedDownloadedUpdateVersion,
+            BuildDownloadedUpdateDismissKey(activity),
+            StringComparison.Ordinal);
+    }
+
+    private string FormatHeaderUpdateActivity(AppUpdateActivity? activity)
+        => activity?.Status switch
+        {
+            AppUpdateActivityStatus.Checking => L["AppHeader.Update.Checking"],
+            AppUpdateActivityStatus.Downloading => activity.Progress is { } progress
+                ? L["AppHeader.Update.DownloadingPercent", progress]
+                : L["AppHeader.Update.Downloading"],
+            AppUpdateActivityStatus.Downloaded => string.IsNullOrWhiteSpace(activity.AvailableVersion)
+                ? L["AppHeader.Update.ReadyToRestart"]
+                : L["AppHeader.Update.ReadyToRestartWithVersion", activity.AvailableVersion],
+            AppUpdateActivityStatus.Failed => string.IsNullOrWhiteSpace(activity.Message)
+                ? L["AppHeader.Update.CheckFailed"]
+                : L["AppHeader.Update.CheckFailedWithMessage", activity.Message],
+            _ => string.Empty,
+        };
+
+    private async Task RestartForUpdateAsync()
+    {
+        if (_appUpdateRestartBusy || _updateService is null)
+        {
+            return;
+        }
+
+        _appUpdateRestartBusy = true;
+        _appUpdateRestartError = null;
+        StateHasChanged();
+        try
+        {
+            await Task.Yield();
+            if (!_updateService.TryApplyDownloadedUpdateAndRestart())
+            {
+                _appUpdateRestartError = L["AppHeader.Update.NotReadyToApply"];
+            }
+        }
+        catch (Exception ex)
+        {
+            _appUpdateRestartError = L["AppHeader.Update.RestartFailed", ex.Message];
+        }
+        finally
+        {
+            _appUpdateRestartBusy = false;
+        }
+    }
+
+    private void DismissUpdatePrompt()
+    {
+        if (_appUpdateActivity is not null)
+        {
+            _dismissedDownloadedUpdateVersion = BuildDownloadedUpdateDismissKey(_appUpdateActivity);
+        }
+
+        _appUpdateRestartError = null;
+    }
+
+    private static string BuildDownloadedUpdateDismissKey(AppUpdateActivity activity)
+        => activity.AvailableVersion ?? activity.Message ?? activity.Status.ToString();
 
     private async Task LoadIgnoreRulesAsync()
     {
@@ -1225,6 +1353,11 @@
         if (_usageTracker is not null)
         {
             _usageTracker.Changed -= OnCopilotUsageChanged;
+        }
+
+        if (_updateService is not null)
+        {
+            _updateService.ActivityChanged -= OnAppUpdateActivityChanged;
         }
 
         StopTriageTimer();
