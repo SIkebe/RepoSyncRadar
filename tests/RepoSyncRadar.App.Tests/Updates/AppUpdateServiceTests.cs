@@ -146,6 +146,48 @@ public sealed class AppUpdateServiceTests
         Assert.Equal(0, manager.DownloadCount);
     }
 
+    [Fact]
+    public void TryApplyDownloadedUpdateAndRestart_When_Pending_Update_Applies_Update()
+    {
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "https://github.com/example/RepoSyncRadar";
+        var manager = new FakeUpdateManager
+        {
+            IsInstalled = true,
+            HasUpdatePendingRestart = true,
+        };
+        var factory = new FakeUpdateManagerFactory(manager);
+        var service = new AppUpdateService(new FakeLocalAppSettingsStore(settings), factory, NullLogger<AppUpdateService>.Instance);
+
+        var applied = service.TryApplyDownloadedUpdateAndRestart();
+
+        Assert.True(applied);
+        Assert.Equal(1, factory.CreateCount);
+        Assert.Equal(1, manager.ApplyCount);
+    }
+
+    [Fact]
+    public void TryApplyDownloadedUpdateAndRestart_When_No_Pending_Update_Returns_False()
+    {
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Updates.Enabled = true;
+        settings.Updates.FeedUrl = "https://github.com/example/RepoSyncRadar";
+        var manager = new FakeUpdateManager
+        {
+            IsInstalled = true,
+            HasUpdatePendingRestart = false,
+        };
+        var factory = new FakeUpdateManagerFactory(manager);
+        var service = new AppUpdateService(new FakeLocalAppSettingsStore(settings), factory, NullLogger<AppUpdateService>.Instance);
+
+        var applied = service.TryApplyDownloadedUpdateAndRestart();
+
+        Assert.False(applied);
+        Assert.Equal(1, factory.CreateCount);
+        Assert.Equal(0, manager.ApplyCount);
+    }
+
     private sealed class FakeLocalAppSettingsStore(LocalAppSettings settings) : ILocalAppSettingsStore
     {
         public string SettingsPath { get; } = "appsettings.local.json";
@@ -187,9 +229,13 @@ public sealed class AppUpdateServiceTests
 
         public string? CurrentVersion { get; init; }
 
+        public bool HasUpdatePendingRestart { get; init; }
+
         public int CheckCount { get; private set; }
 
         public int DownloadCount { get; private set; }
+
+        public int ApplyCount { get; private set; }
 
         public Task<UpdateInfo?>? CheckResult { get; init; }
 
@@ -203,6 +249,11 @@ public sealed class AppUpdateServiceTests
         {
             DownloadCount++;
             return Task.CompletedTask;
+        }
+
+        public void ApplyUpdatesAndRestart()
+        {
+            ApplyCount++;
         }
     }
 }

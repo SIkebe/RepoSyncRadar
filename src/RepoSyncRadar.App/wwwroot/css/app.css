@@ -151,6 +151,24 @@ html, body {
     min-width: 6.75rem;
 }
 
+.app-header-update-status {
+    align-items: center;
+    background: var(--radar-panel-alt-bg);
+    border: 1px solid var(--radar-border-subtle);
+    border-radius: 6px;
+    color: var(--radar-fg);
+    display: inline-flex;
+    flex-wrap: wrap;
+    font-size: 0.82rem;
+    gap: 0.4rem;
+    max-width: 100%;
+    padding: 0.25rem 0.35rem 0.25rem 0.55rem;
+}
+
+.app-header-update-status > span {
+    overflow-wrap: anywhere;
+}
+
 .radar-sidebar {
     display: flex;
     flex-direction: column;

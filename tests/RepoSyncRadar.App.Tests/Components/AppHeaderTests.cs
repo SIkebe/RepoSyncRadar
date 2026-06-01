@@ -993,6 +993,66 @@ public sealed class AppHeaderTests
         });
     }
 
+    [Fact]
+    public void Header_Shows_Background_Update_Download_Progress()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var updateService = new FakeAppUpdateService();
+        var sp = BuildServices(session, out _, out _, updateService: updateService);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        updateService.Publish(new AppUpdateActivity(
+            AppUpdateActivityStatus.Downloading,
+            42,
+            "0.1.0",
+            "0.2.0"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[data-testid=\"app-header-update-status\"]").TextContent;
+            Assert.Contains("Downloading update 42%", status, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Header_Shows_Restart_Prompt_When_Update_Downloaded()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var updateService = new FakeAppUpdateService { RestartResult = true };
+        var sp = BuildServices(session, out _, out _, updateService: updateService);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        updateService.Publish(new AppUpdateActivity(
+            AppUpdateActivityStatus.Downloaded,
+            100,
+            "0.1.0",
+            "0.2.0"));
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[data-testid=\"app-header-update-status\"]").TextContent;
+            Assert.Contains("Update 0.2.0 ready", status, StringComparison.Ordinal);
+            Assert.NotNull(cut.Find("[data-testid=\"app-header-update-restart\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"app-header-update-later\"]"));
+        });
+
+        cut.Find("[data-testid=\"app-header-update-restart\"]").Click();
+
+        cut.WaitForAssertion(() => Assert.Equal(1, updateService.RestartCount));
+    }
+
     private static ServiceProvider BuildServices(
         IGitHubAuthSession session,
         out ICopilotAgent agent,
@@ -1041,6 +1101,35 @@ public sealed class AppHeaderTests
         }
 
         return services.BuildServiceProvider();
+    }
+
+    private sealed class FakeAppUpdateService : IAppUpdateService
+    {
+        public AppUpdateActivity? CurrentActivity { get; private set; }
+
+        public event Action? ActivityChanged;
+
+        public bool RestartResult { get; init; }
+
+        public int RestartCount { get; private set; }
+
+        public Task<AppUpdateResult> CheckAndDownloadAsync(
+            IProgress<int>? progress = null,
+            bool ignoreCheckOnStartup = false,
+            CancellationToken cancellationToken = default)
+            => Task.FromResult(new AppUpdateResult(AppUpdateStatus.NoUpdate));
+
+        public bool TryApplyDownloadedUpdateAndRestart()
+        {
+            RestartCount++;
+            return RestartResult;
+        }
+
+        public void Publish(AppUpdateActivity activity)
+        {
+            CurrentActivity = activity;
+            ActivityChanged?.Invoke();
+        }
     }
 
     private static string NormalizeText(string text)
