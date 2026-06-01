@@ -62,7 +62,14 @@ internal static class WindowsStartMenuShortcutRepair
         Directory.CreateDirectory(startMenuPrograms);
 
         var expectedShortcutPath = Path.Combine(startMenuPrograms, ShortcutName);
-        RemoveStaleRepoSyncRadarShortcuts(startMenuPrograms, installRoot, expectedShortcutPath);
+        try
+        {
+            RemoveStaleRepoSyncRadarShortcuts(startMenuPrograms, installRoot, expectedShortcutPath);
+        }
+        catch (Exception ex) when (IsNonFatalException(ex))
+        {
+        }
+
         CreateShortcut(expectedShortcutPath, shortcutTarget, Path.GetDirectoryName(shortcutTarget)!, shortcutTarget);
     }
 
