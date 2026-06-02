@@ -84,9 +84,28 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
     }
 
     private static CopilotUsageBillingSource ResolveBillingSource(IEnumerable<CopilotUsageBillingSource> sources)
-        => sources.Any(static source => source is not CopilotUsageBillingSource.None)
-            ? CopilotUsageBillingSource.SdkReported
-            : CopilotUsageBillingSource.None;
+    {
+        var hasUnreported = false;
+        var hasSdkReported = false;
+        foreach (var source in sources)
+        {
+            if (source is CopilotUsageBillingSource.SdkReported)
+            {
+                hasSdkReported = true;
+            }
+            else
+            {
+                hasUnreported = true;
+            }
+        }
+
+        return (hasSdkReported, hasUnreported) switch
+        {
+            (true, true) => CopilotUsageBillingSource.Mixed,
+            (true, false) => CopilotUsageBillingSource.SdkReported,
+            _ => CopilotUsageBillingSource.None,
+        };
+    }
 
     public void RecordSessionMetrics(CopilotSessionUsageMetrics metrics)
     {
@@ -321,4 +340,5 @@ public enum CopilotUsageBillingSource
 {
     None,
     SdkReported,
+    Mixed,
 }

@@ -185,6 +185,43 @@ public sealed class CopilotUsageTrackerTests
     }
 
     [Fact]
+    public void Record_Treats_Mixed_Reported_And_Unreported_Usage_As_Mixed()
+    {
+        var tracker = new CopilotUsageTracker();
+        tracker.Record(new CopilotUsageRecord(
+            new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            "Ask",
+            "gpt-5",
+            null,
+            100,
+            10,
+            0,
+            0,
+            0,
+            null,
+            25_000_000));
+        tracker.Record(new CopilotUsageRecord(
+            new DateTimeOffset(2026, 5, 19, 10, 5, 0, TimeSpan.Zero),
+            "session-2",
+            "Ask",
+            "gpt-unknown",
+            null,
+            50,
+            5,
+            0,
+            0,
+            0,
+            null,
+            null));
+
+        var snapshot = tracker.GetSnapshot();
+
+        Assert.Equal(25_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(CopilotUsageBillingSource.Mixed, snapshot.BillingSource);
+    }
+
+    [Fact]
     public void Record_Does_Not_Estimate_Ai_Credits_For_Unknown_Model()
     {
         var tracker = new CopilotUsageTracker();
