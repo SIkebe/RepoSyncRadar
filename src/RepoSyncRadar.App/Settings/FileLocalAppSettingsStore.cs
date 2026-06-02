@@ -510,7 +510,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             && !string.Equals(contextTier, "default", StringComparison.Ordinal)
             && !string.Equals(contextTier, "long_context", StringComparison.Ordinal))
         {
-            errors.Add("Copilot.ContextTier must be default or long_context.");
+            errors.Add("Copilot.ContextTier は default または long_context にしてください。");
         }
         Require(settings.Copilot.LogLevel, "Copilot.LogLevel", errors);
         if (settings.Copilot.SessionIdleTimeoutSeconds is { } idleTimeout)

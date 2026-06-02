@@ -153,6 +153,22 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAsync_Invalid_Copilot_ContextTier_Throws_Validation_Error()
+    {
+        var path = Path.Combine(_tempRoot, "appsettings.local.json");
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Copilot.ContextTier = "huge";
+        var store = new FileLocalAppSettingsStore(path);
+
+        var ex = await Assert.ThrowsAsync<LocalAppSettingsValidationException>(
+            () => store.SaveAsync(settings, TestContext.Current.CancellationToken));
+
+        Assert.Contains("Copilot.ContextTier", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("default", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("long_context", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SaveAsync_Enabled_Updates_Without_FeedUrl_Throws_Validation_Error()
     {
         var path = Path.Combine(_tempRoot, "appsettings.local.json");
