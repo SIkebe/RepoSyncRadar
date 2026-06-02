@@ -1262,20 +1262,13 @@
 
     private string FormatAiCreditsOrTokens(CopilotUsageSnapshot usage)
         => usage.AiCredits() is { } aiCredits
-            ? $"AI Credits {FormatAiCredits(aiCredits)} credits{FormatEstimateSuffix(usage.BillingSource)}"
+            ? $"AI Credits {FormatAiCredits(aiCredits)} credits"
             : L["CopilotUsage.AiCreditsUnreported", FormatTokens(usage.TotalTokens)];
-
-    private string FormatEstimateSuffix(CopilotUsageBillingSource source)
-        => source is CopilotUsageBillingSource.SdkTokenDetails or CopilotUsageBillingSource.OfficialPricingTable or CopilotUsageBillingSource.Mixed
-            ? L["CopilotUsage.EstimatedSuffix"]
-            : string.Empty;
 
     private string FormatBillingSource(CopilotUsageBillingSource source)
         => source switch
         {
             CopilotUsageBillingSource.SdkReported => L["CopilotUsage.BillingSource.SdkReported"],
-            CopilotUsageBillingSource.SdkTokenDetails => L["CopilotUsage.BillingSource.SdkTokenDetails"],
-            CopilotUsageBillingSource.OfficialPricingTable => L["CopilotUsage.BillingSource.OfficialPricingTable"],
             CopilotUsageBillingSource.Mixed => L["CopilotUsage.BillingSource.Mixed"],
             _ => L["CopilotUsage.BillingSource.Unknown"],
         };
@@ -1291,12 +1284,12 @@
 
     private string FormatSnapshotAiCreditsWithUnit(CopilotUsageSnapshot usage)
         => usage.AiCredits() is { } value
-            ? $"{FormatAiCredits(value)} credits{FormatEstimateSuffix(usage.BillingSource)}"
+            ? $"{FormatAiCredits(value)} credits"
             : L["Common.Unreported"];
 
     private string FormatTurnAiCreditsWithUnit(CopilotUsageRecord usage)
         => usage.AiCredits() is { } value
-            ? $"{FormatAiCredits(value)} credits{FormatEstimateSuffix(usage.BillingSource())}"
+            ? $"{FormatAiCredits(value)} credits"
             : L["Common.Unreported"];
 
     private static string FormatAiCredits(double aiCredits)

@@ -24,8 +24,7 @@ public sealed class CopilotUsageTrackerTests
             5,
             3,
             0.01,
-            20_000_000,
-            []));
+            20_000_000));
         tracker.Record(new CopilotUsageRecord(
             new DateTimeOffset(2026, 5, 18, 10, 5, 0, TimeSpan.Zero),
             "session-2",
@@ -38,8 +37,7 @@ public sealed class CopilotUsageTrackerTests
             7,
             2,
             0.02,
-            30_000_000,
-            []));
+            30_000_000));
 
         var snapshot = tracker.GetSnapshot();
 
@@ -74,8 +72,7 @@ public sealed class CopilotUsageTrackerTests
             0,
             0,
             null,
-            null,
-            []));
+            null));
 
         tracker.Reset();
 
@@ -102,8 +99,7 @@ public sealed class CopilotUsageTrackerTests
             0,
             0,
             0.01,
-            10_000_000,
-            []));
+            10_000_000));
 
         tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
             new DateTimeOffset(2026, 5, 18, 10, 1, 0, TimeSpan.Zero),
@@ -138,36 +134,7 @@ public sealed class CopilotUsageTrackerTests
     }
 
     [Fact]
-    public void Record_Estimates_Ai_Credits_From_Token_Details_When_Total_Nano_Aiu_Is_Missing()
-    {
-        var tracker = new CopilotUsageTracker();
-        tracker.Record(new CopilotUsageRecord(
-            new DateTimeOffset(2026, 5, 18, 10, 0, 0, TimeSpan.Zero),
-            "session-1",
-            "Triage",
-            "gpt-5",
-            null,
-            1500,
-            250,
-            0,
-            0,
-            0,
-            null,
-            null,
-            [
-                new CopilotUsageTokenDetail("input", 1500, 1000, 10_000_000),
-                new CopilotUsageTokenDetail("output", 250, 1000, 30_000_000),
-            ]));
-
-        var snapshot = tracker.GetSnapshot();
-
-        Assert.Equal(50_000_000, snapshot.TotalNanoAiu);
-        Assert.Equal(0.05, snapshot.AiCredits());
-        Assert.Equal(0.05, snapshot.LastTurn?.AiCredits());
-    }
-
-    [Fact]
-    public void Record_Estimates_Ai_Credits_From_Official_Model_Pricing_When_Sdk_Aiu_Is_Missing()
+    public void Record_Does_Not_Estimate_Ai_Credits_When_Sdk_Aiu_Is_Missing()
     {
         var tracker = new CopilotUsageTracker();
         tracker.Record(new CopilotUsageRecord(
@@ -182,15 +149,14 @@ public sealed class CopilotUsageTrackerTests
             20,
             10,
             null,
-            null,
-            []));
+            null));
 
         var snapshot = tracker.GetSnapshot();
 
-        Assert.Equal(96_000_000, snapshot.TotalNanoAiu);
-        Assert.Equal(0.096, snapshot.AiCredits());
-        Assert.Equal(0.00096, snapshot.Cost);
-        Assert.Equal(CopilotUsageBillingSource.OfficialPricingTable, snapshot.BillingSource);
+        Assert.Null(snapshot.TotalNanoAiu);
+        Assert.Null(snapshot.AiCredits());
+        Assert.Null(snapshot.Cost);
+        Assert.Equal(CopilotUsageBillingSource.None, snapshot.BillingSource);
     }
 
     [Fact]
@@ -209,8 +175,7 @@ public sealed class CopilotUsageTrackerTests
             0,
             0,
             0.0042,
-            null,
-            []));
+            null));
 
         var snapshot = tracker.GetSnapshot();
 
@@ -220,28 +185,40 @@ public sealed class CopilotUsageTrackerTests
     }
 
     [Fact]
-    public void Record_Estimates_Anthropic_Cache_Write_From_Official_Model_Pricing()
+    public void Record_Treats_Mixed_Reported_And_Unreported_Usage_As_Mixed()
     {
         var tracker = new CopilotUsageTracker();
         tracker.Record(new CopilotUsageRecord(
             new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
             "session-1",
-            "Adoption",
-            "claude-sonnet-4.5",
+            "Ask",
+            "gpt-5",
             null,
             100,
             10,
             0,
-            20,
-            10,
+            0,
+            0,
             null,
+            25_000_000));
+        tracker.Record(new CopilotUsageRecord(
+            new DateTimeOffset(2026, 5, 19, 10, 5, 0, TimeSpan.Zero),
+            "session-2",
+            "Ask",
+            "gpt-unknown",
             null,
-            []));
+            50,
+            5,
+            0,
+            0,
+            0,
+            null,
+            null));
 
         var snapshot = tracker.GetSnapshot();
 
-        Assert.Equal(49_350_000, snapshot.TotalNanoAiu!.Value, 3);
-        Assert.Equal(0.04935, snapshot.AiCredits()!.Value, 6);
+        Assert.Equal(25_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(CopilotUsageBillingSource.Mixed, snapshot.BillingSource);
     }
 
     [Fact]
@@ -260,8 +237,7 @@ public sealed class CopilotUsageTrackerTests
             0,
             0,
             null,
-            null,
-            []));
+            null));
 
         var snapshot = tracker.GetSnapshot();
 
@@ -270,22 +246,8 @@ public sealed class CopilotUsageTrackerTests
         Assert.Equal(CopilotUsageBillingSource.None, snapshot.BillingSource);
     }
 
-    [Theory]
-    [InlineData("gpt-5.3-codex")]
-    [InlineData("gpt-5-mini")]
-    [InlineData("gpt-5.5")]
-    [InlineData("gpt-5.4-mini")]
-    [InlineData("claude-sonnet-4.6")]
-    [InlineData("claude-haiku-4.5")]
-    [InlineData("gemini-3.1-pro")]
-    [InlineData("gemini-3.5-flash")]
-    public void CopilotModelPricing_Supports_Current_Sdk_Model_Ids(string model)
-    {
-        Assert.True(CopilotModelPricing.SupportsModel(model));
-    }
-
     [Fact]
-    public void RecordSessionMetrics_Estimates_From_Current_Model_When_Sdk_Aiu_Is_Missing()
+    public void RecordSessionMetrics_Does_Not_Estimate_From_Current_Model_When_Sdk_Aiu_Is_Missing()
     {
         var tracker = new CopilotUsageTracker();
         tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
@@ -307,8 +269,66 @@ public sealed class CopilotUsageTrackerTests
 
         var snapshot = tracker.GetSnapshot();
 
-        Assert.Equal(29_000_000, snapshot.TotalNanoAiu);
-        Assert.Equal(0.029, snapshot.AiCredits());
-        Assert.Equal(CopilotUsageBillingSource.OfficialPricingTable, snapshot.BillingSource);
+        Assert.Null(snapshot.TotalNanoAiu);
+        Assert.Null(snapshot.AiCredits());
+        Assert.Equal(CopilotUsageBillingSource.None, snapshot.BillingSource);
+    }
+
+    [Fact]
+    public void RecordSessionMetrics_Uses_Model_Level_Sdk_Aiu_When_Total_Is_Missing()
+    {
+        var tracker = new CopilotUsageTracker();
+        tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+            new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            "Triage",
+            "gpt-5",
+            100,
+            10,
+            0,
+            20,
+            0,
+            null,
+            null,
+            1,
+            90,
+            10,
+            [new CopilotModelUsageMetrics("gpt-5", 100, 10, 0, 20, 0, 50_000_000, null, 1)]));
+
+        var snapshot = tracker.GetSnapshot();
+
+        Assert.Equal(50_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(0.05, snapshot.AiCredits());
+        Assert.Equal(CopilotUsageBillingSource.SdkReported, snapshot.BillingSource);
+    }
+
+    [Fact]
+    public void RecordSessionMetrics_Treats_Mixed_Model_Usage_As_Mixed()
+    {
+        var tracker = new CopilotUsageTracker();
+        tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+            new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            "Triage",
+            "gpt-5",
+            150,
+            15,
+            0,
+            0,
+            0,
+            null,
+            null,
+            2,
+            100,
+            10,
+            [
+                new CopilotModelUsageMetrics("gpt-5", 100, 10, 0, 0, 0, 50_000_000, null, 1),
+                new CopilotModelUsageMetrics("gpt-unknown", 50, 5, 0, 0, 0, null, null, 1),
+            ]));
+
+        var snapshot = tracker.GetSnapshot();
+
+        Assert.Equal(50_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(CopilotUsageBillingSource.Mixed, snapshot.BillingSource);
     }
 }

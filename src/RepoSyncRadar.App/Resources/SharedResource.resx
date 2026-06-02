@@ -135,12 +135,9 @@
   <data name="Common.Unreported" xml:space="preserve"><value>未報告</value></data>
   <data name="Common.Work" xml:space="preserve"><value>作業</value></data>
   <data name="CopilotUsage.AiCreditsUnreported" xml:space="preserve"><value>AI Credits 未報告 / {0} tokens</value></data>
-  <data name="CopilotUsage.BillingSource.Mixed" xml:space="preserve"><value>算出元: SDK 報告値と推定値の混在</value></data>
-  <data name="CopilotUsage.BillingSource.OfficialPricingTable" xml:space="preserve"><value>算出元: GitHub Docs 価格表から推定</value></data>
+  <data name="CopilotUsage.BillingSource.Mixed" xml:space="preserve"><value>算出元: SDK 報告値と未報告の混在</value></data>
   <data name="CopilotUsage.BillingSource.SdkReported" xml:space="preserve"><value>算出元: SDK 報告値</value></data>
-  <data name="CopilotUsage.BillingSource.SdkTokenDetails" xml:space="preserve"><value>算出元: SDK token detail から推定</value></data>
   <data name="CopilotUsage.BillingSource.Unknown" xml:space="preserve"><value>算出元: 不明</value></data>
-  <data name="CopilotUsage.EstimatedSuffix" xml:space="preserve"><value> (推定)</value></data>
   <data name="CopilotUsage.Label.AiCredits" xml:space="preserve"><value>AI Credits</value></data>
   <data name="CopilotUsage.Label.PremiumRequestCost" xml:space="preserve"><value>Premium Request コスト</value></data>
   <data name="CopilotUsage.Label.PremiumRequests" xml:space="preserve"><value>Premium Requests</value></data>
@@ -191,7 +188,7 @@
   <data name="ReviewActions.Watch" xml:space="preserve"><value>注目する</value></data>
   <data name="Settings.CopilotUsage" xml:space="preserve"><value>Copilot 使用量</value></data>
   <data name="Settings.CopilotUsage.Empty" xml:space="preserve"><value>まだ Copilot SDK の使用量は記録されていません。</value></data>
-  <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits と Premium Request cost は SDK の usage event / session metrics を優先し、SDK が AI Credits を返さない場合は GitHub Docs のモデル別価格表から概算します。プロンプト本文は保存しません。</value></data>
+  <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits と Premium Request cost は SDK の usage event / session metrics から表示します。SDK が AI Credits を返さない場合は未報告のままにします。プロンプト本文は保存しません。</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>セッション metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
   <data name="Settings.DefaultTheme" xml:space="preserve"><value>既定テーマ</value></data>
   <data name="Settings.Description" xml:space="preserve"><value>表示言語、既定テーマ、アプリ設定、ライセンス、無視リストを確認できます。</value></data>

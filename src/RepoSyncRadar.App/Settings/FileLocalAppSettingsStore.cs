@@ -229,6 +229,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultModel = GetString(configuration, "Copilot:DefaultModel", defaults.Copilot.DefaultModel),
                 Streaming = GetBool(configuration, "Copilot:Streaming", defaults.Copilot.Streaming),
+                ContextTier = GetNullableString(configuration, "Copilot:ContextTier")?.ToLowerInvariant(),
                 LogLevel = GetString(configuration, "Copilot:LogLevel", defaults.Copilot.LogLevel),
                 SessionIdleTimeoutSeconds = GetNullableInt(configuration, "Copilot:SessionIdleTimeoutSeconds"),
                 CopilotHome = GetNullableString(configuration, "Copilot:CopilotHome"),
@@ -296,6 +297,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultModel = GetString(root, "Copilot", "DefaultModel", fallback.Copilot.DefaultModel),
                 Streaming = GetBool(root, "Copilot", "Streaming", fallback.Copilot.Streaming),
+                ContextTier = GetNullableString(root, "Copilot", "ContextTier", fallback.Copilot.ContextTier),
                 LogLevel = GetString(root, "Copilot", "LogLevel", fallback.Copilot.LogLevel),
                 SessionIdleTimeoutSeconds = GetNullableInt(root, "Copilot", "SessionIdleTimeoutSeconds", fallback.Copilot.SessionIdleTimeoutSeconds),
                 CopilotHome = GetNullableString(root, "Copilot", "CopilotHome", fallback.Copilot.CopilotHome),
@@ -360,6 +362,9 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         var copilot = GetOrReplaceObject(root, "Copilot");
         copilot["DefaultModel"] = settings.Copilot.DefaultModel;
         copilot["Streaming"] = settings.Copilot.Streaming;
+        copilot["ContextTier"] = string.IsNullOrWhiteSpace(settings.Copilot.ContextTier)
+            ? null
+            : settings.Copilot.ContextTier;
         copilot["LogLevel"] = settings.Copilot.LogLevel;
         copilot["SessionIdleTimeoutSeconds"] = settings.Copilot.SessionIdleTimeoutSeconds;
         copilot["CopilotHome"] = string.IsNullOrWhiteSpace(settings.Copilot.CopilotHome)
@@ -430,6 +435,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultModel = TrimOrEmpty(settings.Copilot.DefaultModel),
                 Streaming = settings.Copilot.Streaming,
+                ContextTier = NormalizeNullable(settings.Copilot.ContextTier)?.ToLowerInvariant(),
                 LogLevel = string.IsNullOrWhiteSpace(settings.Copilot.LogLevel)
                     ? "info"
                     : settings.Copilot.LogLevel.Trim().ToLowerInvariant(),
@@ -500,6 +506,12 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         ValidateRange(settings.DocsApi.PageListCacheSeconds, 1, int.MaxValue, "DocsApi.PageListCacheSeconds", errors);
 
         Require(settings.Copilot.DefaultModel, "Copilot.DefaultModel", errors);
+        if (settings.Copilot.ContextTier is { } contextTier
+            && !string.Equals(contextTier, "default", StringComparison.Ordinal)
+            && !string.Equals(contextTier, "long_context", StringComparison.Ordinal))
+        {
+            errors.Add("Copilot.ContextTier は default または long_context にしてください。");
+        }
         Require(settings.Copilot.LogLevel, "Copilot.LogLevel", errors);
         if (settings.Copilot.SessionIdleTimeoutSeconds is { } idleTimeout)
         {

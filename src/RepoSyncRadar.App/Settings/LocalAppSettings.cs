@@ -82,6 +82,8 @@ public sealed class CopilotLocalAppSettings
 
     public bool Streaming { get; set; } = true;
 
+    public string? ContextTier { get; set; }
+
     public string LogLevel { get; set; } = "info";
 
     public int? SessionIdleTimeoutSeconds { get; set; }
@@ -111,6 +113,7 @@ public sealed class CopilotLocalAppSettings
         {
             DefaultModel = DefaultModel,
             Streaming = Streaming,
+            ContextTier = ContextTier,
             LogLevel = LogLevel,
             SessionIdleTimeoutSeconds = SessionIdleTimeoutSeconds,
             CopilotHome = CopilotHome,

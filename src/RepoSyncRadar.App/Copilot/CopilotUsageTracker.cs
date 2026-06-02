@@ -83,17 +83,32 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
         Changed?.Invoke();
     }
 
-    private static CopilotUsageBillingSource ResolveBillingSource(IEnumerable<CopilotUsageBillingSource> sources)
+    internal static CopilotUsageBillingSource ResolveBillingSource(IEnumerable<CopilotUsageBillingSource> sources)
     {
-        var effective = sources
-            .Where(static source => source is not CopilotUsageBillingSource.None)
-            .Distinct()
-            .ToArray();
-        return effective.Length switch
+        var hasUnreported = false;
+        var hasSdkReported = false;
+        foreach (var source in sources)
         {
-            0 => CopilotUsageBillingSource.None,
-            1 => effective[0],
-            _ => CopilotUsageBillingSource.Mixed,
+            if (source is CopilotUsageBillingSource.Mixed)
+            {
+                hasSdkReported = true;
+                hasUnreported = true;
+            }
+            else if (source is CopilotUsageBillingSource.SdkReported)
+            {
+                hasSdkReported = true;
+            }
+            else
+            {
+                hasUnreported = true;
+            }
+        }
+
+        return (hasSdkReported, hasUnreported) switch
+        {
+            (true, true) => CopilotUsageBillingSource.Mixed,
+            (true, false) => CopilotUsageBillingSource.SdkReported,
+            _ => CopilotUsageBillingSource.None,
         };
     }
 
@@ -118,7 +133,7 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
         Changed?.Invoke();
     }
 
-#pragma warning disable GHCP001 // beta.10 exposes usage cost and metrics as experimental SDK telemetry.
+#pragma warning disable GHCP001 // SDK 1.0.0 exposes usage cost and metrics as experimental SDK telemetry.
     internal static CopilotUsageRecord FromAssistantUsage(
         AssistantUsageEvent usage,
         SessionPurpose purpose,
@@ -137,8 +152,7 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
             data?.CacheReadTokens ?? 0,
             data?.CacheWriteTokens ?? 0,
             data?.Cost,
-            TotalNanoAiu: null,
-            TokenDetails: []);
+            TotalNanoAiu: null);
     }
 
     internal static CopilotSessionUsageMetrics FromSessionMetrics(
@@ -191,8 +205,7 @@ public sealed record CopilotUsageRecord(
     double CacheReadTokens,
     double CacheWriteTokens,
     double? Cost,
-    double? TotalNanoAiu,
-    IReadOnlyList<CopilotUsageTokenDetail> TokenDetails)
+    double? TotalNanoAiu)
 {
     public double TotalTokens() => InputTokens + OutputTokens + ReasoningTokens;
 
@@ -212,19 +225,7 @@ public sealed record CopilotUsageRecord(
         {
             return CopilotUsageBillingSource.SdkReported;
         }
-        if (TokenDetails.Any(static detail => detail.EstimatedNanoAiu() is > 0))
-        {
-            return CopilotUsageBillingSource.SdkTokenDetails;
-        }
-        return CopilotModelPricing.EstimateNanoAiu(
-            Model,
-            InputTokens,
-            OutputTokens,
-            ReasoningTokens,
-            CacheReadTokens,
-            CacheWriteTokens) is > 0
-            ? CopilotUsageBillingSource.OfficialPricingTable
-            : CopilotUsageBillingSource.None;
+        return CopilotUsageBillingSource.None;
     }
 
     public double? EffectiveTotalNanoAiu()
@@ -234,36 +235,7 @@ public sealed record CopilotUsageRecord(
             return totalNanoAiu;
         }
 
-        var estimated = TokenDetails.Sum(static detail => detail.EstimatedNanoAiu() ?? 0);
-        if (estimated > 0)
-        {
-            return estimated;
-        }
-
-        return CopilotModelPricing.EstimateNanoAiu(
-            Model,
-            InputTokens,
-            OutputTokens,
-            ReasoningTokens,
-            CacheReadTokens,
-            CacheWriteTokens);
-    }
-}
-
-public sealed record CopilotUsageTokenDetail(
-    string? TokenType,
-    double TokenCount,
-    double BatchSize,
-    double CostPerBatch)
-{
-    public double? EstimatedNanoAiu()
-    {
-        if (TokenCount <= 0 || BatchSize <= 0 || CostPerBatch <= 0)
-        {
-            return null;
-        }
-
-        return Math.Ceiling(TokenCount / BatchSize) * CostPerBatch;
+        return null;
     }
 }
 
@@ -312,19 +284,8 @@ public sealed record CopilotSessionUsageMetrics(
             return totalNanoAiu;
         }
 
-        var estimated = ModelMetrics.Sum(static model => model.EffectiveTotalNanoAiu() ?? 0);
-        if (estimated > 0)
-        {
-            return estimated;
-        }
-
-        return CopilotModelPricing.EstimateNanoAiu(
-            CurrentModel,
-            InputTokens,
-            OutputTokens,
-            ReasoningTokens,
-            CacheReadTokens,
-            CacheWriteTokens);
+        var modelNanoAiu = ModelMetrics.Sum(static model => model.EffectiveTotalNanoAiu() ?? 0);
+        return modelNanoAiu > 0 ? modelNanoAiu : null;
     }
 
     public double? EffectiveCost()
@@ -346,18 +307,7 @@ public sealed record CopilotSessionUsageMetrics(
         {
             return CopilotUsageBillingSource.SdkReported;
         }
-        if (ModelMetrics.Any(static model => model.BillingSource() is CopilotUsageBillingSource.OfficialPricingTable)
-            || CopilotModelPricing.EstimateNanoAiu(
-                CurrentModel,
-                InputTokens,
-                OutputTokens,
-                ReasoningTokens,
-                CacheReadTokens,
-                CacheWriteTokens) is > 0)
-        {
-            return CopilotUsageBillingSource.OfficialPricingTable;
-        }
-        return CopilotUsageBillingSource.None;
+        return CopilotUsageTracker.ResolveBillingSource(ModelMetrics.Select(static model => model.BillingSource()));
     }
 }
 
@@ -379,113 +329,18 @@ public sealed record CopilotModelUsageMetrics(
             return totalNanoAiu;
         }
 
-        return CopilotModelPricing.EstimateNanoAiu(
-            Model,
-            InputTokens,
-            OutputTokens,
-            ReasoningTokens,
-            CacheReadTokens,
-            CacheWriteTokens);
+        return null;
     }
 
     public CopilotUsageBillingSource BillingSource()
         => RequestCost is > 0 || TotalNanoAiu is > 0
             ? CopilotUsageBillingSource.SdkReported
-            : EffectiveTotalNanoAiu() is > 0
-                ? CopilotUsageBillingSource.OfficialPricingTable
-                : CopilotUsageBillingSource.None;
+            : CopilotUsageBillingSource.None;
 }
 
 public enum CopilotUsageBillingSource
 {
     None,
     SdkReported,
-    SdkTokenDetails,
-    OfficialPricingTable,
     Mixed,
-}
-
-internal static class CopilotModelPricing
-{
-    private static readonly Dictionary<string, ModelTokenPricing> _pricing = new(StringComparer.Ordinal)
-    {
-        [NormalizeModelKey("GPT-4.1")] = new(2.00, 0.50, 8.00),
-        [NormalizeModelKey("GPT-5 mini")] = new(0.25, 0.025, 2.00),
-        [NormalizeModelKey("GPT-5.2")] = new(1.75, 0.175, 14.00),
-        [NormalizeModelKey("GPT-5.2-Codex")] = new(1.75, 0.175, 14.00),
-        [NormalizeModelKey("GPT-5.3-Codex")] = new(1.75, 0.175, 14.00),
-        [NormalizeModelKey("GPT-5.4")] = new(2.50, 0.25, 15.00),
-        [NormalizeModelKey("GPT-5.4 mini")] = new(0.75, 0.075, 4.50),
-        [NormalizeModelKey("GPT-5.4 nano")] = new(0.20, 0.02, 1.25),
-        [NormalizeModelKey("GPT-5.5")] = new(5.00, 0.50, 30.00),
-        [NormalizeModelKey("Claude Haiku 4.5")] = new(1.00, 0.10, 5.00, 1.25),
-        [NormalizeModelKey("Claude Sonnet 4")] = new(3.00, 0.30, 15.00, 3.75),
-        [NormalizeModelKey("Claude Sonnet 4.5")] = new(3.00, 0.30, 15.00, 3.75),
-        [NormalizeModelKey("Claude Sonnet 4.6")] = new(3.00, 0.30, 15.00, 3.75),
-        [NormalizeModelKey("Claude Opus 4.5")] = new(5.00, 0.50, 25.00, 6.25),
-        [NormalizeModelKey("Claude Opus 4.6")] = new(5.00, 0.50, 25.00, 6.25),
-        [NormalizeModelKey("Claude Opus 4.7")] = new(5.00, 0.50, 25.00, 6.25),
-        [NormalizeModelKey("Gemini 2.5 Pro")] = new(1.25, 0.125, 10.00),
-        [NormalizeModelKey("Gemini 3 Flash")] = new(0.50, 0.05, 3.00),
-        [NormalizeModelKey("Gemini 3.1 Pro")] = new(2.00, 0.20, 12.00),
-        [NormalizeModelKey("Gemini 3.5 Flash")] = new(1.50, 0.15, 9.00),
-        [NormalizeModelKey("Raptor mini")] = new(0.25, 0.025, 2.00),
-        [NormalizeModelKey("Goldeneye")] = new(1.25, 0.125, 10.00),
-    };
-
-    internal static double? EstimateNanoAiu(
-        string? model,
-        double inputTokens,
-        double outputTokens,
-        double reasoningTokens,
-        double cacheReadTokens,
-        double cacheWriteTokens)
-    {
-        if (string.IsNullOrWhiteSpace(model)
-            || !_pricing.TryGetValue(NormalizeModelKey(model), out var pricing))
-        {
-            return null;
-        }
-
-        var aiCredits = EstimateAiCredits(inputTokens, pricing.InputUsdPerMillion)
-            + EstimateAiCredits(outputTokens + reasoningTokens, pricing.OutputUsdPerMillion)
-            + EstimateAiCredits(cacheReadTokens, pricing.CachedInputUsdPerMillion)
-            + EstimateAiCredits(cacheWriteTokens, pricing.CacheWriteUsdPerMillion ?? 0);
-        return aiCredits > 0
-            ? aiCredits * CopilotUsageTracker.NanoAiuPerAiCredit
-            : null;
-    }
-
-    internal static bool SupportsModel(string? model)
-        => !string.IsNullOrWhiteSpace(model) && _pricing.ContainsKey(NormalizeModelKey(model));
-
-    private static double EstimateAiCredits(double tokens, double usdPerMillionTokens)
-        => tokens > 0 && usdPerMillionTokens > 0
-            ? tokens * usdPerMillionTokens / 10_000d
-            : 0;
-
-    private static string NormalizeModelKey(string value)
-    {
-        var cleaned = value.Trim().ToLowerInvariant();
-        var footnote = cleaned.IndexOf('[', StringComparison.Ordinal);
-        if (footnote >= 0)
-        {
-            cleaned = cleaned[..footnote];
-        }
-
-        return cleaned
-            .Replace("claude-", "claude ", StringComparison.Ordinal)
-            .Replace("gpt-", "gpt ", StringComparison.Ordinal)
-            .Replace("gemini-", "gemini ", StringComparison.Ordinal)
-            .Replace("_", " ", StringComparison.Ordinal)
-            .Replace("-", " ", StringComparison.Ordinal)
-            .Replace(".", "", StringComparison.Ordinal)
-            .Replace(" ", string.Empty, StringComparison.Ordinal);
-    }
-
-    private sealed record ModelTokenPricing(
-        double InputUsdPerMillion,
-        double CachedInputUsdPerMillion,
-        double OutputUsdPerMillion,
-        double? CacheWriteUsdPerMillion = null);
 }

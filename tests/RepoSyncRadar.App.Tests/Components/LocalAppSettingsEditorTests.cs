@@ -1,3 +1,4 @@
+using AngleSharp.Html.Dom;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using RepoSyncRadar.App.Components;
@@ -14,6 +15,7 @@ public sealed class LocalAppSettingsEditorTests
         var settings = LocalAppSettings.Default.Clone();
         settings.GitHub.Owner = "github-local";
         settings.Copilot.DefaultModel = "gpt-5.5";
+        settings.Copilot.ContextTier = "long_context";
         settings.Copilot.EnableRemoteSessions = true;
         settings.Copilot.EnableSessionTelemetry = false;
         settings.Copilot.AllowedUrlHosts = ["docs.github.com", "api.github.com"];
@@ -36,6 +38,8 @@ public sealed class LocalAppSettingsEditorTests
         {
             Assert.Equal("github-local", cut.Find("[data-testid=\"settings-github-owner\"]").GetAttribute("value"));
             Assert.Equal("gpt-5.5", cut.Find("[data-testid=\"settings-copilot-model\"]").GetAttribute("value"));
+            var contextTier = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-context-tier\"]"));
+            Assert.Equal("long_context", contextTier.Value);
             Assert.True(cut.Find("[data-testid=\"settings-copilot-enable-remote-sessions\"]").HasAttribute("checked"));
             Assert.False(cut.Find("[data-testid=\"settings-copilot-enable-session-telemetry\"]").HasAttribute("checked"));
             Assert.Contains("api.github.com", cut.Find("[data-testid=\"settings-copilot-allowed-hosts\"]").GetAttribute("value"), StringComparison.Ordinal);
@@ -45,6 +49,24 @@ public sealed class LocalAppSettingsEditorTests
             Assert.True(cut.Find("[data-testid=\"settings-docsrepo-prewarm-on-startup\"]").HasAttribute("checked"));
             Assert.Contains("PORT={port}", cut.Find("[data-testid=\"settings-docsrepo-preview-environment\"]").GetAttribute("value"), StringComparison.Ordinal);
             Assert.Contains("通常は配布版に同梱", cut.Find("[data-testid=\"settings-copilot-oauth-client-id\"]").ParentElement!.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Renders_ContextTier_Unset_Option_With_Label()
+    {
+        var settings = LocalAppSettings.Default.Clone();
+        var store = new FakeLocalAppSettingsStore(settings);
+        using var ctx = new BunitContext();
+
+        var cut = ctx.Render<LocalAppSettingsEditor>(
+            parameters => parameters.AddCascadingValue<IServiceProvider>(BuildServices(store)));
+
+        cut.WaitForAssertion(() =>
+        {
+            var contextTier = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-context-tier\"]"));
+            var unsetOption = Assert.Single(contextTier.Options, static option => string.IsNullOrEmpty(option.Value));
+            Assert.Equal("SDK default (unset)", unsetOption.TextContent.Trim());
         });
     }
 
@@ -66,6 +88,7 @@ public sealed class LocalAppSettingsEditorTests
 
         cut.Find("[data-testid=\"settings-github-owner\"]").Input("contoso");
         cut.Find("[data-testid=\"settings-copilot-model\"]").Input("gpt-5.5");
+        cut.Find("[data-testid=\"settings-copilot-context-tier\"]").Change("long_context");
         cut.Find("[data-testid=\"settings-copilot-enable-remote-sessions\"]").Change(true);
         cut.Find("[data-testid=\"settings-copilot-enable-session-telemetry\"]").Change(false);
         cut.Find("[data-testid=\"settings-copilot-allowed-hosts\"]").Input("docs.github.com\napi.github.com");
@@ -82,6 +105,7 @@ public sealed class LocalAppSettingsEditorTests
             Assert.NotNull(store.Saved);
             Assert.Equal("contoso", store.Saved.GitHub.Owner);
             Assert.Equal("gpt-5.5", store.Saved.Copilot.DefaultModel);
+            Assert.Equal("long_context", store.Saved.Copilot.ContextTier);
             Assert.True(store.Saved.Copilot.EnableRemoteSessions);
             Assert.False(store.Saved.Copilot.EnableSessionTelemetry);
             Assert.Equal(["docs.github.com", "api.github.com"], store.Saved.Copilot.AllowedUrlHosts);

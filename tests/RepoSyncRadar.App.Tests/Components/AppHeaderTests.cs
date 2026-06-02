@@ -530,8 +530,7 @@ public sealed class AppHeaderTests
             20,
             10,
             0.0042,
-            123_000_000,
-            []));
+            123_000_000));
 
         var sp = BuildServices(session, out _, out _, usageTracker: usageTracker);
         using var ctx = new Bunit.BunitContext();
@@ -584,8 +583,7 @@ public sealed class AppHeaderTests
             0,
             0,
             null,
-            null,
-            []));
+            null));
 
         var sp = BuildServices(session, out _, out _, usageTracker: usageTracker);
         using var ctx = new Bunit.BunitContext();
@@ -595,47 +593,6 @@ public sealed class AppHeaderTests
         var usage = cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent;
         Assert.Contains("AI Credits 未報告", usage, StringComparison.Ordinal);
         Assert.Contains("1,200 tokens", usage, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Header_Labels_Official_Pricing_Estimates_When_Sdk_Ai_Credits_Are_Missing()
-    {
-        var session = Substitute.For<IGitHubAuthSession>();
-        session
-            .GetStateAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
-        session
-            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<string?>("octocat"));
-        var usageTracker = new CopilotUsageTracker();
-        usageTracker.Record(new CopilotUsageRecord(
-            new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
-            "session-1",
-            SessionPurpose.Adoption.ToString(),
-            "gpt-5.5",
-            "api-1",
-            100,
-            10,
-            5,
-            20,
-            0,
-            null,
-            null,
-            []));
-
-        var sp = BuildServices(session, out _, out _, usageTracker: usageTracker);
-        using var ctx = new Bunit.BunitContext();
-        var cut = ctx.Render<AppHeader>(
-            p => p.AddCascadingValue<IServiceProvider>(sp));
-
-        var headerUsage = cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent;
-        Assert.Contains("AI Credits", headerUsage, StringComparison.Ordinal);
-        Assert.Contains("(推定)", headerUsage, StringComparison.Ordinal);
-
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
-
-        Assert.Contains("算出元: GitHub Docs 価格表から推定", cut.Find("[data-testid=\"settings-copilot-usage-aiu\"]").TextContent, StringComparison.Ordinal);
-        Assert.Contains("GitHub Docs のモデル別価格表から概算", cut.Find("[data-testid=\"settings-copilot-usage-privacy\"]").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

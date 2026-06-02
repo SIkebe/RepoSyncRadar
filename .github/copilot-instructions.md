@@ -1,6 +1,6 @@
 # RepoSyncRadar Copilot Instructions
 
-RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0-beta.10.
+RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.0.
 
 Use these repository instructions as the starting point. When code or validated behavior contradicts them, follow the verified source and update this file after confirming the rule is stable.
 
@@ -54,14 +54,14 @@ Use these repository instructions as the starting point. When code or validated 
 ### SDK API
 
 - The app must read Copilot SDK final assistant text from `response?.Data?.Content`, not `response?.ToString()`.
-- `GitHub.Copilot.SDK` 1.0.0-beta.10 exposes `MessageOptions` prompt, attachments, mode, headers, and `DisplayPrompt`. No public JSON schema or response-format property has been observed in the XML docs.
-- In `GitHub.Copilot.SDK` 1.0.0-beta.10, public C# types live under `GitHub.Copilot` / `GitHub.Copilot.Rpc`, client process settings use `CopilotClientOptions.Connection = RuntimeConnection.ForStdio(...)`, `BaseDirectory`, and `CopilotLogLevel`, and permission handlers use `Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>>` with `PermissionDecision.ApproveOnce()` / `Reject(...)` / `UserNotAvailable()`.
-- `GitHub.Copilot.SDK` 1.0.0-beta.10 includes the beta.10 C# stderr-pump cleanup fix, opt-in `CopilotClientOptions.EnableRemoteSessions`, per-session `SessionConfig.EnableSessionTelemetry`, and per-session `McpOAuthTokenStorage` (use `InMemory` unless persistent MCP OAuth tokens are explicitly required).
-- `GitHub.Copilot.SDK` 1.0.0-beta.10 nupkg includes `build/GitHub.Copilot.SDK.props` with `CopilotCliVersion=1.0.56-1`; do not pin `CopilotCliVersion` in `Directory.Build.props` unless a future package regresses.
-- In beta.10 hook payloads such as `PreToolUseHookInput.ToolArgs`, `PostToolUseHookInput.ToolResult`, and `PreMcpToolCallHookInput.Arguments` are JSON values; tests should create fixtures with `JsonSerializer.SerializeToElement(...)` where needed.
-- In beta.10 `AssistantUsageData` does not expose legacy `CopilotUsage`; use `Cost` and session `Usage.GetMetricsAsync()` for SDK-reported billing details, and keep `GHCP001` suppressions local to experimental SDK telemetry/permission types.
+- `GitHub.Copilot.SDK` 1.0.0 exposes `MessageOptions` prompt, attachments, mode, headers, and `DisplayPrompt`. No public JSON schema or response-format property has been observed in the XML docs.
+- In `GitHub.Copilot.SDK` 1.0.0, public C# types live under `GitHub.Copilot` / `GitHub.Copilot.Rpc`, client process settings use `CopilotClientOptions.Connection = RuntimeConnection.ForStdio(...)`, `BaseDirectory`, and `CopilotLogLevel`, and permission handlers use `Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>>` with `PermissionDecision.ApproveOnce()` / `Reject(...)` / `UserNotAvailable()`.
+- `GitHub.Copilot.SDK` 1.0.0 includes opt-in `CopilotClientOptions.EnableRemoteSessions`, per-session `SessionConfig.EnableSessionTelemetry`, per-session `McpOAuthTokenStorage` (use `InMemory` unless persistent MCP OAuth tokens are explicitly required), and optional `SessionConfig.ContextTier` values `default` / `long_context`.
+- `GitHub.Copilot.SDK` 1.0.0 nupkg includes `build/GitHub.Copilot.SDK.props` with `CopilotCliVersion=1.0.57`; do not pin `CopilotCliVersion` in `Directory.Build.props` unless a future package regresses.
+- In 1.0.0 hook payloads such as `PreToolUseHookInput.ToolArgs`, `PostToolUseHookInput.ToolResult`, and `PreMcpToolCallHookInput.Arguments` are JSON values; tests should create fixtures with `JsonSerializer.SerializeToElement(...)` where needed.
+- In 1.0.0 `AssistantUsageData` does not expose legacy `CopilotUsage`; use `Cost` and session `Usage.GetMetricsAsync()` for SDK-reported billing details, and keep `GHCP001` suppressions local to experimental SDK telemetry/permission types.
 - For Copilot tool metadata such as `skip_permission`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { SkipPermission = true }, ...)` over magic-string `AdditionalProperties`.
-- For beta.10 tool filtering, use `ToolSet().AddCustom(toolName)` for RepoSyncRadar's registered radar tools instead of bare tool names, and explicitly disable ambient custom instructions, org-level custom agents, coauthor trailers, and scheduler integration in `SessionConfigBuilder` unless a feature needs them.
+- For 1.0.0 tool filtering, use `ToolSet().AddCustom(toolName)` for RepoSyncRadar's registered radar tools instead of bare tool names, and explicitly disable ambient custom instructions, org-level custom agents, coauthor trailers, and scheduler integration in `SessionConfigBuilder` unless a feature needs them.
 
 ### Client And Telemetry
 
@@ -87,7 +87,7 @@ Use these repository instructions as the starting point. When code or validated 
 - For user-facing sharing drafts, Twitter and customer-facing text must include official `docs.github.com` URLs when a publishable docs URL is known. If Copilot omits the URL, preserve safety by appending it before saving.
 - Commit detail should show the useful first commit message line only. Do not surface `Co-authored-by`, `Signed-off-by`, `Reviewed-by`, or `Acked-by` trailers as prominent UI text.
 - Copilot usage UI must label units explicitly: AI Credits as `credits`, Premium Request cost as `PR`, request counts as `requests`, and token counts as `tokens`.
-- When SDK AI Credits are absent, fall back to the GitHub Docs model pricing table for usage estimates. Unknown models should remain unreported rather than guessed.
+- Copilot usage UI should show AI Credits only from SDK usage events or `Usage.GetMetricsAsync()` session metrics; when SDK AI Credits are absent, leave credits unreported rather than estimating from a model pricing table.
 - For Copilot fallback models, prefer currently supported non-retiring models. Check GitHub Changelog plus the supported-models docs before hardcoding model IDs; avoid `GPT-4.1`, `GPT-5`, `GPT-5.2`, and `GPT-5.2-Codex` as preferred fallbacks because they are retired or scheduled for retirement.
 
 ## Preview And WebView

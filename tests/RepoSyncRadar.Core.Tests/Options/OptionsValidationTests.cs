@@ -157,16 +157,32 @@ public class OptionsValidationTests
     {
         var json = _validJson.Replace(
             "\"Streaming\": true,",
-            "\"Streaming\": true,\n    \"LogLevel\": \" Debug \",\n    \"SessionIdleTimeoutSeconds\": 90,\n    \"CopilotHome\": \" C:/data/copilot \",\n    \"TelemetryFilePath\": \" C:/logs/copilot.jsonl \",",
+            "\"Streaming\": true,\n    \"ContextTier\": \" Long_Context \",\n    \"LogLevel\": \" Debug \",\n    \"SessionIdleTimeoutSeconds\": 90,\n    \"CopilotHome\": \" C:/data/copilot \",\n    \"TelemetryFilePath\": \" C:/logs/copilot.jsonl \",",
             StringComparison.Ordinal);
         using var sp = BuildServiceProvider(json);
 
         var copilot = sp.GetRequiredService<IOptions<CopilotOptions>>().Value;
 
+        Assert.Equal("long_context", copilot.ContextTier);
         Assert.Equal("debug", copilot.LogLevel);
         Assert.Equal(90, copilot.SessionIdleTimeoutSeconds);
         Assert.Equal("C:/data/copilot", copilot.CopilotHome);
         Assert.Equal("C:/logs/copilot.jsonl", copilot.TelemetryFilePath);
+    }
+
+    [Fact]
+    public void Bind_CopilotContextTierInvalid_ThrowsOptionsValidationException()
+    {
+        var json = _validJson.Replace(
+            "\"Streaming\": true,",
+            "\"Streaming\": true,\n    \"ContextTier\": \"huge\",",
+            StringComparison.Ordinal);
+        using var sp = BuildServiceProvider(json);
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => _ = sp.GetRequiredService<IOptions<CopilotOptions>>().Value);
+
+        Assert.Contains("ContextTier", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

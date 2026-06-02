@@ -8,7 +8,7 @@ using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
 
-#pragma warning disable GHCP001 // beta.10 exposes permission decisions through experimental RPC types.
+#pragma warning disable GHCP001 // SDK 1.0.0 exposes permission decisions through experimental RPC types.
 
 public class SessionConfigBuilderTests
 {
@@ -18,6 +18,7 @@ public class SessionConfigBuilderTests
         var copilot = new CopilotOptions
         {
             DefaultModel = "gpt-5",
+            ContextTier = "long_context",
             Streaming = true,
             EnableSessionTelemetry = false,
             AllowedUrlHosts = ["docs.github.com"],
@@ -31,6 +32,7 @@ public class SessionConfigBuilderTests
             handler);
 
         Assert.Equal("gpt-5", config.Model);
+        Assert.Equal(ContextTier.LongContext, config.ContextTier);
         Assert.True(config.Streaming);
         Assert.False(config.EnableSessionTelemetry);
         Assert.NotNull(config.SystemMessage);

@@ -43,6 +43,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
                 ["GitHub:Repo"] = "docs-from-config",
                 ["GitHub:PullRequestTitleFilter"] = "Repo sync",
                 ["Copilot:DefaultModel"] = "gpt-config",
+                ["Copilot:ContextTier"] = " Long_Context ",
                 ["Copilot:OAuthScopes:0"] = "public_repo",
                 ["DocsRepository:PrewarmOnStartup"] = "true",
                 ["DocsRepository:PreviewEnvironment:PORT"] = "{port}",
@@ -56,6 +57,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("docs-from-config", settings.GitHub.Repo);
         Assert.Equal(8, settings.GitHub.MaxPullRequests);
         Assert.Equal("gpt-config", settings.Copilot.DefaultModel);
+        Assert.Equal("long_context", settings.Copilot.ContextTier);
         Assert.Equal(["docs.github.com", "api.github.com"], settings.Copilot.AllowedUrlHosts);
         Assert.Empty(settings.Copilot.OAuthScopes);
         Assert.Equal(["docs.github.com", "github.com"], settings.WebView.AllowedUrlHosts);
@@ -84,6 +86,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.GitHub.Repo = "docs";
         settings.GitHub.PullRequestCreatedAtOrAfter = "2026-05-15T00:00:00Z";
         settings.Copilot.DefaultModel = "gpt-5.5";
+        settings.Copilot.ContextTier = " Long_Context ";
         settings.Copilot.LogLevel = " Debug ";
         settings.Copilot.SessionIdleTimeoutSeconds = 120;
         settings.Copilot.CopilotHome = " C:\\Users\\me\\.reposyncradar-copilot ";
@@ -119,6 +122,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("keep", root.GetProperty("GitHub").GetProperty("Unknown").GetString());
         Assert.Equal("github", root.GetProperty("GitHub").GetProperty("Owner").GetString());
         Assert.Equal("gpt-5.5", root.GetProperty("Copilot").GetProperty("DefaultModel").GetString());
+        Assert.Equal("long_context", root.GetProperty("Copilot").GetProperty("ContextTier").GetString());
         Assert.Equal("debug", root.GetProperty("Copilot").GetProperty("LogLevel").GetString());
         Assert.Equal(120, root.GetProperty("Copilot").GetProperty("SessionIdleTimeoutSeconds").GetInt32());
         Assert.Equal("C:\\Users\\me\\.reposyncradar-copilot", root.GetProperty("Copilot").GetProperty("CopilotHome").GetString());
@@ -148,6 +152,22 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
             () => store.SaveAsync(settings, TestContext.Current.CancellationToken));
 
         Assert.Contains("DocsApi.BaseAddress", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaveAsync_Invalid_Copilot_ContextTier_Throws_Validation_Error()
+    {
+        var path = Path.Combine(_tempRoot, "appsettings.local.json");
+        var settings = LocalAppSettings.Default.Clone();
+        settings.Copilot.ContextTier = "huge";
+        var store = new FileLocalAppSettingsStore(path);
+
+        var ex = await Assert.ThrowsAsync<LocalAppSettingsValidationException>(
+            () => store.SaveAsync(settings, TestContext.Current.CancellationToken));
+
+        Assert.Contains("Copilot.ContextTier", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("default", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("long_context", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

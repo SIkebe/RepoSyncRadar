@@ -99,6 +99,14 @@
                     <span>Streaming</span>
                 </label>
                 <label class="local-settings-field">
+                    <span>ContextTier</span>
+                    <select data-testid="settings-copilot-context-tier" @bind:get="settings.Copilot.ContextTier" @bind:set="value => settings.Copilot.ContextTier = NullableStringValue(value)" disabled="@_saving">
+                        <option value="">SDK default (unset)</option>
+                        <option value="default">default</option>
+                        <option value="long_context">long_context</option>
+                    </select>
+                </label>
+                <label class="local-settings-field">
                     <span>LogLevel</span>
                     <input data-testid="settings-copilot-log-level" value="@settings.Copilot.LogLevel" disabled="@_saving" @oninput="e => settings.Copilot.LogLevel = StringValue(e)" />
                 </label>
@@ -344,6 +352,11 @@
     private static string? NullableStringValue(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
+        return NullableStringValue(value);
+    }
+
+    private static string? NullableStringValue(string? value)
+    {
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 

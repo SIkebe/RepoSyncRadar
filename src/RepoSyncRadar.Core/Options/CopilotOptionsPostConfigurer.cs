@@ -3,9 +3,8 @@ using Microsoft.Extensions.Options;
 namespace RepoSyncRadar.Core.Options;
 
 /// <summary>
-/// Normalizes <see cref="CopilotOptions.AllowedUrlHosts"/> and
-/// <see cref="CopilotOptions.OAuthScopes"/> so downstream checks can do plain ordinal
-/// comparisons.
+/// Normalizes Copilot string and list options so downstream checks can do plain ordinal
+/// comparisons and SDK option wiring receives trimmed values.
 /// </summary>
 internal sealed class CopilotOptionsPostConfigurer : IPostConfigureOptions<CopilotOptions>
 {
@@ -20,6 +19,7 @@ internal sealed class CopilotOptionsPostConfigurer : IPostConfigureOptions<Copil
             ? "info"
             : options.LogLevel.Trim().ToLowerInvariant();
 
+        options.ContextTier = NormalizeNullable(options.ContextTier)?.ToLowerInvariant();
         options.CopilotHome = NormalizeNullable(options.CopilotHome);
         options.TelemetryFilePath = NormalizeNullable(options.TelemetryFilePath);
 

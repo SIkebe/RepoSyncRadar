@@ -109,7 +109,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 
 起動後はヘッダー右側の **設定** から、ローカル `appsettings.local.json` の `GitHub` / `DocsApi` / `Copilot` / `DocsRepository` / `Logging` / `Updates` の値を表示・変更できます。保存した内容はローカル設定ファイルに書き戻され、次回起動時に確実に反映されます。インストール版の保存先はアプリ更新で差し替わらない `%LocalAppData%\RepoSyncRadar\appsettings.local.json` です。同じ設定パネルで、直接参照している NuGet パッケージのサードパーティ ライセンスも確認できます。
 
-設定パネルの **Copilot 使用量** では、SDK の usage event / session metrics が返す AI Credits を優先して表示します。SDK が AI Credits を返さず、モデル名と token breakdown だけが得られる場合は、GitHub Docs の [Models and pricing for GitHub Copilot](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing) にある per 1M token 単価から概算します。公式価格表にないモデルは、誤った見積もりを避けるため `credits 未報告` のままにします。
+設定パネルの **Copilot 使用量** では、SDK の usage event / session metrics が返す AI Credits と Premium Request cost を表示します。SDK が AI Credits を返さない場合、アプリ側でモデル別価格から推定せず `credits 未報告` のままにします。実測では `GitHub.Copilot.SDK` 1.0.0 の `Usage.GetMetricsAsync()` から `TotalNanoAiu` とモデル別 `TotalNanoAiu` が取得できることを確認しています。
 
 ### 2.4 起動
 
