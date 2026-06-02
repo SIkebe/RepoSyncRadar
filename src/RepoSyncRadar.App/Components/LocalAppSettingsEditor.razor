@@ -100,7 +100,7 @@
                 </label>
                 <label class="local-settings-field">
                     <span>ContextTier</span>
-                    <select data-testid="settings-copilot-context-tier" value="@settings.Copilot.ContextTier" disabled="@_saving" @onchange="e => settings.Copilot.ContextTier = NullableStringValue(e)">
+                    <select data-testid="settings-copilot-context-tier" @bind:get="settings.Copilot.ContextTier" @bind:set="value => settings.Copilot.ContextTier = NullableStringValue(value)" disabled="@_saving">
                         <option value=""></option>
                         <option value="default">default</option>
                         <option value="long_context">long_context</option>
@@ -352,6 +352,11 @@
     private static string? NullableStringValue(ChangeEventArgs e)
     {
         var value = e.Value?.ToString();
+        return NullableStringValue(value);
+    }
+
+    private static string? NullableStringValue(string? value)
+    {
         return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
