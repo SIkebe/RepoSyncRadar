@@ -84,17 +84,9 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
     }
 
     private static CopilotUsageBillingSource ResolveBillingSource(IEnumerable<CopilotUsageBillingSource> sources)
-    {
-        var effective = sources
-            .Where(static source => source is not CopilotUsageBillingSource.None)
-            .Distinct()
-            .ToArray();
-        return effective.Length switch
-        {
-            0 => CopilotUsageBillingSource.None,
-            _ => CopilotUsageBillingSource.SdkReported,
-        };
-    }
+        => sources.Any(static source => source is not CopilotUsageBillingSource.None)
+            ? CopilotUsageBillingSource.SdkReported
+            : CopilotUsageBillingSource.None;
 
     public void RecordSessionMetrics(CopilotSessionUsageMetrics metrics)
     {
