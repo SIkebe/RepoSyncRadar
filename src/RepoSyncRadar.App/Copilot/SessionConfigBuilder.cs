@@ -7,7 +7,7 @@ using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;
 
-#pragma warning disable GHCP001 // beta.12 exposes permission decisions through experimental RPC types.
+#pragma warning disable GHCP001 // SDK 1.0.0 exposes permission decisions through experimental RPC types.
 
 /// <summary>
 /// Builds <see cref="SessionConfig"/> values for a given <see cref="SessionPurpose"/>.
