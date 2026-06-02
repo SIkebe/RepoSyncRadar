@@ -43,6 +43,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
                 ["GitHub:Repo"] = "docs-from-config",
                 ["GitHub:PullRequestTitleFilter"] = "Repo sync",
                 ["Copilot:DefaultModel"] = "gpt-config",
+                ["Copilot:ContextTier"] = " Long_Context ",
                 ["Copilot:OAuthScopes:0"] = "public_repo",
                 ["DocsRepository:PrewarmOnStartup"] = "true",
                 ["DocsRepository:PreviewEnvironment:PORT"] = "{port}",
@@ -56,6 +57,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("docs-from-config", settings.GitHub.Repo);
         Assert.Equal(8, settings.GitHub.MaxPullRequests);
         Assert.Equal("gpt-config", settings.Copilot.DefaultModel);
+        Assert.Equal("long_context", settings.Copilot.ContextTier);
         Assert.Equal(["docs.github.com", "api.github.com"], settings.Copilot.AllowedUrlHosts);
         Assert.Empty(settings.Copilot.OAuthScopes);
         Assert.Equal(["docs.github.com", "github.com"], settings.WebView.AllowedUrlHosts);

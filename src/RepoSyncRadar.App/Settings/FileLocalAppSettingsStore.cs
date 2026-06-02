@@ -229,7 +229,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             {
                 DefaultModel = GetString(configuration, "Copilot:DefaultModel", defaults.Copilot.DefaultModel),
                 Streaming = GetBool(configuration, "Copilot:Streaming", defaults.Copilot.Streaming),
-                ContextTier = GetNullableString(configuration, "Copilot:ContextTier"),
+                ContextTier = GetNullableString(configuration, "Copilot:ContextTier")?.ToLowerInvariant(),
                 LogLevel = GetString(configuration, "Copilot:LogLevel", defaults.Copilot.LogLevel),
                 SessionIdleTimeoutSeconds = GetNullableInt(configuration, "Copilot:SessionIdleTimeoutSeconds"),
                 CopilotHome = GetNullableString(configuration, "Copilot:CopilotHome"),
