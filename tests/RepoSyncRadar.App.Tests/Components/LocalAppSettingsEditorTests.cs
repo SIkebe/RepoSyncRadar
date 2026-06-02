@@ -53,6 +53,24 @@ public sealed class LocalAppSettingsEditorTests
     }
 
     [Fact]
+    public void Renders_ContextTier_Unset_Option_With_Label()
+    {
+        var settings = LocalAppSettings.Default.Clone();
+        var store = new FakeLocalAppSettingsStore(settings);
+        using var ctx = new BunitContext();
+
+        var cut = ctx.Render<LocalAppSettingsEditor>(
+            parameters => parameters.AddCascadingValue<IServiceProvider>(BuildServices(store)));
+
+        cut.WaitForAssertion(() =>
+        {
+            var contextTier = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-context-tier\"]"));
+            var unsetOption = Assert.Single(contextTier.Options, static option => string.IsNullOrEmpty(option.Value));
+            Assert.Equal("SDK default (unset)", unsetOption.TextContent.Trim());
+        });
+    }
+
+    [Fact]
     public void Save_Writes_Edited_Local_Appsettings()
     {
         var settings = LocalAppSettings.Default.Clone();

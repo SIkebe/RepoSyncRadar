@@ -101,7 +101,7 @@
                 <label class="local-settings-field">
                     <span>ContextTier</span>
                     <select data-testid="settings-copilot-context-tier" @bind:get="settings.Copilot.ContextTier" @bind:set="value => settings.Copilot.ContextTier = NullableStringValue(value)" disabled="@_saving">
-                        <option value=""></option>
+                        <option value="">SDK default (unset)</option>
                         <option value="default">default</option>
                         <option value="long_context">long_context</option>
                     </select>
