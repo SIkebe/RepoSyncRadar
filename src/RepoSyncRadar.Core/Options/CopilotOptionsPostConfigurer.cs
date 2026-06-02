@@ -20,6 +20,7 @@ internal sealed class CopilotOptionsPostConfigurer : IPostConfigureOptions<Copil
             ? "info"
             : options.LogLevel.Trim().ToLowerInvariant();
 
+        options.ContextTier = NormalizeNullable(options.ContextTier)?.ToLowerInvariant();
         options.CopilotHome = NormalizeNullable(options.CopilotHome);
         options.TelemetryFilePath = NormalizeNullable(options.TelemetryFilePath);
 

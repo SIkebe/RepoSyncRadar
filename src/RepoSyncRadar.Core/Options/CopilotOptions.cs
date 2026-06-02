@@ -19,6 +19,10 @@ public sealed class CopilotOptions
     /// <summary>Enable streaming response chunks. Recommended for the UI.</summary>
     public bool Streaming { get; set; } = true;
 
+    /// <summary>Optional SDK context tier override. Use null for SDK/model default behavior.</summary>
+    [RegularExpression("^(default|long_context)$")]
+    public string? ContextTier { get; set; }
+
     /// <summary>Log level passed to the embedded Copilot CLI server.</summary>
     public string LogLevel { get; set; } = "info";
 

@@ -99,6 +99,14 @@
                     <span>Streaming</span>
                 </label>
                 <label class="local-settings-field">
+                    <span>ContextTier</span>
+                    <select data-testid="settings-copilot-context-tier" value="@settings.Copilot.ContextTier" disabled="@_saving" @onchange="e => settings.Copilot.ContextTier = NullableStringValue(e)">
+                        <option value=""></option>
+                        <option value="default">default</option>
+                        <option value="long_context">long_context</option>
+                    </select>
+                </label>
+                <label class="local-settings-field">
                     <span>LogLevel</span>
                     <input data-testid="settings-copilot-log-level" value="@settings.Copilot.LogLevel" disabled="@_saving" @oninput="e => settings.Copilot.LogLevel = StringValue(e)" />
                 </label>

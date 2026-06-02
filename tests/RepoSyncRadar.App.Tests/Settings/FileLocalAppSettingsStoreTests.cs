@@ -84,6 +84,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.GitHub.Repo = "docs";
         settings.GitHub.PullRequestCreatedAtOrAfter = "2026-05-15T00:00:00Z";
         settings.Copilot.DefaultModel = "gpt-5.5";
+        settings.Copilot.ContextTier = " Long_Context ";
         settings.Copilot.LogLevel = " Debug ";
         settings.Copilot.SessionIdleTimeoutSeconds = 120;
         settings.Copilot.CopilotHome = " C:\\Users\\me\\.reposyncradar-copilot ";
@@ -119,6 +120,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("keep", root.GetProperty("GitHub").GetProperty("Unknown").GetString());
         Assert.Equal("github", root.GetProperty("GitHub").GetProperty("Owner").GetString());
         Assert.Equal("gpt-5.5", root.GetProperty("Copilot").GetProperty("DefaultModel").GetString());
+        Assert.Equal("long_context", root.GetProperty("Copilot").GetProperty("ContextTier").GetString());
         Assert.Equal("debug", root.GetProperty("Copilot").GetProperty("LogLevel").GetString());
         Assert.Equal(120, root.GetProperty("Copilot").GetProperty("SessionIdleTimeoutSeconds").GetInt32());
         Assert.Equal("C:\\Users\\me\\.reposyncradar-copilot", root.GetProperty("Copilot").GetProperty("CopilotHome").GetString());

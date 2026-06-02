@@ -7,7 +7,7 @@ using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;
 
-#pragma warning disable GHCP001 // beta.10 exposes permission decisions through experimental RPC types.
+#pragma warning disable GHCP001 // beta.11 exposes permission decisions through experimental RPC types.
 
 /// <summary>
 /// Builds <see cref="SessionConfig"/> values for a given <see cref="SessionPurpose"/>.
@@ -34,6 +34,7 @@ internal static class SessionConfigBuilder
         {
             ClientName = _clientName,
             Model = copilot.DefaultModel,
+            ContextTier = ParseContextTier(copilot.ContextTier),
             Streaming = copilot.Streaming,
             SystemMessage = new SystemMessageConfig
             {
@@ -82,6 +83,15 @@ internal static class SessionConfigBuilder
 
         return config;
     }
+
+    private static ContextTier? ParseContextTier(string? contextTier)
+        => contextTier?.Trim().ToLowerInvariant() switch
+        {
+            null or "" => null,
+            "default" => ContextTier.Default,
+            "long_context" => ContextTier.LongContext,
+            _ => null,
+        };
 
     private static string SystemPromptFor(SessionPurpose purpose) => purpose switch
     {
