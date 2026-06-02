@@ -135,12 +135,8 @@
   <data name="Common.Unreported" xml:space="preserve"><value>Unreported</value></data>
   <data name="Common.Work" xml:space="preserve"><value>Work</value></data>
   <data name="CopilotUsage.AiCreditsUnreported" xml:space="preserve"><value>AI Credits unreported / {0} tokens</value></data>
-  <data name="CopilotUsage.BillingSource.Mixed" xml:space="preserve"><value>Source: mixed SDK-reported and estimated values</value></data>
-  <data name="CopilotUsage.BillingSource.OfficialPricingTable" xml:space="preserve"><value>Source: estimated from GitHub Docs pricing table</value></data>
   <data name="CopilotUsage.BillingSource.SdkReported" xml:space="preserve"><value>Source: SDK-reported values</value></data>
-  <data name="CopilotUsage.BillingSource.SdkTokenDetails" xml:space="preserve"><value>Source: estimated from SDK token details</value></data>
   <data name="CopilotUsage.BillingSource.Unknown" xml:space="preserve"><value>Source: unknown</value></data>
-  <data name="CopilotUsage.EstimatedSuffix" xml:space="preserve"><value> (estimated)</value></data>
   <data name="CopilotUsage.Label.AiCredits" xml:space="preserve"><value>AI Credits</value></data>
   <data name="CopilotUsage.Label.PremiumRequestCost" xml:space="preserve"><value>Premium Request cost</value></data>
   <data name="CopilotUsage.Label.PremiumRequests" xml:space="preserve"><value>Premium Requests</value></data>
@@ -191,7 +187,7 @@
   <data name="ReviewActions.Watch" xml:space="preserve"><value>Watch</value></data>
   <data name="Settings.CopilotUsage" xml:space="preserve"><value>Copilot Usage</value></data>
   <data name="Settings.CopilotUsage.Empty" xml:space="preserve"><value>No Copilot SDK usage has been recorded yet.</value></data>
-  <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits and Premium Request cost prefer SDK usage events and session metrics. If the SDK does not report AI Credits, estimates use the GitHub Docs model pricing table. Prompt text is not stored.</value></data>
+  <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits and Premium Request cost are shown from SDK usage events and session metrics. If the SDK does not report AI Credits, they remain unreported. Prompt text is not stored.</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>Session metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
   <data name="Settings.DefaultTheme" xml:space="preserve"><value>Default Theme</value></data>
   <data name="Settings.Description" xml:space="preserve"><value>Review display language, default theme, app settings, licenses, and ignore rules.</value></data>

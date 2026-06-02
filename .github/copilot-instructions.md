@@ -87,7 +87,7 @@ Use these repository instructions as the starting point. When code or validated 
 - For user-facing sharing drafts, Twitter and customer-facing text must include official `docs.github.com` URLs when a publishable docs URL is known. If Copilot omits the URL, preserve safety by appending it before saving.
 - Commit detail should show the useful first commit message line only. Do not surface `Co-authored-by`, `Signed-off-by`, `Reviewed-by`, or `Acked-by` trailers as prominent UI text.
 - Copilot usage UI must label units explicitly: AI Credits as `credits`, Premium Request cost as `PR`, request counts as `requests`, and token counts as `tokens`.
-- When SDK AI Credits are absent, fall back to the GitHub Docs model pricing table for usage estimates. Unknown models should remain unreported rather than guessed.
+- Copilot usage UI should show AI Credits only from SDK usage events or `Usage.GetMetricsAsync()` session metrics; when SDK AI Credits are absent, leave credits unreported rather than estimating from a model pricing table.
 - For Copilot fallback models, prefer currently supported non-retiring models. Check GitHub Changelog plus the supported-models docs before hardcoding model IDs; avoid `GPT-4.1`, `GPT-5`, `GPT-5.2`, and `GPT-5.2-Codex` as preferred fallbacks because they are retired or scheduled for retirement.
 
 ## Preview And WebView
