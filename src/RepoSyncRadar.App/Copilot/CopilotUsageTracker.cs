@@ -83,13 +83,18 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
         Changed?.Invoke();
     }
 
-    private static CopilotUsageBillingSource ResolveBillingSource(IEnumerable<CopilotUsageBillingSource> sources)
+    internal static CopilotUsageBillingSource ResolveBillingSource(IEnumerable<CopilotUsageBillingSource> sources)
     {
         var hasUnreported = false;
         var hasSdkReported = false;
         foreach (var source in sources)
         {
-            if (source is CopilotUsageBillingSource.SdkReported)
+            if (source is CopilotUsageBillingSource.Mixed)
+            {
+                hasSdkReported = true;
+                hasUnreported = true;
+            }
+            else if (source is CopilotUsageBillingSource.SdkReported)
             {
                 hasSdkReported = true;
             }
@@ -279,7 +284,8 @@ public sealed record CopilotSessionUsageMetrics(
             return totalNanoAiu;
         }
 
-        return null;
+        var modelNanoAiu = ModelMetrics.Sum(static model => model.EffectiveTotalNanoAiu() ?? 0);
+        return modelNanoAiu > 0 ? modelNanoAiu : null;
     }
 
     public double? EffectiveCost()
@@ -301,11 +307,7 @@ public sealed record CopilotSessionUsageMetrics(
         {
             return CopilotUsageBillingSource.SdkReported;
         }
-        if (ModelMetrics.Any(static model => model.BillingSource() is CopilotUsageBillingSource.SdkReported))
-        {
-            return CopilotUsageBillingSource.SdkReported;
-        }
-        return CopilotUsageBillingSource.None;
+        return CopilotUsageTracker.ResolveBillingSource(ModelMetrics.Select(static model => model.BillingSource()));
     }
 }
 

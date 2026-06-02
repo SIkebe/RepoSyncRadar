@@ -273,4 +273,62 @@ public sealed class CopilotUsageTrackerTests
         Assert.Null(snapshot.AiCredits());
         Assert.Equal(CopilotUsageBillingSource.None, snapshot.BillingSource);
     }
+
+    [Fact]
+    public void RecordSessionMetrics_Uses_Model_Level_Sdk_Aiu_When_Total_Is_Missing()
+    {
+        var tracker = new CopilotUsageTracker();
+        tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+            new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            "Triage",
+            "gpt-5",
+            100,
+            10,
+            0,
+            20,
+            0,
+            null,
+            null,
+            1,
+            90,
+            10,
+            [new CopilotModelUsageMetrics("gpt-5", 100, 10, 0, 20, 0, 50_000_000, null, 1)]));
+
+        var snapshot = tracker.GetSnapshot();
+
+        Assert.Equal(50_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(0.05, snapshot.AiCredits());
+        Assert.Equal(CopilotUsageBillingSource.SdkReported, snapshot.BillingSource);
+    }
+
+    [Fact]
+    public void RecordSessionMetrics_Treats_Mixed_Model_Usage_As_Mixed()
+    {
+        var tracker = new CopilotUsageTracker();
+        tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+            new DateTimeOffset(2026, 5, 19, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            "Triage",
+            "gpt-5",
+            150,
+            15,
+            0,
+            0,
+            0,
+            null,
+            null,
+            2,
+            100,
+            10,
+            [
+                new CopilotModelUsageMetrics("gpt-5", 100, 10, 0, 0, 0, 50_000_000, null, 1),
+                new CopilotModelUsageMetrics("gpt-unknown", 50, 5, 0, 0, 0, null, null, 1),
+            ]));
+
+        var snapshot = tracker.GetSnapshot();
+
+        Assert.Equal(50_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(CopilotUsageBillingSource.Mixed, snapshot.BillingSource);
+    }
 }
