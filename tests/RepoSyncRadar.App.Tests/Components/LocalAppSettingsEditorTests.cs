@@ -71,6 +71,25 @@ public sealed class LocalAppSettingsEditorTests
     }
 
     [Fact]
+    public void Renders_PrewarmOnStartup_Checkbox_With_Boolean_Layout_Class()
+    {
+        var store = new FakeLocalAppSettingsStore(LocalAppSettings.Default.Clone());
+        using var ctx = new BunitContext();
+
+        var cut = ctx.Render<LocalAppSettingsEditor>(
+            parameters => parameters.AddCascadingValue<IServiceProvider>(BuildServices(store)));
+
+        cut.WaitForAssertion(() =>
+        {
+            var checkbox = cut.Find("[data-testid='settings-docsrepo-prewarm-on-startup']");
+            var label = checkbox.ParentElement;
+
+            Assert.NotNull(label);
+            Assert.Contains("local-settings-check", label.ClassList);
+        });
+    }
+
+    [Fact]
     public void Save_Writes_Edited_Local_Appsettings()
     {
         var settings = LocalAppSettings.Default.Clone();
