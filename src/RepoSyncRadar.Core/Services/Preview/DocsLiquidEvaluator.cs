@@ -48,7 +48,7 @@ internal static partial class DocsLiquidEvaluator
     [GeneratedRegex(@"\{%-?\s*capture\s+[A-Za-z_][A-Za-z0-9_]*\s*-?%\}(?<content>.*?)\{%-?\s*endcapture\s*-?%\}", RegexOptions.Singleline)]
     private static partial Regex CaptureBlockRegex();
 
-    [GeneratedRegex(@"\{%-?\s*assign\s+[A-Za-z_][A-Za-z0-9_]*\s*=.*?\s*-?%\}", RegexOptions.Singleline)]
+    [GeneratedRegex(@"\{%-?\s*assign\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<expr>.*?)\s*-?%\}", RegexOptions.Singleline)]
     private static partial Regex AssignTagRegex();
 
     // {% data variables.X.Y %} / {% data reusables.X.Y %} / {% data reusables.X.Y+arg %}
@@ -60,12 +60,18 @@ internal static partial class DocsLiquidEvaluator
     private static partial Regex IndentedDataRegex();
 
     // {% for entry in tables.copilot.models-and-pricing %}...{% endfor %}
-    [GeneratedRegex(@"\{%-?\s*for\s+(?<var>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<expr>[A-Za-z0-9_.\-/]+)\s*-?%\}(?<body>.*?)\{%-?\s*endfor\s*-?%\}", RegexOptions.Singleline)]
+    [GeneratedRegex(@"\{%-?\s*for\s+(?<var>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<expr>[^%]+?)\s*-?%\}(?<body>(?:(?!\{%-?\s*for\b).)*?)\{%-?\s*endfor\s*-?%\}", RegexOptions.Singleline)]
     private static partial Regex ForBlockRegex();
 
     // {{ entry.model }} within supported for loops.
     [GeneratedRegex(@"\{\{-?\s*(?<var>[A-Za-z_][A-Za-z0-9_]*)\.(?<key>[A-Za-z0-9_-]+)\s*-?\}\}")]
     private static partial Regex LoopVariableExprRegex();
+
+    [GeneratedRegex(@"\{%-?\s*case\s+(?<expr>.*?)\s*-?%\}(?<body>.*?)\{%-?\s*endcase\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex CaseBlockRegex();
+
+    [GeneratedRegex(@"\{%-?\s*(?<kw>when|else)\b\s*(?<expr>[^%]*?)\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex CaseBranchRegex();
 
     [GeneratedRegex("""^(?<var>[A-Za-z_][A-Za-z0-9_]*)\.(?<key>[A-Za-z0-9_-]+)\s*(?<op>==|!=)\s*(?<quote>["'])(?<value>.*?)\k<quote>$""")]
     private static partial Regex LoopComparisonRegex();
@@ -74,8 +80,11 @@ internal static partial class DocsLiquidEvaluator
     private static partial Regex LoopTruthyRegex();
 
     // {{ variables.X.Y }} / {{ site.data.variables.X.Y }}
-    [GeneratedRegex(@"\{\{-?\s*(?<expr>[A-Za-z0-9_.\-/\[\]]+)\s*-?\}\}")]
+    [GeneratedRegex(@"\{\{-?\s*(?<expr>[^{}]*?)\s*-?\}\}", RegexOptions.Singleline)]
     private static partial Regex VariableExprRegex();
+
+    [GeneratedRegex("""^(?<left>.+?)\s*(?<op><=|>=|==|!=|<|>)\s*(?<right>.+)$""")]
+    private static partial Regex LiquidComparisonRegex();
 
     [GeneratedRegex(@"(\r?\n){3,}")]
     private static partial Regex ExtraEmptyLinesRegex();
@@ -181,27 +190,32 @@ internal static partial class DocsLiquidEvaluator
         });
 
         current = StripNonOutputLiquid(current);
+        var scope = new LiquidScope();
 
         // 2. for / ifversion / if を内側から再帰的に解く。for は data YAML 配列を
         //    簡易展開し、ifversion は version で真評価、if (= 版に依存しない) は
         //    最初の分岐を採用 (保守的)。
         //    variables / reusables の展開で新しい ifversion が現れることがあるため、
         //    反復展開の中でも毎回 ResolveConditionals を通す。
-        current = ResolveForLoops(current, context, version);
-        current = ResolveConditionals(current, version, context.Features);
+        current = ResolveAssignTagsOutsideForBlocks(current, context, scope);
+        current = ResolveForLoops(current, context, version, scope);
+        current = ResolveCaseBlocks(current, context, scope);
+        current = ResolveConditionals(current, context, version, context.Features, scope);
         current = OcticonTagRegex().Replace(current, ResolveOcticonTag);
 
         // 3. variables / reusables を反復展開。
         for (var depth = 0; depth < maxRecursionDepth; depth++)
         {
             var before = current;
-            current = ResolveForLoops(current, context, version);
+            current = ResolveAssignTagsOutsideForBlocks(current, context, scope);
+            current = ResolveForLoops(current, context, version, scope);
             var dataSource = current;
             current = DataTagRegex().Replace(current, m => ResolveDataExpr(m, context, dataSource));
             current = IndentedDataRegex().Replace(current, m => ResolveIndentedDataExpr(m, context));
-            current = VariableExprRegex().Replace(current, m => ResolveDataExpr(m.Groups["expr"].Value, context, m.Value));
-            current = ResolveForLoops(current, context, version);
-            current = ResolveConditionals(current, version, context.Features);
+            current = VariableExprRegex().Replace(current, m => ResolveLiquidVariable(m, context, scope));
+            current = ResolveForLoops(current, context, version, scope);
+            current = ResolveCaseBlocks(current, context, scope);
+            current = ResolveConditionals(current, context, version, context.Features, scope);
             current = OcticonTagRegex().Replace(current, ResolveOcticonTag);
             if (string.Equals(before, current, StringComparison.Ordinal))
             {
@@ -237,8 +251,7 @@ internal static partial class DocsLiquidEvaluator
     private static string StripNonOutputLiquid(string source)
     {
         var current = CommentBlockRegex().Replace(source, string.Empty);
-        current = CaptureBlockRegex().Replace(current, string.Empty);
-        return AssignTagRegex().Replace(current, string.Empty);
+        return CaptureBlockRegex().Replace(current, string.Empty);
     }
 
     private static string ResolveDataExpr(Match match, DocsLiquidContext context, string source)
@@ -286,12 +299,58 @@ internal static partial class DocsLiquidEvaluator
         return expr;
     }
 
-    private static string ResolveForLoops(string source, DocsLiquidContext context, DocsVersion version)
+    private static string ResolveAssignTags(string source, DocsLiquidContext context, LiquidScope scope)
     {
         var current = source;
         for (var safety = 0; safety < _infiniteLoopGuard; safety++)
         {
-            var replaced = ForBlockRegex().Replace(current, m => ResolveForBlock(m, context, version));
+            var m = AssignTagRegex().Match(current);
+            if (!m.Success)
+            {
+                return current;
+            }
+            var name = m.Groups["name"].Value;
+            var expr = NormalizeLiquidTagExpression(m.Groups["expr"].Value);
+            scope.Set(name, EvaluateLiquidExpression(expr, context, scope));
+            current = current[..m.Index] + current[(m.Index + m.Length)..];
+        }
+        return current;
+    }
+
+    private static string NormalizeLiquidTagExpression(string expression)
+    {
+        var trimmed = expression.Trim();
+        return trimmed.Length > 0 && trimmed[^1] == '-' ? trimmed[..^1].TrimEnd() : trimmed;
+    }
+
+    private static string ResolveAssignTagsOutsideForBlocks(string source, DocsLiquidContext context, LiquidScope scope)
+    {
+        var sb = new StringBuilder(source.Length);
+        var cursor = 0;
+        var depth = 0;
+        foreach (Match tag in Regex.Matches(source, @"\{%-?\s*(?<tag>for|endfor)\b.*?-?%\}", RegexOptions.Singleline))
+        {
+            var segment = source[cursor..tag.Index];
+            sb.Append(depth == 0 ? ResolveAssignTags(segment, context, scope) : segment);
+            sb.Append(tag.Value);
+            depth += string.Equals(tag.Groups["tag"].Value, "for", StringComparison.Ordinal) ? 1 : -1;
+            if (depth < 0)
+            {
+                depth = 0;
+            }
+            cursor = tag.Index + tag.Length;
+        }
+        var tail = source[cursor..];
+        sb.Append(depth == 0 ? ResolveAssignTags(tail, context, scope) : tail);
+        return sb.ToString();
+    }
+
+    private static string ResolveForLoops(string source, DocsLiquidContext context, DocsVersion version, LiquidScope scope)
+    {
+        var current = source;
+        for (var safety = 0; safety < _infiniteLoopGuard; safety++)
+        {
+            var replaced = ForBlockRegex().Replace(current, m => ResolveForBlock(m, context, version, scope));
             if (string.Equals(replaced, current, StringComparison.Ordinal))
             {
                 break;
@@ -301,40 +360,120 @@ internal static partial class DocsLiquidEvaluator
         return current;
     }
 
-    private static string ResolveForBlock(Match match, DocsLiquidContext context, DocsVersion version)
+    private static string ResolveForBlock(Match match, DocsLiquidContext context, DocsVersion version, LiquidScope scope)
     {
         var variableName = match.Groups["var"].Value;
-        var sequenceKey = NormalizeDataExpr(match.Groups["expr"].Value);
-        if (!context.DataSequences.TryGetValue(sequenceKey, out var rows))
+        var sequenceExpr = match.Groups["expr"].Value;
+        var sequenceValue = EvaluateLiquidExpression(sequenceExpr, context, scope);
+        var items = EnumerateForItems(sequenceValue).ToArray();
+        if (items.Length == 0)
         {
-            return match.Value;
+            var sequenceKey = NormalizeDataExpr(sequenceExpr);
+            if (!context.DataSequences.TryGetValue(sequenceKey, out var rows))
+            {
+                return IsKnownOptionalPreviewLoop(sequenceExpr) ? string.Empty : match.Value;
+            }
+            items = rows.Select(RowToLiquidObject).ToArray();
         }
 
         var body = match.Groups["body"].Value;
-        var sb = new StringBuilder(body.Length * Math.Min(rows.Count, 4));
-        foreach (var row in rows)
+        var sb = new StringBuilder(body.Length * Math.Min(items.Length, 4));
+        foreach (var item in items)
         {
-            var scope = new LoopScope(variableName, row);
-            var rendered = ResolveConditionals(body, version, context.Features, scope);
-            rendered = ResolveLoopVariables(rendered, scope);
+            var childScope = new LiquidScope(scope);
+            childScope.Set(variableName, item);
+            var rendered = ResolveAssignTagsOutsideForBlocks(body, context, childScope);
+            rendered = ResolveForLoops(rendered, context, version, childScope);
+            rendered = ResolveAssignTags(rendered, context, childScope);
+            EnsureLanguageSupportLevel(childScope);
+            rendered = ResolveCaseBlocks(rendered, context, childScope);
+            rendered = ResolveConditionals(rendered, context, version, context.Features, childScope);
+            rendered = ResolveLiquidVariables(rendered, context, childScope);
+            rendered = ReplaceLanguageSupportDynamicVariable(rendered, childScope);
             sb.Append(rendered);
         }
         return sb.ToString();
     }
 
-    private static string ResolveLoopVariables(string source, LoopScope scope)
-        => LoopVariableExprRegex().Replace(source, m =>
+    private static bool IsKnownOptionalPreviewLoop(string expression)
+        => expression.Contains("ideEntry.", StringComparison.Ordinal)
+            || expression.Contains("groupVersions", StringComparison.Ordinal);
+
+    private static void EnsureLanguageSupportLevel(LiquidScope scope)
+    {
+        if ((scope.TryGet("supportLevel", out var existing) && IsTruthy(existing))
+            || !scope.TryGet("languageData", out var languageData)
+            || !scope.TryGet("featureKey", out var featureKey)
+            || languageData is not DocsLiquidObjectValue languageDataObject
+            || !languageDataObject.Properties.TryGetValue(RenderLiquidValue(featureKey).Trim(), out var supportLevel))
         {
-            if (!string.Equals(m.Groups["var"].Value, scope.Name, StringComparison.Ordinal))
-            {
-                return m.Value;
-            }
+            return;
+        }
+        scope.Set("supportLevel", supportLevel);
+    }
 
-            var key = m.Groups["key"].Value;
-            return scope.Values.TryGetValue(key, out var value) ? value : string.Empty;
-        });
+    private static string ReplaceLanguageSupportDynamicVariable(string source, LiquidScope scope)
+    {
+        if (!source.Contains("languageData[featureKey]", StringComparison.Ordinal)
+            || !scope.TryGet("languageData", out var languageData)
+            || !scope.TryGet("featureKey", out var featureKey)
+            || languageData is not DocsLiquidObjectValue languageDataObject
+            || !languageDataObject.Properties.TryGetValue(RenderLiquidValue(featureKey).Trim(), out var supportLevel))
+        {
+            return source;
+        }
+        return source.Replace("{{ languageData[featureKey] }}", RenderLiquidValue(supportLevel), StringComparison.Ordinal);
+    }
 
-    private static bool TryEvaluateLoopCondition(string condition, LoopScope? scope, out bool result)
+    private static DocsLiquidDataValue RowToLiquidObject(IReadOnlyDictionary<string, string> row)
+        => new DocsLiquidObjectValue(row.ToDictionary(
+            static pair => pair.Key,
+            static pair => (DocsLiquidDataValue)new DocsLiquidScalarValue(pair.Value),
+            StringComparer.Ordinal));
+
+    private static IEnumerable<DocsLiquidDataValue> EnumerateForItems(DocsLiquidDataValue value)
+        => value switch
+        {
+            DocsLiquidSequenceValue sequence => sequence.Items,
+            DocsLiquidObjectValue obj => obj.Properties.Select(static pair =>
+                (DocsLiquidDataValue)new DocsLiquidSequenceValue([
+                    new DocsLiquidScalarValue(pair.Key),
+                    pair.Value,
+                ])),
+            _ => [],
+        };
+
+    private static string ResolveLiquidVariables(string source, DocsLiquidContext context, LiquidScope scope)
+        => VariableExprRegex().Replace(source, m => ResolveLiquidVariable(m, context, scope));
+
+    private static string ResolveLiquidVariable(Match match, DocsLiquidContext context, LiquidScope scope)
+    {
+        var expr = NormalizeLiquidTagExpression(match.Groups["expr"].Value);
+        if (expr.Contains("languageData", StringComparison.Ordinal)
+            && expr.Contains("featureKey", StringComparison.Ordinal)
+            && scope.TryGet("languageData", out var languageData)
+            && scope.TryGet("featureKey", out var featureKey)
+            && languageData is DocsLiquidObjectValue languageDataObject
+            && languageDataObject.Properties.TryGetValue(RenderLiquidValue(featureKey).Trim(), out var supportLevel))
+        {
+            return RenderLiquidValue(supportLevel);
+        }
+        if (TryResolveScopedDynamicBracket(expr, scope, out var dynamicValue))
+        {
+            return RenderLiquidValue(dynamicValue);
+        }
+        var value = EvaluateLiquidExpression(expr, context, scope);
+        var rendered = RenderLiquidValue(value);
+        if (rendered.Length == 0 && (scope.Contains(expr)
+            || expr.Contains("languageData", StringComparison.Ordinal)
+            || expr.StartsWith("enterpriseServerReleases.", StringComparison.Ordinal)))
+        {
+            return string.Empty;
+        }
+        return rendered.Length == 0 ? ResolveDataExpr(expr, context, match.Value) : rendered;
+    }
+
+    private static bool TryEvaluateLiquidCondition(string condition, DocsLiquidContext context, LiquidScope? scope, out bool result)
     {
         result = false;
         if (scope is null)
@@ -343,27 +482,49 @@ internal static partial class DocsLiquidEvaluator
         }
 
         var trimmed = condition.Trim();
-        var comparison = LoopComparisonRegex().Match(trimmed);
-        if (comparison.Success && string.Equals(comparison.Groups["var"].Value, scope.Name, StringComparison.Ordinal))
+        var comparison = LiquidComparisonRegex().Match(trimmed);
+        if (comparison.Success)
         {
-            var key = comparison.Groups["key"].Value;
-            var expected = comparison.Groups["value"].Value;
-            var actual = scope.Values.TryGetValue(key, out var value) ? value : string.Empty;
-            var isEqual = string.Equals(actual, expected, StringComparison.Ordinal);
-            result = comparison.Groups["op"].Value == "==" ? isEqual : !isEqual;
+            var left = RenderLiquidValue(EvaluateLiquidExpression(comparison.Groups["left"].Value, context, scope));
+            var right = RenderLiquidValue(EvaluateLiquidExpression(comparison.Groups["right"].Value, context, scope));
+            var order = CompareLiquidScalars(left, right);
+            result = comparison.Groups["op"].Value switch
+            {
+                "<" => order < 0,
+                "<=" => order <= 0,
+                ">" => order > 0,
+                ">=" => order >= 0,
+                "==" => string.Equals(left, right, StringComparison.Ordinal),
+                "!=" => !string.Equals(left, right, StringComparison.Ordinal),
+                _ => false,
+            };
             return true;
         }
 
-        var truthy = LoopTruthyRegex().Match(trimmed);
-        if (truthy.Success && string.Equals(truthy.Groups["var"].Value, scope.Name, StringComparison.Ordinal))
-        {
-            var key = truthy.Groups["key"].Value;
-            result = scope.Values.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value);
-            return true;
-        }
-
-        return false;
+        var value = EvaluateLiquidExpression(trimmed, context, scope);
+        result = IsTruthy(value);
+        return !ReferenceEquals(value, DocsLiquidDataValue.EmptyString) || scope.Contains(trimmed) || context.DataObjects.ContainsKey(trimmed);
     }
+
+    private static int CompareLiquidScalars(string left, string right)
+    {
+        if (long.TryParse(left, NumberStyles.Integer, CultureInfo.InvariantCulture, out var leftNumber)
+            && long.TryParse(right, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rightNumber))
+        {
+            return leftNumber.CompareTo(rightNumber);
+        }
+        return string.Compare(left, right, StringComparison.Ordinal);
+    }
+
+    private static bool IsTruthy(DocsLiquidDataValue value)
+        => value switch
+        {
+            DocsLiquidScalarValue scalar => !string.IsNullOrWhiteSpace(scalar.Value)
+                && !string.Equals(scalar.Value, "false", StringComparison.OrdinalIgnoreCase),
+            DocsLiquidSequenceValue sequence => sequence.Items.Count > 0,
+            DocsLiquidObjectValue obj => obj.Properties.Count > 0,
+            _ => false,
+        };
 
     private static string ApplyDataTagContext(Match match, string source, string text)
     {
@@ -646,7 +807,323 @@ internal static partial class DocsLiquidEvaluator
     [GeneratedRegex(@"[^a-z0-9]+", RegexOptions.IgnoreCase)]
     private static partial Regex NonAlphanumericRegex();
 
-    private sealed record LoopScope(string Name, IReadOnlyDictionary<string, string> Values);
+    private static string ResolveCaseBlocks(string source, DocsLiquidContext context, LiquidScope scope)
+        => CaseBlockRegex().Replace(source, m => ResolveCaseBlock(m, context, scope));
+
+    private static string ResolveCaseBlock(Match match, DocsLiquidContext context, LiquidScope scope)
+    {
+        var value = RenderLiquidValue(EvaluateLiquidExpression(match.Groups["expr"].Value, context, scope));
+        var body = match.Groups["body"].Value;
+        var branches = CaseBranchRegex().Matches(body);
+        for (var i = 0; i < branches.Count; i++)
+        {
+            var branch = branches[i];
+            var branchStart = branch.Index + branch.Length;
+            var branchEnd = i + 1 < branches.Count ? branches[i + 1].Index : body.Length;
+            var branchBody = body[branchStart..branchEnd];
+            if (string.Equals(branch.Groups["kw"].Value, "else", StringComparison.Ordinal))
+            {
+                return branchBody;
+            }
+
+            var expected = RenderLiquidValue(EvaluateLiquidExpression(branch.Groups["expr"].Value, context, scope));
+            if (string.Equals(value, expected, StringComparison.Ordinal))
+            {
+                return branchBody;
+            }
+        }
+        return string.Empty;
+    }
+
+    private static DocsLiquidDataValue EvaluateLiquidExpression(string expression, DocsLiquidContext context, LiquidScope scope)
+    {
+        var parts = SplitLiquidFilters(expression);
+        var value = EvaluateLiquidPrimary(parts[0], context, scope);
+        foreach (var filter in parts.Skip(1))
+        {
+            value = ApplyLiquidFilter(value, filter, context, scope);
+        }
+        return value;
+    }
+
+    private static List<string> SplitLiquidFilters(string expression)
+    {
+        var parts = new List<string>();
+        var start = 0;
+        var quote = '\0';
+        for (var i = 0; i < expression.Length; i++)
+        {
+            var ch = expression[i];
+            if (quote != '\0')
+            {
+                if (ch == quote)
+                {
+                    quote = '\0';
+                }
+                continue;
+            }
+            if (ch is '\'' or '"')
+            {
+                quote = ch;
+                continue;
+            }
+            if (ch == '|')
+            {
+                parts.Add(expression[start..i].Trim());
+                start = i + 1;
+            }
+        }
+        parts.Add(expression[start..].Trim());
+        return parts;
+    }
+
+    private static DocsLiquidDataValue ApplyLiquidFilter(
+        DocsLiquidDataValue value,
+        string filter,
+        DocsLiquidContext context,
+        LiquidScope scope)
+    {
+        var trimmed = filter.Trim();
+        if (string.Equals(trimmed, "first", StringComparison.Ordinal))
+        {
+            return value is DocsLiquidSequenceValue { Items.Count: > 0 } sequence
+                ? sequence.Items[0]
+                : DocsLiquidDataValue.EmptyString;
+        }
+        if (trimmed.StartsWith("default:", StringComparison.Ordinal))
+        {
+            return IsTruthy(value)
+                ? value
+                : EvaluateLiquidExpression(trimmed["default:".Length..], context, scope);
+        }
+        if (trimmed.StartsWith("date:", StringComparison.Ordinal))
+        {
+            var format = UnquoteLiquidString(trimmed["date:".Length..].Trim());
+            var rendered = RenderLiquidValue(value);
+            if (string.Equals(format, "%s", StringComparison.Ordinal))
+            {
+                if (string.Equals(rendered, "now", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new DocsLiquidScalarValue(DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+                }
+                if (DateTimeOffset.TryParse(rendered, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed))
+                {
+                    return new DocsLiquidScalarValue(parsed.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+                }
+            }
+        }
+        return value;
+    }
+
+    private static DocsLiquidDataValue EvaluateLiquidPrimary(string expression, DocsLiquidContext context, LiquidScope scope)
+    {
+        var trimmed = expression.Trim();
+        if (trimmed.Length == 0)
+        {
+            return DocsLiquidDataValue.EmptyString;
+        }
+        if (IsQuotedLiquidString(trimmed))
+        {
+            return new DocsLiquidScalarValue(UnquoteLiquidString(trimmed));
+        }
+        if (long.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+        {
+            return new DocsLiquidScalarValue(trimmed);
+        }
+        if (scope.TryGet(trimmed, out var scopedValue))
+        {
+            return scopedValue;
+        }
+        if (TryResolveScopedDynamicBracket(trimmed, scope, out var dynamicValue))
+        {
+            return dynamicValue;
+        }
+        if (context.DataObjects.TryGetValue(trimmed, out var dataObject))
+        {
+            return dataObject;
+        }
+        if (TryResolveLiquidPath(trimmed, context, scope, out var pathValue))
+        {
+            return pathValue;
+        }
+        var dataResolved = ResolveDataExpr(trimmed, context, string.Empty);
+        return dataResolved.Length > 0 ? new DocsLiquidScalarValue(dataResolved) : DocsLiquidDataValue.EmptyString;
+    }
+
+    private static bool TryResolveScopedDynamicBracket(string expression, LiquidScope scope, out DocsLiquidDataValue value)
+    {
+        value = DocsLiquidDataValue.EmptyString;
+        var trimmed = expression.Trim();
+        var open = trimmed.IndexOf('[', StringComparison.Ordinal);
+        var close = trimmed.IndexOf(']', open + 1);
+        if (open <= 0 || close <= open + 1 || close != trimmed.Length - 1)
+        {
+            return false;
+        }
+
+        var rootName = trimmed[..open].Trim();
+        var keyName = trimmed[(open + 1)..close].Trim();
+        if (!scope.TryGet(rootName, out var root) || !scope.TryGet(keyName, out var keyValue))
+        {
+            return false;
+        }
+        return TryGetObjectProperty(root, RenderLiquidValue(keyValue).Trim(), out value);
+    }
+
+    private static bool TryResolveLiquidPath(string expression, DocsLiquidContext context, LiquidScope scope, out DocsLiquidDataValue value)
+    {
+        value = DocsLiquidDataValue.EmptyString;
+        if (!TryGetLiquidPathRoot(expression, context, scope, out var rootName, out value))
+        {
+            return false;
+        }
+
+        var index = rootName.Length;
+        while (index < expression.Length)
+        {
+            if (expression[index] == '.')
+            {
+                index++;
+                var start = index;
+                while (index < expression.Length && expression[index] is not '.' and not '[')
+                {
+                    index++;
+                }
+                if (!TryGetObjectProperty(value, expression[start..index], out value))
+                {
+                    return false;
+                }
+                continue;
+            }
+            if (expression[index] == '[')
+            {
+                var end = expression.IndexOf(']', index + 1);
+                if (end < 0)
+                {
+                    return false;
+                }
+                var accessor = expression[(index + 1)..end].Trim();
+                if (!TryApplyBracketAccessor(value, accessor, context, scope, out value))
+                {
+                    return false;
+                }
+                index = end + 1;
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private static bool TryGetLiquidPathRoot(
+        string expression,
+        DocsLiquidContext context,
+        LiquidScope scope,
+        out string rootName,
+        out DocsLiquidDataValue value)
+    {
+        foreach (var key in context.DataObjects.Keys.OrderByDescending(static key => key.Length))
+        {
+            if (expression.Length == key.Length || (expression.StartsWith(key, StringComparison.Ordinal) && expression[key.Length] is '.' or '['))
+            {
+                rootName = key;
+                value = context.DataObjects[key];
+                return true;
+            }
+        }
+
+        var end = expression.IndexOfAny(['.', '[']);
+        rootName = end < 0 ? expression : expression[..end];
+        return scope.TryGet(rootName, out value!);
+    }
+
+    private static bool TryApplyBracketAccessor(
+        DocsLiquidDataValue source,
+        string accessor,
+        DocsLiquidContext context,
+        LiquidScope scope,
+        out DocsLiquidDataValue value)
+    {
+        value = DocsLiquidDataValue.EmptyString;
+        string key;
+        if (IsQuotedLiquidString(accessor))
+        {
+            key = UnquoteLiquidString(accessor);
+        }
+        else if (scope.TryGet(accessor, out var scopedAccessor))
+        {
+            key = RenderLiquidValue(scopedAccessor);
+        }
+        else
+        {
+            key = RenderLiquidValue(EvaluateLiquidExpression(accessor, context, scope));
+        }
+        if (source is DocsLiquidSequenceValue sequence && int.TryParse(key, NumberStyles.Integer, CultureInfo.InvariantCulture, out var index))
+        {
+            if (index >= 0 && index < sequence.Items.Count)
+            {
+                value = sequence.Items[index];
+                return true;
+            }
+            return false;
+        }
+        return TryGetObjectProperty(source, key, out value);
+    }
+
+    private static bool TryGetObjectProperty(DocsLiquidDataValue source, string key, out DocsLiquidDataValue value)
+    {
+        value = DocsLiquidDataValue.EmptyString;
+        if (source is DocsLiquidObjectValue obj && obj.Properties.TryGetValue(key, out value!))
+        {
+            return true;
+        }
+        return false;
+    }
+
+    private static string RenderLiquidValue(DocsLiquidDataValue value)
+        => value switch
+        {
+            DocsLiquidScalarValue scalar => scalar.Value,
+            DocsLiquidSequenceValue sequence => string.Join(", ", sequence.Items.Select(RenderLiquidValue)),
+            _ => string.Empty,
+        };
+
+    private static bool IsQuotedLiquidString(string value)
+        => value.Length >= 2 && ((value[0] == '\'' && value[^1] == '\'') || (value[0] == '"' && value[^1] == '"'));
+
+    private static string UnquoteLiquidString(string value)
+        => IsQuotedLiquidString(value.Trim()) ? value.Trim()[1..^1] : value.Trim();
+
+    private sealed class LiquidScope
+    {
+        private readonly Dictionary<string, DocsLiquidDataValue> _values = new(StringComparer.Ordinal);
+        private readonly LiquidScope? _parent;
+
+        public LiquidScope(LiquidScope? parent = null)
+        {
+            _parent = parent;
+        }
+
+        public void Set(string name, DocsLiquidDataValue value)
+            => _values[name] = value;
+
+        public bool Contains(string name)
+            => _values.ContainsKey(name) || (_parent?.Contains(name) ?? false);
+
+        public bool TryGet(string name, out DocsLiquidDataValue value)
+        {
+            if (_values.TryGetValue(name, out value!))
+            {
+                return true;
+            }
+            if (_parent is not null)
+            {
+                return _parent.TryGet(name, out value!);
+            }
+            value = DocsLiquidDataValue.EmptyString;
+            return false;
+        }
+    }
 
     private static string IndentLines(string content, int spaces)
     {
@@ -685,9 +1162,10 @@ internal static partial class DocsLiquidEvaluator
 
     private static string ResolveConditionals(
         string source,
+        DocsLiquidContext context,
         DocsVersion version,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features,
-        LoopScope? scope = null)
+        LiquidScope? scope = null)
     {
         var current = source;
         for (var safety = 0; safety < _infiniteLoopGuard; safety++)
@@ -697,7 +1175,7 @@ internal static partial class DocsLiquidEvaluator
                 var tag = m.Groups["tag"].Value;
                 var cond = m.Groups["cond"].Value;
                 var body = m.Groups["body"].Value;
-                return EvaluateBlock(tag, cond, body, version, features, scope);
+                return EvaluateBlock(tag, cond, body, context, version, features, scope);
             });
             if (string.Equals(replaced, current, StringComparison.Ordinal))
             {
@@ -717,9 +1195,10 @@ internal static partial class DocsLiquidEvaluator
         string tag,
         string cond,
         string body,
+        DocsLiquidContext context,
         DocsVersion version,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features,
-        LoopScope? scope)
+        LiquidScope? scope)
     {
         var isVersion = string.Equals(tag, "ifversion", StringComparison.Ordinal);
 
@@ -727,12 +1206,12 @@ internal static partial class DocsLiquidEvaluator
         var separators = BranchSeparatorRegex().Matches(body);
         if (separators.Count == 0)
         {
-            return EvaluateCondition(cond, isVersion, version, features, scope) ? body : string.Empty;
+            return EvaluateCondition(cond, isVersion, context, version, features, scope) ? body : string.Empty;
         }
 
         // 0 番目 = if 本体 (条件: cond)
         var firstBranchBody = body[..separators[0].Index];
-        if (EvaluateCondition(cond, isVersion, version, features, scope))
+        if (EvaluateCondition(cond, isVersion, context, version, features, scope))
         {
             return firstBranchBody;
         }
@@ -751,7 +1230,7 @@ internal static partial class DocsLiquidEvaluator
             {
                 return branchBody;
             }
-            if (EvaluateCondition(branchCond, isVersion, version, features, scope))
+            if (EvaluateCondition(branchCond, isVersion, context, version, features, scope))
             {
                 return branchBody;
             }
@@ -763,15 +1242,16 @@ internal static partial class DocsLiquidEvaluator
     private static bool EvaluateCondition(
         string condition,
         bool isVersion,
+        DocsLiquidContext context,
         DocsVersion version,
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features,
-        LoopScope? scope)
+        LiquidScope? scope)
     {
         if (isVersion)
         {
             return VersionExpressionEvaluator.Evaluate(condition, version, features);
         }
-        if (TryEvaluateLoopCondition(condition, scope, out var loopConditionResult))
+        if (TryEvaluateLiquidCondition(condition, context, scope, out var loopConditionResult))
         {
             return loopConditionResult;
         }

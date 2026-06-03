@@ -44,6 +44,19 @@ public sealed class DocsLiquidEvaluatorTests
                 [key] = rows,
             });
 
+    private static DocsLiquidContext WithDataObject(string key, DocsLiquidDataValue value)
+        => new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal))
+        {
+            DataObjects = new Dictionary<string, DocsLiquidDataValue>(StringComparer.Ordinal)
+            {
+                [key] = value,
+            },
+        };
+
     [Fact]
     public void Returns_Empty_For_Null_Input()
     {
@@ -261,6 +274,81 @@ public sealed class DocsLiquidEvaluatorTests
         Assert.DoesNotContain("{% for", result, StringComparison.Ordinal);
         Assert.DoesNotContain("{{ entry.", result, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Expands_DataObject_Mapping_ForLoops_With_Assign_And_Case()
+    {
+        var features = Obj(
+            ("copilot", Obj(
+                ("name", Scalar("GitHub Copilot")),
+                ("link", Scalar("/copilot")),
+                ("fptAndGhec", Scalar("true")))),
+            ("packages", Obj(
+                ("name", Scalar("Packages")),
+                ("link", Scalar("/packages")),
+                ("fptAndGhec", Scalar("false")))));
+        var languages = Obj(
+            ("C#", Obj(
+                ("copilot", Scalar("supported")),
+                ("packages", Scalar("dotnet")))));
+        var context = WithDataObject(
+            "tables.supported-code-languages",
+            Obj(("features", features), ("languages", languages)));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            """
+            | Language{%- for featureEntry in tables.supported-code-languages.features %}{%- assign featureData = featureEntry[1] %}{%- if featureData.fptAndGhec %} | [{{ featureData.name }}]({{ featureData.link }}){%- endif %}{%- endfor %} |
+            {%- for languageEntry in tables.supported-code-languages.languages %}
+            {%- assign language = languageEntry[0] %}
+            {%- assign languageData = languageEntry[1] %}
+            | {{ language }}{%- for featureEntry in tables.supported-code-languages.features -%}{%- assign featureKey = featureEntry[0] -%}{%- assign featureData = featureEntry[1] -%}{%- if featureData.fptAndGhec -%}{%- assign supportLevel = languageData[featureKey] %} | {%- case supportLevel -%}{%- when "supported" %}YES{%- when "not-supported" %}NO{%- else %}{{ supportLevel }}{%- endcase -%}{%- endif -%}{%- endfor %} |
+            {%- endfor %}
+            """,
+            context);
+
+        Assert.Contains("[GitHub Copilot](/copilot)", result, StringComparison.Ordinal);
+        Assert.Contains("| C# |", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% for", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% case", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{ featureData", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{ supportLevel", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{ languageData", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Expands_EnterpriseServerReleases_Style_Object_Access()
+    {
+        var context = WithDataObject(
+            "enterpriseServerReleases",
+            Obj(
+                ("supported", Seq(Scalar("3.21"))),
+                ("dates", Obj(
+                    ("3.21", Obj(
+                        ("displayCandidateDate", Scalar("2026-01-01")),
+                        ("displayReleaseDate", Scalar("2026-02-01")),
+                        ("deprecationDate", Scalar("2027-02-01"))))))));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            """
+            {%- for version in enterpriseServerReleases.supported %}
+            {%- assign currentDate = 'now' | date: '%s' %}
+            {%- assign deprecationDate = enterpriseServerReleases.dates[version].deprecationDate | date: '%s' %}
+            | {{version}} | {{enterpriseServerReleases.dates[version].displayCandidateDate}} | {{enterpriseServerReleases.dates[version].displayReleaseDate}} | {{enterpriseServerReleases.dates[version].deprecationDate}} | {% if currentDate < deprecationDate %}supported{% else %}unsupported{% endif %} |
+            {%- endfor %}
+            """,
+            context);
+
+        Assert.Contains("| 3.21 | 2026-01-01 | 2026-02-01 | 2027-02-01 | supported |", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("enterpriseServerReleases", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% for", result, StringComparison.Ordinal);
+    }
+
+    private static DocsLiquidScalarValue Scalar(string value) => new(value);
+
+    private static DocsLiquidSequenceValue Seq(params DocsLiquidDataValue[] items) => new(items);
+
+    private static DocsLiquidObjectValue Obj(params (string Key, DocsLiquidDataValue Value)[] values)
+        => new(values.ToDictionary(static pair => pair.Key, static pair => pair.Value, StringComparer.Ordinal));
 
     [Fact]
     public void Renders_Octicon_Tags_As_Primer_Svg()
