@@ -211,7 +211,8 @@ html, body {
 
 .sidebar-auth-state,
 .sidebar-auth-login,
-.sidebar-auth-error {
+.sidebar-auth-error,
+.sidebar-auth-hint {
     font-size: 0.78rem;
     line-height: 1.25;
     max-width: 100%;
@@ -238,6 +239,10 @@ html, body {
 .sidebar-auth-login {
     color: var(--radar-muted-fg, #57606a);
     font-weight: 600;
+}
+
+.sidebar-auth-hint {
+    color: var(--radar-muted-fg, #57606a);
 }
 
 .sidebar-auth-button {

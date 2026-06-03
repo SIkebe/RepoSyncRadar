@@ -176,6 +176,24 @@ public class SidebarTests
     }
 
     [Fact]
+    public void Sidebar_Footer_Renders_Config_Hint_When_Auth_Is_NotConfigured()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.NotConfigured));
+        var sp = BuildServices(repo, session);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<Sidebar>(parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
+
+        Assert.Equal("NotConfigured", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
+        Assert.Contains("OAuth Client ID", cut.Find("[data-testid=\"sidebar-auth-config-hint\"]").TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(cut.FindAll("[data-testid=\"sidebar-auth-signin\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"sidebar-auth-signout\"]"));
+    }
+
+    [Fact]
     public void Sidebar_SignIn_Refreshes_Account_State_And_Notifies_Workbench()
     {
         var repo = BuildEmptyCountsRepository();
