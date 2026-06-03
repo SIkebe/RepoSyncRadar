@@ -63,21 +63,11 @@ internal static partial class DocsLiquidEvaluator
     [GeneratedRegex(@"\{%-?\s*for\s+(?<var>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<expr>[^%]+?)\s*-?%\}(?<body>(?:(?!\{%-?\s*for\b).)*?)\{%-?\s*endfor\s*-?%\}", RegexOptions.Singleline)]
     private static partial Regex ForBlockRegex();
 
-    // {{ entry.model }} within supported for loops.
-    [GeneratedRegex(@"\{\{-?\s*(?<var>[A-Za-z_][A-Za-z0-9_]*)\.(?<key>[A-Za-z0-9_-]+)\s*-?\}\}")]
-    private static partial Regex LoopVariableExprRegex();
-
     [GeneratedRegex(@"\{%-?\s*case\s+(?<expr>.*?)\s*-?%\}(?<body>.*?)\{%-?\s*endcase\s*-?%\}", RegexOptions.Singleline)]
     private static partial Regex CaseBlockRegex();
 
     [GeneratedRegex(@"\{%-?\s*(?<kw>when|else)\b\s*(?<expr>[^%]*?)\s*-?%\}", RegexOptions.Singleline)]
     private static partial Regex CaseBranchRegex();
-
-    [GeneratedRegex("""^(?<var>[A-Za-z_][A-Za-z0-9_]*)\.(?<key>[A-Za-z0-9_-]+)\s*(?<op>==|!=)\s*(?<quote>["'])(?<value>.*?)\k<quote>$""")]
-    private static partial Regex LoopComparisonRegex();
-
-    [GeneratedRegex(@"^(?<var>[A-Za-z_][A-Za-z0-9_]*)\.(?<key>[A-Za-z0-9_-]+)$")]
-    private static partial Regex LoopTruthyRegex();
 
     // {{ variables.X.Y }} / {{ site.data.variables.X.Y }}
     [GeneratedRegex(@"\{\{-?\s*(?<expr>[^{}]*?)\s*-?\}\}", RegexOptions.Singleline)]
@@ -1023,14 +1013,25 @@ internal static partial class DocsLiquidEvaluator
         out string rootName,
         out DocsLiquidDataValue value)
     {
-        foreach (var key in context.DataObjects.Keys.OrderByDescending(static key => key.Length))
+        var matchedKey = string.Empty;
+        foreach (var key in context.DataObjects.Keys)
         {
+            if (key.Length <= matchedKey.Length)
+            {
+                continue;
+            }
+
             if (expression.Length == key.Length || (expression.StartsWith(key, StringComparison.Ordinal) && expression[key.Length] is '.' or '['))
             {
-                rootName = key;
-                value = context.DataObjects[key];
-                return true;
+                matchedKey = key;
             }
+        }
+
+        if (matchedKey.Length > 0)
+        {
+            rootName = matchedKey;
+            value = context.DataObjects[matchedKey];
+            return true;
         }
 
         var end = expression.IndexOfAny(['.', '[']);
