@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json;
 using System.Text;
 using System.Text.RegularExpressions;
 using YamlDotNet.RepresentationModel;
@@ -54,6 +55,9 @@ internal static partial class DocsLiquidContextLoader
     [GeneratedRegex(@"\{%-?\s*for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\s+(?<expr>[A-Za-z0-9_.\-/_]+)\s*-?%\}", RegexOptions.IgnoreCase)]
     private static partial Regex DataSequenceReferenceRegex();
 
+    [GeneratedRegex(@"\b(?:tables\.[A-Za-z0-9_.\-/\[\]""' ]+|enterpriseServerReleases\b)", RegexOptions.IgnoreCase)]
+    private static partial Regex DataObjectReferenceRegex();
+
     [GeneratedRegex(@"\{%-?\s*data\s+variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+)\s*-?%\}", RegexOptions.IgnoreCase)]
     private static partial Regex DataVariableReferenceRegex();
 
@@ -79,12 +83,16 @@ internal static partial class DocsLiquidContextLoader
         var reusables = await LoadReusablesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
         var pageTitles = await LoadPageTitlesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
         var dataSequences = await LoadDataSequencesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
+        var dataObjects = await LoadDataObjectsAsync(worktreePath, cancellationToken).ConfigureAwait(false);
         var features = await LoadFeaturesAsync(worktreePath, cancellationToken).ConfigureAwait(false);
-        if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0 && dataSequences.Count == 0 && features.Count == 0)
+        if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0 && dataSequences.Count == 0 && dataObjects.Count == 0 && features.Count == 0)
         {
             return DocsLiquidContext.Empty;
         }
-        return new DocsLiquidContext(variables, reusables, pageTitles, dataSequences, features);
+        return new DocsLiquidContext(variables, reusables, pageTitles, dataSequences, features)
+        {
+            DataObjects = dataObjects,
+        };
     }
 
     public static async Task<DocsLiquidContext> LoadForMarkdownAsync(
@@ -125,6 +133,11 @@ internal static partial class DocsLiquidContextLoader
                 expandedLiquidSources,
                 cancellationToken)
             .ConfigureAwait(false);
+        var dataObjects = await LoadReferencedDataObjectsAsync(
+            source,
+            expandedLiquidSources,
+            cancellationToken)
+            .ConfigureAwait(false);
         var pageTitles = await LoadReferencedPageTitlesAsync(
             source,
                 repoPath,
@@ -136,11 +149,14 @@ internal static partial class DocsLiquidContextLoader
             expandedLiquidSources,
             cancellationToken)
             .ConfigureAwait(false);
-        if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0 && dataSequences.Count == 0 && features.Count == 0)
+        if (variables.Count == 0 && reusables.Count == 0 && pageTitles.Count == 0 && dataSequences.Count == 0 && dataObjects.Count == 0 && features.Count == 0)
         {
             return DocsLiquidContext.Empty;
         }
-        return new DocsLiquidContext(variables, reusables, pageTitles, dataSequences, features);
+        return new DocsLiquidContext(variables, reusables, pageTitles, dataSequences, features)
+        {
+            DataObjects = dataObjects,
+        };
     }
 
     private static async Task<IReadOnlyDictionary<string, string>> LoadPageTitlesAsync(
@@ -1080,6 +1096,349 @@ internal static partial class DocsLiquidContextLoader
             YamlSequenceNode sequence => string.Join(", ", sequence.Children.Select(ConvertYamlValue)),
             _ => string.Empty,
         };
+
+    private static async Task<IReadOnlyDictionary<string, DocsLiquidDataValue>> LoadDataObjectsAsync(
+        string worktreePath,
+        CancellationToken cancellationToken)
+    {
+        var dataDir = Path.Combine(worktreePath, _dataDir);
+        var result = new Dictionary<string, DocsLiquidDataValue>(StringComparer.Ordinal);
+        if (Directory.Exists(dataDir))
+        {
+            var dirLen = dataDir.Length + 1;
+            foreach (var file in EnumerateFilesOrEmpty(dataDir, "*.yml", SearchOption.AllDirectories))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (file.Length <= dirLen)
+                {
+                    continue;
+                }
+
+                var rel = file[dirLen..];
+                if (rel.StartsWith(_variablesSubdir + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                    || rel.StartsWith(_variablesSubdir + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (rel.EndsWith(".yml", StringComparison.OrdinalIgnoreCase))
+                {
+                    rel = rel[..^4];
+                }
+                var key = rel.Replace(Path.DirectorySeparatorChar, '.').Replace(Path.AltDirectorySeparatorChar, '.');
+                await AddDataObjectFromFileAsync(file, key, result, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        await AddEnterpriseServerReleasesAsync(
+            new WorktreeDocsFileSource(worktreePath),
+            result,
+            cancellationToken)
+            .ConfigureAwait(false);
+        return result;
+    }
+
+    private static async Task<IReadOnlyDictionary<string, DocsLiquidDataValue>> LoadReferencedDataObjectsAsync(
+        IDocsFileSource source,
+        IEnumerable<string?> sources,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, DocsLiquidDataValue>(StringComparer.Ordinal);
+        var keys = sources.SelectMany(ExtractDataObjectKeys).Distinct(StringComparer.Ordinal).ToArray();
+        foreach (var key in keys.Where(static key => !string.Equals(key, "enterpriseServerReleases", StringComparison.Ordinal)))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await AddReferencedDataObjectAsync(source, key, result, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (keys.Contains("enterpriseServerReleases", StringComparer.Ordinal))
+        {
+            await AddEnterpriseServerReleasesAsync(source, result, cancellationToken).ConfigureAwait(false);
+        }
+        return result;
+    }
+
+    private static IEnumerable<string> ExtractDataObjectKeys(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            yield break;
+        }
+
+        foreach (Match match in DataObjectReferenceRegex().Matches(source))
+        {
+            var key = NormalizeDataObjectKey(match.Value);
+            if (key.Length > 0)
+            {
+                yield return key;
+            }
+        }
+    }
+
+    private static string NormalizeDataObjectKey(string key)
+    {
+        var normalized = key.Trim().TrimEnd('.', ',', ')', ']', '}', '-');
+        var pipe = normalized.IndexOf('|', StringComparison.Ordinal);
+        if (pipe >= 0)
+        {
+            normalized = normalized[..pipe].TrimEnd('-', ' ');
+        }
+        return normalized.Replace('/', '.').Replace('\\', '.').Trim('.');
+    }
+
+    private static async Task AddReferencedDataObjectAsync(
+        IDocsFileSource source,
+        string key,
+        Dictionary<string, DocsLiquidDataValue> result,
+        CancellationToken cancellationToken)
+    {
+        var segments = SplitDataObjectPath(key);
+        for (var count = segments.Count; count > 0; count--)
+        {
+            var fileKey = string.Join('.', segments.Take(count));
+            var repoPath = _dataDir + "/" + fileKey.Replace('.', '/') + ".yml";
+            var yaml = await source.ReadTextAsync(repoPath, cancellationToken).ConfigureAwait(false);
+            if (yaml is null)
+            {
+                continue;
+            }
+
+            if (!TryParseDataObject(yaml, out var value))
+            {
+                return;
+            }
+
+            result[fileKey] = value;
+            var suffix = segments.Skip(count).ToArray();
+            if (suffix.Length > 0 && TryGetDataPathValue(value, suffix, out var nested))
+            {
+                result[string.Join('.', segments)] = nested;
+            }
+            return;
+        }
+    }
+
+    private static List<string> SplitDataObjectPath(string key)
+    {
+        var clean = new StringBuilder(key.Length);
+        foreach (var ch in key)
+        {
+            if (ch == '[')
+            {
+                break;
+            }
+            clean.Append(ch);
+        }
+        return clean.ToString().Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    }
+
+    private static bool TryGetDataPathValue(DocsLiquidDataValue value, IReadOnlyList<string> path, out DocsLiquidDataValue nested)
+    {
+        nested = value;
+        foreach (var segment in path)
+        {
+            if (nested is not DocsLiquidObjectValue obj || !obj.Properties.TryGetValue(segment, out nested!))
+            {
+                nested = DocsLiquidDataValue.EmptyString;
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static async Task AddDataObjectFromFileAsync(
+        string file,
+        string key,
+        Dictionary<string, DocsLiquidDataValue> result,
+        CancellationToken cancellationToken)
+    {
+        string yaml;
+        try
+        {
+            yaml = await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return;
+        }
+        if (TryParseDataObject(yaml, out var value))
+        {
+            result[key] = value;
+        }
+    }
+
+    private static bool TryParseDataObject(string yaml, out DocsLiquidDataValue value)
+    {
+        value = DocsLiquidDataValue.EmptyString;
+        if (string.IsNullOrWhiteSpace(yaml))
+        {
+            return false;
+        }
+
+        var stream = new YamlStream();
+        try
+        {
+            using var reader = new StringReader(yaml);
+            stream.Load(reader);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+        var root = stream.Documents.FirstOrDefault()?.RootNode;
+        if (root is null)
+        {
+            return false;
+        }
+        value = ConvertYamlDataValue(root);
+        return true;
+    }
+
+    private static DocsLiquidDataValue ConvertYamlDataValue(YamlNode node)
+        => node switch
+        {
+            YamlScalarNode scalar => new DocsLiquidScalarValue(scalar.Value ?? string.Empty),
+            YamlSequenceNode sequence => new DocsLiquidSequenceValue(sequence.Children.Select(ConvertYamlDataValue).ToArray()),
+            YamlMappingNode mapping => new DocsLiquidObjectValue(mapping.Children
+                .Where(static entry => entry.Key is YamlScalarNode { Value: not null })
+                .ToDictionary(
+                    static entry => ((YamlScalarNode)entry.Key).Value!,
+                    static entry => ConvertYamlDataValue(entry.Value),
+                    StringComparer.Ordinal)),
+            _ => DocsLiquidDataValue.EmptyString,
+        };
+
+    private static async Task AddEnterpriseServerReleasesAsync(
+        IDocsFileSource source,
+        Dictionary<string, DocsLiquidDataValue> result,
+        CancellationToken cancellationToken)
+    {
+        var datesJson = await source.ReadTextAsync("src/ghes-releases/lib/enterprise-dates.json", cancellationToken).ConfigureAwait(false);
+        var releasesTs = await source.ReadTextAsync("src/versions/lib/enterprise-server-releases.ts", cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(datesJson) || string.IsNullOrWhiteSpace(releasesTs))
+        {
+            return;
+        }
+
+        var supported = ExtractTsStringArray(releasesTs, "supported");
+        var deprecatedFunctional = ExtractTsStringArray(releasesTs, "deprecatedWithFunctionalRedirects");
+        var deprecated = deprecatedFunctional.Concat(ExtractDeprecatedTail(releasesTs)).ToArray();
+        var dates = ParseEnterpriseDates(datesJson);
+
+        result["enterpriseServerReleases"] = new DocsLiquidObjectValue(new Dictionary<string, DocsLiquidDataValue>(StringComparer.Ordinal)
+        {
+            ["supported"] = ToScalarSequence(supported),
+            ["deprecatedReleasesWithNewFormat"] = ToScalarSequence(deprecated.Where(static version => CompareVersion(version, "2.18") > 0)),
+            ["deprecatedReleasesWithLegacyFormat"] = ToScalarSequence(deprecated.Where(static version => CompareVersion(version, "2.18") <= 0)),
+            ["deprecatedReleasesOnDeveloperSite"] = ToScalarSequence(deprecated.Where(static version => CompareVersion(version, "2.16") <= 0)),
+            ["dates"] = new DocsLiquidObjectValue(dates),
+        });
+    }
+
+    private static string[] ExtractTsStringArray(string source, string name)
+    {
+        var match = Regex.Match(source, $"export\\s+const\\s+{Regex.Escape(name)}\\s*=\\s*\\[(?<body>.*?)\\]", RegexOptions.Singleline);
+        return match.Success ? ExtractQuotedStrings(match.Groups["body"].Value).ToArray() : [];
+    }
+
+    private static IEnumerable<string> ExtractDeprecatedTail(string source)
+    {
+        var match = Regex.Match(source, "export\\s+const\\s+deprecated\\s*=\\s*\\[(?<body>.*?)\\]", RegexOptions.Singleline);
+        if (!match.Success)
+        {
+            yield break;
+        }
+        foreach (var value in ExtractQuotedStrings(match.Groups["body"].Value))
+        {
+            yield return value;
+        }
+    }
+
+    private static IEnumerable<string> ExtractQuotedStrings(string source)
+    {
+        foreach (Match match in Regex.Matches(source, "['\"](?<value>[^'\"]+)['\"]"))
+        {
+            yield return match.Groups["value"].Value;
+        }
+    }
+
+    private static Dictionary<string, DocsLiquidDataValue> ParseEnterpriseDates(string json)
+    {
+        var dates = new Dictionary<string, DocsLiquidDataValue>(StringComparer.Ordinal);
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return dates;
+        }
+
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return dates;
+            }
+
+        foreach (var version in document.RootElement.EnumerateObject())
+        {
+            if (version.Value.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var properties = new Dictionary<string, DocsLiquidDataValue>(StringComparer.Ordinal);
+            foreach (var property in version.Value.EnumerateObject())
+            {
+                properties[property.Name] = new DocsLiquidScalarValue(ReadJsonScalar(property.Value));
+            }
+            if (properties.TryGetValue("releaseCandidateDate", out var candidate))
+            {
+                properties["displayCandidateDate"] = candidate;
+            }
+            if (properties.TryGetValue("generalAvailabilityDate", out var release))
+            {
+                properties["displayReleaseDate"] = release;
+            }
+            dates[version.Name] = new DocsLiquidObjectValue(properties);
+        }
+        }
+        return dates;
+    }
+
+    private static string ReadJsonScalar(JsonElement element)
+        => element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString() ?? string.Empty,
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => element.GetRawText(),
+            JsonValueKind.Null or JsonValueKind.Undefined => string.Empty,
+            _ => element.GetRawText(),
+        };
+
+    private static DocsLiquidSequenceValue ToScalarSequence(IEnumerable<string> values)
+        => new(values.Select(static value => new DocsLiquidScalarValue(value)).ToArray());
+
+    private static int CompareVersion(string left, string right)
+    {
+        var leftParts = left.Split('.').Select(ParseVersionPart).ToArray();
+        var rightParts = right.Split('.').Select(ParseVersionPart).ToArray();
+        var count = Math.Max(leftParts.Length, rightParts.Length);
+        for (var i = 0; i < count; i++)
+        {
+            var l = i < leftParts.Length ? leftParts[i] : 0;
+            var r = i < rightParts.Length ? rightParts[i] : 0;
+            var comparison = l.CompareTo(r);
+            if (comparison != 0)
+            {
+                return comparison;
+            }
+        }
+        return 0;
+    }
+
+    private static int ParseVersionPart(string value)
+        => int.TryParse(value, out var parsed) ? parsed : 0;
 
     private static async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>> LoadFeaturesAsync(
         string worktreePath,

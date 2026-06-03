@@ -58,6 +58,12 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex(@"\{%-?\s*prompt\s*-?%\}(?<body>.*?)\{%-?\s*endprompt\s*-?%\}", RegexOptions.Singleline)]
     private static partial Regex PromptBlockRegex();
 
+    [GeneratedRegex(@"\{%-?\s*codetabs\s*-?%\}(?<body>.*?)\{%-?\s*endcodetabs\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex CodeTabsBlockRegex();
+
+    [GeneratedRegex(@"\{%-?\s*codetab\s+(?<label>[^%]*?)\s*-?%\}(?<body>.*?)\{%-?\s*endcodetab\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex CodeTabBlockRegex();
+
     [GeneratedRegex("""<a\b(?<attrs>[^>]*)>(?<body>.*?)</a>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex AnchorRegex();
 
@@ -225,6 +231,7 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".ghd-markdown-alert>:last-child{margin-bottom:0;}.ghd-markdown-alert-title{align-items:center;color:var(--rsr-alert-color);display:flex;font-weight:650;gap:6px;margin:0 0 8px;}");
         html.AppendLine(".ghd-markdown-alert-note{--rsr-alert-color:#0969da;}.ghd-markdown-alert-tip{--rsr-alert-color:#1a7f37;}.ghd-markdown-alert-important{--rsr-alert-color:#8250df;}.ghd-markdown-alert-warning{--rsr-alert-color:#9a6700;}.ghd-markdown-alert-caution{--rsr-alert-color:#cf222e;}");
         html.AppendLine(".ghd-tool{border:1px solid var(--rsr-border);border-left:4px solid var(--rsr-link);border-radius:6px;margin:0 0 1rem;padding:12px 14px;background:var(--rsr-pre-bg);}");
+        html.AppendLine(".ghd-code-tabs{border:1px solid var(--rsr-border);border-radius:6px;margin:0 0 1rem;background:var(--rsr-article-bg);overflow:hidden;}.ghd-code-tab+.ghd-code-tab{border-top:1px solid var(--rsr-border);}.ghd-code-tab-label{background:var(--rsr-th-bg);border-bottom:1px solid var(--rsr-border);color:var(--rsr-muted);font:600 .78rem 'Cascadia Mono',Consolas,monospace;padding:6px 10px;text-transform:none;}.ghd-code-tab-body{padding:10px;}.ghd-code-tab-body>:last-child{margin-bottom:0;}.ghd-code-tab-body pre{margin:0;}");
         html.AppendLine(".copilot-prompt-long,.copilot-prompt-short{display:inline-flex;align-items:center;color:var(--rsr-link);margin-left:.25rem;text-decoration:none;}.copilot-prompt-short{display:none;}");
         html.AppendLine(".rsr-liquid{display:inline-block;background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border:1px solid var(--rsr-liquid-border);border-radius:3px;padding:0 .35em;margin:0 .15em;font-size:.82em;font-family:'Cascadia Mono',Consolas,monospace;}");
         html.AppendLine(".rsr-empty{color:var(--rsr-muted);font-style:italic;}");
@@ -556,6 +563,8 @@ internal static partial class MarkdownPreviewRenderer
         for (var safety = 0; safety < 16; safety++)
         {
             var before = current;
+            current = CodeTabsBlockRegex().Replace(current, RenderCodeTabsBlock);
+            current = CodeTabBlockRegex().Replace(current, RenderStandaloneCodeTabBlock);
             current = SpotlightBlockRegex().Replace(current, RenderSpotlightBlock);
             current = ToolBlockRegex().Replace(current, RenderToolBlock);
             current = PromptBlockRegex().Replace(current, RenderPromptBlock);
@@ -729,6 +738,48 @@ internal static partial class MarkdownPreviewRenderer
         return string.Create(
             CultureInfo.InvariantCulture,
             $"<code id=\"{promptId}\">{encodedPrompt}</code><a href=\"{encodedHref}\" target=\"_blank\" class=\"tooltipped tooltipped-n ml-1 copilot-prompt-long\" aria-label=\"Run this prompt in Copilot Chat\" aria-describedby=\"{promptId}\" style=\"text-decoration:none;\">{_copilotOcticonSvg}</a><a href=\"{encodedHref}\" target=\"_blank\" class=\"tooltipped tooltipped-n ml-1 copilot-prompt-short\" aria-label=\"Run prompt\" aria-describedby=\"{promptId}\" style=\"text-decoration:none;\">{_copilotOcticonSvg}</a>");
+    }
+
+    private static string RenderCodeTabsBlock(Match match)
+    {
+        var body = match.Groups["body"].Value;
+        var tabMatches = CodeTabBlockRegex().Matches(body);
+        if (tabMatches.Count == 0)
+        {
+            return RenderLiquidBlockBody(body);
+        }
+
+        var html = new StringBuilder(body.Length + 256);
+        html.AppendLine("\n<div class=\"ghd-code-tabs\">");
+        foreach (Match tabMatch in tabMatches)
+        {
+            html.Append(RenderCodeTabBlock(tabMatch));
+        }
+        html.AppendLine("</div>\n");
+        return html.ToString();
+    }
+
+    private static string RenderStandaloneCodeTabBlock(Match match)
+        => "\n<div class=\"ghd-code-tabs\">\n" + RenderCodeTabBlock(match) + "</div>\n";
+
+    private static string RenderCodeTabBlock(Match match)
+    {
+        var label = NormalizeCodeTabLabel(match.Groups["label"].Value);
+        var innerHtml = RenderLiquidBlockBody(match.Groups["body"].Value);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"<section class=\"ghd-code-tab\"><div class=\"ghd-code-tab-label\">{WebUtility.HtmlEncode(label)}</div><div class=\"ghd-code-tab-body\">\n{innerHtml}\n</div></section>\n");
+    }
+
+    private static string NormalizeCodeTabLabel(string label)
+    {
+        var trimmed = label.Trim();
+        if (trimmed.Length >= 2
+            && ((trimmed[0] == '"' && trimmed[^1] == '"') || (trimmed[0] == '\'' && trimmed[^1] == '\'')))
+        {
+            trimmed = trimmed[1..^1];
+        }
+        return trimmed.Length == 0 ? "code" : trimmed;
     }
 
     private static string RenderLiquidBlockBody(string body)
