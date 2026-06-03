@@ -40,7 +40,7 @@
         <main class="radar-workbench">
             <AppHeader DisplayCultureChanged="HandleDisplayCultureChanged"
                        SettingsOpen="_settingsOpen"
-                       AuthRefreshToken="_authRefreshToken" />
+                       AuthStateVersion="_authStateVersion" />
 
             @if (!_settingsOpen)
             {
@@ -224,7 +224,7 @@
     private DocsThemeMode _theme = AppUserSettings.Default.DefaultDocsTheme;
     private string _displayCulture = AppUserSettings.Default.DisplayCulture;
     private bool _settingsOpen;
-    private int _authRefreshToken;
+    private int _authStateVersion;
 
     private void ApplyDisplayCultureForRender()
         => AppDisplayCulture.Apply(_displayCulture);
@@ -350,7 +350,7 @@
 
     private Task HandleAuthChangedAsync()
     {
-        _authRefreshToken++;
+        _authStateVersion++;
         return Task.CompletedTask;
     }
 

@@ -323,7 +323,7 @@
 
     [Parameter] public bool SettingsOpen { get; set; }
 
-    [Parameter] public int AuthRefreshToken { get; set; }
+    [Parameter] public int AuthStateVersion { get; set; }
 
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
@@ -363,7 +363,7 @@
     private bool _appUpdateRestartBusy;
     private string? _appUpdateRestartError;
     private string? _dismissedDownloadedUpdateVersion;
-    private int _observedAuthRefreshToken;
+    private int _observedAuthStateVersion;
 
     private string _appVersion = "0.0.0";
 
@@ -390,7 +390,7 @@
             _appVersion = versionProvider.DisplayVersion;
         }
 
-        _observedAuthRefreshToken = AuthRefreshToken;
+        _observedAuthStateVersion = AuthStateVersion;
         await RefreshStateAsync();
     }
 
@@ -416,9 +416,9 @@
             }
         }
 
-        if (_observedAuthRefreshToken != AuthRefreshToken)
+        if (_observedAuthStateVersion != AuthStateVersion)
         {
-            _observedAuthRefreshToken = AuthRefreshToken;
+            _observedAuthStateVersion = AuthStateVersion;
             await RefreshStateAsync();
         }
     }
