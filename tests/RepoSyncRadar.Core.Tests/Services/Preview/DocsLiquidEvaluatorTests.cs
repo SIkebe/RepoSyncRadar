@@ -138,6 +138,30 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Resolves_Case_Introduced_By_Reusable_Before_Variable_Expansion()
+    {
+        var ctx = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["product.choice"] = "selected",
+                ["product.hidden"] = "Hidden branch should not render",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["guide.case-block"] = "{% case variables.product.choice %}{% when \"selected\" %}Visible branch{% else %}{{ variables.product.hidden }}{% endcase %}",
+            });
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% data reusables.guide.case-block %}",
+            ctx);
+
+        Assert.Equal("Visible branch", result);
+        Assert.DoesNotContain("Hidden branch", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{ variables.product.hidden }}", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% case", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Expands_Reusable_With_Plus_Argument_By_Base_Key()
     {
         var ctx = WithReusables(

@@ -212,6 +212,7 @@ internal static partial class DocsLiquidEvaluator
             var dataSource = current;
             current = DataTagRegex().Replace(current, m => ResolveDataExpr(m, context, dataSource));
             current = IndentedDataRegex().Replace(current, m => ResolveIndentedDataExpr(m, context));
+            current = ResolveCaseBlocks(current, context, scope);
             current = VariableExprRegex().Replace(current, m => ResolveLiquidVariable(m, context, scope));
             current = ResolveForLoops(current, context, version, scope);
             current = ResolveCaseBlocks(current, context, scope);
