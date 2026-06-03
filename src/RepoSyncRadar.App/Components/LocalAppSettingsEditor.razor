@@ -44,7 +44,7 @@
         }
 
         <div class="local-settings-grid">
-            <fieldset class="local-settings-group" data-testid="settings-local-github">
+            <fieldset class="local-settings-group local-settings-group-github" data-testid="settings-local-github">
                 <legend>GitHub</legend>
                 <label class="local-settings-field">
                     <span>Owner</span>
@@ -68,7 +68,7 @@
                 </label>
             </fieldset>
 
-            <fieldset class="local-settings-group" data-testid="settings-local-docs-api">
+            <fieldset class="local-settings-group local-settings-group-docs-api" data-testid="settings-local-docs-api">
                 <legend>DocsApi</legend>
                 <label class="local-settings-field wide">
                     <span>BaseAddress</span>
@@ -88,7 +88,7 @@
                 </label>
             </fieldset>
 
-            <fieldset class="local-settings-group" data-testid="settings-local-copilot">
+            <fieldset class="local-settings-group local-settings-group-copilot" data-testid="settings-local-copilot">
                 <legend>Copilot</legend>
                 <label class="local-settings-field">
                     <span>DefaultModel</span>
@@ -149,7 +149,7 @@
                 </label>
             </fieldset>
 
-            <fieldset class="local-settings-group" data-testid="settings-local-webview">
+            <fieldset class="local-settings-group local-settings-group-webview" data-testid="settings-local-webview">
                 <legend>WebView</legend>
                 <label class="local-settings-field wide">
                     <span>AllowedUrlHosts</span>
@@ -157,7 +157,7 @@
                 </label>
             </fieldset>
 
-            <fieldset class="local-settings-group" data-testid="settings-local-docs-repository">
+            <fieldset class="local-settings-group local-settings-group-docs-repository" data-testid="settings-local-docs-repository">
                 <legend>DocsRepository</legend>
                 <label class="local-settings-field wide">
                     <span>BareCloneDir</span>
@@ -205,7 +205,7 @@
                 </label>
             </fieldset>
 
-            <fieldset class="local-settings-group" data-testid="settings-local-logging">
+            <fieldset class="local-settings-group local-settings-group-logging" data-testid="settings-local-logging">
                 <legend>Logging</legend>
                 <label class="local-settings-field">
                     <span>Default</span>
@@ -217,7 +217,7 @@
                 </label>
             </fieldset>
 
-            <fieldset class="local-settings-group" data-testid="settings-local-updates">
+            <fieldset class="local-settings-group local-settings-group-updates" data-testid="settings-local-updates">
                 <legend>Updates</legend>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-updates-enabled" checked="@settings.Updates.Enabled" disabled="@_saving" @onchange="e => settings.Updates.Enabled = BoolValue(e)" />

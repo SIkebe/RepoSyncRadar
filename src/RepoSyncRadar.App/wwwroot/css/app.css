@@ -1195,8 +1195,9 @@ html, body {
 
 .local-settings-grid {
     display: grid;
-    gap: 0.6rem;
-    grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+    align-items: start;
+    gap: 0.75rem;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
 .local-settings-group {
@@ -1204,10 +1205,49 @@ html, body {
     border-radius: 6px;
     display: grid;
     gap: 0.5rem;
+    grid-column: span 4;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin: 0;
     min-width: 0;
     padding: 0.65rem;
+}
+
+.local-settings-group-github,
+.local-settings-group-docs-api,
+.local-settings-group-logging,
+.local-settings-group-updates {
+    grid-column: span 3;
+}
+
+.local-settings-group-copilot {
+    grid-column: span 5;
+    order: 5;
+}
+
+.local-settings-group-webview {
+    grid-column: span 3;
+    order: 6;
+}
+
+.local-settings-group-docs-repository {
+    grid-column: span 4;
+    order: 7;
+}
+
+.local-settings-group-github {
+    order: 1;
+}
+
+.local-settings-group-docs-api {
+    order: 2;
+}
+
+.local-settings-group-logging {
+    order: 3;
+}
+
+.local-settings-group-updates {
+    order: 4;
 }
 
 .local-settings-group legend {
@@ -1215,6 +1255,43 @@ html, body {
     font-size: 0.82rem;
     font-weight: 700;
     padding: 0 0.25rem;
+}
+
+@media (max-width: 1180px) {
+    .local-settings-grid {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .local-settings-group,
+    .local-settings-group-github,
+    .local-settings-group-docs-api,
+    .local-settings-group-webview,
+    .local-settings-group-logging,
+    .local-settings-group-updates {
+        grid-column: span 3;
+    }
+
+    .local-settings-group-copilot,
+    .local-settings-group-docs-repository {
+        grid-column: span 6;
+    }
+}
+
+@media (max-width: 760px) {
+    .local-settings-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .local-settings-group,
+    .local-settings-group-github,
+    .local-settings-group-docs-api,
+    .local-settings-group-copilot,
+    .local-settings-group-webview,
+    .local-settings-group-docs-repository,
+    .local-settings-group-logging,
+    .local-settings-group-updates {
+        grid-column: 1 / -1;
+    }
 }
 
 .local-settings-field,

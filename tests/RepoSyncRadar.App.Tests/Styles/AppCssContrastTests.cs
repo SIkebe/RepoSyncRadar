@@ -113,6 +113,9 @@ public sealed partial class AppCssContrastTests
         var errorBlock = GetRuleBlock(css, ".settings-error");
         var gridBlock = GetRuleBlock(css, ".local-settings-grid");
         var groupBlock = GetRuleBlock(css, ".local-settings-group");
+        var compactGridBlock = GetRuleBlock(css, "@media (max-width: 1180px)");
+        var copilotGroupBlock = GetExactRuleBlock(css, ".local-settings-group-copilot");
+        var docsRepositoryGroupBlock = GetExactRuleBlock(css, ".local-settings-group-docs-repository");
         var contextTierBlock = GetExactRuleBlock(css, ".local-settings-field .context-tier-select");
         var webViewAllowedHostsBlock = GetExactRuleBlock(css, ".local-settings-field textarea[data-testid=\"settings-webview-allowed-hosts\"]");
 
@@ -122,8 +125,11 @@ public sealed partial class AppCssContrastTests
             @"\.app-settings-header p,\s*\.settings-muted\s*\{[^}]*overflow-wrap:\s*anywhere",
             css);
         Assert.Contains("overflow-wrap: anywhere", errorBlock, StringComparison.Ordinal);
-        Assert.Contains("minmax(min(18rem, 100%), 1fr)", gridBlock, StringComparison.Ordinal);
+        Assert.Contains("repeat(12, minmax(0, 1fr))", gridBlock, StringComparison.Ordinal);
         Assert.Contains("min-width: 0", groupBlock, StringComparison.Ordinal);
+        Assert.Contains("grid-column: span 5", copilotGroupBlock, StringComparison.Ordinal);
+        Assert.Contains("grid-column: span 4", docsRepositoryGroupBlock, StringComparison.Ordinal);
+        Assert.Contains("repeat(6, minmax(0, 1fr))", compactGridBlock, StringComparison.Ordinal);
         Assert.Contains("padding-right: 2rem", contextTierBlock, StringComparison.Ordinal);
         Assert.Contains("min-width: min(14rem, 100%)", contextTierBlock, StringComparison.Ordinal);
         Assert.Contains("min-height: 9rem", webViewAllowedHostsBlock, StringComparison.Ordinal);
