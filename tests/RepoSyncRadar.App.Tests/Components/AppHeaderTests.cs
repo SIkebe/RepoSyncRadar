@@ -446,6 +446,10 @@ public sealed class AppHeaderTests
         {
             Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"settings-third-party-notices\"]"));
+            Assert.True(
+                cut.Markup.IndexOf("data-testid=\"settings-ignore-rules\"", StringComparison.Ordinal) <
+                cut.Markup.IndexOf("data-testid=\"settings-third-party-notices\"", StringComparison.Ordinal),
+                "Ignore rules should appear before third-party notices in Settings.");
             Assert.DoesNotContain("無視リストを更新", cut.Find(".app-settings-header").TextContent, StringComparison.Ordinal);
             Assert.Equal(
                 "無視リストを更新",
