@@ -9,9 +9,9 @@
 @{ ApplyDisplayCultureForRender(); }
 
 @*
-    AppHeader — top bar shown at the top of Workbench. Surfaces the current GitHub
-    auth state (Not configured / Not signed in / Signed in), exposes Sign in / Sign
-    out buttons, and the Triage trigger that runs ICopilotAgent.
+    AppHeader — top bar shown at the top of Workbench. Surfaces activity status and
+    the Triage trigger that runs ICopilotAgent. Auth and settings entry points live
+    in the sidebar footer so account/setup management stays anchored at the lower left.
     Without this header the app launches into an entirely empty inbox with no
     visible action, which is what motivated this component.
 *@
@@ -20,44 +20,7 @@
           Class="app-header pa-3 mb-2"
           data-testid="app-header">
     <header style="display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
-        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-        @switch (_state)
-        {
-            case GitHubAuthState.SignedIn:
-                <span data-testid="app-header-state"
-                      data-state="SignedIn"
-                      style="color:#22c55e; font-weight:600;">@L["AppHeader.SignedIn"]</span>
-                @if (!string.IsNullOrEmpty(_login))
-                {
-                    <span data-testid="app-header-login"
-                          style="font-weight:600; opacity:0.9;">@($"@{_login}")</span>
-                }
-                <MudButton Variant="Variant.Outlined"
-                           Size="Size.Small"
-                           OnClick="OnSignOutAsync"
-                           Disabled="@_busy"
-                           data-testid="app-header-signout">@L["AppHeader.SignOut"]</MudButton>
-                break;
-            case GitHubAuthState.NotSignedIn:
-                <span data-testid="app-header-state"
-                      data-state="NotSignedIn"
-                      style="color:#fbbf24; font-weight:600;">@L["AppHeader.NotSignedIn"]</span>
-                <MudButton Variant="Variant.Filled"
-                           Color="Color.Primary"
-                           Size="Size.Small"
-                           OnClick="OnSignInAsync"
-                           Disabled="@_busy"
-                           data-testid="app-header-signin">@L["AppHeader.SignIn"]</MudButton>
-                break;
-            case GitHubAuthState.NotConfigured:
-                <span data-testid="app-header-state"
-                      data-state="NotConfigured"
-                                            style="color:#ef4444; font-weight:600;">@L["AppHeader.NotConfigured"]</span>
-                <span data-testid="app-header-config-hint"
-                                        style="font-size:0.85em; opacity:0.8;">@L["AppHeader.ConfigHint"]</span>
-                break;
-        }
-    </div>
+        <div class="app-header-spacer" aria-hidden="true"></div>
 
     <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
         @if (_lastReport is { } report)
@@ -139,10 +102,6 @@
                    data-testid="app-header-sync">
             @(_busy ? L["AppHeader.Triaging"] : "Triage")
         </MudButton>
-        <MudButton Variant="Variant.Outlined"
-                   Size="Size.Small"
-                   OnClick="ToggleSettingsAsync"
-                   data-testid="app-header-settings">@L["Common.Settings"]</MudButton>
         <span data-testid="app-header-version"
               title="@_appVersion"
               style="font-size:0.8em; opacity:0.7; font-variant-numeric:tabular-nums;">v@_appVersion</span>
@@ -362,11 +321,14 @@
 
     [Parameter] public EventCallback<string> DisplayCultureChanged { get; set; }
 
+    [Parameter] public bool SettingsOpen { get; set; }
+
+    [Parameter] public int AuthRefreshToken { get; set; }
+
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
     private GitHubAuthState _state = GitHubAuthState.NotSignedIn;
-    private string? _login;
     private bool _busy;
     private IngestionReport? _lastReport;
     private string? _lastError;
@@ -401,6 +363,7 @@
     private bool _appUpdateRestartBusy;
     private string? _appUpdateRestartError;
     private string? _dismissedDownloadedUpdateVersion;
+    private int _observedAuthRefreshToken;
 
     private string _appVersion = "0.0.0";
 
@@ -427,15 +390,36 @@
             _appVersion = versionProvider.DisplayVersion;
         }
 
+        _observedAuthRefreshToken = AuthRefreshToken;
         await RefreshStateAsync();
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         var displayCulture = AppDisplayCulture.NormalizeCultureName(DisplayCulture);
         if (!_settingsDisplayCultureSaving && !string.Equals(_displayCulture, displayCulture, StringComparison.OrdinalIgnoreCase))
         {
             _displayCulture = displayCulture;
+        }
+
+        if (SettingsOpen != _settingsOpen)
+        {
+            _settingsOpen = SettingsOpen;
+            if (_settingsOpen)
+            {
+                await LoadSettingsPanelAsync();
+            }
+            else
+            {
+                _selectedIgnoreRulePatterns.Clear();
+                _settingsDeleteStatus = null;
+            }
+        }
+
+        if (_observedAuthRefreshToken != AuthRefreshToken)
+        {
+            _observedAuthRefreshToken = AuthRefreshToken;
+            await RefreshStateAsync();
         }
     }
 
@@ -490,58 +474,6 @@
     {
         var session = Services.GetRequiredService<IGitHubAuthSession>();
         _state = await session.GetStateAsync(CancellationToken.None);
-        if (_state == GitHubAuthState.SignedIn)
-        {
-            // Cached inside the session so we can call this on every refresh; failure
-            // returns null and we just hide the @login chip.
-            _login = await session.GetCurrentLoginAsync(CancellationToken.None);
-        }
-        else
-        {
-            _login = null;
-        }
-    }
-
-    private async Task OnSignInAsync()
-    {
-        _busy = true;
-        _lastError = null;
-        StateHasChanged();
-        try
-        {
-            var session = Services.GetRequiredService<IGitHubAuthSession>();
-            await session.SignInAsync(CancellationToken.None);
-            await RefreshStateAsync();
-        }
-        catch (Exception ex)
-        {
-            _lastError = $"{L["AppHeader.SignInFailed"]}: {ex.Message}";
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task OnSignOutAsync()
-    {
-        _busy = true;
-        _lastError = null;
-        StateHasChanged();
-        try
-        {
-            var session = Services.GetRequiredService<IGitHubAuthSession>();
-            await session.SignOutAsync(CancellationToken.None);
-            await RefreshStateAsync();
-        }
-        catch (Exception ex)
-        {
-            _lastError = $"{L["AppHeader.SignOutFailed"]}: {ex.Message}";
-        }
-        finally
-        {
-            _busy = false;
-        }
     }
 
     private async Task OnTriageAsync()
@@ -581,14 +513,10 @@
         }
     }
 
-    private async Task ToggleSettingsAsync()
+    private async Task LoadSettingsPanelAsync()
     {
-        _settingsOpen = !_settingsOpen;
-        if (_settingsOpen)
-        {
-            await LoadUserSettingsAsync();
-            await LoadIgnoreRulesAsync();
-        }
+        await LoadUserSettingsAsync();
+        await LoadIgnoreRulesAsync();
     }
 
     private async Task LoadUserSettingsAsync()

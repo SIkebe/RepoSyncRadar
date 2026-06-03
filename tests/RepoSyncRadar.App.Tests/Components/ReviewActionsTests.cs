@@ -2,6 +2,7 @@ using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using RepoSyncRadar.App;
+using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
@@ -421,11 +422,16 @@ public sealed class ReviewActionsTests : IDisposable
 
     private static ServiceProvider BuildServices(IRadarRepository repo, IReviewBroadcaster broadcaster)
     {
+        var auth = Substitute.For<IGitHubAuthSession>();
+        auth.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.NotSignedIn));
+
         return new ServiceCollection()
             .AddLogging()
             .AddLocalization(options => options.ResourcesPath = "Resources")
             .AddSingleton(repo)
             .AddSingleton(broadcaster)
+            .AddSingleton(auth)
             .BuildServiceProvider();
     }
 }

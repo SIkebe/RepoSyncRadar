@@ -24,7 +24,10 @@
         <aside class="radar-sidebar-pane">
             <MudText Typo="Typo.h6" Class="mb-2">@L["Workbench.Queues"]</MudText>
             <Sidebar Selected="_selectedStatus"
-                     SelectedChanged="HandleStatusChanged" />
+                     SelectedChanged="HandleStatusChanged"
+                     SettingsOpen="_settingsOpen"
+                     SettingsClicked="ToggleSettingsAsync"
+                     AuthChanged="HandleAuthChangedAsync" />
         </aside>
 
         <div class="radar-sidebar-resizer"
@@ -35,7 +38,9 @@
              data-testid="radar-sidebar-resizer"></div>
 
         <main class="radar-workbench">
-            <AppHeader DisplayCultureChanged="HandleDisplayCultureChanged" />
+            <AppHeader DisplayCultureChanged="HandleDisplayCultureChanged"
+                       SettingsOpen="_settingsOpen"
+                       AuthRefreshToken="_authRefreshToken" />
 
             <MudPaper Elevation="0" Class="pa-2">
                 <div class="commit-search-toolbar" data-testid="commit-search-toolbar">
@@ -215,6 +220,8 @@
     private IAppUserSettingsStore? _settingsStore;
     private DocsThemeMode _theme = AppUserSettings.Default.DefaultDocsTheme;
     private string _displayCulture = AppUserSettings.Default.DisplayCulture;
+    private bool _settingsOpen;
+    private int _authRefreshToken;
 
     private void ApplyDisplayCultureForRender()
         => AppDisplayCulture.Apply(_displayCulture);
@@ -328,6 +335,18 @@
         _bulkReviewStatus = null;
         ClearBatchExplanation();
         _listRefreshVersion++;
+        return Task.CompletedTask;
+    }
+
+    private Task ToggleSettingsAsync()
+    {
+        _settingsOpen = !_settingsOpen;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleAuthChangedAsync()
+    {
+        _authRefreshToken++;
         return Task.CompletedTask;
     }
 

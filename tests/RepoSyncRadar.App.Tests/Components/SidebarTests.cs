@@ -1,6 +1,7 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
@@ -33,11 +34,7 @@ public class SidebarTests
                     [ReviewStatus.Later] = 0,
                 }));
 
-        var sp = new ServiceCollection()
-            .AddLogging()
-            .AddLocalization(options => options.ResourcesPath = "Resources")
-            .AddSingleton(repo)
-            .BuildServiceProvider();
+        var sp = BuildServices(repo);
 
         using var ctx = new Bunit.BunitContext();
 
@@ -70,11 +67,7 @@ public class SidebarTests
                     [ReviewStatus.Later] = 0,
                 }));
 
-        var sp = new ServiceCollection()
-            .AddLogging()
-            .AddLocalization(options => options.ResourcesPath = "Resources")
-            .AddSingleton(repo)
-            .BuildServiceProvider();
+        var sp = BuildServices(repo);
 
         using var ctx = new Bunit.BunitContext();
         var cut = ctx.Render<Sidebar>(
@@ -87,5 +80,103 @@ public class SidebarTests
         Assert.Contains("保留", cut.Find("[data-testid=\"sidebar-item-Later\"]").GetAttribute("title"));
         Assert.Empty(cut.FindAll("[data-testid^=\"sidebar-description-\"]"));
         Assert.DoesNotContain("スキム済み", cut.Markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Sidebar_Footer_Opens_Settings_From_Gear_Button()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var sp = BuildServices(repo);
+        var settingsClicked = false;
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<Sidebar>(parameters => parameters
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(sidebar => sidebar.SettingsClicked, () => settingsClicked = true));
+
+        cut.Find("[data-testid=\"sidebar-settings\"]").Click();
+
+        Assert.True(settingsClicked);
+    }
+
+    [Fact]
+    public void Sidebar_Footer_Renders_SignedIn_Account_And_SignOut()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var sp = BuildServices(repo, session);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<Sidebar>(parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
+
+        Assert.Equal("SignedIn", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
+        Assert.Equal("@octocat", cut.Find("[data-testid=\"sidebar-auth-login\"]").TextContent);
+        Assert.NotNull(cut.Find("[data-testid=\"sidebar-auth-signout\"]"));
+    }
+
+    [Fact]
+    public void Sidebar_SignIn_Refreshes_Account_State_And_Notifies_Workbench()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(GitHubAuthState.NotSignedIn),
+                Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var sp = BuildServices(repo, session);
+        var authChanged = false;
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<Sidebar>(parameters => parameters
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(sidebar => sidebar.AuthChanged, () => authChanged = true));
+
+        cut.Find("[data-testid=\"sidebar-auth-signin\"]").Click();
+
+        session.Received(1).SignInAsync(Arg.Any<CancellationToken>());
+        Assert.True(authChanged);
+        Assert.Equal("SignedIn", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
+        Assert.Equal("@octocat", cut.Find("[data-testid=\"sidebar-auth-login\"]").TextContent);
+    }
+
+    private static IRadarRepository BuildEmptyCountsRepository()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(
+                new Dictionary<ReviewStatus, int>
+                {
+                    [ReviewStatus.Unseen] = 0,
+                    [ReviewStatus.Seen] = 0,
+                    [ReviewStatus.Adopted] = 0,
+                    [ReviewStatus.Rejected] = 0,
+                    [ReviewStatus.Archived] = 0,
+                    [ReviewStatus.Later] = 0,
+                }));
+        return repo;
+    }
+
+    private static ServiceProvider BuildServices(IRadarRepository repo, IGitHubAuthSession? session = null)
+    {
+        var resolvedSession = session;
+        if (resolvedSession is null)
+        {
+            resolvedSession = Substitute.For<IGitHubAuthSession>();
+            resolvedSession.GetStateAsync(Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult(GitHubAuthState.NotSignedIn));
+        }
+
+        return new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
+            .AddSingleton(repo)
+            .AddSingleton(resolvedSession)
+            .BuildServiceProvider();
     }
 }

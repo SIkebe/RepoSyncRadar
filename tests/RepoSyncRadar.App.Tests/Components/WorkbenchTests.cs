@@ -106,7 +106,7 @@ public sealed class WorkbenchTests
             await using var ctx = CreateWorkbenchTestContext(repo, out _, settingsStore);
             var cut = ctx.Render<Workbench>();
 
-            cut.Find("[data-testid=\"app-header-settings\"]").Click();
+            cut.Find("[data-testid=\"sidebar-settings\"]").Click();
             cut.WaitForAssertion(() => Assert.Contains("表示言語", cut.Find("[data-testid=\"settings-panel\"]").TextContent, StringComparison.Ordinal));
 
             cut.Find("[data-testid=\"settings-display-language-en\"]").Click();
