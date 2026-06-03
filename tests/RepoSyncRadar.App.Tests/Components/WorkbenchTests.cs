@@ -115,7 +115,7 @@ public sealed class WorkbenchTests
             {
                 var shellText = cut.Find("[data-testid=\"radar-shell\"]").TextContent;
                 Assert.Equal("en", settingsStore.Current.DisplayCulture);
-                Assert.Contains("Signed in", shellText, StringComparison.Ordinal);
+                Assert.Contains("@octocat", shellText, StringComparison.Ordinal);
                 Assert.Contains("Unseen", shellText, StringComparison.Ordinal);
                 Assert.Contains("Watch", shellText, StringComparison.Ordinal);
                 Assert.Contains("Display Language", shellText, StringComparison.Ordinal);

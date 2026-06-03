@@ -41,10 +41,13 @@
 
     <div class="sidebar-footer" data-testid="sidebar-footer">
         <section class="sidebar-auth" data-testid="sidebar-auth" aria-label="@L["Sidebar.Auth.AriaLabel"]">
-            <span class="@BuildAuthStateClass()"
-                  data-testid="sidebar-auth-state"
-                  data-state="@_authState"
-                  title="@BuildAuthStateTitle()">@L[BuildAuthStateLabelKey()]</span>
+            @if (ShouldShowAuthStateLabel())
+            {
+                <span class="@BuildAuthStateClass()"
+                      data-testid="sidebar-auth-state"
+                      data-state="@_authState"
+                      title="@BuildAuthStateTitle()">@L[BuildAuthStateLabelKey()]</span>
+            }
             @if (!string.IsNullOrWhiteSpace(_login))
             {
                 <span class="sidebar-auth-login" data-testid="sidebar-auth-login">@($"@{_login}")</span>
@@ -276,5 +279,8 @@
 
     private string BuildSettingsPressed()
         => SettingsOpen ? "true" : "false";
+
+    private bool ShouldShowAuthStateLabel()
+        => _authState != GitHubAuthState.SignedIn || string.IsNullOrWhiteSpace(_login);
 
 }

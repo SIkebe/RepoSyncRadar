@@ -151,8 +151,27 @@ public class SidebarTests
 
         var cut = ctx.Render<Sidebar>(parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
 
-        Assert.Equal("SignedIn", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
+        Assert.Empty(cut.FindAll("[data-testid=\"sidebar-auth-state\"]"));
         Assert.Equal("@octocat", cut.Find("[data-testid=\"sidebar-auth-login\"]").TextContent);
+        Assert.NotNull(cut.Find("[data-testid=\"sidebar-auth-signout\"]"));
+    }
+
+    [Fact]
+    public void Sidebar_Footer_Renders_SignedIn_State_When_Login_Is_Unavailable()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>(null));
+        var sp = BuildServices(repo, session);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<Sidebar>(parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
+
+        Assert.Equal("SignedIn", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
+        Assert.Empty(cut.FindAll("[data-testid=\"sidebar-auth-login\"]"));
         Assert.NotNull(cut.Find("[data-testid=\"sidebar-auth-signout\"]"));
     }
 
@@ -179,7 +198,7 @@ public class SidebarTests
 
         session.Received(1).SignInAsync(Arg.Any<CancellationToken>());
         Assert.True(authChanged);
-        Assert.Equal("SignedIn", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
+        Assert.Empty(cut.FindAll("[data-testid=\"sidebar-auth-state\"]"));
         Assert.Equal("@octocat", cut.Find("[data-testid=\"sidebar-auth-login\"]").TextContent);
     }
 
@@ -204,7 +223,7 @@ public class SidebarTests
         cut.Find("[data-testid=\"sidebar-auth-signin\"]").Click();
 
         session.Received(1).SignInAsync(Arg.Any<CancellationToken>());
-        Assert.Equal("SignedIn", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
+        Assert.Empty(cut.FindAll("[data-testid=\"sidebar-auth-state\"]"));
         Assert.Empty(cut.FindAll("[data-testid=\"sidebar-auth-error\"]"));
     }
 
