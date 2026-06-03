@@ -223,7 +223,7 @@
                     @if (_copilotUsage.LastTurn is { } lastTurn)
                     {
                         <p class="settings-muted" data-testid="settings-copilot-usage-last">
-                            @L["Common.Last"]: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? "model unknown") / @FormatTurnAiCreditsWithUnit(lastTurn) / @FormatTokensWithUnit(lastTurn.TotalTokens())
+                            @L["Common.Last"]: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? L["CopilotUsage.ModelUnknown"]) / @FormatTurnAiCreditsWithUnit(lastTurn) / @FormatTokensWithUnit(lastTurn.TotalTokens())
                         </p>
                     }
                     @if (_copilotUsage.SessionMetrics.FirstOrDefault() is { } sessionMetrics)
