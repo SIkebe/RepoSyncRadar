@@ -98,6 +98,63 @@ public sealed class WriteToolsTests
     }
 
     [Fact]
+    public async Task ScoreCommit_AutoRejects_Low_Score_When_Unreviewed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("aaa", ct);
+        var tools = harness.CreateTools();
+
+        var result = await tools.ScoreCommitAsync(new ScoreCommitArgs(
+            Sha: "aaa",
+            Score: RadarWriteTools.AutoRejectScoreThreshold,
+            Category: "low-signal",
+            Audience: ["internal"],
+            SummaryJa: "要約",
+            WhyJa: "理由",
+            DetailsJa: "詳細",
+            Model: "gpt-test",
+            PromptHash: "hash"), ct);
+
+        Assert.Null(result.Error);
+        await using var db = harness.CreateDb();
+        var review = await db.Reviews.SingleAsync(r => r.Sha == "aaa", ct);
+        Assert.Equal(ReviewStatus.Rejected, review.Status);
+        Assert.Equal(RadarWriteTools.AutoRejectedLowScoreReason, review.Reason);
+        Assert.NotNull(review.ReviewedAt);
+    }
+
+    [Fact]
+    public async Task ScoreCommit_Does_Not_Override_User_Review_For_Low_Score()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync(
+            "aaa",
+            ReviewStatus.Adopted,
+            message: "user-selected",
+            cancellationToken: ct);
+        var tools = harness.CreateTools();
+
+        var result = await tools.ScoreCommitAsync(new ScoreCommitArgs(
+            Sha: "aaa",
+            Score: 0.1,
+            Category: "low-signal",
+            Audience: ["internal"],
+            SummaryJa: "要約",
+            WhyJa: "理由",
+            DetailsJa: "詳細",
+            Model: "gpt-test",
+            PromptHash: "hash"), ct);
+
+        Assert.Null(result.Error);
+        await using var db = harness.CreateDb();
+        var review = await db.Reviews.SingleAsync(r => r.Sha == "aaa", ct);
+        Assert.Equal(ReviewStatus.Adopted, review.Status);
+        Assert.Null(review.Reason);
+    }
+
+    [Fact]
     public async Task ScoreCommit_Reports_Triage_Current_Position_After_Save()
     {
         var ct = TestContext.Current.CancellationToken;

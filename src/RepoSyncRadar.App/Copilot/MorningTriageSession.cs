@@ -30,8 +30,8 @@ public sealed partial class MorningTriageSession
             Success criteria:
             - `radar_list_commits` を `status="Unseen"`, `limit=50` で呼び、まだスコアリングされていない未確認コミット一覧を取得する。
             - 各コミットについて `radar_score_commit` でスコア・カテゴリ・読者・要約・理由・詳細分析を保存する。
-            - 採点後の注目 / 保留 / 見送り判断はユーザーが一覧を見て行う。Morning Triage では任意判断でレビュー状態を保存しない。
-            - `Rejected` / `Archived` / `Later` / `Adopted` などのレビュー状態はユーザーの最終判断で保存する。ただし、登録済み Ignore ルールによる自動見送りは尊重する。
+            - 0.44 以下の低スコアは `radar_score_commit` 保存時に自動で見送り候補へ分類される。0.45 以上の注目 / 保留判断はユーザーが一覧を見て行う。
+            - `Rejected` / `Archived` / `Later` / `Adopted` などのレビュー状態はユーザーの最終判断で保存する。ただし、低スコアと登録済み Ignore ルールによる自動見送りは尊重する。
             - 既に確立されたユーザー設定 (Ignore / Boost) を尊重し、自動見送り済みの無視対象はスキップする。
 
             Evidence budget:
@@ -294,7 +294,7 @@ public sealed partial class MorningTriageSession
             - 各 SHA について `radar_get_diff` を呼び、差分を確認する。
             - user-facing な変更、0.70 以上になりそうな変更、または差分だけで判断できない変更のみ `radar_resolve_url` / `radar_fetch_rendered` を使う。
             - 各 SHA について必ず `radar_score_commit` を 1 回呼び、スコア・カテゴリ・読者・要約・理由・詳細分析を保存する。
-            - 採点後の注目 / 保留 / 見送り判断はユーザーが一覧を見て行う。Morning Triage では任意判断でレビュー状態を保存しない。
+            - 0.44 以下の低スコアは `radar_score_commit` 保存時に自動で見送り候補へ分類される。0.45 以上の注目 / 保留判断はユーザーが一覧を見て行う。
             - 登録済み Ignore ルールによる自動見送りは尊重する。
             - 全件を処理したら短く完了報告する。
 
