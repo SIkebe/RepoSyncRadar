@@ -20,6 +20,8 @@ public sealed class RadarWriteTools
 {
     private const double _boostDeltaMax = 5.0;
     private const double _boostDeltaMin = -5.0;
+    internal const double AutoRejectScoreThreshold = 0.44;
+    internal const string AutoRejectedLowScoreReason = "auto-low-score";
 
     private readonly IDbContextFactory<RadarDbContext> _dbFactory;
     private readonly TriageScoringProgressTracker _triageProgress;
@@ -148,10 +150,43 @@ public sealed class RadarWriteTools
             existing.ScoredAt = nowUtc;
         }
 
+        await AutoRejectLowScoreAsync(db, args, nowUtc, cancellationToken).ConfigureAwait(false);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         _triageProgress.ReportScoreSaved(args.Sha);
         _reviewBroadcaster?.Publish();
         return new WriteResult(Error: null);
+    }
+
+    private static async Task AutoRejectLowScoreAsync(
+        RadarDbContext db,
+        ScoreCommitArgs args,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        if (args.Score > AutoRejectScoreThreshold)
+        {
+            return;
+        }
+
+        var review = await db.Reviews.FirstOrDefaultAsync(r => r.Sha == args.Sha, cancellationToken).ConfigureAwait(false);
+        if (review is null)
+        {
+            db.Reviews.Add(new Review
+            {
+                Sha = args.Sha,
+                Status = ReviewStatus.Rejected,
+                Reason = AutoRejectedLowScoreReason,
+                ReviewedAt = nowUtc,
+            });
+            return;
+        }
+
+        if (review.Status is ReviewStatus.Unseen or ReviewStatus.Seen)
+        {
+            review.Status = ReviewStatus.Rejected;
+            review.Reason = AutoRejectedLowScoreReason;
+            review.ReviewedAt = nowUtc;
+        }
     }
 
     internal async Task<WriteResult> PostDraftAsync(PostDraftArgs args, CancellationToken cancellationToken)

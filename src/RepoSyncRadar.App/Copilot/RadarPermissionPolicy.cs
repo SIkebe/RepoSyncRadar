@@ -23,8 +23,9 @@ public sealed partial class RadarPermissionPolicy
 {
     /// <summary>
     /// Custom-tool names that are pre-approved without prompting. The read-only tools
-    /// are harmless, and Morning Triage is only expected to write scoring rows
-    /// automatically. Final review decisions remain user-owned.
+    /// are harmless, and Morning Triage may write scoring rows plus low-score
+    /// auto-rejected review rows automatically. Final non-low-score review decisions
+    /// remain user-owned.
     /// </summary>
     internal static readonly IReadOnlySet<string> AutoApprovedToolNames = new HashSet<string>(StringComparer.Ordinal)
     {
