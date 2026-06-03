@@ -340,6 +340,33 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Expands_Nested_DataObject_ForLoops_Inside_Outer_Scope()
+    {
+        var features = Obj(
+            ("copilot", Obj(("fptAndGhec", Scalar("true")))),
+            ("packages", Obj(("fptAndGhec", Scalar("false")))));
+        var languages = Obj(
+            ("C#", Obj(("copilot", Scalar("supported")), ("packages", Scalar("dotnet")))));
+        var context = WithDataObject(
+            "tables.supported-code-languages",
+            Obj(("features", features), ("languages", languages)));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            """
+            {%- for languageEntry in tables.supported-code-languages.languages %}
+            {%- assign language = languageEntry[0] %}
+            {%- assign languageData = languageEntry[1] %}
+            | {{ language }}{%- for featureEntry in tables.supported-code-languages.features -%}{%- assign featureKey = featureEntry[0] -%}{%- assign featureData = featureEntry[1] -%}{%- if featureData.fptAndGhec -%} | {{ languageData[featureKey] }}{%- endif -%}{%- endfor %} |
+            {%- endfor %}
+            """,
+            context);
+
+        Assert.Contains("| C# | supported |", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% for", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{ languageData", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Expands_EnterpriseServerReleases_Style_Object_Access()
     {
         var context = WithDataObject(

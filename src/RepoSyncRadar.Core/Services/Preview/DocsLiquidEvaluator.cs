@@ -59,9 +59,8 @@ internal static partial class DocsLiquidEvaluator
     [GeneratedRegex(@"\{%-?\s*indented_data_reference\s+(?<expr>[A-Za-z0-9_.\-/+_]+)(?:\s+spaces=(?<spaces>\d+))?\s*-?%\}")]
     private static partial Regex IndentedDataRegex();
 
-    // {% for entry in tables.copilot.models-and-pricing %}...{% endfor %}
-    [GeneratedRegex(@"\{%-?\s*for\s+(?<var>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<expr>[^%]+?)\s*-?%\}(?<body>(?:(?!\{%-?\s*for\b).)*?)\{%-?\s*endfor\s*-?%\}", RegexOptions.Singleline)]
-    private static partial Regex ForBlockRegex();
+    [GeneratedRegex(@"\{%-?\s*(?:(?<end>end)for|for\s+(?<var>[A-Za-z_][A-Za-z0-9_]*)\s+in\s+(?<expr>[^%]+?))\s*-?%\}", RegexOptions.Singleline)]
+    private static partial Regex ForTagRegex();
 
     [GeneratedRegex(@"\{%-?\s*case\s+(?<expr>.*?)\s*-?%\}(?<body>.*?)\{%-?\s*endcase\s*-?%\}", RegexOptions.Singleline)]
     private static partial Regex CaseBlockRegex();
@@ -341,8 +340,8 @@ internal static partial class DocsLiquidEvaluator
         var current = source;
         for (var safety = 0; safety < _infiniteLoopGuard; safety++)
         {
-            var replaced = ForBlockRegex().Replace(current, m => ResolveForBlock(m, context, version, scope));
-            if (string.Equals(replaced, current, StringComparison.Ordinal))
+            var replaced = ResolveOutermostForLoops(current, context, version, scope, out var changed);
+            if (!changed)
             {
                 break;
             }
@@ -351,10 +350,81 @@ internal static partial class DocsLiquidEvaluator
         return current;
     }
 
-    private static string ResolveForBlock(Match match, DocsLiquidContext context, DocsVersion version, LiquidScope scope)
+    private static string ResolveOutermostForLoops(
+        string source,
+        DocsLiquidContext context,
+        DocsVersion version,
+        LiquidScope scope,
+        out bool changed)
     {
-        var variableName = match.Groups["var"].Value;
-        var sequenceExpr = match.Groups["expr"].Value;
+        changed = false;
+        var tags = ForTagRegex().Matches(source);
+        if (tags.Count == 0)
+        {
+            return source;
+        }
+
+        var rendered = new StringBuilder(source.Length);
+        var cursor = 0;
+        Match? outerStart = null;
+        var depth = 0;
+        foreach (Match tag in tags)
+        {
+            if (!tag.Groups["end"].Success)
+            {
+                if (depth == 0)
+                {
+                    outerStart = tag;
+                }
+                depth++;
+                continue;
+            }
+
+            if (depth == 0)
+            {
+                continue;
+            }
+            depth--;
+            if (depth != 0 || outerStart is null)
+            {
+                continue;
+            }
+
+            rendered.Append(source, cursor, outerStart.Index - cursor);
+            var bodyStart = outerStart.Index + outerStart.Length;
+            var bodyLength = tag.Index - bodyStart;
+            var body = bodyLength <= 0 ? string.Empty : source.Substring(bodyStart, bodyLength);
+            var originalBlock = source.Substring(outerStart.Index, tag.Index + tag.Length - outerStart.Index);
+            rendered.Append(ResolveForBlock(
+                outerStart.Groups["var"].Value,
+                NormalizeLiquidTagExpression(outerStart.Groups["expr"].Value),
+                body,
+                originalBlock,
+                context,
+                version,
+                scope));
+            cursor = tag.Index + tag.Length;
+            outerStart = null;
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return source;
+        }
+        rendered.Append(source, cursor, source.Length - cursor);
+        return rendered.ToString();
+    }
+
+    private static string ResolveForBlock(
+        string variableName,
+        string sequenceExpr,
+        string body,
+        string originalBlock,
+        DocsLiquidContext context,
+        DocsVersion version,
+        LiquidScope scope)
+    {
         var sequenceValue = EvaluateLiquidExpression(sequenceExpr, context, scope);
         var items = EnumerateForItems(sequenceValue).ToArray();
         if (items.Length == 0)
@@ -362,12 +432,11 @@ internal static partial class DocsLiquidEvaluator
             var sequenceKey = NormalizeDataExpr(sequenceExpr);
             if (!context.DataSequences.TryGetValue(sequenceKey, out var rows))
             {
-                return IsKnownOptionalPreviewLoop(sequenceExpr) ? string.Empty : match.Value;
+                return IsKnownOptionalPreviewLoop(sequenceExpr) ? string.Empty : originalBlock;
             }
             items = rows.Select(RowToLiquidObject).ToArray();
         }
 
-        var body = match.Groups["body"].Value;
         var sb = new StringBuilder(body.Length * Math.Min(items.Length, 4));
         foreach (var item in items)
         {
