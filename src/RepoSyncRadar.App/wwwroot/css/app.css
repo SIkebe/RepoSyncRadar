@@ -1244,7 +1244,8 @@ html, body {
 }
 
 .local-settings-field input,
-.local-settings-field textarea {
+.local-settings-field textarea,
+.local-settings-field select {
     background: #fff;
     border: 1px solid #d0d7de;
     border-radius: 6px;
@@ -1256,13 +1257,24 @@ html, body {
     width: 100%;
 }
 
+.local-settings-field .context-tier-select {
+    min-height: 2.6rem;
+    min-width: min(14rem, 100%);
+    padding-right: 2rem;
+}
+
 .local-settings-field textarea {
     min-height: 4.5rem;
     resize: vertical;
 }
 
+.local-settings-field textarea[data-testid="settings-webview-allowed-hosts"] {
+    min-height: 9rem;
+}
+
 .local-settings-field input:disabled,
 .local-settings-field textarea:disabled,
+.local-settings-field select:disabled,
 .local-settings-check input:disabled {
     cursor: default;
     opacity: 0.62;
@@ -2112,6 +2124,7 @@ html, body {
 .radar-theme-dark .local-settings-group,
 .radar-theme-dark .local-settings-field input,
 .radar-theme-dark .local-settings-field textarea,
+.radar-theme-dark .local-settings-field select,
 .radar-theme-dark .ignore-rule-row code,
 .radar-theme-dark .third-party-version,
 .radar-theme-dark .third-party-license,

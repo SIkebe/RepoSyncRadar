@@ -113,6 +113,8 @@ public sealed partial class AppCssContrastTests
         var errorBlock = GetRuleBlock(css, ".settings-error");
         var gridBlock = GetRuleBlock(css, ".local-settings-grid");
         var groupBlock = GetRuleBlock(css, ".local-settings-group");
+        var contextTierBlock = GetExactRuleBlock(css, ".local-settings-field .context-tier-select");
+        var webViewAllowedHostsBlock = GetExactRuleBlock(css, ".local-settings-field textarea[data-testid=\"settings-webview-allowed-hosts\"]");
 
         Assert.Contains("min-width: 0", panelBlock, StringComparison.Ordinal);
         Assert.Matches(@"\.settings-section\s*\{[^}]*min-width:\s*0", css);
@@ -122,6 +124,9 @@ public sealed partial class AppCssContrastTests
         Assert.Contains("overflow-wrap: anywhere", errorBlock, StringComparison.Ordinal);
         Assert.Contains("minmax(min(18rem, 100%), 1fr)", gridBlock, StringComparison.Ordinal);
         Assert.Contains("min-width: 0", groupBlock, StringComparison.Ordinal);
+        Assert.Contains("padding-right: 2rem", contextTierBlock, StringComparison.Ordinal);
+        Assert.Contains("min-width: min(14rem, 100%)", contextTierBlock, StringComparison.Ordinal);
+        Assert.Contains("min-height: 9rem", webViewAllowedHostsBlock, StringComparison.Ordinal);
     }
 
     private static Dictionary<string, string> ReadDarkThemeVariables()
