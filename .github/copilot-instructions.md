@@ -109,7 +109,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 ### Markdown/Liquid Rendering
 
-- Markdown/Liquid preview should mimic github/docs rendering. Render `{% octicon "name" ... %}` as Primer Octicons inline SVG with appropriate classes/attributes. Preserve data tag indentation, alert blocks, tool/platform blocks, prompt blocks, and Copilot links where practical.
+- Markdown/Liquid preview should mimic github/docs rendering. Render `{% octicon "name" ... %}` as Primer Octicons inline SVG with appropriate classes/attributes. Preserve data tag indentation, alert blocks, tool/platform blocks, prompt blocks, code tab blocks, and Copilot links where practical.
 - Markdown comparison preview should read Markdown and referenced Liquid inputs from the bare clone by SHA (`git show`/`git ls-tree`) instead of creating full worktrees; reserve full worktrees for npm/Next preview. For binary or static assets referenced by Markdown, extract only the needed files from the same commit into the preview asset cache so screenshots do not break.
 - Markdown preview Liquid context must stay lazy but complete for the clicked file: load referenced reusables, AUTOTITLE targets, and referenced `data/**/*.yml` sequence files used by `for` loops such as `tables.copilot.models-and-pricing`; do not fall back to all-repo reusable/content scans for interactivity.
 - Markdown preview `ifversion` evaluation should load referenced `data/features/*.yml` files so known feature flags use their real `versions` mapping; unknown feature flags should remain conservatively visible.

@@ -1177,6 +1177,51 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Renders_Docs_CodeTabs_Blocks_Without_Liquid_Placeholders()
+    {
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            {% codetabs %}
+            {% codetab typescript %}
+            ```typescript
+            const client = new CopilotClient({
+              useLoggedInUser: false,
+            });
+            ```
+            {% endcodetab %}
+            {% codetab python %}
+            ```python
+            client = CopilotClient({
+                "use_logged_in_user": False,
+            })
+            ```
+            {% endcodetab %}
+            {% endcodetabs %}
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/copilot-sdk/authentication.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("class=\"ghd-code-tabs\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"ghd-code-tab-label\">typescript</div>", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"ghd-code-tab-label\">python</div>", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"language-typescript\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"language-python\"", html, StringComparison.Ordinal);
+        Assert.Contains("useLoggedInUser", html, StringComparison.Ordinal);
+        Assert.Contains("use_logged_in_user", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% codetabs", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% codetab", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{% endcodetab", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-liquid", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Preserves_Inline_Html_Like_Picture_Tags()
     {
         // Step 19.8: DisableHtml() was removed so github/docs inline HTML
