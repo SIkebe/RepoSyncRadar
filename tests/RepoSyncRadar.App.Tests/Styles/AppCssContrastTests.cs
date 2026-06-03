@@ -16,6 +16,22 @@ public sealed partial class AppCssContrastTests
         AssertContrast("chip", variables["--radar-chip-fg"], variables["--radar-chip-bg"]);
         AssertContrast("warning", variables["--radar-warning-fg"], variables["--radar-warning-bg"]);
         AssertContrast("danger", variables["--radar-danger-fg"], variables["--radar-danger-bg"]);
+        AssertContrast("success text", variables["--radar-success-fg"], variables["--radar-app-bg"]);
+    }
+
+    [Fact]
+    public void SidebarAuthState_Uses_ThemeAware_ColorTokens()
+    {
+        var css = ReadAppCss();
+
+        var signedInBlock = GetRuleBlock(css, ".sidebar-auth-state.signed-in");
+        var notSignedInBlock = GetRuleBlock(css, ".sidebar-auth-state.not-signed-in");
+        var notConfiguredBlock = GetRuleBlock(css, ".sidebar-auth-state.not-configured,") +
+            GetRuleBlock(css, ".sidebar-auth-error");
+
+        Assert.Contains("color: var(--radar-success-fg", signedInBlock, StringComparison.Ordinal);
+        Assert.Contains("color: var(--radar-warning-fg", notSignedInBlock, StringComparison.Ordinal);
+        Assert.Contains("color: var(--radar-danger-fg", notConfiguredBlock, StringComparison.Ordinal);
     }
 
     [Fact]
