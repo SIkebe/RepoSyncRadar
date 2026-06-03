@@ -42,6 +42,8 @@
                        SettingsOpen="_settingsOpen"
                        AuthRefreshToken="_authRefreshToken" />
 
+            @if (!_settingsOpen)
+            {
             <MudPaper Elevation="0" Class="pa-2">
                 <div class="commit-search-toolbar" data-testid="commit-search-toolbar">
                     <label class="commit-search-label" for="commit-hash-search">@L["Common.Search"]</label>
@@ -195,6 +197,7 @@
                     }
                 }
             </MudPaper>
+            }
         </main>
     </div>
 </CascadingValue>
@@ -328,6 +331,7 @@
 
     private Task HandleStatusChanged(ReviewStatus? status)
     {
+        _settingsOpen = false;
         _selectedStatus = status;
         _filter = BuildCurrentFilter();
         _selectedCommit = null;
