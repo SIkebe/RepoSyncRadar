@@ -26,7 +26,7 @@ public sealed record DocsLiquidContext(
     IReadOnlyDictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>> DataSequences,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Features)
 {
-    public IReadOnlyDictionary<string, DocsLiquidDataValue> DataObjects { get; init; } =
+    internal IReadOnlyDictionary<string, DocsLiquidDataValue> DataObjects { get; init; } =
         new Dictionary<string, DocsLiquidDataValue>(StringComparer.Ordinal);
 
     public DocsLiquidContext(
@@ -75,13 +75,13 @@ public sealed record DocsLiquidContext(
         new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal));
 }
 
-public abstract record DocsLiquidDataValue
+internal abstract record DocsLiquidDataValue
 {
     public static DocsLiquidDataValue EmptyString { get; } = new DocsLiquidScalarValue(string.Empty);
 }
 
-public sealed record DocsLiquidScalarValue(string Value) : DocsLiquidDataValue;
+internal sealed record DocsLiquidScalarValue(string Value) : DocsLiquidDataValue;
 
-public sealed record DocsLiquidSequenceValue(IReadOnlyList<DocsLiquidDataValue> Items) : DocsLiquidDataValue;
+internal sealed record DocsLiquidSequenceValue(IReadOnlyList<DocsLiquidDataValue> Items) : DocsLiquidDataValue;
 
-public sealed record DocsLiquidObjectValue(IReadOnlyDictionary<string, DocsLiquidDataValue> Properties) : DocsLiquidDataValue;
+internal sealed record DocsLiquidObjectValue(IReadOnlyDictionary<string, DocsLiquidDataValue> Properties) : DocsLiquidDataValue;
