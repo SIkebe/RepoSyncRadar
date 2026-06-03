@@ -24,7 +24,10 @@
         <aside class="radar-sidebar-pane">
             <MudText Typo="Typo.h6" Class="mb-2">@L["Workbench.Queues"]</MudText>
             <Sidebar Selected="_selectedStatus"
-                     SelectedChanged="HandleStatusChanged" />
+                     SelectedChanged="HandleStatusChanged"
+                     SettingsOpen="_settingsOpen"
+                     SettingsClicked="ToggleSettingsAsync"
+                     AuthChanged="HandleAuthChangedAsync" />
         </aside>
 
         <div class="radar-sidebar-resizer"
@@ -35,8 +38,12 @@
              data-testid="radar-sidebar-resizer"></div>
 
         <main class="radar-workbench">
-            <AppHeader DisplayCultureChanged="HandleDisplayCultureChanged" />
+            <AppHeader DisplayCultureChanged="HandleDisplayCultureChanged"
+                       SettingsOpen="_settingsOpen"
+                       AuthStateVersion="_authStateVersion" />
 
+            @if (!_settingsOpen)
+            {
             <MudPaper Elevation="0" Class="pa-2">
                 <div class="commit-search-toolbar" data-testid="commit-search-toolbar">
                     <label class="commit-search-label" for="commit-hash-search">@L["Common.Search"]</label>
@@ -190,6 +197,7 @@
                     }
                 }
             </MudPaper>
+            }
         </main>
     </div>
 </CascadingValue>
@@ -213,8 +221,11 @@
     private Task? _batchExplanationTimerTask;
     private IReviewBroadcaster? _broadcaster;
     private IAppUserSettingsStore? _settingsStore;
+    private IWorkbenchLayoutCoordinator? _layoutCoordinator;
     private DocsThemeMode _theme = AppUserSettings.Default.DefaultDocsTheme;
     private string _displayCulture = AppUserSettings.Default.DisplayCulture;
+    private bool _settingsOpen;
+    private int _authStateVersion;
 
     private void ApplyDisplayCultureForRender()
         => AppDisplayCulture.Apply(_displayCulture);
@@ -234,6 +245,9 @@
         {
             _broadcaster.Reviewed += OnReviewed;
         }
+
+        _layoutCoordinator = Services.GetService<IWorkbenchLayoutCoordinator>();
+        _layoutCoordinator?.SetSettingsExpanded(_settingsOpen);
     }
 
     private async void OnSettingsChanged(AppUserSettings settings)
@@ -305,6 +319,7 @@
         CancelBatchExplanationProgress();
         _batchExplanationCts?.Dispose();
         _batchExplanationCts = null;
+        _layoutCoordinator?.SetSettingsExpanded(false);
     }
 
     internal static string BuildShellClass(DocsThemeMode theme)
@@ -321,6 +336,7 @@
 
     private Task HandleStatusChanged(ReviewStatus? status)
     {
+        SetSettingsOpen(false);
         _selectedStatus = status;
         _filter = BuildCurrentFilter();
         _selectedCommit = null;
@@ -328,6 +344,29 @@
         _bulkReviewStatus = null;
         ClearBatchExplanation();
         _listRefreshVersion++;
+        return Task.CompletedTask;
+    }
+
+    private Task ToggleSettingsAsync()
+    {
+        SetSettingsOpen(!_settingsOpen);
+        return Task.CompletedTask;
+    }
+
+    private void SetSettingsOpen(bool isOpen)
+    {
+        if (_settingsOpen == isOpen)
+        {
+            return;
+        }
+
+        _settingsOpen = isOpen;
+        _layoutCoordinator?.SetSettingsExpanded(isOpen);
+    }
+
+    private Task HandleAuthChangedAsync()
+    {
+        _authStateVersion++;
         return Task.CompletedTask;
     }
 

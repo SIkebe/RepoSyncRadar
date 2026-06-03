@@ -66,7 +66,26 @@ public sealed class LocalAppSettingsEditorTests
         {
             var contextTier = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-context-tier\"]"));
             var unsetOption = Assert.Single(contextTier.Options, static option => string.IsNullOrEmpty(option.Value));
-            Assert.Equal("SDK default (unset)", unsetOption.TextContent.Trim());
+            Assert.Equal("SDK 既定 (未設定)", unsetOption.TextContent.Trim());
+        });
+    }
+
+    [Fact]
+    public void Renders_PrewarmOnStartup_Checkbox_With_Boolean_Layout_Class()
+    {
+        var store = new FakeLocalAppSettingsStore(LocalAppSettings.Default.Clone());
+        using var ctx = new BunitContext();
+
+        var cut = ctx.Render<LocalAppSettingsEditor>(
+            parameters => parameters.AddCascadingValue<IServiceProvider>(BuildServices(store)));
+
+        cut.WaitForAssertion(() =>
+        {
+            var checkbox = cut.Find("[data-testid='settings-docsrepo-prewarm-on-startup']");
+            var label = checkbox.ParentElement;
+
+            Assert.NotNull(label);
+            Assert.Contains("local-settings-check", label.ClassList);
         });
     }
 

@@ -1,4 +1,6 @@
 @using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Logging
+@using RepoSyncRadar.App.Auth
 @using RepoSyncRadar.Core.Data
 @using RepoSyncRadar.Core.Models
 @implements IDisposable
@@ -12,28 +14,79 @@
 *@
 
 <nav class="radar-sidebar" data-testid="sidebar">
-    @if (_counts is null)
-    {
-        <p class="loading" data-testid="sidebar-loading">@L["Common.Loading"]</p>
-    }
-    else
-    {
-        @foreach (var entry in Entries)
+    <div class="sidebar-queue-list" data-testid="sidebar-queue-list">
+        @if (_counts is null)
         {
-            <button type="button"
-                    class="sidebar-item @(Selected == entry.Status ? "active" : null)"
-                    data-status="@entry.Status"
-                    data-testid="sidebar-item-@entry.Status"
-                    title="@BuildDescription(entry)"
-                    aria-label="@BuildAriaLabel(entry)"
-                    @onclick="() => OnSelectAsync(entry.Status)">
-                <span class="sidebar-copy">
-                    <span class="label">@BuildLabel(entry)</span>
-                </span>
-                <span class="count" data-testid="sidebar-count-@entry.Status">@CountFor(entry.Status)</span>
-            </button>
+            <p class="loading" data-testid="sidebar-loading">@L["Common.Loading"]</p>
         }
-    }
+        else
+        {
+            @foreach (var entry in Entries)
+            {
+                <button type="button"
+                        class="sidebar-item @(Selected == entry.Status ? "active" : null)"
+                        data-status="@entry.Status"
+                        data-testid="sidebar-item-@entry.Status"
+                        title="@BuildDescription(entry)"
+                        aria-label="@BuildAriaLabel(entry)"
+                        @onclick="() => OnSelectAsync(entry.Status)">
+                    <span class="sidebar-copy">
+                        <span class="label">@BuildLabel(entry)</span>
+                    </span>
+                    <span class="count" data-testid="sidebar-count-@entry.Status">@CountFor(entry.Status)</span>
+                </button>
+            }
+        }
+    </div>
+
+    <div class="sidebar-footer" data-testid="sidebar-footer">
+        <section class="sidebar-auth" data-testid="sidebar-auth" aria-label="@L["Sidebar.Auth.AriaLabel"]">
+            @if (ShouldShowAuthStateLabel())
+            {
+                <span class="@BuildAuthStateClass()"
+                      data-testid="sidebar-auth-state"
+                      data-state="@_authState"
+                      title="@BuildAuthStateTitle()">@L[BuildAuthStateLabelKey()]</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(_login))
+            {
+                <span class="sidebar-auth-login" data-testid="sidebar-auth-login">@($"@{_login}")</span>
+            }
+            @if (!string.IsNullOrWhiteSpace(_authError))
+            {
+                <span class="sidebar-auth-error" data-testid="sidebar-auth-error">@_authError</span>
+            }
+            @if (_authState == GitHubAuthState.NotConfigured)
+            {
+                <span class="sidebar-auth-hint" data-testid="sidebar-auth-config-hint">@L["AppHeader.ConfigHint"]</span>
+            }
+            @if (_authState == GitHubAuthState.SignedIn)
+            {
+                <button type="button"
+                        class="toolbar-button compact secondary sidebar-auth-button"
+                        data-testid="sidebar-auth-signout"
+                        disabled="@_authBusy"
+                        @onclick="OnSignOutAsync">@L["AppHeader.SignOut"]</button>
+            }
+            else if (_authState == GitHubAuthState.NotSignedIn)
+            {
+                <button type="button"
+                        class="toolbar-button compact primary sidebar-auth-button"
+                        data-testid="sidebar-auth-signin"
+                        disabled="@_authBusy"
+                        @onclick="OnSignInAsync">@L["AppHeader.SignIn"]</button>
+            }
+        </section>
+        <MudIconButton Icon="@Icons.Material.Filled.Settings"
+                       Size="Size.Small"
+                       Color="Color.Default"
+                       Class="sidebar-settings-button"
+                       title="@L["Common.Settings"]"
+                       aria-label="@L["Common.Settings"]"
+                       data-testid="sidebar-settings"
+                       aria-pressed="@BuildSettingsPressed()"
+                       OnClick="OnSettingsClickedAsync" />
+    </div>
 </nav>
 
 @code {
@@ -59,15 +112,25 @@
 
     [Parameter] public EventCallback<ReviewStatus?> SelectedChanged { get; set; }
 
+    [Parameter] public bool SettingsOpen { get; set; }
+
+    [Parameter] public EventCallback SettingsClicked { get; set; }
+
+    [Parameter] public EventCallback AuthChanged { get; set; }
+
     private IReadOnlyDictionary<ReviewStatus, int>? _counts;
     private IReviewBroadcaster? _broadcaster;
+    private GitHubAuthState _authState = GitHubAuthState.NotSignedIn;
+    private string? _login;
+    private bool _authBusy;
+    private string? _authError;
 
     private void ApplyDisplayCultureForRender()
         => AppDisplayCulture.Apply(DisplayCulture);
 
     protected override async Task OnInitializedAsync()
     {
-        await ReloadAsync();
+        await Task.WhenAll(ReloadAsync(), RefreshAuthStateAsync());
         _broadcaster = Services.GetService<IReviewBroadcaster>();
         if (_broadcaster is not null)
         {
@@ -79,6 +142,81 @@
     {
         var repo = Services.GetRequiredService<IRadarRepository>();
         _counts = await repo.GetReviewCountsAsync();
+    }
+
+    private async Task RefreshAuthStateAsync()
+    {
+        var session = Services.GetRequiredService<IGitHubAuthSession>();
+        _authState = await session.GetStateAsync(CancellationToken.None);
+        _login = _authState == GitHubAuthState.SignedIn
+            ? await session.GetCurrentLoginAsync(CancellationToken.None)
+            : null;
+    }
+
+    private async Task OnSignInAsync()
+    {
+        _authBusy = true;
+        _authError = null;
+        StateHasChanged();
+        try
+        {
+            var session = Services.GetRequiredService<IGitHubAuthSession>();
+            await session.SignInAsync(CancellationToken.None);
+            await RefreshAuthStateAsync();
+        }
+        catch (Exception ex)
+        {
+            _authError = $"{L["AppHeader.SignInFailed"]}: {ex.Message}";
+            return;
+        }
+        finally
+        {
+            _authBusy = false;
+        }
+
+        await NotifyAuthChangedAsync("sign-in");
+    }
+
+    private async Task OnSignOutAsync()
+    {
+        _authBusy = true;
+        _authError = null;
+        StateHasChanged();
+        try
+        {
+            var session = Services.GetRequiredService<IGitHubAuthSession>();
+            await session.SignOutAsync(CancellationToken.None);
+            await RefreshAuthStateAsync();
+        }
+        catch (Exception ex)
+        {
+            _authError = $"{L["AppHeader.SignOutFailed"]}: {ex.Message}";
+            return;
+        }
+        finally
+        {
+            _authBusy = false;
+        }
+
+        await NotifyAuthChangedAsync("sign-out");
+    }
+
+    private Task OnSettingsClickedAsync()
+        => SettingsClicked.InvokeAsync();
+
+    private async Task NotifyAuthChangedAsync(string operation)
+    {
+        try
+        {
+            await AuthChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            if (Services.GetService<ILogger<Sidebar>>() is { } logger)
+            {
+                LogAuthChangedCallbackFailed(logger, ex, operation);
+            }
+        }
     }
 
     private async void OnReviewed(object? sender, EventArgs e)
@@ -121,4 +259,32 @@
 
     private string BuildAriaLabel(SidebarEntry entry)
         => $"{BuildLabel(entry)}: {BuildDescription(entry)}";
+
+    private string BuildAuthStateLabelKey()
+        => _authState switch
+        {
+            GitHubAuthState.SignedIn => "AppHeader.SignedIn",
+            GitHubAuthState.NotConfigured => "AppHeader.NotConfigured",
+            _ => "AppHeader.NotSignedIn",
+        };
+
+    private string BuildAuthStateTitle()
+        => _authState == GitHubAuthState.NotConfigured
+            ? L["AppHeader.ConfigHint"]
+            : L[BuildAuthStateLabelKey()];
+
+    private string BuildAuthStateClass()
+        => _authState switch
+        {
+            GitHubAuthState.SignedIn => "sidebar-auth-state signed-in",
+            GitHubAuthState.NotConfigured => "sidebar-auth-state not-configured",
+            _ => "sidebar-auth-state not-signed-in",
+        };
+
+    private string BuildSettingsPressed()
+        => SettingsOpen ? "true" : "false";
+
+    private bool ShouldShowAuthStateLabel()
+        => _authState != GitHubAuthState.SignedIn || string.IsNullOrWhiteSpace(_login);
+
 }

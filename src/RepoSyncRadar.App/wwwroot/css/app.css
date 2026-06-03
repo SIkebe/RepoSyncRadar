@@ -42,9 +42,11 @@ html, body {
 .radar-sidebar-pane {
     border-right: 1px solid #e5e5e5;
     padding: 0.75rem 0.4rem;
-    overflow-y: auto;
+    overflow: hidden;
     background: #ffffff;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .radar-sidebar-resizer {
@@ -175,7 +177,81 @@ html, body {
     gap: 0.25rem;
     padding: 0;
     border-right: none;
-    overflow-y: visible;
+    overflow: hidden;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.sidebar-queue-list {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.sidebar-footer {
+    border-top: 1px solid var(--radar-border-subtle, #e5e5e5);
+    display: grid;
+    flex: 0 0 auto;
+    gap: 0.5rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-top: 0.65rem;
+    padding-top: 0.65rem;
+}
+
+.sidebar-auth {
+    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.sidebar-auth-state,
+.sidebar-auth-login,
+.sidebar-auth-error,
+.sidebar-auth-hint {
+    font-size: 0.78rem;
+    line-height: 1.25;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.sidebar-auth-state {
+    font-weight: 700;
+}
+
+.sidebar-auth-state.signed-in {
+    color: var(--radar-success-fg, #1a7f37);
+}
+
+.sidebar-auth-state.not-signed-in {
+    color: var(--radar-warning-fg, #7d4e00);
+}
+
+.sidebar-auth-state.not-configured,
+.sidebar-auth-error {
+    color: var(--radar-danger-fg, #a40e26);
+}
+
+.sidebar-auth-login {
+    color: var(--radar-muted-fg, #57606a);
+    font-weight: 600;
+}
+
+.sidebar-auth-hint {
+    color: var(--radar-muted-fg, #57606a);
+}
+
+.sidebar-auth-button {
+    align-self: flex-start;
+    max-width: 100%;
+}
+
+.sidebar-settings-button {
+    align-self: end;
 }
 
 .sidebar-item {
@@ -1119,8 +1195,9 @@ html, body {
 
 .local-settings-grid {
     display: grid;
-    gap: 0.6rem;
-    grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+    align-items: start;
+    gap: 0.75rem;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
 .local-settings-group {
@@ -1128,10 +1205,49 @@ html, body {
     border-radius: 6px;
     display: grid;
     gap: 0.5rem;
+    grid-column: span 4;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin: 0;
     min-width: 0;
     padding: 0.65rem;
+}
+
+.local-settings-group-github,
+.local-settings-group-docs-api,
+.local-settings-group-logging,
+.local-settings-group-updates {
+    grid-column: span 3;
+}
+
+.local-settings-group-copilot {
+    grid-column: span 5;
+    order: 5;
+}
+
+.local-settings-group-webview {
+    grid-column: span 3;
+    order: 6;
+}
+
+.local-settings-group-docs-repository {
+    grid-column: span 4;
+    order: 7;
+}
+
+.local-settings-group-github {
+    order: 1;
+}
+
+.local-settings-group-docs-api {
+    order: 2;
+}
+
+.local-settings-group-logging {
+    order: 3;
+}
+
+.local-settings-group-updates {
+    order: 4;
 }
 
 .local-settings-group legend {
@@ -1139,6 +1255,43 @@ html, body {
     font-size: 0.82rem;
     font-weight: 700;
     padding: 0 0.25rem;
+}
+
+@media (max-width: 1180px) {
+    .local-settings-grid {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+
+    .local-settings-group,
+    .local-settings-group-github,
+    .local-settings-group-docs-api,
+    .local-settings-group-webview,
+    .local-settings-group-logging,
+    .local-settings-group-updates {
+        grid-column: span 3;
+    }
+
+    .local-settings-group-copilot,
+    .local-settings-group-docs-repository {
+        grid-column: span 6;
+    }
+}
+
+@media (max-width: 760px) {
+    .local-settings-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .local-settings-group,
+    .local-settings-group-github,
+    .local-settings-group-docs-api,
+    .local-settings-group-copilot,
+    .local-settings-group-webview,
+    .local-settings-group-docs-repository,
+    .local-settings-group-logging,
+    .local-settings-group-updates {
+        grid-column: 1 / -1;
+    }
 }
 
 .local-settings-field,
@@ -1168,7 +1321,8 @@ html, body {
 }
 
 .local-settings-field input,
-.local-settings-field textarea {
+.local-settings-field textarea,
+.local-settings-field select {
     background: #fff;
     border: 1px solid #d0d7de;
     border-radius: 6px;
@@ -1180,13 +1334,24 @@ html, body {
     width: 100%;
 }
 
+.local-settings-field .context-tier-select {
+    min-height: 2.6rem;
+    min-width: min(14rem, 100%);
+    padding-right: 2rem;
+}
+
 .local-settings-field textarea {
     min-height: 4.5rem;
     resize: vertical;
 }
 
+.local-settings-field textarea[data-testid="settings-webview-allowed-hosts"] {
+    min-height: 9rem;
+}
+
 .local-settings-field input:disabled,
 .local-settings-field textarea:disabled,
+.local-settings-field select:disabled,
 .local-settings-check input:disabled {
     cursor: default;
     opacity: 0.62;
@@ -1872,6 +2037,7 @@ html, body {
     --radar-danger-fg: #a40e26;
     --radar-warning-bg: #fff8c5;
     --radar-warning-fg: #7d4e00;
+    --radar-success-fg: #1a7f37;
     --radar-accent-bg: #eaf3ff;
     --radar-accent-hover-bg: #d6e7ff;
     --radar-accent-border: #2f6fd0;
@@ -1899,6 +2065,7 @@ html, body {
     --radar-danger-fg: #ff7b72;
     --radar-warning-bg: #3c2e00;
     --radar-warning-fg: #e3b341;
+    --radar-success-fg: #3fb950;
     --radar-accent-bg: #0d2d4d;
     --radar-accent-hover-bg: #1f4f78;
     --radar-accent-border: #58a6ff;
@@ -2034,6 +2201,7 @@ html, body {
 .radar-theme-dark .local-settings-group,
 .radar-theme-dark .local-settings-field input,
 .radar-theme-dark .local-settings-field textarea,
+.radar-theme-dark .local-settings-field select,
 .radar-theme-dark .ignore-rule-row code,
 .radar-theme-dark .third-party-version,
 .radar-theme-dark .third-party-license,

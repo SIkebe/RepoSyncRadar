@@ -106,7 +106,7 @@ public sealed class WorkbenchTests
             await using var ctx = CreateWorkbenchTestContext(repo, out _, settingsStore);
             var cut = ctx.Render<Workbench>();
 
-            cut.Find("[data-testid=\"app-header-settings\"]").Click();
+            cut.Find("[data-testid=\"sidebar-settings\"]").Click();
             cut.WaitForAssertion(() => Assert.Contains("表示言語", cut.Find("[data-testid=\"settings-panel\"]").TextContent, StringComparison.Ordinal));
 
             cut.Find("[data-testid=\"settings-display-language-en\"]").Click();
@@ -115,7 +115,7 @@ public sealed class WorkbenchTests
             {
                 var shellText = cut.Find("[data-testid=\"radar-shell\"]").TextContent;
                 Assert.Equal("en", settingsStore.Current.DisplayCulture);
-                Assert.Contains("Signed in", shellText, StringComparison.Ordinal);
+                Assert.Contains("@octocat", shellText, StringComparison.Ordinal);
                 Assert.Contains("Unseen", shellText, StringComparison.Ordinal);
                 Assert.Contains("Watch", shellText, StringComparison.Ordinal);
                 Assert.Contains("Display Language", shellText, StringComparison.Ordinal);
@@ -136,6 +136,58 @@ public sealed class WorkbenchTests
         {
             AppDisplayCulture.Apply(AppDisplayCulture.DefaultCultureName);
         }
+    }
+
+    [Fact]
+    public async Task Workbench_SettingsPanel_Hides_Commit_Surface_And_Category_Selection_Closes_Settings()
+    {
+        var unseen = MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "unseen docs");
+        var rejected = MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "rejected docs");
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts([
+                ReviewStatus.Unseen,
+                ReviewStatus.Rejected,
+            ])));
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> commits = filter.Status switch
+                {
+                    ReviewStatus.Unseen => [unseen],
+                    ReviewStatus.Rejected => [rejected],
+                    _ => [],
+                };
+                return Task.FromResult(commits);
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
+        cut.WaitForAssertion(() => Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]")));
+
+        cut.Find("[data-testid=\"sidebar-settings\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-search-toolbar\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-empty\"]"));
+        });
+
+        cut.Find("[data-testid=\"sidebar-item-Rejected\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-panel\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"commit-search-toolbar\"]"));
+            Assert.Contains("active", cut.Find("[data-testid=\"sidebar-item-Rejected\"]").ClassList);
+            var row = Assert.Single(cut.FindAll("[data-testid=\"commit-row\"]"));
+            Assert.Equal(rejected.Sha, row.GetAttribute("data-sha"));
+        });
     }
 
     [Fact]

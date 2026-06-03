@@ -15,8 +15,8 @@ using Xunit;
 namespace RepoSyncRadar.App.Tests.Components;
 
 /// <summary>
-/// bUnit tests for <see cref="AppHeader"/>. Verifies the three auth states render the
-/// right affordances and that the Triage button drives
+/// bUnit tests for <see cref="AppHeader"/>. Verifies auth state gates the
+/// Triage button, settings panel content renders when opened, and Triage drives
 /// <see cref="ICopilotAgent.RunMorningTriageAsync"/> + republishes through
 /// <see cref="IReviewBroadcaster"/> so Sidebar / CommitList refresh themselves.
 /// </summary>
@@ -24,7 +24,7 @@ namespace RepoSyncRadar.App.Tests.Components;
 public sealed class AppHeaderTests
 {
     [Fact]
-    public void Renders_SignedIn_State_With_SignOut_And_Enabled_Triage()
+    public void Renders_SignedIn_State_With_Enabled_Triage()
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -41,19 +41,14 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         Assert.Contains("app-header", cut.Find("[data-testid=\"app-header\"]").ClassList);
-        Assert.Equal(
-            "SignedIn",
-            cut.Find("[data-testid=\"app-header-state\"]").GetAttribute("data-state"));
-        Assert.NotNull(cut.Find("[data-testid=\"app-header-signout\"]"));
-        Assert.Equal(
-            "@octocat",
-            cut.Find("[data-testid=\"app-header-login\"]").TextContent);
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-signout\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-login\"]"));
         Assert.False(cut.Find("[data-testid=\"app-header-sync\"]").HasAttribute("disabled"));
         Assert.Equal("Triage", cut.Find("[data-testid=\"app-header-sync\"]").TextContent.Trim());
     }
 
     [Fact]
-    public void Renders_NotSignedIn_State_With_SignIn_And_Disabled_Triage()
+    public void Renders_NotSignedIn_State_With_Disabled_Triage()
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -66,15 +61,12 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        Assert.Equal(
-            "NotSignedIn",
-            cut.Find("[data-testid=\"app-header-state\"]").GetAttribute("data-state"));
-        Assert.NotNull(cut.Find("[data-testid=\"app-header-signin\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-signin\"]"));
         Assert.True(cut.Find("[data-testid=\"app-header-sync\"]").HasAttribute("disabled"));
     }
 
     [Fact]
-    public void Renders_NotConfigured_State_With_Hint_And_Disabled_Triage()
+    public void Renders_NotConfigured_State_With_Disabled_Triage()
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -87,10 +79,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        Assert.Equal(
-            "NotConfigured",
-            cut.Find("[data-testid=\"app-header-state\"]").GetAttribute("data-state"));
-        Assert.NotNull(cut.Find("[data-testid=\"app-header-config-hint\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-config-hint\"]"));
         Assert.True(cut.Find("[data-testid=\"app-header-sync\"]").HasAttribute("disabled"));
     }
 
@@ -399,39 +388,7 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
-    public void SignIn_Button_Calls_SignInAsync_And_Refreshes_State()
-    {
-        var session = Substitute.For<IGitHubAuthSession>();
-        // First call (initial render) — NotSignedIn. After SignInAsync succeeds the
-        // component re-queries state and should observe SignedIn so the UI flips.
-        session
-            .GetStateAsync(Arg.Any<CancellationToken>())
-            .Returns(
-                Task.FromResult(GitHubAuthState.NotSignedIn),
-                Task.FromResult(GitHubAuthState.SignedIn));
-        session
-            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<string?>("octocat"));
-
-        var sp = BuildServices(session, out _, out _);
-        using var ctx = new Bunit.BunitContext();
-
-        var cut = ctx.Render<AppHeader>(
-            p => p.AddCascadingValue<IServiceProvider>(sp));
-
-        cut.Find("[data-testid=\"app-header-signin\"]").Click();
-
-        session.Received(1).SignInAsync(Arg.Any<CancellationToken>());
-        Assert.Equal(
-            "SignedIn",
-            cut.Find("[data-testid=\"app-header-state\"]").GetAttribute("data-state"));
-        Assert.Equal(
-            "@octocat",
-            cut.Find("[data-testid=\"app-header-login\"]").TextContent);
-    }
-
-    [Fact]
-    public void Renders_SignedIn_State_Without_Login_When_UserApi_Returns_Null()
+    public void Renders_SignedIn_State_Without_Account_Controls_In_Header()
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -447,13 +404,53 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        // Still rendered as signed-in (Triage enabled), but no @login chip — the
-        // header must not crash just because /user 5xx'd or rate-limited.
-        Assert.Equal(
-            "SignedIn",
-            cut.Find("[data-testid=\"app-header-state\"]").GetAttribute("data-state"));
         Assert.Empty(cut.FindAll("[data-testid=\"app-header-login\"]"));
         Assert.False(cut.Find("[data-testid=\"app-header-sync\"]").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void Settings_Open_Hides_Triage_And_Work_Activity_From_Header()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var usageTracker = new CopilotUsageTracker();
+        usageTracker.Record(new CopilotUsageRecord(
+            new DateTimeOffset(2026, 5, 18, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            SessionPurpose.Triage.ToString(),
+            "gpt-5",
+            "api-1",
+            1000,
+            200,
+            0,
+            0,
+            0,
+            null,
+            null));
+
+        var sp = BuildServices(session, out var agent, out _, usageTracker: usageTracker);
+        agent
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IngestionReport(Total: 3, Inserted: 2, Skipped: 1)));
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"app-header-last-sync\"]")));
+
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+
+        Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-sync\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-last-sync\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-triage-status\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-copilot-usage\"]"));
+        Assert.NotNull(cut.Find("[data-testid=\"app-header-version\"]"));
     }
 
     [Fact]
@@ -488,12 +485,16 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
 
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"settings-third-party-notices\"]"));
+            Assert.True(
+                cut.Markup.IndexOf("data-testid=\"settings-ignore-rules\"", StringComparison.Ordinal) <
+                cut.Markup.IndexOf("data-testid=\"settings-third-party-notices\"", StringComparison.Ordinal),
+                "Ignore rules should appear before third-party notices in Settings.");
             Assert.DoesNotContain("無視リストを更新", cut.Find(".app-settings-header").TextContent, StringComparison.Ordinal);
             Assert.Equal(
                 "無視リストを更新",
@@ -539,7 +540,7 @@ public sealed class AppHeaderTests
 
         Assert.Contains("0.1230", cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent);
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
         Assert.Contains("AI Credits0.1230 credits", summary, StringComparison.Ordinal);
@@ -628,7 +629,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
         Assert.Contains("AI Credits0.2500 credits", summary, StringComparison.Ordinal);
@@ -680,7 +681,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"settings-ignore-rule\"]").Count));
 
         cut.FindAll("[data-testid=\"settings-delete-ignore-rule\"]")[0].Click();
@@ -743,7 +744,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
         cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"settings-ignore-rule\"]").Count));
         cut.FindAll("[data-testid=\"settings-ignore-rule-select\"]")[0].Change(true);
         cut.FindAll("[data-testid=\"settings-ignore-rule-select\"]")[2].Change(true);
@@ -791,7 +792,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
 
         cut.WaitForAssertion(() =>
         {
@@ -827,7 +828,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
 
         cut.WaitForAssertion(() =>
         {
@@ -871,7 +872,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
 
         cut.WaitForAssertion(() =>
         {
@@ -909,7 +910,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-check-updates\"]")));
         cut.Find("[data-testid=\"settings-check-updates\"]").Click();
 
@@ -938,7 +939,7 @@ public sealed class AppHeaderTests
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
-        cut.Find("[data-testid=\"app-header-settings\"]").Click();
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-check-updates\"]")));
         cut.Find("[data-testid=\"settings-check-updates\"]").Click();
 

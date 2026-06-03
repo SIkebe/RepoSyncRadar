@@ -56,6 +56,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<ICopilotAgent, CopilotAgent>();
         services.TryAddSingleton<IReviewBroadcaster, ReviewBroadcaster>();
         services.TryAddSingleton<IPreviewNavigator, PreviewNavigator>();
+        services.TryAddSingleton<IWorkbenchLayoutCoordinator, WorkbenchLayoutCoordinator>();
         services.TryAddSingleton<IVelopackUpdateManagerFactory, VelopackUpdateManagerFactory>();
         services.TryAddSingleton<IAppUpdateService, AppUpdateService>();
         services.TryAddSingleton<IAppVersionProvider, AppVersionProvider>();
