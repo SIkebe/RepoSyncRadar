@@ -66,7 +66,7 @@ public sealed class LocalAppSettingsEditorTests
         {
             var contextTier = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-context-tier\"]"));
             var unsetOption = Assert.Single(contextTier.Options, static option => string.IsNullOrEmpty(option.Value));
-            Assert.Equal("SDK default (unset)", unsetOption.TextContent.Trim());
+            Assert.Equal("SDK 既定 (未設定)", unsetOption.TextContent.Trim());
         });
     }
 

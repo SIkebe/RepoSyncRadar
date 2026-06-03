@@ -105,7 +105,7 @@
                        OnClick="OnTriageAsync"
                        Disabled="@(_busy || _state != GitHubAuthState.SignedIn)"
                        data-testid="app-header-sync">
-                @(_busy ? L["AppHeader.Triaging"] : "Triage")
+                @(_busy ? L["AppHeader.Triaging"] : L["Common.Triage"])
             </MudButton>
         }
         <span data-testid="app-header-version"
@@ -229,7 +229,7 @@
                     @if (_copilotUsage.SessionMetrics.FirstOrDefault() is { } sessionMetrics)
                     {
                         <p class="settings-muted" data-testid="settings-copilot-usage-session-metrics">
-                            @L["Settings.CopilotUsage.SessionMetrics", sessionMetrics.CurrentModel ?? "model unknown", FormatNumber(sessionMetrics.TotalUserRequests), FormatTokensWithUnit(sessionMetrics.LastCallInputTokens), FormatTokensWithUnit(sessionMetrics.LastCallOutputTokens)]
+                            @L["Settings.CopilotUsage.SessionMetrics", sessionMetrics.CurrentModel ?? L["CopilotUsage.ModelUnknown"], FormatNumber(sessionMetrics.TotalUserRequests), FormatTokensWithUnit(sessionMetrics.LastCallInputTokens), FormatTokensWithUnit(sessionMetrics.LastCallOutputTokens)]
                         </p>
                     }
                     @if (_copilotUsage.TotalNanoAiu is { } totalNanoAiu)

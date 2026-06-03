@@ -161,6 +161,58 @@
   <data name="LocalSettings.SaveFailed" xml:space="preserve"><value>アプリ設定の保存に失敗しました</value></data>
   <data name="LocalSettings.Saved" xml:space="preserve"><value>appsettings.local.json を保存しました</value></data>
   <data name="LocalSettings.Title" xml:space="preserve"><value>アプリ設定</value></data>
+  <data name="LocalSettings.Section.GitHub" xml:space="preserve"><value>GitHub</value></data>
+  <data name="LocalSettings.Section.DocsApi" xml:space="preserve"><value>DocsApi</value></data>
+  <data name="LocalSettings.Section.Copilot" xml:space="preserve"><value>Copilot</value></data>
+  <data name="LocalSettings.Section.WebView" xml:space="preserve"><value>WebView</value></data>
+  <data name="LocalSettings.Section.DocsRepository" xml:space="preserve"><value>DocsRepository</value></data>
+  <data name="LocalSettings.Section.Logging" xml:space="preserve"><value>Logging</value></data>
+  <data name="LocalSettings.Section.Updates" xml:space="preserve"><value>Updates</value></data>
+  <data name="LocalSettings.Label.Owner" xml:space="preserve"><value>所有者</value></data>
+  <data name="LocalSettings.Label.Repo" xml:space="preserve"><value>リポジトリ</value></data>
+  <data name="LocalSettings.Label.PullRequestTitleFilter" xml:space="preserve"><value>PR タイトル絞り込み</value></data>
+  <data name="LocalSettings.Label.MaxPullRequests" xml:space="preserve"><value>最大 PR 数</value></data>
+  <data name="LocalSettings.Label.PullRequestCreatedAtOrAfter" xml:space="preserve"><value>作成日時以降</value></data>
+  <data name="LocalSettings.Label.BaseAddress" xml:space="preserve"><value>ベース URL</value></data>
+  <data name="LocalSettings.Label.DefaultLanguage" xml:space="preserve"><value>既定言語</value></data>
+  <data name="LocalSettings.Label.ClientName" xml:space="preserve"><value>クライアント名</value></data>
+  <data name="LocalSettings.Label.PageListCacheSeconds" xml:space="preserve"><value>ページ一覧キャッシュ秒数</value></data>
+  <data name="LocalSettings.Label.DefaultModel" xml:space="preserve"><value>既定モデル</value></data>
+  <data name="LocalSettings.Label.Streaming" xml:space="preserve"><value>ストリーミング</value></data>
+  <data name="LocalSettings.Label.ContextTier" xml:space="preserve"><value>コンテキスト階層</value></data>
+  <data name="LocalSettings.Label.LogLevel" xml:space="preserve"><value>ログレベル</value></data>
+  <data name="LocalSettings.Label.SessionIdleTimeoutSeconds" xml:space="preserve"><value>セッション待機タイムアウト秒</value></data>
+  <data name="LocalSettings.Label.CopilotHome" xml:space="preserve"><value>Copilot Home</value></data>
+  <data name="LocalSettings.Label.TelemetryFilePath" xml:space="preserve"><value>テレメトリファイル</value></data>
+  <data name="LocalSettings.Label.CaptureContent" xml:space="preserve"><value>内容をキャプチャ</value></data>
+  <data name="LocalSettings.Label.EnableRemoteSessions" xml:space="preserve"><value>リモートセッションを有効化</value></data>
+  <data name="LocalSettings.Label.EnableSessionTelemetry" xml:space="preserve"><value>セッションテレメトリを有効化</value></data>
+  <data name="LocalSettings.Label.OAuthClientId" xml:space="preserve"><value>OAuthClientId</value></data>
+  <data name="LocalSettings.Label.AllowedUrlHosts" xml:space="preserve"><value>許可 URL ホスト</value></data>
+  <data name="LocalSettings.Label.OAuthScopes" xml:space="preserve"><value>OAuth スコープ</value></data>
+  <data name="LocalSettings.Label.BareCloneDir" xml:space="preserve"><value>ベアクローン先</value></data>
+  <data name="LocalSettings.Label.CloneUrl" xml:space="preserve"><value>クローン URL</value></data>
+  <data name="LocalSettings.Label.WorktreeRoot" xml:space="preserve"><value>ワークツリー ルート</value></data>
+  <data name="LocalSettings.Label.MaxWorktrees" xml:space="preserve"><value>最大ワークツリー数</value></data>
+  <data name="LocalSettings.Label.PrewarmOnStartup" xml:space="preserve"><value>起動時に事前準備</value></data>
+  <data name="LocalSettings.Label.PreviewCommand" xml:space="preserve"><value>プレビューコマンド</value></data>
+  <data name="LocalSettings.Label.PreviewArguments" xml:space="preserve"><value>プレビュー引数</value></data>
+  <data name="LocalSettings.Label.PreviewInstallArguments" xml:space="preserve"><value>インストール引数</value></data>
+  <data name="LocalSettings.Label.PreviewEnvironment" xml:space="preserve"><value>プレビュー環境変数</value></data>
+  <data name="LocalSettings.Label.PreviewBasePort" xml:space="preserve"><value>プレビュー基準ポート</value></data>
+  <data name="LocalSettings.Label.PreviewReadyTimeoutSeconds" xml:space="preserve"><value>プレビュー準備完了待ち秒数</value></data>
+  <data name="LocalSettings.Label.Default" xml:space="preserve"><value>既定</value></data>
+  <data name="LocalSettings.Label.Microsoft" xml:space="preserve"><value>Microsoft</value></data>
+  <data name="LocalSettings.Label.Enabled" xml:space="preserve"><value>有効</value></data>
+  <data name="LocalSettings.Label.CheckOnStartup" xml:space="preserve"><value>起動時に確認</value></data>
+  <data name="LocalSettings.Label.FeedUrl" xml:space="preserve"><value>フィード URL</value></data>
+  <data name="LocalSettings.Label.Channel" xml:space="preserve"><value>チャネル</value></data>
+  <data name="LocalSettings.Label.CheckTimeoutSeconds" xml:space="preserve"><value>確認タイムアウト秒</value></data>
+  <data name="LocalSettings.Option.SdkDefault" xml:space="preserve"><value>SDK 既定 (未設定)</value></data>
+  <data name="LocalSettings.Option.Default" xml:space="preserve"><value>default</value></data>
+  <data name="LocalSettings.Option.LongContext" xml:space="preserve"><value>long_context</value></data>
+  <data name="Common.Triage" xml:space="preserve"><value>Triage</value></data>
+  <data name="CopilotUsage.ModelUnknown" xml:space="preserve"><value>model unknown</value></data>
   <data name="ReviewActions.AddToIgnoreList" xml:space="preserve"><value>無視リストへ追加</value></data>
   <data name="ReviewActions.Archive" xml:space="preserve"><value>アーカイブする</value></data>
   <data name="ReviewActions.ArchivedReason" xml:space="preserve"><value>アーカイブ済みの理由</value></data>

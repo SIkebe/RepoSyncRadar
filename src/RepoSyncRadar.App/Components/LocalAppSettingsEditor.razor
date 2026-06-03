@@ -45,198 +45,198 @@
 
         <div class="local-settings-grid">
             <fieldset class="local-settings-group local-settings-group-github" data-testid="settings-local-github">
-                <legend>GitHub</legend>
+                <legend>@L["LocalSettings.Section.GitHub"]</legend>
                 <label class="local-settings-field">
-                    <span>Owner</span>
+                    <span>@L["LocalSettings.Label.Owner"]</span>
                     <input data-testid="settings-github-owner" value="@settings.GitHub.Owner" disabled="@_saving" @oninput="e => settings.GitHub.Owner = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>Repo</span>
+                    <span>@L["LocalSettings.Label.Repo"]</span>
                     <input data-testid="settings-github-repo" value="@settings.GitHub.Repo" disabled="@_saving" @oninput="e => settings.GitHub.Repo = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>PullRequestTitleFilter</span>
+                    <span>@L["LocalSettings.Label.PullRequestTitleFilter"]</span>
                     <input data-testid="settings-github-pr-title-filter" value="@settings.GitHub.PullRequestTitleFilter" disabled="@_saving" @oninput="e => settings.GitHub.PullRequestTitleFilter = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>MaxPullRequests</span>
+                    <span>@L["LocalSettings.Label.MaxPullRequests"]</span>
                     <input type="number" min="1" max="100" data-testid="settings-github-max-prs" value="@settings.GitHub.MaxPullRequests" disabled="@_saving" @oninput="e => settings.GitHub.MaxPullRequests = IntValue(e)" />
                 </label>
                 <label class="local-settings-field wide">
-                    <span>PullRequestCreatedAtOrAfter</span>
+                    <span>@L["LocalSettings.Label.PullRequestCreatedAtOrAfter"]</span>
                     <input data-testid="settings-github-created-after" placeholder="2026-05-15T00:00:00Z" value="@settings.GitHub.PullRequestCreatedAtOrAfter" disabled="@_saving" @oninput="e => settings.GitHub.PullRequestCreatedAtOrAfter = NullableStringValue(e)" />
                 </label>
             </fieldset>
 
             <fieldset class="local-settings-group local-settings-group-docs-api" data-testid="settings-local-docs-api">
-                <legend>DocsApi</legend>
+                <legend>@L["LocalSettings.Section.DocsApi"]</legend>
                 <label class="local-settings-field wide">
-                    <span>BaseAddress</span>
+                    <span>@L["LocalSettings.Label.BaseAddress"]</span>
                     <input data-testid="settings-docsapi-base-address" value="@settings.DocsApi.BaseAddress" disabled="@_saving" @oninput="e => settings.DocsApi.BaseAddress = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>DefaultLanguage</span>
+                    <span>@L["LocalSettings.Label.DefaultLanguage"]</span>
                     <input data-testid="settings-docsapi-language" value="@settings.DocsApi.DefaultLanguage" disabled="@_saving" @oninput="e => settings.DocsApi.DefaultLanguage = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>ClientName</span>
+                    <span>@L["LocalSettings.Label.ClientName"]</span>
                     <input data-testid="settings-docsapi-client-name" value="@settings.DocsApi.ClientName" disabled="@_saving" @oninput="e => settings.DocsApi.ClientName = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>PageListCacheSeconds</span>
+                    <span>@L["LocalSettings.Label.PageListCacheSeconds"]</span>
                     <input type="number" min="1" data-testid="settings-docsapi-cache-seconds" value="@settings.DocsApi.PageListCacheSeconds" disabled="@_saving" @oninput="e => settings.DocsApi.PageListCacheSeconds = IntValue(e)" />
                 </label>
             </fieldset>
 
             <fieldset class="local-settings-group local-settings-group-copilot" data-testid="settings-local-copilot">
-                <legend>Copilot</legend>
+                <legend>@L["LocalSettings.Section.Copilot"]</legend>
                 <label class="local-settings-field">
-                    <span>DefaultModel</span>
+                    <span>@L["LocalSettings.Label.DefaultModel"]</span>
                     <input data-testid="settings-copilot-model" value="@settings.Copilot.DefaultModel" disabled="@_saving" @oninput="e => settings.Copilot.DefaultModel = StringValue(e)" />
                 </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-copilot-streaming" checked="@settings.Copilot.Streaming" disabled="@_saving" @onchange="e => settings.Copilot.Streaming = BoolValue(e)" />
-                    <span>Streaming</span>
+                    <span>@L["LocalSettings.Label.Streaming"]</span>
                 </label>
                 <label class="local-settings-field">
-                    <span>ContextTier</span>
+                    <span>@L["LocalSettings.Label.ContextTier"]</span>
                     <select class="context-tier-select" data-testid="settings-copilot-context-tier" @bind:get="settings.Copilot.ContextTier" @bind:set="value => settings.Copilot.ContextTier = NullableStringValue(value)" disabled="@_saving">
-                        <option value="">SDK default (unset)</option>
-                        <option value="default">default</option>
-                        <option value="long_context">long_context</option>
+                        <option value="">@L["LocalSettings.Option.SdkDefault"]</option>
+                        <option value="default">@L["LocalSettings.Option.Default"]</option>
+                        <option value="long_context">@L["LocalSettings.Option.LongContext"]</option>
                     </select>
                 </label>
                 <label class="local-settings-field">
-                    <span>LogLevel</span>
+                    <span>@L["LocalSettings.Label.LogLevel"]</span>
                     <input data-testid="settings-copilot-log-level" value="@settings.Copilot.LogLevel" disabled="@_saving" @oninput="e => settings.Copilot.LogLevel = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>SessionIdleTimeoutSeconds</span>
+                    <span>@L["LocalSettings.Label.SessionIdleTimeoutSeconds"]</span>
                     <input type="number" min="0" data-testid="settings-copilot-idle-timeout" value="@settings.Copilot.SessionIdleTimeoutSeconds" disabled="@_saving" @oninput="e => settings.Copilot.SessionIdleTimeoutSeconds = NullableIntValue(e)" />
                 </label>
                 <label class="local-settings-field wide">
-                    <span>CopilotHome</span>
+                    <span>@L["LocalSettings.Label.CopilotHome"]</span>
                     <input data-testid="settings-copilot-home" value="@settings.Copilot.CopilotHome" disabled="@_saving" @oninput="e => settings.Copilot.CopilotHome = NullableStringValue(e)" />
                 </label>
                 <label class="local-settings-field wide">
-                    <span>TelemetryFilePath</span>
+                    <span>@L["LocalSettings.Label.TelemetryFilePath"]</span>
                     <input data-testid="settings-copilot-telemetry-file" value="@settings.Copilot.TelemetryFilePath" disabled="@_saving" @oninput="e => settings.Copilot.TelemetryFilePath = NullableStringValue(e)" />
                 </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-copilot-capture-content" checked="@settings.Copilot.CaptureContent" disabled="@_saving" @onchange="e => settings.Copilot.CaptureContent = BoolValue(e)" />
-                    <span>CaptureContent</span>
+                    <span>@L["LocalSettings.Label.CaptureContent"]</span>
                 </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-copilot-enable-remote-sessions" checked="@settings.Copilot.EnableRemoteSessions" disabled="@_saving" @onchange="e => settings.Copilot.EnableRemoteSessions = BoolValue(e)" />
-                    <span>EnableRemoteSessions</span>
+                    <span>@L["LocalSettings.Label.EnableRemoteSessions"]</span>
                 </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-copilot-enable-session-telemetry" checked="@settings.Copilot.EnableSessionTelemetry" disabled="@_saving" @onchange="e => settings.Copilot.EnableSessionTelemetry = BoolValue(e)" />
-                    <span>EnableSessionTelemetry</span>
+                    <span>@L["LocalSettings.Label.EnableSessionTelemetry"]</span>
                 </label>
                 <label class="local-settings-field wide">
-                    <span>OAuthClientId</span>
+                    <span>@L["LocalSettings.Label.OAuthClientId"]</span>
                     <input data-testid="settings-copilot-oauth-client-id" value="@settings.Copilot.OAuthClientId" disabled="@_saving" @oninput="e => settings.Copilot.OAuthClientId = NullableStringValue(e)" />
                     <small class="settings-muted">@L["LocalSettings.OAuthClientIdHint"]</small>
                 </label>
                 <label class="local-settings-field wide">
-                    <span>AllowedUrlHosts</span>
+                    <span>@L["LocalSettings.Label.AllowedUrlHosts"]</span>
                     <textarea rows="3" data-testid="settings-copilot-allowed-hosts" disabled="@_saving" @bind="_allowedHostsText" @bind:event="oninput"></textarea>
                 </label>
                 <label class="local-settings-field wide">
-                    <span>OAuthScopes</span>
+                    <span>@L["LocalSettings.Label.OAuthScopes"]</span>
                     <textarea rows="2" data-testid="settings-copilot-oauth-scopes" disabled="@_saving" @bind="_oauthScopesText" @bind:event="oninput"></textarea>
                 </label>
             </fieldset>
 
             <fieldset class="local-settings-group local-settings-group-webview" data-testid="settings-local-webview">
-                <legend>WebView</legend>
+                <legend>@L["LocalSettings.Section.WebView"]</legend>
                 <label class="local-settings-field wide">
-                    <span>AllowedUrlHosts</span>
+                    <span>@L["LocalSettings.Label.AllowedUrlHosts"]</span>
                     <textarea rows="4" data-testid="settings-webview-allowed-hosts" disabled="@_saving" @bind="_webViewAllowedHostsText" @bind:event="oninput"></textarea>
                 </label>
             </fieldset>
 
             <fieldset class="local-settings-group local-settings-group-docs-repository" data-testid="settings-local-docs-repository">
-                <legend>DocsRepository</legend>
+                <legend>@L["LocalSettings.Section.DocsRepository"]</legend>
                 <label class="local-settings-field wide">
-                    <span>BareCloneDir</span>
+                    <span>@L["LocalSettings.Label.BareCloneDir"]</span>
                     <input data-testid="settings-docsrepo-bare-clone-dir" value="@settings.DocsRepository.BareCloneDir" disabled="@_saving" @oninput="e => settings.DocsRepository.BareCloneDir = StringValue(e)" />
                 </label>
                 <label class="local-settings-field wide">
-                    <span>CloneUrl</span>
+                    <span>@L["LocalSettings.Label.CloneUrl"]</span>
                     <input data-testid="settings-docsrepo-clone-url" value="@settings.DocsRepository.CloneUrl" disabled="@_saving" @oninput="e => settings.DocsRepository.CloneUrl = StringValue(e)" />
                 </label>
                 <label class="local-settings-field wide">
-                    <span>WorktreeRoot</span>
+                    <span>@L["LocalSettings.Label.WorktreeRoot"]</span>
                     <input data-testid="settings-docsrepo-worktree-root" value="@settings.DocsRepository.WorktreeRoot" disabled="@_saving" @oninput="e => settings.DocsRepository.WorktreeRoot = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>MaxWorktrees</span>
+                    <span>@L["LocalSettings.Label.MaxWorktrees"]</span>
                     <input type="number" min="1" max="50" data-testid="settings-docsrepo-max-worktrees" value="@settings.DocsRepository.MaxWorktrees" disabled="@_saving" @oninput="e => settings.DocsRepository.MaxWorktrees = IntValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>PrewarmOnStartup</span>
+                    <span>@L["LocalSettings.Label.PrewarmOnStartup"]</span>
                     <input type="checkbox" data-testid="settings-docsrepo-prewarm-on-startup" checked="@settings.DocsRepository.PrewarmOnStartup" disabled="@_saving" @onchange="e => settings.DocsRepository.PrewarmOnStartup = BoolValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>PreviewCommand</span>
+                    <span>@L["LocalSettings.Label.PreviewCommand"]</span>
                     <input data-testid="settings-docsrepo-preview-command" value="@settings.DocsRepository.PreviewCommand" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewCommand = StringValue(e)" />
                 </label>
                 <label class="local-settings-field wide">
-                    <span>PreviewArguments</span>
+                    <span>@L["LocalSettings.Label.PreviewArguments"]</span>
                     <input data-testid="settings-docsrepo-preview-arguments" value="@settings.DocsRepository.PreviewArguments" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewArguments = StringValue(e)" />
                 </label>
                 <label class="local-settings-field wide">
-                    <span>PreviewInstallArguments</span>
+                    <span>@L["LocalSettings.Label.PreviewInstallArguments"]</span>
                     <input data-testid="settings-docsrepo-preview-install-arguments" value="@settings.DocsRepository.PreviewInstallArguments" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewInstallArguments = StringValue(e)" />
                 </label>
                 <label class="local-settings-field wide">
-                    <span>PreviewEnvironment</span>
+                    <span>@L["LocalSettings.Label.PreviewEnvironment"]</span>
                     <textarea rows="3" data-testid="settings-docsrepo-preview-environment" disabled="@_saving" @bind="_previewEnvironmentText" @bind:event="oninput"></textarea>
                 </label>
                 <label class="local-settings-field">
-                    <span>PreviewBasePort</span>
+                    <span>@L["LocalSettings.Label.PreviewBasePort"]</span>
                     <input type="number" min="1024" max="65535" data-testid="settings-docsrepo-preview-base-port" value="@settings.DocsRepository.PreviewBasePort" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewBasePort = IntValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>PreviewReadyTimeoutSeconds</span>
+                    <span>@L["LocalSettings.Label.PreviewReadyTimeoutSeconds"]</span>
                     <input type="number" min="5" max="1800" data-testid="settings-docsrepo-preview-timeout" value="@settings.DocsRepository.PreviewReadyTimeoutSeconds" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewReadyTimeoutSeconds = IntValue(e)" />
                 </label>
             </fieldset>
 
             <fieldset class="local-settings-group local-settings-group-logging" data-testid="settings-local-logging">
-                <legend>Logging</legend>
+                <legend>@L["LocalSettings.Section.Logging"]</legend>
                 <label class="local-settings-field">
-                    <span>Default</span>
+                    <span>@L["LocalSettings.Label.Default"]</span>
                     <input data-testid="settings-logging-default" value="@settings.Logging.DefaultLogLevel" disabled="@_saving" @oninput="e => settings.Logging.DefaultLogLevel = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>Microsoft</span>
+                    <span>@L["LocalSettings.Label.Microsoft"]</span>
                     <input data-testid="settings-logging-microsoft" value="@settings.Logging.MicrosoftLogLevel" disabled="@_saving" @oninput="e => settings.Logging.MicrosoftLogLevel = StringValue(e)" />
                 </label>
             </fieldset>
 
             <fieldset class="local-settings-group local-settings-group-updates" data-testid="settings-local-updates">
-                <legend>Updates</legend>
+                <legend>@L["LocalSettings.Section.Updates"]</legend>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-updates-enabled" checked="@settings.Updates.Enabled" disabled="@_saving" @onchange="e => settings.Updates.Enabled = BoolValue(e)" />
-                    <span>Enabled</span>
+                    <span>@L["LocalSettings.Label.Enabled"]</span>
                 </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-updates-check-on-startup" checked="@settings.Updates.CheckOnStartup" disabled="@_saving" @onchange="e => settings.Updates.CheckOnStartup = BoolValue(e)" />
-                    <span>CheckOnStartup</span>
+                    <span>@L["LocalSettings.Label.CheckOnStartup"]</span>
                 </label>
                 <label class="local-settings-field wide">
-                    <span>FeedUrl</span>
+                    <span>@L["LocalSettings.Label.FeedUrl"]</span>
                     <input data-testid="settings-updates-feed-url" placeholder="https://github.com/owner/repo" value="@settings.Updates.FeedUrl" disabled="@_saving" @oninput="e => settings.Updates.FeedUrl = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>Channel</span>
+                    <span>@L["LocalSettings.Label.Channel"]</span>
                     <input data-testid="settings-updates-channel" placeholder="win-x64-stable" value="@settings.Updates.Channel" disabled="@_saving" @oninput="e => settings.Updates.Channel = NullableStringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>CheckTimeoutSeconds</span>
+                    <span>@L["LocalSettings.Label.CheckTimeoutSeconds"]</span>
                     <input type="number" min="5" max="1800" data-testid="settings-updates-timeout" value="@settings.Updates.CheckTimeoutSeconds" disabled="@_saving" @oninput="e => settings.Updates.CheckTimeoutSeconds = IntValue(e)" />
                 </label>
             </fieldset>
