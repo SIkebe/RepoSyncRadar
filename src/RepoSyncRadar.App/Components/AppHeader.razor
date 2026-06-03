@@ -23,15 +23,18 @@
         <div class="app-header-spacer" aria-hidden="true"></div>
 
     <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-        @if (_lastReport is { } report)
+        @if (!_settingsOpen)
         {
-            <span data-testid="app-header-last-sync" style="font-size:0.85em; opacity:0.8;">
-                @L["AppHeader.LastTriage", report.Total, report.Inserted, report.Skipped]
-            </span>
-        }
-        @if (_lastError is not null)
-        {
-            <span data-testid="app-header-error" style="color:#ef4444; font-size:0.85em;">@_lastError</span>
+            @if (_lastReport is { } report)
+            {
+                <span data-testid="app-header-last-sync" style="font-size:0.85em; opacity:0.8;">
+                    @L["AppHeader.LastTriage", report.Total, report.Inserted, report.Skipped]
+                </span>
+            }
+            @if (_lastError is not null)
+            {
+                <span data-testid="app-header-error" style="color:#ef4444; font-size:0.85em;">@_lastError</span>
+            }
         }
         @if (ShouldShowHeaderUpdateActivity(_appUpdateActivity))
         {
@@ -58,7 +61,7 @@
         {
             <span data-testid="app-header-update-error" style="color:#ef4444; font-size:0.85em;">@_appUpdateRestartError</span>
         }
-        @if (_triageStatus is not null)
+        @if (!_settingsOpen && _triageStatus is not null)
         {
             @if (BuildTriageProgressView(_triageStatus) is { } triageProgress)
             {
@@ -89,19 +92,22 @@
                 </span>
             }
         }
-        @if (_copilotUsage.TurnCount > 0)
+        @if (!_settingsOpen && _copilotUsage.TurnCount > 0)
         {
             <span data-testid="app-header-copilot-usage" style="font-size:0.85em; opacity:0.85;">
                 Copilot @FormatAiCreditsOrTokens(_copilotUsage)
             </span>
         }
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   OnClick="OnTriageAsync"
-                   Disabled="@(_busy || _state != GitHubAuthState.SignedIn)"
-                   data-testid="app-header-sync">
-            @(_busy ? L["AppHeader.Triaging"] : "Triage")
-        </MudButton>
+        @if (!_settingsOpen)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="OnTriageAsync"
+                       Disabled="@(_busy || _state != GitHubAuthState.SignedIn)"
+                       data-testid="app-header-sync">
+                @(_busy ? L["AppHeader.Triaging"] : "Triage")
+            </MudButton>
+        }
         <span data-testid="app-header-version"
               title="@_appVersion"
               style="font-size:0.8em; opacity:0.7; font-variant-numeric:tabular-nums;">v@_appVersion</span>

@@ -409,6 +409,51 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Settings_Open_Hides_Triage_And_Work_Activity_From_Header()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var usageTracker = new CopilotUsageTracker();
+        usageTracker.Record(new CopilotUsageRecord(
+            new DateTimeOffset(2026, 5, 18, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            SessionPurpose.Triage.ToString(),
+            "gpt-5",
+            "api-1",
+            1000,
+            200,
+            0,
+            0,
+            0,
+            null,
+            null));
+
+        var sp = BuildServices(session, out var agent, out _, usageTracker: usageTracker);
+        agent
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IngestionReport(Total: 3, Inserted: 2, Skipped: 1)));
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"app-header-last-sync\"]")));
+
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+
+        Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-sync\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-last-sync\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-triage-status\"]"));
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-copilot-usage\"]"));
+        Assert.NotNull(cut.Find("[data-testid=\"app-header-version\"]"));
+    }
+
+    [Fact]
     public void Settings_Button_Loads_And_Renders_Ignore_Rules()
     {
         var session = Substitute.For<IGitHubAuthSession>();
