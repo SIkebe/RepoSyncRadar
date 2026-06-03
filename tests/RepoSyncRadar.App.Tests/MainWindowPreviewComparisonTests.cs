@@ -411,6 +411,35 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(2, result.Value);
     }
 
+    [Fact]
+    public void ResolvePreviewSurfaceColumnRestoreWidth_Preserves_User_Adjusted_Width()
+    {
+        var savedWidth = new GridLength(720);
+
+        var result = MainWindow.ResolvePreviewSurfaceColumnRestoreWidth(savedWidth);
+
+        Assert.Equal(GridUnitType.Pixel, result.GridUnitType);
+        Assert.Equal(720, result.Value);
+    }
+
+    [Fact]
+    public void ResolvePreviewSurfaceColumnRestoreWidth_Falls_Back_When_Saved_Width_Is_Collapsed()
+    {
+        var result = MainWindow.ResolvePreviewSurfaceColumnRestoreWidth(new GridLength(0));
+
+        Assert.Equal(GridUnitType.Star, result.GridUnitType);
+        Assert.Equal(3, result.Value);
+    }
+
+    [Fact]
+    public void ResolveSplitterColumnRestoreWidth_Falls_Back_When_Saved_Width_Is_Collapsed()
+    {
+        var result = MainWindow.ResolveSplitterColumnRestoreWidth(new GridLength(0));
+
+        Assert.Equal(GridUnitType.Pixel, result.GridUnitType);
+        Assert.Equal(5, result.Value);
+    }
+
     [Theory]
     [InlineData(false, "‹‹", "プレビューだけ表示", "左の作業ペインを折りたたんでプレビューだけ表示します")]
     [InlineData(true, "››", "作業ペインを戻す", "折りたたんだ左の作業ペインを戻します")]

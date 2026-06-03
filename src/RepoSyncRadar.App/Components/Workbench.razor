@@ -221,6 +221,7 @@
     private Task? _batchExplanationTimerTask;
     private IReviewBroadcaster? _broadcaster;
     private IAppUserSettingsStore? _settingsStore;
+    private IWorkbenchLayoutCoordinator? _layoutCoordinator;
     private DocsThemeMode _theme = AppUserSettings.Default.DefaultDocsTheme;
     private string _displayCulture = AppUserSettings.Default.DisplayCulture;
     private bool _settingsOpen;
@@ -244,6 +245,9 @@
         {
             _broadcaster.Reviewed += OnReviewed;
         }
+
+        _layoutCoordinator = Services.GetService<IWorkbenchLayoutCoordinator>();
+        _layoutCoordinator?.SetSettingsExpanded(_settingsOpen);
     }
 
     private async void OnSettingsChanged(AppUserSettings settings)
@@ -315,6 +319,7 @@
         CancelBatchExplanationProgress();
         _batchExplanationCts?.Dispose();
         _batchExplanationCts = null;
+        _layoutCoordinator?.SetSettingsExpanded(false);
     }
 
     internal static string BuildShellClass(DocsThemeMode theme)
@@ -331,7 +336,7 @@
 
     private Task HandleStatusChanged(ReviewStatus? status)
     {
-        _settingsOpen = false;
+        SetSettingsOpen(false);
         _selectedStatus = status;
         _filter = BuildCurrentFilter();
         _selectedCommit = null;
@@ -344,8 +349,19 @@
 
     private Task ToggleSettingsAsync()
     {
-        _settingsOpen = !_settingsOpen;
+        SetSettingsOpen(!_settingsOpen);
         return Task.CompletedTask;
+    }
+
+    private void SetSettingsOpen(bool isOpen)
+    {
+        if (_settingsOpen == isOpen)
+        {
+            return;
+        }
+
+        _settingsOpen = isOpen;
+        _layoutCoordinator?.SetSettingsExpanded(isOpen);
     }
 
     private Task HandleAuthChangedAsync()

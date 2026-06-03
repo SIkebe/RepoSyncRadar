@@ -129,6 +129,7 @@ public partial class MainWindow : Window
     private const string _webViewUserDataRootEnv = "REPOSYNCRADAR_WEBVIEW_USER_DATA_ROOT";
 
     private static readonly GridLength _defaultWorkbenchColumnWidth = new(2, GridUnitType.Star);
+    private static readonly GridLength _defaultPreviewSurfaceColumnWidth = new(3, GridUnitType.Star);
     private static readonly GridLength _expandedWorkbenchSplitterColumnWidth = new(5);
     // BlazorWebView hosts a native child window, which can throw when arranged at exactly 0 width.
     private static readonly GridLength _collapsedWorkbenchColumnWidth = new(1);
@@ -138,6 +139,7 @@ public partial class MainWindow : Window
     private readonly UrlAllowList _allowList;
     private readonly PreviewSession _previewSession;
     private readonly IPreviewNavigator _previewNavigator;
+    private readonly IWorkbenchLayoutCoordinator _workbenchLayoutCoordinator;
     private readonly IAppUserSettingsStore _userSettingsStore;
     private readonly ILogger<MainWindow> _logger;
     private PreviewComparisonRequest? _activePreviewDiffRequest;
@@ -153,7 +155,10 @@ public partial class MainWindow : Window
     private ulong? _afterPreviewDiffNavigationId;
     private Uri? _openOfficialDocsUri;
     private GridLength? _expandedWorkbenchColumnWidth = _defaultWorkbenchColumnWidth;
+    private GridLength? _expandedPreviewSurfaceColumnWidth = _defaultPreviewSurfaceColumnWidth;
+    private GridLength? _expandedWorkbenchPreviewSplitterColumnWidth = _expandedWorkbenchSplitterColumnWidth;
     private bool _isPreviewFocusMode;
+    private bool _isSettingsExpandedMode;
     private bool _previewFocusToggleMouseActivated;
     private bool? _pendingPreviewFocusMode;
     private bool _previewFocusModeChangeScheduled;
@@ -199,6 +204,8 @@ public partial class MainWindow : Window
         _previewNavigator = services.GetRequiredService<IPreviewNavigator>();
         _previewNavigator.Requested += OnPreviewRequested;
         _previewNavigator.ComparisonRequested += OnPreviewComparisonRequested;
+        _workbenchLayoutCoordinator = services.GetRequiredService<IWorkbenchLayoutCoordinator>();
+        _workbenchLayoutCoordinator.SettingsExpandedChanged += OnSettingsExpandedChanged;
         DocsView.NavigationStarting += OnDocsViewNavigationStarting;
         PreviewView.NavigationStarting += OnPreviewViewNavigationStarting;
         DocsView.NavigationCompleted += OnDocsViewNavigationCompleted;
@@ -209,6 +216,7 @@ public partial class MainWindow : Window
         {
             _previewNavigator.Requested -= OnPreviewRequested;
             _previewNavigator.ComparisonRequested -= OnPreviewComparisonRequested;
+            _workbenchLayoutCoordinator.SettingsExpandedChanged -= OnSettingsExpandedChanged;
             DocsView.NavigationStarting -= OnDocsViewNavigationStarting;
             PreviewView.NavigationStarting -= OnPreviewViewNavigationStarting;
             DocsView.NavigationCompleted -= OnDocsViewNavigationCompleted;
@@ -442,6 +450,49 @@ public partial class MainWindow : Window
         }
 
         UpdatePreviewFocusToggleButton();
+    }
+
+    private void OnSettingsExpandedChanged(object? sender, bool isExpanded)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            ApplySettingsExpandedMode(isExpanded);
+            return;
+        }
+
+        Dispatcher.BeginInvoke(DispatcherPriority.Normal, () => ApplySettingsExpandedMode(isExpanded));
+    }
+
+    private void ApplySettingsExpandedMode(bool isExpanded)
+    {
+        if (_isSettingsExpandedMode == isExpanded)
+        {
+            return;
+        }
+
+        if (isExpanded && _isPreviewFocusMode)
+        {
+            ApplyPreviewFocusMode(false);
+        }
+
+        _isSettingsExpandedMode = isExpanded;
+        if (isExpanded)
+        {
+            _expandedPreviewSurfaceColumnWidth = ResolvePreviewSurfaceColumnSaveWidth(PreviewSurfaceColumn.Width);
+            _expandedWorkbenchPreviewSplitterColumnWidth = ResolveSplitterColumnSaveWidth(WorkbenchPreviewSplitterColumn.Width);
+
+            WorkbenchPreviewSplitter.Visibility = Visibility.Collapsed;
+            WorkbenchPreviewSplitterColumn.Width = _collapsedSplitterColumnWidth;
+            PreviewSurfaceHost.Visibility = Visibility.Collapsed;
+            PreviewSurfaceColumn.Width = _collapsedSplitterColumnWidth;
+        }
+        else
+        {
+            PreviewSurfaceColumn.Width = ResolvePreviewSurfaceColumnRestoreWidth(_expandedPreviewSurfaceColumnWidth);
+            WorkbenchPreviewSplitterColumn.Width = ResolveSplitterColumnRestoreWidth(_expandedWorkbenchPreviewSplitterColumnWidth);
+            PreviewSurfaceHost.Visibility = Visibility.Visible;
+            WorkbenchPreviewSplitter.Visibility = Visibility.Visible;
+        }
     }
 
     private void OnPreviewFocusLayoutShieldTimerTick(object? sender, EventArgs e)
@@ -2370,6 +2421,32 @@ public partial class MainWindow : Window
         }
 
         return _defaultWorkbenchColumnWidth;
+    }
+
+    internal static GridLength ResolvePreviewSurfaceColumnSaveWidth(GridLength currentWidth)
+        => currentWidth.Value > 0 ? currentWidth : _defaultPreviewSurfaceColumnWidth;
+
+    internal static GridLength ResolvePreviewSurfaceColumnRestoreWidth(GridLength? savedWidth)
+    {
+        if (savedWidth.HasValue && savedWidth.Value.Value > 0)
+        {
+            return savedWidth.Value;
+        }
+
+        return _defaultPreviewSurfaceColumnWidth;
+    }
+
+    internal static GridLength ResolveSplitterColumnSaveWidth(GridLength currentWidth)
+        => currentWidth.Value > 0 ? currentWidth : _expandedWorkbenchSplitterColumnWidth;
+
+    internal static GridLength ResolveSplitterColumnRestoreWidth(GridLength? savedWidth)
+    {
+        if (savedWidth.HasValue && savedWidth.Value.Value > 0)
+        {
+            return savedWidth.Value;
+        }
+
+        return _expandedWorkbenchSplitterColumnWidth;
     }
 
     internal static string BuildPreviewFocusToggleText(bool isPreviewFocusMode)

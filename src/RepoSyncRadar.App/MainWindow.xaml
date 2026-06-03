@@ -87,7 +87,8 @@
          Source is assigned in code-behind after CreationProperties (custom
          UserDataFolder) so standalone WebView2 instances do not collide with
          BlazorWebView's internal WebView2 on the default folder. -->
-    <Grid Grid.Column="2">
+    <Grid x:Name="PreviewSurfaceHost"
+          Grid.Column="2">
       <Grid.RowDefinitions>
         <RowDefinition Height="50" />
         <RowDefinition Height="*" />
