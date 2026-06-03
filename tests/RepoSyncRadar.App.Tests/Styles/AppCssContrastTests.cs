@@ -113,7 +113,6 @@ public sealed partial class AppCssContrastTests
         var errorBlock = GetRuleBlock(css, ".settings-error");
         var gridBlock = GetRuleBlock(css, ".local-settings-grid");
         var groupBlock = GetRuleBlock(css, ".local-settings-group");
-        var compactGridBlock = GetRuleBlock(css, "@media (max-width: 1180px)");
         var copilotGroupBlock = GetExactRuleBlock(css, ".local-settings-group-copilot");
         var docsRepositoryGroupBlock = GetExactRuleBlock(css, ".local-settings-group-docs-repository");
         var contextTierBlock = GetExactRuleBlock(css, ".local-settings-field .context-tier-select");
@@ -129,7 +128,9 @@ public sealed partial class AppCssContrastTests
         Assert.Contains("min-width: 0", groupBlock, StringComparison.Ordinal);
         Assert.Contains("grid-column: span 5", copilotGroupBlock, StringComparison.Ordinal);
         Assert.Contains("grid-column: span 4", docsRepositoryGroupBlock, StringComparison.Ordinal);
-        Assert.Contains("repeat(6, minmax(0, 1fr))", compactGridBlock, StringComparison.Ordinal);
+        Assert.Matches(
+            @"@media\s*\(max-width:\s*1180px\)\s*\{[\s\S]*?\.local-settings-grid\s*\{[^}]*grid-template-columns:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)",
+            css);
         Assert.Contains("padding-right: 2rem", contextTierBlock, StringComparison.Ordinal);
         Assert.Contains("min-width: min(14rem, 100%)", contextTierBlock, StringComparison.Ordinal);
         Assert.Contains("min-height: 9rem", webViewAllowedHostsBlock, StringComparison.Ordinal);
