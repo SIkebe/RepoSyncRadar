@@ -120,6 +120,24 @@ public class SidebarTests
     }
 
     [Fact]
+    public void Sidebar_Settings_Button_Uses_Lowercase_AriaPressed()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var sp = BuildServices(repo);
+        using var ctx = new Bunit.BunitContext();
+
+        var closed = ctx.Render<Sidebar>(parameters => parameters
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(sidebar => sidebar.SettingsOpen, false));
+        var open = ctx.Render<Sidebar>(parameters => parameters
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(sidebar => sidebar.SettingsOpen, true));
+
+        Assert.Equal("false", closed.Find("[data-testid=\"sidebar-settings\"]").GetAttribute("aria-pressed"));
+        Assert.Equal("true", open.Find("[data-testid=\"sidebar-settings\"]").GetAttribute("aria-pressed"));
+    }
+
+    [Fact]
     public void Sidebar_Footer_Renders_SignedIn_Account_And_SignOut()
     {
         var repo = BuildEmptyCountsRepository();
@@ -163,6 +181,56 @@ public class SidebarTests
         Assert.True(authChanged);
         Assert.Equal("SignedIn", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
         Assert.Equal("@octocat", cut.Find("[data-testid=\"sidebar-auth-login\"]").TextContent);
+    }
+
+    [Fact]
+    public void Sidebar_SignIn_Callback_Failure_Does_Not_Show_SignIn_Error()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(GitHubAuthState.NotSignedIn),
+                Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var sp = BuildServices(repo, session);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<Sidebar>(parameters => parameters
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(sidebar => sidebar.AuthChanged, () => throw new InvalidOperationException("callback failed")));
+
+        cut.Find("[data-testid=\"sidebar-auth-signin\"]").Click();
+
+        session.Received(1).SignInAsync(Arg.Any<CancellationToken>());
+        Assert.Equal("SignedIn", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
+        Assert.Empty(cut.FindAll("[data-testid=\"sidebar-auth-error\"]"));
+    }
+
+    [Fact]
+    public void Sidebar_SignOut_Callback_Failure_Does_Not_Show_SignOut_Error()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(GitHubAuthState.SignedIn),
+                Task.FromResult(GitHubAuthState.NotSignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var sp = BuildServices(repo, session);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<Sidebar>(parameters => parameters
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(sidebar => sidebar.AuthChanged, () => throw new InvalidOperationException("callback failed")));
+
+        cut.Find("[data-testid=\"sidebar-auth-signout\"]").Click();
+
+        session.Received(1).SignOutAsync(Arg.Any<CancellationToken>());
+        Assert.Equal("NotSignedIn", cut.Find("[data-testid=\"sidebar-auth-state\"]").GetAttribute("data-state"));
+        Assert.Empty(cut.FindAll("[data-testid=\"sidebar-auth-error\"]"));
     }
 
     private static IRadarRepository BuildEmptyCountsRepository()
