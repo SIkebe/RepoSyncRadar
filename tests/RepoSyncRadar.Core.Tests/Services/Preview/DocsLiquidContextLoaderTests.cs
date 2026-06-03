@@ -399,6 +399,82 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
         Assert.DoesNotContain("bad.broken", context.Variables.Keys);
     }
 
+    [Fact]
+    public async Task LoadForMarkdownAsync_Trims_Liquid_Whitespace_Control_From_DataObject_Key()
+    {
+        WriteDataFile(
+            Path.Combine("tables", "example.yml"),
+            """
+            group:
+              name: Example value
+            """);
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/sample.md",
+            "{{ tables.example.group.name -}}",
+            TestContext.Current.CancellationToken);
+
+        Assert.True(context.DataObjects.ContainsKey("tables.example.group.name"));
+        var value = Assert.IsType<DocsLiquidScalarValue>(context.DataObjects["tables.example.group.name"]);
+        Assert.Equal("Example value", value.Value);
+    }
+
+    [Fact]
+    public async Task LoadForMarkdownAsync_Ignores_Invalid_EnterpriseDates_Json()
+    {
+        var source = new RecordingDocsFileSource();
+        source.Add("src/ghes-releases/lib/enterprise-dates.json", "{ definitely invalid json");
+        source.Add("src/versions/lib/enterprise-server-releases.ts", MinimalEnterpriseServerReleasesSource());
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            source,
+            "content/admin/all-releases.md",
+            "{% for version in enterpriseServerReleases.supported %}{{ version }}{% endfor %}",
+            TestContext.Current.CancellationToken);
+
+        Assert.True(context.DataObjects.ContainsKey("enterpriseServerReleases"));
+    }
+
+    [Fact]
+    public async Task LoadForMarkdownAsync_Reads_NonString_EnterpriseDates_Json_Values()
+    {
+        var source = new RecordingDocsFileSource();
+        source.Add(
+            "src/ghes-releases/lib/enterprise-dates.json",
+            """
+            {
+              "3.21": {
+                "releaseDate": 123,
+                "deprecationDate": false,
+                "releaseCandidateDate": "2026-01-01",
+                "generalAvailabilityDate": null
+              }
+            }
+            """);
+        source.Add("src/versions/lib/enterprise-server-releases.ts", MinimalEnterpriseServerReleasesSource());
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            source,
+            "content/admin/all-releases.md",
+            "{{ enterpriseServerReleases.dates[version].releaseDate }}",
+            TestContext.Current.CancellationToken);
+
+        var releases = Assert.IsType<DocsLiquidObjectValue>(context.DataObjects["enterpriseServerReleases"]);
+        var dates = Assert.IsType<DocsLiquidObjectValue>(releases.Properties["dates"]);
+        var version = Assert.IsType<DocsLiquidObjectValue>(dates.Properties["3.21"]);
+        Assert.Equal("123", Assert.IsType<DocsLiquidScalarValue>(version.Properties["releaseDate"]).Value);
+        Assert.Equal("false", Assert.IsType<DocsLiquidScalarValue>(version.Properties["deprecationDate"]).Value);
+        Assert.Equal(string.Empty, Assert.IsType<DocsLiquidScalarValue>(version.Properties["generalAvailabilityDate"]).Value);
+    }
+
+    private static string MinimalEnterpriseServerReleasesSource()
+        => """
+        export const supported = ['3.21']
+        export const deprecatedWithFunctionalRedirects = []
+        export const deprecated = []
+        """;
+
     private sealed class RecordingDocsFileSource : IDocsFileSource
     {
         private readonly Dictionary<string, string> _files = new(StringComparer.OrdinalIgnoreCase);

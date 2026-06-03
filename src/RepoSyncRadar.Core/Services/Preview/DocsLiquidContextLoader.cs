@@ -1176,11 +1176,11 @@ internal static partial class DocsLiquidContextLoader
 
     private static string NormalizeDataObjectKey(string key)
     {
-        var normalized = key.Trim().TrimEnd('.', ',', ')', ']', '}');
+        var normalized = key.Trim().TrimEnd('.', ',', ')', ']', '}', '-');
         var pipe = normalized.IndexOf('|', StringComparison.Ordinal);
         if (pipe >= 0)
         {
-            normalized = normalized[..pipe].TrimEnd();
+            normalized = normalized[..pipe].TrimEnd('-', ' ');
         }
         return normalized.Replace('/', '.').Replace('\\', '.').Trim('.');
     }
@@ -1364,13 +1364,34 @@ internal static partial class DocsLiquidContextLoader
     private static Dictionary<string, DocsLiquidDataValue> ParseEnterpriseDates(string json)
     {
         var dates = new Dictionary<string, DocsLiquidDataValue>(StringComparer.Ordinal);
-        using var document = JsonDocument.Parse(json);
+        JsonDocument document;
+        try
+        {
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return dates;
+        }
+
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return dates;
+            }
+
         foreach (var version in document.RootElement.EnumerateObject())
         {
+            if (version.Value.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
             var properties = new Dictionary<string, DocsLiquidDataValue>(StringComparer.Ordinal);
             foreach (var property in version.Value.EnumerateObject())
             {
-                properties[property.Name] = new DocsLiquidScalarValue(property.Value.GetString() ?? string.Empty);
+                properties[property.Name] = new DocsLiquidScalarValue(ReadJsonScalar(property.Value));
             }
             if (properties.TryGetValue("releaseCandidateDate", out var candidate))
             {
@@ -1382,8 +1403,18 @@ internal static partial class DocsLiquidContextLoader
             }
             dates[version.Name] = new DocsLiquidObjectValue(properties);
         }
+        }
         return dates;
     }
+
+    private static string ReadJsonScalar(JsonElement element)
+        => element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString() ?? string.Empty,
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => element.GetRawText(),
+            JsonValueKind.Null or JsonValueKind.Undefined => string.Empty,
+            _ => element.GetRawText(),
+        };
 
     private static DocsLiquidSequenceValue ToScalarSequence(IEnumerable<string> values)
         => new(values.Select(static value => new DocsLiquidScalarValue(value)).ToArray());
