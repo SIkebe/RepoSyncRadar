@@ -32,6 +32,8 @@ public sealed partial class AppCssContrastTests
         Assert.Contains("color: var(--radar-success-fg", signedInBlock, StringComparison.Ordinal);
         Assert.Contains("color: var(--radar-warning-fg", notSignedInBlock, StringComparison.Ordinal);
         Assert.Contains("color: var(--radar-danger-fg", notConfiguredBlock, StringComparison.Ordinal);
+        Assert.Contains("#7d4e00", notSignedInBlock, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("#a40e26", notConfiguredBlock, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

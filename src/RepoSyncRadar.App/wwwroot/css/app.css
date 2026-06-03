@@ -228,12 +228,12 @@ html, body {
 }
 
 .sidebar-auth-state.not-signed-in {
-    color: var(--radar-warning-fg, #9a6700);
+    color: var(--radar-warning-fg, #7d4e00);
 }
 
 .sidebar-auth-state.not-configured,
 .sidebar-auth-error {
-    color: var(--radar-danger-fg, #cf222e);
+    color: var(--radar-danger-fg, #a40e26);
 }
 
 .sidebar-auth-login {
