@@ -206,6 +206,7 @@
   <data name="Settings.Theme.Light" xml:space="preserve"><value>Light</value></data>
   <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>Failed to load theme settings</value></data>
   <data name="Settings.Theme.SaveFailed" xml:space="preserve"><value>Failed to save theme settings</value></data>
+  <data name="Sidebar.Auth.AriaLabel" xml:space="preserve"><value>GitHub account</value></data>
   <data name="Sidebar.Archive.Description" xml:space="preserve"><value>Candidates removed from active review</value></data>
   <data name="Sidebar.Archive.Label" xml:space="preserve"><value>Archive</value></data>
   <data name="Sidebar.Later.Description" xml:space="preserve"><value>Candidates deferred for later review</value></data>

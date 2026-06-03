@@ -206,6 +206,7 @@
   <data name="Settings.Theme.Light" xml:space="preserve"><value>ライト</value></data>
   <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>テーマ設定の読み込みに失敗しました</value></data>
   <data name="Settings.Theme.SaveFailed" xml:space="preserve"><value>テーマ設定の保存に失敗しました</value></data>
+  <data name="Sidebar.Auth.AriaLabel" xml:space="preserve"><value>GitHub アカウント</value></data>
   <data name="Sidebar.Archive.Description" xml:space="preserve"><value>アクティブな確認対象から外した候補</value></data>
   <data name="Sidebar.Archive.Label" xml:space="preserve"><value>アーカイブ</value></data>
   <data name="Sidebar.Later.Description" xml:space="preserve"><value>判断をいったん保留している候補</value></data>

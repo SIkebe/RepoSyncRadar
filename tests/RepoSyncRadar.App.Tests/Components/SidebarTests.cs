@@ -83,6 +83,26 @@ public class SidebarTests
     }
 
     [Fact]
+    public void Sidebar_Auth_AriaLabel_Is_Localized()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var sp = BuildServices(repo);
+        using var ctx = new Bunit.BunitContext();
+
+        var japanese = ctx.Render<Sidebar>(parameters => parameters
+            .AddCascadingValue<IServiceProvider>(sp)
+            .AddCascadingValue(AppDisplayCulture.DefaultCultureName));
+
+        Assert.Equal("GitHub アカウント", japanese.Find("[data-testid=\"sidebar-auth\"]").GetAttribute("aria-label"));
+
+        var english = ctx.Render<Sidebar>(parameters => parameters
+            .AddCascadingValue<IServiceProvider>(sp)
+            .AddCascadingValue("en"));
+
+        Assert.Equal("GitHub account", english.Find("[data-testid=\"sidebar-auth\"]").GetAttribute("aria-label"));
+    }
+
+    [Fact]
     public void Sidebar_Footer_Opens_Settings_From_Gear_Button()
     {
         var repo = BuildEmptyCountsRepository();
