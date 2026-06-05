@@ -8,8 +8,8 @@ namespace RepoSyncRadar.Core.Services.Preview;
 
 /// <summary>
 /// Default <see cref="IProcessRunner"/> implementation backed by
-/// <see cref="System.Diagnostics.Process"/>. Stdout/stderr are buffered into
-/// <see cref="StringBuilder"/> so callers can include them in errors.
+/// <see cref="System.Diagnostics.Process"/>. Stdout/stderr are captured together
+/// so callers can include them in errors without risking pipe deadlocks.
 /// </summary>
 /// <remarks>
 /// <see cref="RunAsync"/> wraps <see cref="Win32Exception"/> thrown by
@@ -52,47 +52,19 @@ public sealed class SystemProcessRunner : IProcessRunner
             StandardErrorEncoding = Encoding.UTF8,
         };
 
-        Process p;
         try
         {
-            p = Process.Start(psi)
-                ?? throw new InvalidOperationException($"Failed to start process '{fileName}'.");
+            var output = await Process.RunAndCaptureTextAsync(psi, cancellationToken).ConfigureAwait(false);
+            return new ProcessRunResult(
+                output.ExitStatus.ExitCode,
+                output.StandardOutput,
+                output.StandardError);
         }
         catch (Win32Exception ex)
         {
             throw new InvalidOperationException(
                 $"'{fileName}' を起動できませんでした。PATH に追加されているか確認してください ({ex.Message})",
                 ex);
-        }
-
-        using (p)
-        {
-            var stdout = new StringBuilder();
-            var stderr = new StringBuilder();
-            p.OutputDataReceived += (_, e) => { if (e.Data is not null) { stdout.AppendLine(e.Data); } };
-            p.ErrorDataReceived += (_, e) => { if (e.Data is not null) { stderr.AppendLine(e.Data); } };
-            p.BeginOutputReadLine();
-            p.BeginErrorReadLine();
-            try
-            {
-                await p.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                try
-                {
-                    if (!p.HasExited)
-                    {
-                        p.Kill(entireProcessTree: true);
-                    }
-                }
-                catch (InvalidOperationException)
-                {
-                    // already exited between HasExited and Kill
-                }
-                throw;
-            }
-            return new ProcessRunResult(p.ExitCode, stdout.ToString(), stderr.ToString());
         }
     }
 
