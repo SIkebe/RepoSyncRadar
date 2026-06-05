@@ -44,7 +44,7 @@ jobs:
     name: Build and test
     runs-on: windows-latest
     needs: ghalint
-    timeout-minutes: 30
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -81,7 +81,7 @@ jobs:
     name: Installed package E2E
     runs-on: windows-latest
     needs: build-test
-    timeout-minutes: 90
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
