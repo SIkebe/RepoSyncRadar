@@ -94,6 +94,9 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""&lt;span class=&quot;(?<class>rsr-rendered-diff-(?:added|removed))&quot;&gt;(?<body>.*?)&lt;/span&gt;""", RegexOptions.Singleline)]
     private static partial Regex EscapedRenderedDiffMarkerRegex();
 
+    [GeneratedRegex("""[a-zA-Z_][a-zA-Z0-9_-]*""")]
+    private static partial Regex VersionExpressionIdentifierRegex();
+
     private const string _copilotOcticonSvg = """
         <svg version="1.1" width="16" height="16" viewBox="0 0 16 16" class="octicon octicon-copilot" aria-hidden="true" data-component="Octicon"><path d="M7.998 15.035c-4.562 0-7.873-2.914-7.998-3.749V9.338c.085-.628.677-1.686 1.588-2.065.013-.07.024-.143.036-.218.029-.183.06-.384.126-.612-.201-.508-.254-1.084-.254-1.656 0-.87.128-1.769.693-2.484.579-.733 1.494-1.124 2.724-1.261 1.206-.134 2.262.034 2.944.765.05.053.096.108.139.165.044-.057.094-.112.143-.165.682-.731 1.738-.899 2.944-.765 1.23.137 2.145.528 2.724 1.261.566.715.693 1.614.693 2.484 0 .572-.053 1.148-.254 1.656.066.228.098.429.126.612.012.076.024.148.037.218.924.385 1.522 1.471 1.591 2.095v1.872c0 .766-3.351 3.795-8.002 3.795Zm0-1.485c2.28 0 4.584-1.11 5.002-1.433V7.862l-.023-.116c-.49.21-1.075.291-1.727.291-1.146 0-2.059-.327-2.71-.991A3.222 3.222 0 0 1 8 6.303a3.24 3.24 0 0 1-.544.743c-.65.664-1.563.991-2.71.991-.652 0-1.236-.081-1.727-.291l-.023.116v4.255c.419.323 2.722 1.433 5.002 1.433ZM6.762 2.83c-.193-.206-.637-.413-1.682-.297-1.019.113-1.479.404-1.713.7-.247.312-.369.789-.369 1.554 0 .793.129 1.171.308 1.371.162.181.519.379 1.442.379.853 0 1.339-.235 1.638-.54.315-.322.527-.827.617-1.553.117-.935-.037-1.395-.241-1.614Zm4.155-.297c-1.044-.116-1.488.091-1.681.297-.204.219-.359.679-.242 1.614.091.726.303 1.231.618 1.553.299.305.784.54 1.638.54.922 0 1.28-.198 1.442-.379.179-.2.308-.578.308-1.371 0-.765-.123-1.242-.37-1.554-.233-.296-.693-.587-1.713-.7Z"></path><path d="M6.25 9.037a.75.75 0 0 1 .75.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 .75-.75Zm4.25.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 1.5 0Z"></path></svg>
         """;
@@ -320,7 +323,7 @@ internal static partial class MarkdownPreviewRenderer
             sourceDiff,
             trimmedRepoPath,
             effectiveLiquidContext,
-            effectiveVersion);
+            selectedVersion ?? effectiveVersion);
         html.AppendLine("</header>");
         if (!string.IsNullOrWhiteSpace(introHtml))
         {
@@ -1543,16 +1546,27 @@ internal static partial class MarkdownPreviewRenderer
             return;
         }
 
-        var totalChanges = sourceDiff.IfversionChanges.Count
+        // 表示中の版で本文に反映される ifversion 変更は、本文の差分側で既に
+        // 見えている。ここでは「表示中の版では本文に出ない条件変更」だけを残し、
+        // 見落とし防止に集中する。
+        var hiddenIfversionChanges = sourceDiff.IfversionChanges
+            .Where(change => !IfversionChangeRendersForVersion(change, version, liquidContext.Features))
+            .ToArray();
+        if (hiddenIfversionChanges.Length == 0 && sourceDiff.RelatedFileChanges.Count == 0)
+        {
+            return;
+        }
+
+        var totalChanges = hiddenIfversionChanges.Length
             + sourceDiff.RelatedFileChanges.Sum(static file => file.Changes.Count);
         html.Append("<section class=\"rsr-source-diff\" data-testid=\"rsr-source-diff\" aria-label=\"ソース差分\">");
         html.Append("<h2>レンダリングに出ないソース差分</h2>");
         html.Append("<p class=\"rsr-source-diff-overview\">")
             .Append(totalChanges.ToString(CultureInfo.InvariantCulture))
-            .Append(" 件の Liquid 条件または関連 data ファイル差分があります。本文が同じに見える場合は、この条件変更を確認してください。</p>");
+            .Append(" 件の Liquid 条件または関連 data ファイル差分があります。表示中の版では本文に出ないため、この条件変更を確認してください。</p>");
         html.Append("<ul class=\"rsr-source-diff-list\">");
 
-        foreach (var change in sourceDiff.IfversionChanges.Take(8))
+        foreach (var change in hiddenIfversionChanges.Take(8))
         {
             AppendIfversionSourceChange(html, change, repoPath, liquidContext, version);
         }
@@ -1577,11 +1591,77 @@ internal static partial class MarkdownPreviewRenderer
             html.Append("</li>");
         }
 
-        if (sourceDiff.IfversionChanges.Count > 8 || sourceDiff.RelatedFileChanges.Count > 4)
+        if (hiddenIfversionChanges.Length > 8 || sourceDiff.RelatedFileChanges.Count > 4)
         {
             html.Append("<li class=\"rsr-version-diff-more\">一部のソース差分のみ表示しています。</li>");
         }
         html.Append("</ul></section>");
+    }
+
+    private static readonly HashSet<string> _versionExpressionKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "and",
+        "or",
+        "not",
+        "fpt",
+        "ghec",
+        "ghes",
+        "ghae",
+    };
+
+    /// <summary>
+    /// <paramref name="change"/> の <c>ifversion</c> 条件が、現在表示中の
+    /// <paramref name="version"/> の本文レンダリングに反映されるか（=本文の差分側で
+    /// 既に見えるか）を返す。<c>true</c> のときソース差分セクションからは除外する。
+    /// </summary>
+    private static bool IfversionChangeRendersForVersion(
+        MarkdownIfversionChange change,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
+    {
+        var beforeRenders = EvaluateIfversionExpressionForVersion(change.BeforeExpression, version, features);
+        var afterRenders = EvaluateIfversionExpressionForVersion(change.AfterExpression, version, features);
+        return change.Kind switch
+        {
+            // 追加: 表示中の版が条件を満たすなら本文に出る → 本文差分側で見える。
+            DocsVersionChangeKind.Added => afterRenders == true,
+            // 削除: 表示中の版が以前は条件を満たしていたなら本文から消える → 本文差分側で見える。
+            DocsVersionChangeKind.Removed => beforeRenders == true,
+            // 条件変更: 表示中の版での可視状態が反転する場合のみ本文に差分が出る。
+            DocsVersionChangeKind.Updated => beforeRenders is bool before && afterRenders is bool after && before != after,
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// <c>ifversion</c> 式を <paramref name="version"/> で評価する。未知の feature
+    /// フラグを含む式は確実に評価できないため <c>null</c> を返し、呼び出し側で安全側
+    /// （ソース差分を出し続ける）に倒せるようにする。
+    /// </summary>
+    private static bool? EvaluateIfversionExpressionForVersion(
+        string? expression,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+        {
+            return null;
+        }
+
+        foreach (Match match in VersionExpressionIdentifierRegex().Matches(expression))
+        {
+            var identifier = match.Value;
+            if (_versionExpressionKeywords.Contains(identifier))
+            {
+                continue;
+            }
+            if (!features.ContainsKey(identifier))
+            {
+                return null;
+            }
+        }
+
+        return VersionExpressionEvaluator.Evaluate(expression, version, features);
     }
 
     private static void AppendIfversionSourceChange(

@@ -1966,6 +1966,61 @@ public sealed class MarkdownPreviewRendererTests
         Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Source_Diff_Summary_Hides_Ifversion_Change_When_Current_Version_Renders_It()
+    {
+        // {% ifversion fpt or ghec %} の追加は ghec の本文に出る（本文差分側で見える）ため、
+        // ghec 表示中はソース差分セクションに出してはならない。
+        var sourceDiff = new MarkdownSourceDiffSummary(
+            [new MarkdownIfversionChange(
+                DocsVersionChangeKind.Added,
+                null,
+                "fpt or ghec",
+                null,
+                "Powered by the cloud agent, you can trigger these agents.")],
+            []);
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/apps/using-github-apps/about-using-github-apps.md",
+            "# About using GitHub Apps",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Ghec,
+            sourceDiff: sourceDiff);
+
+        Assert.DoesNotContain("data-testid=\"rsr-source-diff\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("レンダリングに出ないソース差分", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Source_Diff_Summary_Shows_Ifversion_Change_When_Current_Version_Does_Not_Render_It()
+    {
+        // 同じ {% ifversion fpt or ghec %} の追加でも、ghes 3.21 表示中は本文に出ないため、
+        // 見落とし防止のためソース差分セクションに残す。
+        var sourceDiff = new MarkdownSourceDiffSummary(
+            [new MarkdownIfversionChange(
+                DocsVersionChangeKind.Added,
+                null,
+                "fpt or ghec",
+                null,
+                "Powered by the cloud agent, you can trigger these agents.")],
+            []);
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/apps/using-github-apps/about-using-github-apps.md",
+            "# About using GitHub Apps",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Ghes("3.21"),
+            sourceDiff: sourceDiff);
+
+        Assert.Contains("data-testid=\"rsr-source-diff\"", html, StringComparison.Ordinal);
+        Assert.Contains("{% ifversion fpt or ghec %}", html, StringComparison.Ordinal);
+        Assert.Contains("表示中の版では本文に出ない", html, StringComparison.Ordinal);
+    }
+
     private static int CountOccurrences(string value, string search)
     {
         var count = 0;
