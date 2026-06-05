@@ -380,6 +380,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         docsRepository["PrewarmOnStartup"] = settings.DocsRepository.PrewarmOnStartup;
         docsRepository["PreviewBasePort"] = settings.DocsRepository.PreviewBasePort;
         docsRepository["PreviewReadyTimeoutSeconds"] = settings.DocsRepository.PreviewReadyTimeoutSeconds;
+        RemoveLegacyDocsPreviewSettings(docsRepository);
 
         var logging = GetOrReplaceObject(root, "Logging");
         var logLevel = GetOrReplaceObject(logging, "LogLevel");
@@ -394,6 +395,17 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             ? null
             : settings.Updates.Channel;
         updates["CheckTimeoutSeconds"] = settings.Updates.CheckTimeoutSeconds;
+    }
+
+    private static void RemoveLegacyDocsPreviewSettings(JsonObject docsRepository)
+    {
+        docsRepository.Remove("MaxWorktrees");
+        docsRepository.Remove("PreviewCommand");
+        docsRepository.Remove("PreviewArguments");
+        docsRepository.Remove("InstallArguments");
+        docsRepository.Remove("PreviewInstallArguments");
+        docsRepository.Remove("PreviewEnvironment");
+        docsRepository.Remove("PreviewEnvironmentVariables");
     }
 
     private static LocalAppSettings Normalize(LocalAppSettings settings)
