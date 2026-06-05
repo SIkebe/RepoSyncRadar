@@ -2592,31 +2592,6 @@ internal static partial class MarkdownPreviewRenderer
         return false;
     }
 
-    private static bool TryFindLastMarkdownLinkLabelRange(string content, out InlineChangedRange labelRange)
-    {
-        labelRange = default;
-        var labelEnd = content.LastIndexOf("](", StringComparison.Ordinal);
-        if (labelEnd < 0)
-        {
-            return false;
-        }
-
-        var labelStart = content.LastIndexOf('[', labelEnd);
-        if (labelStart < 0 || labelStart + 1 >= labelEnd)
-        {
-            return false;
-        }
-
-        var linkEnd = content.IndexOf(')', labelEnd + 2);
-        if (linkEnd < 0)
-        {
-            return false;
-        }
-
-        labelRange = new InlineChangedRange(labelStart + 1, labelEnd - labelStart - 1);
-        return true;
-    }
-
     private static int FindSentenceStart(string content, int index)
     {
         var cursor = Math.Min(index, content.Length);
