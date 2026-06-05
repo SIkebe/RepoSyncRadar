@@ -2069,13 +2069,14 @@ internal static partial class MarkdownPreviewRenderer
 
         var currentLines = SplitMarkdownLines(renderedMarkdown);
         var comparisonLines = SplitMarkdownLines(comparisonRendered);
-        var changed = FindCurrentChangedLines(currentLines, comparisonLines);
-        if (changed.Count == 0)
+        var changes = FindCurrentLineDiffs(currentLines, comparisonLines);
+        if (changes.Count == 0)
         {
             return renderedMarkdown;
         }
+        var changesByIndex = changes.ToDictionary(static change => change.Index);
 
-        var marked = new StringBuilder(renderedMarkdown.Length + (changed.Count * 48));
+        var marked = new StringBuilder(renderedMarkdown.Length + (changes.Count * 48));
         var markerClass = diffSide == RenderedMarkdownDiffSide.After
             ? "rsr-rendered-diff-added"
             : "rsr-rendered-diff-removed";
@@ -2090,8 +2091,8 @@ internal static partial class MarkdownPreviewRenderer
             var trimmed = line.TrimStart();
             var isCodeFence = trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal);
             var canMark = !inCodeFence && !isCodeFence && CanMarkRenderedDiffLine(trimmed);
-            marked.Append(changed.Contains(index) && canMark
-                ? MarkRenderedDiffLine(line, markerClass, comparisonLines)
+            marked.Append(changesByIndex.TryGetValue(index, out var change) && canMark
+                ? MarkRenderedDiffLine(line, markerClass, change.ComparisonLines)
                 : line);
             if (isCodeFence)
             {
@@ -2206,10 +2207,12 @@ internal static partial class MarkdownPreviewRenderer
     private static string[] SplitMarkdownLines(string markdown)
         => markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
 
-    private static HashSet<int> FindCurrentChangedLines(string[] currentLines, string[] comparisonLines)
+    private static List<CurrentLineDiff> FindCurrentLineDiffs(string[] currentLines, string[] comparisonLines)
     {
         var table = BuildLineLcsTable(currentLines, comparisonLines);
-        var changed = new HashSet<int>();
+        var changed = new List<CurrentLineDiff>();
+        var currentHunkIndexes = new List<int>();
+        var comparisonHunkLines = new List<string>();
         var currentIndex = 0;
         var comparisonIndex = 0;
         while (currentIndex < currentLines.Length || comparisonIndex < comparisonLines.Length)
@@ -2218,6 +2221,7 @@ internal static partial class MarkdownPreviewRenderer
                 && comparisonIndex < comparisonLines.Length
                 && string.Equals(currentLines[currentIndex], comparisonLines[comparisonIndex], StringComparison.Ordinal))
             {
+                FlushCurrentLineDiffs(changed, currentHunkIndexes, comparisonHunkLines);
                 currentIndex++;
                 comparisonIndex++;
             }
@@ -2226,16 +2230,41 @@ internal static partial class MarkdownPreviewRenderer
             {
                 if (!string.IsNullOrWhiteSpace(currentLines[currentIndex]))
                 {
-                    changed.Add(currentIndex);
+                    currentHunkIndexes.Add(currentIndex);
                 }
                 currentIndex++;
             }
             else
             {
+                if (comparisonIndex < comparisonLines.Length && !string.IsNullOrWhiteSpace(comparisonLines[comparisonIndex]))
+                {
+                    comparisonHunkLines.Add(comparisonLines[comparisonIndex]);
+                }
                 comparisonIndex++;
             }
         }
+        FlushCurrentLineDiffs(changed, currentHunkIndexes, comparisonHunkLines);
         return changed;
+    }
+
+    private static void FlushCurrentLineDiffs(
+        List<CurrentLineDiff> changed,
+        List<int> currentHunkIndexes,
+        List<string> comparisonHunkLines)
+    {
+        if (currentHunkIndexes.Count == 0)
+        {
+            comparisonHunkLines.Clear();
+            return;
+        }
+
+        var candidates = comparisonHunkLines.ToArray();
+        foreach (var index in currentHunkIndexes)
+        {
+            changed.Add(new CurrentLineDiff(index, candidates));
+        }
+        currentHunkIndexes.Clear();
+        comparisonHunkLines.Clear();
     }
 
     private static int[,] BuildLineLcsTable(string[] currentLines, string[] comparisonLines)
@@ -2719,6 +2748,8 @@ internal static partial class MarkdownPreviewRenderer
     }
 
     private readonly record struct RenderedDiffLineParts(RenderedDiffLineKind Kind, string Prefix, string Content);
+
+    private readonly record struct CurrentLineDiff(int Index, string[] ComparisonLines);
 
     private readonly record struct MarkdownLinkRange(int LabelStart, int LabelEnd, int LinkEnd);
 
