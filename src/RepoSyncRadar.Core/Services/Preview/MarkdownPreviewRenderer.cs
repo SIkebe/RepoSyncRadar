@@ -1482,7 +1482,7 @@ internal static partial class MarkdownPreviewRenderer
         // すでに見えているため重複になる。ここでは「表示中の版には出ないが、
         // 他の版だけで変わる変更」だけを残し、レビュアーが見落としやすい
         // 他版限定の差分に集中できるようにする (IMPLEMENTATION_PLAN.md §Step 19.9)。
-        var groups = BuildVersionImpactGroups(versionImpacts, currentVersion);
+        var groups = BuildVersionImpactGroups(versionImpacts);
         var otherVersionGroups = groups
             .Where(group => !group.Versions.Contains(currentVersion))
             .ToList();
@@ -1731,8 +1731,7 @@ internal static partial class MarkdownPreviewRenderer
     }
 
     private static List<VersionImpactGroup> BuildVersionImpactGroups(
-        IReadOnlyList<DocsVersionImpactDetail> versionImpacts,
-        DocsVersion currentVersion)
+        IReadOnlyList<DocsVersionImpactDetail> versionImpacts)
     {
         var builders = new List<VersionImpactGroupBuilder>();
         var lookup = new Dictionary<string, VersionImpactGroupBuilder>(StringComparer.Ordinal);
@@ -1749,16 +1748,9 @@ internal static partial class MarkdownPreviewRenderer
             builder.Versions.Add(impact.Version);
         }
 
-        builders.Sort((left, right) =>
-        {
-            var leftIsCurrent = left.Versions.Contains(currentVersion);
-            var rightIsCurrent = right.Versions.Contains(currentVersion);
-            if (leftIsCurrent != rightIsCurrent)
-            {
-                return leftIsCurrent ? -1 : 1;
-            }
-            return left.FirstIndex.CompareTo(right.FirstIndex);
-        });
+        // 表示中の版を含むグループは呼び出し元で除外されるため、
+        // 元の出現順 (FirstIndex) だけで安定ソートする。
+        builders.Sort(static (left, right) => left.FirstIndex.CompareTo(right.FirstIndex));
 
         return builders
             .Select(static builder => new VersionImpactGroup(builder.Versions, builder.Changes))
