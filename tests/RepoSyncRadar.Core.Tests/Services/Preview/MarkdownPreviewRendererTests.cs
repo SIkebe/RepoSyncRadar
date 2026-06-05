@@ -983,6 +983,55 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Renders_Inline_Alert_Marker_On_Same_Line_As_Alert_Html()
+    {
+        // github/docs では `> [!NOTE] {% data ... %}` のようにマーカーと本文が
+        // 同じ行に並ぶことがある。これも NOTE アラートとして描画する。
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            > [!NOTE] Agent apps are currently in public preview and subject to change.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", html, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"ghd-markdown-alert-title\">Note</p>", html, StringComparison.Ordinal);
+        Assert.Contains("Agent apps are currently in public preview and subject to change.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[!NOTE]", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Does_Not_Split_Liquid_Tag_When_Marking_Rendered_Diff()
+    {
+        // 見出しの Liquid 変数が丸ごと差し替わったケース。差分マーカーの span が
+        // {% ... %} タグの途中に挿入されるとタグが壊れる (タグ崩れ・id 破損) ので、
+        // span はタグ全体を包み、タグ内部を分断しないこと。
+        const string beforeMarkdown = "## {% data variables.product.prodname_github_apps %} and OAuth apps";
+        const string afterMarkdown = "## {% data variables.copilot.agent_apps_caps %}";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        // Liquid タグが span で分断されていない (タグ内に span 終了タグが入らない)。
+        Assert.Contains("{% data variables.copilot.agent_apps_caps %}", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("agent_apps_ca</span>", html, StringComparison.Ordinal);
+        // 差分マーカー内に HTML エスケープされた span が混入していない。
+        Assert.DoesNotContain("&lt;span class=&quot;rsr-rendered-diff", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Leaves_GitHub_Alert_Markers_In_Code_Fences_Untouched()
     {
         var markdown = """

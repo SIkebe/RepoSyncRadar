@@ -636,12 +636,21 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var marker = blockquoteLines[0].Trim();
-        if (!TryGetGitHubAlertKind(marker, out var kind, out var label))
+        if (!TryGetGitHubAlertKind(marker, out var kind, out var label, out var inlineRest))
         {
             return false;
         }
 
-        var bodyMarkdown = string.Join('\n', blockquoteLines.Skip(1)).Trim('\n');
+        // GitHub の正式な構文ではマーカーは単独行だが、github/docs では
+        // `> [!NOTE] {% data reusables... %}` のようにマーカーと本文が同じ行に
+        // 並ぶことがある。マーカー直後の本文を最初の本文行として扱う。
+        var bodyLines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(inlineRest))
+        {
+            bodyLines.Add(inlineRest);
+        }
+        bodyLines.AddRange(blockquoteLines.Skip(1));
+        var bodyMarkdown = string.Join('\n', bodyLines).Trim('\n');
         var bodyHtml = bodyMarkdown.Length == 0
             ? string.Empty
             : Markdown.ToHtml(RenderGitHubAlertBlocks(bodyMarkdown), _pipeline).TrimEnd();
@@ -651,16 +660,23 @@ internal static partial class MarkdownPreviewRenderer
         return true;
     }
 
-    private static bool TryGetGitHubAlertKind(string marker, out string kind, out string label)
+    private static bool TryGetGitHubAlertKind(string marker, out string kind, out string label, out string inlineRest)
     {
         kind = string.Empty;
         label = string.Empty;
-        if (marker.Length < 4 || marker[0] != '[' || marker[1] != '!' || marker[^1] != ']')
+        inlineRest = string.Empty;
+        if (marker.Length < 4 || marker[0] != '[' || marker[1] != '!')
         {
             return false;
         }
 
-        var alertType = marker[2..^1].Trim();
+        var close = marker.IndexOf(']', 2);
+        if (close < 3)
+        {
+            return false;
+        }
+
+        var alertType = marker[2..close].Trim();
         (kind, label) = alertType.ToUpperInvariant() switch
         {
             "NOTE" => ("note", "Note"),
@@ -670,7 +686,13 @@ internal static partial class MarkdownPreviewRenderer
             "CAUTION" => ("caution", "Caution"),
             _ => (string.Empty, string.Empty),
         };
-        return kind.Length > 0;
+        if (kind.Length == 0)
+        {
+            return false;
+        }
+
+        inlineRest = marker[(close + 1)..].Trim();
+        return true;
     }
 
     private static bool TryReadBlockquoteLine(string line, out string quotedLine)
@@ -2011,7 +2033,10 @@ internal static partial class MarkdownPreviewRenderer
         return new InlineChangedRange(prefixLength, excerptEnd - prefixLength + 1);
     }
 
-    private readonly record struct InlineChangedRange(int Start, int Length);
+    private readonly record struct InlineChangedRange(int Start, int Length)
+    {
+        public int End => Start + Length;
+    }
 
     private enum VersionChangeExcerptSide
     {
@@ -2333,6 +2358,7 @@ internal static partial class MarkdownPreviewRenderer
             if (TryFindLastMarkdownLinkLabelRange(content, out var linkLabelRange))
             {
                 var expandedRange = ExpandRenderedDiffRange(content, linkLabelRange);
+                expandedRange = SnapRangeOutsideLiquidTokens(content, expandedRange);
                 if (expandedRange.Start > 0 && expandedRange.Length < content.Length)
                 {
                     return content[..expandedRange.Start]
@@ -2354,6 +2380,11 @@ internal static partial class MarkdownPreviewRenderer
                 : content;
         }
         changedRange = ExpandRenderedDiffRange(content, changedRange);
+        changedRange = SnapRangeOutsideLiquidTokens(content, changedRange);
+        if (changedRange.Length == 0)
+        {
+            return content;
+        }
 
         return content[..changedRange.Start]
             + "<span class=\"" + markerClass + "\">"
@@ -2392,7 +2423,6 @@ internal static partial class MarkdownPreviewRenderer
         {
             return changedRange;
         }
-
         var start = FindSentenceStart(content, linkRange.LabelStart);
         var sentencePrefix = content[start..linkRange.LabelStart].TrimStart();
         if (sentencePrefix.StartsWith("For more information", StringComparison.OrdinalIgnoreCase)
@@ -2403,6 +2433,73 @@ internal static partial class MarkdownPreviewRenderer
 
         var end = FindSentenceEnd(content, linkRange.LinkEnd);
         return end > start ? new InlineChangedRange(start, end - start) : changedRange;
+    }
+
+    /// <summary>
+    /// 差分マーカー span が Liquid タグ (<c>{% ... %}</c> / <c>{{ ... }}</c>) を
+    /// 途中で分断しないよう、範囲の端がタグ内部に入っている場合はタグの外側へ
+    /// スナップする。タグ内に span を挿入すると後段の Liquid 中立化で壊れる
+    /// (タグ崩れ・HTML エスケープ混入・見出し id 破損) のを防ぐ。
+    /// </summary>
+    private static InlineChangedRange SnapRangeOutsideLiquidTokens(string content, InlineChangedRange range)
+    {
+        if (range.Length == 0)
+        {
+            return range;
+        }
+
+        var start = range.Start;
+        var end = range.Start + range.Length;
+        foreach (var token in EnumerateLiquidTokenSpans(content))
+        {
+            // 開始端がタグ内部 (開きより後ろ・閉じより前) ならタグ先頭へ。
+            if (start > token.Start && start < token.End)
+            {
+                start = token.Start;
+            }
+            // 終了端がタグ内部ならタグ末尾へ。
+            if (end > token.Start && end < token.End)
+            {
+                end = token.End;
+            }
+        }
+
+        start = Math.Clamp(start, 0, content.Length);
+        end = Math.Clamp(end, start, content.Length);
+        return new InlineChangedRange(start, end - start);
+    }
+
+    private static IEnumerable<InlineChangedRange> EnumerateLiquidTokenSpans(string content)
+    {
+        var cursor = 0;
+        while (cursor < content.Length - 1)
+        {
+            var open = -1;
+            string? closing = null;
+            for (var index = cursor; index < content.Length - 1; index++)
+            {
+                if (content[index] == '{' && (content[index + 1] == '%' || content[index + 1] == '{'))
+                {
+                    open = index;
+                    closing = content[index + 1] == '%' ? "%}" : "}}";
+                    break;
+                }
+            }
+            if (open < 0 || closing is null)
+            {
+                yield break;
+            }
+
+            var closeIndex = content.IndexOf(closing, open + 2, StringComparison.Ordinal);
+            if (closeIndex < 0)
+            {
+                yield break;
+            }
+
+            var endExclusive = closeIndex + 2;
+            yield return new InlineChangedRange(open, endExclusive - open);
+            cursor = endExclusive;
+        }
     }
 
     private static bool TryFindMarkdownLinkAroundRange(
