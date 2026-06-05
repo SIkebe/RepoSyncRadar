@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <!-- App と TFM を揃える（App は WebView2 のため Windows SDK バージョン明示が必要） -->
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net11.0-windows10.0.19041.0</TargetFramework>
     <RootNamespace>RepoSyncRadar.App.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>

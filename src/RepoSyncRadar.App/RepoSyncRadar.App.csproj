@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <!-- Windows SDK バージョンを明示して WinRT projection (Microsoft.Windows.SDK.NET) を
          取り込む。WebView2.Wpf の D3DImage 初期化がこれを要求する。 -->
-    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net11.0-windows10.0.19041.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>false</UseWindowsForms>
     <RootNamespace>RepoSyncRadar.App</RootNamespace>

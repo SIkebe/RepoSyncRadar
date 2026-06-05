@@ -275,8 +275,8 @@ if ($isSelfContainedPartialTrim) {
 }
 else {
     $framework = switch ($Runtime) {
-        'win-x64' { 'net10.0-x64-desktop,webview2' }
-        'win-arm64' { 'net10.0-arm64-desktop,webview2' }
+        'win-x64' { 'net11.0-x64-desktop,webview2' }
+        'win-arm64' { 'net11.0-arm64-desktop,webview2' }
     }
 }
 

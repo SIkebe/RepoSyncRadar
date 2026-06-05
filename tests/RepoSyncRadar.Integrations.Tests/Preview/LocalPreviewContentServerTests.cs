@@ -80,6 +80,49 @@ public sealed class LocalPreviewContentServerTests
     }
 
     [Fact]
+    public async Task StartAsync_Serves_MediaTypeMap_Content_Types()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var server = new LocalPreviewContentServer(NullLogger<LocalPreviewContentServer>.Instance);
+        var port = GetFreeLoopbackPort();
+        var root = Path.Combine(Path.GetTempPath(), "rsr-preview-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+        var cgmPath = Path.Combine(root, "assets", "diagram.cgm");
+        var svgPath = Path.Combine(root, "assets", "diagram.svg");
+        await File.WriteAllBytesAsync(cgmPath, [0x43, 0x47, 0x4d], ct);
+        await File.WriteAllTextAsync(svgPath, "<svg xmlns=\"http://www.w3.org/2000/svg\" />", ct);
+        using var http = new HttpClient();
+
+        try
+        {
+            await server.StartAsync(
+                port,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["/markdown/after"] = "<html><body>page</body></html>",
+                },
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["/markdown-assets/after"] = root,
+                },
+                ct);
+
+            using var cgmResponse = await http.GetAsync(new Uri($"http://127.0.0.1:{port}/markdown-assets/after/assets/diagram.cgm"), ct);
+            using var svgResponse = await http.GetAsync(new Uri($"http://127.0.0.1:{port}/markdown-assets/after/assets/diagram.svg"), ct);
+
+            Assert.Equal(HttpStatusCode.OK, cgmResponse.StatusCode);
+            Assert.Equal("image/cgm", cgmResponse.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(HttpStatusCode.OK, svgResponse.StatusCode);
+            Assert.Equal("image/svg+xml", svgResponse.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("utf-8", svgResponse.Content.Headers.ContentType?.CharSet);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task StartAsync_Rejects_Asset_Path_Traversal()
     {
         var ct = TestContext.Current.CancellationToken;
