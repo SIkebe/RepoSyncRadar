@@ -94,6 +94,9 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""&lt;span class=&quot;(?<class>rsr-rendered-diff-(?:added|removed))&quot;&gt;(?<body>.*?)&lt;/span&gt;""", RegexOptions.Singleline)]
     private static partial Regex EscapedRenderedDiffMarkerRegex();
 
+    [GeneratedRegex("""[a-zA-Z_][a-zA-Z0-9_-]*""")]
+    private static partial Regex VersionExpressionIdentifierRegex();
+
     private const string _copilotOcticonSvg = """
         <svg version="1.1" width="16" height="16" viewBox="0 0 16 16" class="octicon octicon-copilot" aria-hidden="true" data-component="Octicon"><path d="M7.998 15.035c-4.562 0-7.873-2.914-7.998-3.749V9.338c.085-.628.677-1.686 1.588-2.065.013-.07.024-.143.036-.218.029-.183.06-.384.126-.612-.201-.508-.254-1.084-.254-1.656 0-.87.128-1.769.693-2.484.579-.733 1.494-1.124 2.724-1.261 1.206-.134 2.262.034 2.944.765.05.053.096.108.139.165.044-.057.094-.112.143-.165.682-.731 1.738-.899 2.944-.765 1.23.137 2.145.528 2.724 1.261.566.715.693 1.614.693 2.484 0 .572-.053 1.148-.254 1.656.066.228.098.429.126.612.012.076.024.148.037.218.924.385 1.522 1.471 1.591 2.095v1.872c0 .766-3.351 3.795-8.002 3.795Zm0-1.485c2.28 0 4.584-1.11 5.002-1.433V7.862l-.023-.116c-.49.21-1.075.291-1.727.291-1.146 0-2.059-.327-2.71-.991A3.222 3.222 0 0 1 8 6.303a3.24 3.24 0 0 1-.544.743c-.65.664-1.563.991-2.71.991-.652 0-1.236-.081-1.727-.291l-.023.116v4.255c.419.323 2.722 1.433 5.002 1.433ZM6.762 2.83c-.193-.206-.637-.413-1.682-.297-1.019.113-1.479.404-1.713.7-.247.312-.369.789-.369 1.554 0 .793.129 1.171.308 1.371.162.181.519.379 1.442.379.853 0 1.339-.235 1.638-.54.315-.322.527-.827.617-1.553.117-.935-.037-1.395-.241-1.614Zm4.155-.297c-1.044-.116-1.488.091-1.681.297-.204.219-.359.679-.242 1.614.091.726.303 1.231.618 1.553.299.305.784.54 1.638.54.922 0 1.28-.198 1.442-.379.179-.2.308-.578.308-1.371 0-.765-.123-1.242-.37-1.554-.233-.296-.693-.587-1.713-.7Z"></path><path d="M6.25 9.037a.75.75 0 0 1 .75.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 .75-.75Zm4.25.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 1.5 0Z"></path></svg>
         """;
@@ -263,13 +266,10 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-version-diff-overview{color:var(--rsr-muted);font-size:.78rem;margin:0 0 10px;}");
         html.AppendLine(".rsr-version-diff-list{display:grid;gap:8px;list-style:none;margin:0;padding:0;}");
         html.AppendLine(".rsr-version-diff-item{border:1px solid var(--rsr-border);border-radius:6px;background:var(--rsr-article-bg);padding:10px;}");
-        html.AppendLine(".rsr-version-diff-item--current{box-shadow:inset 3px 0 0 var(--rsr-link);}");
         html.AppendLine(".rsr-version-diff-title{align-items:center;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px;font-size:.84rem;}");
         html.AppendLine(".rsr-version-pattern-versions{display:flex;flex-wrap:wrap;gap:5px;list-style:none;margin:0 0 8px;padding:0;}");
         html.AppendLine(".rsr-version-pattern-badge{display:inline-block;padding:2px 7px;background:var(--rsr-th-bg);border:1px solid var(--rsr-border);border-radius:12px;font:inherit;font-size:.72rem;color:var(--rsr-fg);cursor:pointer;}");
         html.AppendLine(".rsr-version-pattern-badge:hover{border-color:var(--rsr-link);color:var(--rsr-link);}");
-        html.AppendLine(".rsr-version-pattern-badge--current{background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);font-weight:600;}");
-        html.AppendLine(".rsr-version-current-chip{border:1px solid var(--rsr-liquid-border);border-radius:999px;color:var(--rsr-liquid-fg);font-size:.7rem;padding:1px 7px;}");
         html.AppendLine(".rsr-version-change{border-left:3px solid var(--rsr-border);display:grid;gap:4px;margin-top:8px;padding-left:8px;}");
         html.AppendLine(".rsr-version-change[data-change-kind='added']{border-left-color:#2da44e;}");
         html.AppendLine(".rsr-version-change[data-change-kind='removed']{border-left-color:#cf222e;}");
@@ -323,7 +323,7 @@ internal static partial class MarkdownPreviewRenderer
             sourceDiff,
             trimmedRepoPath,
             effectiveLiquidContext,
-            effectiveVersion);
+            selectedVersion ?? effectiveVersion);
         html.AppendLine("</header>");
         if (!string.IsNullOrWhiteSpace(introHtml))
         {
@@ -636,12 +636,21 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var marker = blockquoteLines[0].Trim();
-        if (!TryGetGitHubAlertKind(marker, out var kind, out var label))
+        if (!TryGetGitHubAlertKind(marker, out var kind, out var label, out var inlineRest))
         {
             return false;
         }
 
-        var bodyMarkdown = string.Join('\n', blockquoteLines.Skip(1)).Trim('\n');
+        // GitHub の正式な構文ではマーカーは単独行だが、github/docs では
+        // `> [!NOTE] {% data reusables... %}` のようにマーカーと本文が同じ行に
+        // 並ぶことがある。マーカー直後の本文を最初の本文行として扱う。
+        var bodyLines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(inlineRest))
+        {
+            bodyLines.Add(inlineRest);
+        }
+        bodyLines.AddRange(blockquoteLines.Skip(1));
+        var bodyMarkdown = string.Join('\n', bodyLines).Trim('\n');
         var bodyHtml = bodyMarkdown.Length == 0
             ? string.Empty
             : Markdown.ToHtml(RenderGitHubAlertBlocks(bodyMarkdown), _pipeline).TrimEnd();
@@ -651,16 +660,23 @@ internal static partial class MarkdownPreviewRenderer
         return true;
     }
 
-    private static bool TryGetGitHubAlertKind(string marker, out string kind, out string label)
+    private static bool TryGetGitHubAlertKind(string marker, out string kind, out string label, out string inlineRest)
     {
         kind = string.Empty;
         label = string.Empty;
-        if (marker.Length < 4 || marker[0] != '[' || marker[1] != '!' || marker[^1] != ']')
+        inlineRest = string.Empty;
+        if (marker.Length < 4 || marker[0] != '[' || marker[1] != '!')
         {
             return false;
         }
 
-        var alertType = marker[2..^1].Trim();
+        var close = marker.IndexOf(']', 2);
+        if (close < 3)
+        {
+            return false;
+        }
+
+        var alertType = marker[2..close].Trim();
         (kind, label) = alertType.ToUpperInvariant() switch
         {
             "NOTE" => ("note", "Note"),
@@ -670,7 +686,13 @@ internal static partial class MarkdownPreviewRenderer
             "CAUTION" => ("caution", "Caution"),
             _ => (string.Empty, string.Empty),
         };
-        return kind.Length > 0;
+        if (kind.Length == 0)
+        {
+            return false;
+        }
+
+        inlineRest = marker[(close + 1)..].Trim();
+        return true;
     }
 
     private static bool TryReadBlockquoteLine(string line, out string quotedLine)
@@ -1481,42 +1503,42 @@ internal static partial class MarkdownPreviewRenderer
             return;
         }
 
-        var groups = BuildVersionImpactGroups(versionImpacts, currentVersion);
+        // 表示中の版を含むグループは、本文のインライン差分 (赤/緑マーカー) で
+        // すでに見えているため重複になる。ここでは「表示中の版には出ないが、
+        // 他の版だけで変わる変更」だけを残し、レビュアーが見落としやすい
+        // 他版限定の差分に集中できるようにする (IMPLEMENTATION_PLAN.md §Step 19.9)。
+        var groups = BuildVersionImpactGroups(versionImpacts);
+        var otherVersionGroups = groups
+            .Where(group => !group.Versions.Contains(currentVersion))
+            .ToList();
+        if (otherVersionGroups.Count == 0)
+        {
+            return;
+        }
+
         html.Append("<section class=\"rsr-version-diff-summary\" data-testid=\"rsr-version-diff-summary\" aria-label=\"版別差分\">");
         html.Append("<h2>変更パターン</h2>");
         html.Append("<p class=\"rsr-version-diff-overview\">");
-        if (groups.Count == 1)
+        if (otherVersionGroups.Count == 1)
         {
-            html.Append(versionImpacts.Count.ToString(CultureInfo.InvariantCulture))
-                .Append(" 版で同じ変更内容です。");
+            html.Append("表示中の版には出ない、他の版だけの変更です。本文の差分には含まれないため、ここで内容を確認してください。");
         }
         else
         {
-            html.Append(groups.Count.ToString(CultureInfo.InvariantCulture))
-                .Append(" 種類の変更内容があります。版チップが同じ変更を共有する範囲です。");
+            html.Append(otherVersionGroups.Count.ToString(CultureInfo.InvariantCulture))
+                .Append(" 種類の他版限定の変更があります。表示中の版の本文には出ないため、ここで確認してください。");
         }
         html.Append("</p>");
         html.Append("<ul class=\"rsr-version-diff-list\">");
-        for (var groupIndex = 0; groupIndex < groups.Count; groupIndex++)
+        for (var groupIndex = 0; groupIndex < otherVersionGroups.Count; groupIndex++)
         {
-            var group = groups[groupIndex];
-            var isCurrent = group.Versions.Contains(currentVersion);
-            html.Append("<li class=\"rsr-version-diff-item");
-            if (isCurrent)
-            {
-                html.Append(" rsr-version-diff-item--current");
-            }
-            html.Append("\">");
+            var group = otherVersionGroups[groupIndex];
+            html.Append("<li class=\"rsr-version-diff-item\">");
             html.Append("<h3 class=\"rsr-version-diff-title\"><span>")
                 .Append(WebUtility.HtmlEncode(BuildVersionImpactGroupTitle(group, groupIndex)))
-                .Append("</span>");
-            if (isCurrent)
-            {
-                html.Append("<span class=\"rsr-version-current-chip\">表示中</span>");
-            }
-            html.Append("</h3>");
+                .Append("</span></h3>");
 
-            AppendVersionPatternBadges(html, group.Versions, currentVersion);
+            AppendVersionPatternBadges(html, group.Versions);
 
             var visibleChanges = group.Changes.Take(3).ToArray();
             foreach (var change in visibleChanges)
@@ -1546,16 +1568,27 @@ internal static partial class MarkdownPreviewRenderer
             return;
         }
 
-        var totalChanges = sourceDiff.IfversionChanges.Count
+        // 表示中の版で本文に反映される ifversion 変更は、本文の差分側で既に
+        // 見えている。ここでは「表示中の版では本文に出ない条件変更」だけを残し、
+        // 見落とし防止に集中する。
+        var hiddenIfversionChanges = sourceDiff.IfversionChanges
+            .Where(change => !IfversionChangeRendersForVersion(change, version, liquidContext.Features))
+            .ToArray();
+        if (hiddenIfversionChanges.Length == 0 && sourceDiff.RelatedFileChanges.Count == 0)
+        {
+            return;
+        }
+
+        var totalChanges = hiddenIfversionChanges.Length
             + sourceDiff.RelatedFileChanges.Sum(static file => file.Changes.Count);
         html.Append("<section class=\"rsr-source-diff\" data-testid=\"rsr-source-diff\" aria-label=\"ソース差分\">");
         html.Append("<h2>レンダリングに出ないソース差分</h2>");
         html.Append("<p class=\"rsr-source-diff-overview\">")
             .Append(totalChanges.ToString(CultureInfo.InvariantCulture))
-            .Append(" 件の Liquid 条件または関連 data ファイル差分があります。本文が同じに見える場合は、この条件変更を確認してください。</p>");
+            .Append(" 件の Liquid 条件または関連 data ファイル差分があります。表示中の版では本文に出ないため、この条件変更を確認してください。</p>");
         html.Append("<ul class=\"rsr-source-diff-list\">");
 
-        foreach (var change in sourceDiff.IfversionChanges.Take(8))
+        foreach (var change in hiddenIfversionChanges.Take(8))
         {
             AppendIfversionSourceChange(html, change, repoPath, liquidContext, version);
         }
@@ -1580,11 +1613,77 @@ internal static partial class MarkdownPreviewRenderer
             html.Append("</li>");
         }
 
-        if (sourceDiff.IfversionChanges.Count > 8 || sourceDiff.RelatedFileChanges.Count > 4)
+        if (hiddenIfversionChanges.Length > 8 || sourceDiff.RelatedFileChanges.Count > 4)
         {
             html.Append("<li class=\"rsr-version-diff-more\">一部のソース差分のみ表示しています。</li>");
         }
         html.Append("</ul></section>");
+    }
+
+    private static readonly HashSet<string> _versionExpressionKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "and",
+        "or",
+        "not",
+        "fpt",
+        "ghec",
+        "ghes",
+        "ghae",
+    };
+
+    /// <summary>
+    /// <paramref name="change"/> の <c>ifversion</c> 条件が、現在表示中の
+    /// <paramref name="version"/> の本文レンダリングに反映されるか（=本文の差分側で
+    /// 既に見えるか）を返す。<c>true</c> のときソース差分セクションからは除外する。
+    /// </summary>
+    private static bool IfversionChangeRendersForVersion(
+        MarkdownIfversionChange change,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
+    {
+        var beforeRenders = EvaluateIfversionExpressionForVersion(change.BeforeExpression, version, features);
+        var afterRenders = EvaluateIfversionExpressionForVersion(change.AfterExpression, version, features);
+        return change.Kind switch
+        {
+            // 追加: 表示中の版が条件を満たすなら本文に出る → 本文差分側で見える。
+            DocsVersionChangeKind.Added => afterRenders == true,
+            // 削除: 表示中の版が以前は条件を満たしていたなら本文から消える → 本文差分側で見える。
+            DocsVersionChangeKind.Removed => beforeRenders == true,
+            // 条件変更: 表示中の版での可視状態が反転する場合のみ本文に差分が出る。
+            DocsVersionChangeKind.Updated => beforeRenders is bool before && afterRenders is bool after && before != after,
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// <c>ifversion</c> 式を <paramref name="version"/> で評価する。未知の feature
+    /// フラグを含む式は確実に評価できないため <c>null</c> を返し、呼び出し側で安全側
+    /// （ソース差分を出し続ける）に倒せるようにする。
+    /// </summary>
+    private static bool? EvaluateIfversionExpressionForVersion(
+        string? expression,
+        DocsVersion version,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> features)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+        {
+            return null;
+        }
+
+        foreach (Match match in VersionExpressionIdentifierRegex().Matches(expression))
+        {
+            var identifier = match.Value;
+            if (_versionExpressionKeywords.Contains(identifier))
+            {
+                continue;
+            }
+            if (!features.ContainsKey(identifier))
+            {
+                return null;
+            }
+        }
+
+        return VersionExpressionEvaluator.Evaluate(expression, version, features);
     }
 
     private static void AppendIfversionSourceChange(
@@ -1734,8 +1833,7 @@ internal static partial class MarkdownPreviewRenderer
     }
 
     private static List<VersionImpactGroup> BuildVersionImpactGroups(
-        IReadOnlyList<DocsVersionImpactDetail> versionImpacts,
-        DocsVersion currentVersion)
+        IReadOnlyList<DocsVersionImpactDetail> versionImpacts)
     {
         var builders = new List<VersionImpactGroupBuilder>();
         var lookup = new Dictionary<string, VersionImpactGroupBuilder>(StringComparer.Ordinal);
@@ -1752,16 +1850,9 @@ internal static partial class MarkdownPreviewRenderer
             builder.Versions.Add(impact.Version);
         }
 
-        builders.Sort((left, right) =>
-        {
-            var leftIsCurrent = left.Versions.Contains(currentVersion);
-            var rightIsCurrent = right.Versions.Contains(currentVersion);
-            if (leftIsCurrent != rightIsCurrent)
-            {
-                return leftIsCurrent ? -1 : 1;
-            }
-            return left.FirstIndex.CompareTo(right.FirstIndex);
-        });
+        // 表示中の版を含むグループは呼び出し元で除外されるため、
+        // 元の出現順 (FirstIndex) だけで安定ソートする。
+        builders.Sort(static (left, right) => left.FirstIndex.CompareTo(right.FirstIndex));
 
         return builders
             .Select(static builder => new VersionImpactGroup(builder.Versions, builder.Changes))
@@ -1795,36 +1886,20 @@ internal static partial class MarkdownPreviewRenderer
 
     private static void AppendVersionPatternBadges(
         StringBuilder html,
-        IReadOnlyList<DocsVersion> versions,
-        DocsVersion currentVersion)
+        IReadOnlyList<DocsVersion> versions)
     {
+        // このヘルパーは currentVersion を含まない他版限定グループに対してのみ
+        // 呼ばれるため、表示中バージョンのハイライトは生じない。
         html.Append("<ul class=\"rsr-version-pattern-versions\" aria-label=\"この変更が出る版\">");
         foreach (var version in versions)
         {
-            var isCurrent = version == currentVersion;
-            html.Append("<li><button type=\"button\" class=\"rsr-version-pattern-badge");
-            if (isCurrent)
-            {
-                html.Append(" rsr-version-pattern-badge--current");
-            }
-            html.Append("\" data-rsr-version-slug=\"")
+            html.Append("<li><button type=\"button\" class=\"rsr-version-pattern-badge\" data-rsr-version-slug=\"")
                 .Append(WebUtility.HtmlEncode(version.Slug))
                 .Append("\" data-version-slug=\"")
                 .Append(WebUtility.HtmlEncode(version.Slug))
-                .Append('"');
-            if (isCurrent)
-            {
-                html.Append(" aria-current=\"true\" aria-label=\"")
-                    .Append(WebUtility.HtmlEncode(version.DisplayLabel + " を表示中"))
-                    .Append('"');
-            }
-            else
-            {
-                html.Append(" aria-label=\"")
-                    .Append(WebUtility.HtmlEncode(version.DisplayLabel + " に切り替え"))
-                    .Append('"');
-            }
-            html.Append('>')
+                .Append("\" aria-label=\"")
+                .Append(WebUtility.HtmlEncode(version.DisplayLabel + " に切り替え"))
+                .Append("\">")
                 .Append(WebUtility.HtmlEncode(version.DisplayLabel))
                 .Append("</button></li>");
         }
@@ -1958,7 +2033,10 @@ internal static partial class MarkdownPreviewRenderer
         return new InlineChangedRange(prefixLength, excerptEnd - prefixLength + 1);
     }
 
-    private readonly record struct InlineChangedRange(int Start, int Length);
+    private readonly record struct InlineChangedRange(int Start, int Length)
+    {
+        public int End => Start + Length;
+    }
 
     private enum VersionChangeExcerptSide
     {
@@ -2203,6 +2281,20 @@ internal static partial class MarkdownPreviewRenderer
         if (content.StartsWith("> ", StringComparison.Ordinal))
         {
             var quoted = content[2..];
+            if (TrySplitGitHubAlertQuotedLine(quoted, out var alertMarkerPrefix, out var alertInlineContent))
+            {
+                if (alertInlineContent.Length == 0)
+                {
+                    parts = default;
+                    return false;
+                }
+
+                parts = new RenderedDiffLineParts(
+                    RenderedDiffLineKind.Quote,
+                    leading + "> " + alertMarkerPrefix,
+                    alertInlineContent);
+                return true;
+            }
             if (IsGitHubAlertMarker(quoted) || string.IsNullOrWhiteSpace(quoted))
             {
                 parts = default;
@@ -2280,6 +2372,7 @@ internal static partial class MarkdownPreviewRenderer
             if (TryFindLastMarkdownLinkLabelRange(content, out var linkLabelRange))
             {
                 var expandedRange = ExpandRenderedDiffRange(content, linkLabelRange);
+                expandedRange = SnapRangeOutsideLiquidTokens(content, expandedRange);
                 if (expandedRange.Start > 0 && expandedRange.Length < content.Length)
                 {
                     return content[..expandedRange.Start]
@@ -2301,6 +2394,11 @@ internal static partial class MarkdownPreviewRenderer
                 : content;
         }
         changedRange = ExpandRenderedDiffRange(content, changedRange);
+        changedRange = SnapRangeOutsideLiquidTokens(content, changedRange);
+        if (changedRange.Length == 0)
+        {
+            return content;
+        }
 
         return content[..changedRange.Start]
             + "<span class=\"" + markerClass + "\">"
@@ -2339,7 +2437,6 @@ internal static partial class MarkdownPreviewRenderer
         {
             return changedRange;
         }
-
         var start = FindSentenceStart(content, linkRange.LabelStart);
         var sentencePrefix = content[start..linkRange.LabelStart].TrimStart();
         if (sentencePrefix.StartsWith("For more information", StringComparison.OrdinalIgnoreCase)
@@ -2350,6 +2447,73 @@ internal static partial class MarkdownPreviewRenderer
 
         var end = FindSentenceEnd(content, linkRange.LinkEnd);
         return end > start ? new InlineChangedRange(start, end - start) : changedRange;
+    }
+
+    /// <summary>
+    /// 差分マーカー span が Liquid タグ (<c>{% ... %}</c> / <c>{{ ... }}</c>) を
+    /// 途中で分断しないよう、範囲の端がタグ内部に入っている場合はタグの外側へ
+    /// スナップする。タグ内に span を挿入すると後段の Liquid 中立化で壊れる
+    /// (タグ崩れ・HTML エスケープ混入・見出し id 破損) のを防ぐ。
+    /// </summary>
+    private static InlineChangedRange SnapRangeOutsideLiquidTokens(string content, InlineChangedRange range)
+    {
+        if (range.Length == 0)
+        {
+            return range;
+        }
+
+        var start = range.Start;
+        var end = range.Start + range.Length;
+        foreach (var token in EnumerateLiquidTokenSpans(content))
+        {
+            // 開始端がタグ内部 (開きより後ろ・閉じより前) ならタグ先頭へ。
+            if (start > token.Start && start < token.End)
+            {
+                start = token.Start;
+            }
+            // 終了端がタグ内部ならタグ末尾へ。
+            if (end > token.Start && end < token.End)
+            {
+                end = token.End;
+            }
+        }
+
+        start = Math.Clamp(start, 0, content.Length);
+        end = Math.Clamp(end, start, content.Length);
+        return new InlineChangedRange(start, end - start);
+    }
+
+    private static IEnumerable<InlineChangedRange> EnumerateLiquidTokenSpans(string content)
+    {
+        var cursor = 0;
+        while (cursor < content.Length - 1)
+        {
+            var open = -1;
+            string? closing = null;
+            for (var index = cursor; index < content.Length - 1; index++)
+            {
+                if (content[index] == '{' && (content[index + 1] == '%' || content[index + 1] == '{'))
+                {
+                    open = index;
+                    closing = content[index + 1] == '%' ? "%}" : "}}";
+                    break;
+                }
+            }
+            if (open < 0 || closing is null)
+            {
+                yield break;
+            }
+
+            var closeIndex = content.IndexOf(closing, open + 2, StringComparison.Ordinal);
+            if (closeIndex < 0)
+            {
+                yield break;
+            }
+
+            var endExclusive = closeIndex + 2;
+            yield return new InlineChangedRange(open, endExclusive - open);
+            cursor = endExclusive;
+        }
     }
 
     private static bool TryFindMarkdownLinkAroundRange(
@@ -2542,8 +2706,16 @@ internal static partial class MarkdownPreviewRenderer
             return prefixOrSuffixMatch;
         }
 
-        var minimumScore = Math.Min(12, Math.Max(1, currentParts.Content.Length / 3));
-        return bestScore >= minimumScore ? bestContent : null;
+        // Avoid treating a genuinely added line as an update just because it
+        // shares a short word or phrase with an unrelated existing line (for
+        // example "Agent apps" vs "GitHub Apps and OAuth apps", or two
+        // unrelated sentences that both start with "If the app"). Require both
+        // a small absolute overlap and a meaningful ratio so short real updates
+        // like "Old entry" -> "New entry" still get inline marking.
+        var minimumScore = Math.Max(4, currentParts.Content.Length / 3);
+        return bestScore >= minimumScore && bestScore * 5 >= currentParts.Content.Length * 3
+            ? bestContent
+            : null;
     }
 
     private readonly record struct RenderedDiffLineParts(RenderedDiffLineKind Kind, string Prefix, string Content);
@@ -2561,6 +2733,38 @@ internal static partial class MarkdownPreviewRenderer
 
     private static bool IsGitHubAlertMarker(string value)
         => value.TrimStart().StartsWith("[!", StringComparison.Ordinal);
+
+    private static bool TrySplitGitHubAlertQuotedLine(
+        string quoted,
+        out string markerPrefix,
+        out string inlineContent)
+    {
+        markerPrefix = string.Empty;
+        inlineContent = string.Empty;
+
+        var leadingLength = quoted.Length - quoted.TrimStart().Length;
+        var trimmed = quoted[leadingLength..];
+        if (!TryGetGitHubAlertKind(trimmed, out _, out _, out _))
+        {
+            return false;
+        }
+
+        var close = trimmed.IndexOf(']', 2);
+        if (close < 0)
+        {
+            return false;
+        }
+
+        var contentStart = leadingLength + close + 1;
+        while (contentStart < quoted.Length && char.IsWhiteSpace(quoted[contentStart]))
+        {
+            contentStart++;
+        }
+
+        markerPrefix = quoted[..contentStart];
+        inlineContent = contentStart >= quoted.Length ? string.Empty : quoted[contentStart..];
+        return true;
+    }
 
     private static int GetMarkdownHeadingMarkerLength(string content)
     {

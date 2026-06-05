@@ -257,4 +257,27 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Contains("ghes-3.21", slugs);
         Assert.Contains("ghes-3.16", slugs);
     }
+
+    [Fact]
+    public void AnalyzeDetails_Ignores_Blank_Line_Removed_After_Heading()
+    {
+        // 見出し直後の空行が削除されただけ（fpt/ghec 限定の ifversion ブロック追加に
+        // 伴う整形差）。GHES では本文レンダリングは変わらないので差分なしと判定すべき。
+        var before = "## GitHub Apps and OAuth apps\n\nGitHub also supports OAuth apps. Unlike GitHub Apps, you do not install an OAuth app.";
+        var after = "{% ifversion fpt or ghec %}\n\n## Agents\n\nAgent intro.\n\n{% endif %}\n\n## GitHub Apps and OAuth apps\nGitHub also supports OAuth apps. Unlike GitHub Apps, you do not install an OAuth app.";
+
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        var slugs = details.Select(static detail => detail.Version.Slug).ToArray();
+        // fpt/ghec は Agents セクション追加という実質差分があるので含まれる。
+        Assert.Contains("fpt", slugs);
+        Assert.Contains("ghec", slugs);
+        // GHES は見出し後の空行が消えただけ → 差分なし。
+        Assert.DoesNotContain("ghes-3.21", slugs);
+        Assert.DoesNotContain("ghes-3.16", slugs);
+    }
 }

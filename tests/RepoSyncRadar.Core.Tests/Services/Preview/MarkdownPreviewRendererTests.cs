@@ -983,6 +983,113 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Renders_Inline_Alert_Marker_On_Same_Line_As_Alert_Html()
+    {
+        // github/docs では `> [!NOTE] {% data ... %}` のようにマーカーと本文が
+        // 同じ行に並ぶことがある。これも NOTE アラートとして描画する。
+        var markdown = """
+            ---
+            title: Sample
+            ---
+
+            > [!NOTE] Agent apps are currently in public preview and subject to change.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", html, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"ghd-markdown-alert-title\">Note</p>", html, StringComparison.Ordinal);
+        Assert.Contains("Agent apps are currently in public preview and subject to change.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("[!NOTE]", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Marks_Inline_Alert_Body_When_Alert_Line_Is_Added()
+    {
+        const string beforeMarkdown = "Existing content.";
+        const string afterMarkdown = "> [!NOTE] Agent apps are currently in public preview and subject to change.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">Agent apps are currently in public preview and subject to change.</span>",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("[!NOTE]", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Does_Not_Split_Liquid_Tag_When_Marking_Rendered_Diff()
+    {
+        // 見出しの Liquid 変数が丸ごと差し替わったケース。差分マーカーの span が
+        // {% ... %} タグの途中に挿入されるとタグが壊れる (タグ崩れ・id 破損) ので、
+        // span はタグ全体を包み、タグ内部を分断しないこと。
+        const string beforeMarkdown = "## {% data variables.product.prodname_github_apps %} and OAuth apps";
+        const string afterMarkdown = "## {% data variables.copilot.agent_apps_caps %}";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        // Liquid タグが span で分断されていない (タグ内に span 終了タグが入らない)。
+        Assert.Contains("{% data variables.copilot.agent_apps_caps %}", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("agent_apps_ca</span>", html, StringComparison.Ordinal);
+        // 差分マーカー内に HTML エスケープされた span が混入していない。
+        Assert.DoesNotContain("&lt;span class=&quot;rsr-rendered-diff", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Marks_Whole_Added_Heading_When_Only_Common_Suffix_Is_Unrelated()
+    {
+        const string beforeMarkdown = "## GitHub Apps and OAuth apps";
+        const string afterMarkdown = "## Agent apps";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">Agent apps</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">Agent</span> apps", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Marks_Whole_Added_Sentence_When_Only_Common_Prefix_Is_Unrelated()
+    {
+        const string beforeMarkdown = "If the app requires additional configuration, the app will direct you to do so.";
+        const string afterMarkdown = "If the app is installed in an organization owned by an enterprise, an administrator must also enable the policy before the agent features become available.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">If the app is installed", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("If the app <span class=\"rsr-rendered-diff-added\">is installed", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Leaves_GitHub_Alert_Markers_In_Code_Fences_Untouched()
     {
         var markdown = """
@@ -1418,8 +1525,10 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
-    public void Version_Diff_Summary_Renders_Per_Version_Changes()
+    public void Version_Diff_Summary_Hides_Current_Version_And_Shows_Other_Versions()
     {
+        // 表示中の版 (Ghec) の変更は本文のインライン差分で見えるため、
+        // 変更パターンには出さず、他版限定の変更 (Fpt) だけを残す。
         var impacts = new[]
         {
             new DocsVersionImpactDetail(
@@ -1441,14 +1550,38 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("data-testid=\"rsr-version-diff-summary\"", html, StringComparison.Ordinal);
         Assert.Contains("変更パターン", html, StringComparison.Ordinal);
+        Assert.Contains("Free, Pro, &amp; Team のみ", html, StringComparison.Ordinal);
         Assert.Contains("rsr-version-change-excerpt--removed", html, StringComparison.Ordinal);
         Assert.Contains("rsr-version-change-excerpt--added", html, StringComparison.Ordinal);
         Assert.Contains("text-decoration-line:line-through", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("rsr-version-change-excerpt--removed\">Free old note", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("rsr-version-change-excerpt--added\">Free updated note", html, StringComparison.Ordinal);
-        Assert.Contains("Enterprise Cloud only addition", html, StringComparison.Ordinal);
-        Assert.Contains("rsr-version-diff-item--current", html, StringComparison.Ordinal);
-        Assert.Contains("data-change-kind=\"added\"", html, StringComparison.Ordinal);
+        // 表示中の版 (Ghec) の変更は本文で見えるため重複表示しない。
+        Assert.DoesNotContain("Enterprise Cloud only addition", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-version-diff-item--current", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-version-current-chip", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Version_Diff_Summary_Omitted_When_All_Changes_Are_In_Current_Version()
+    {
+        // すべての差分が表示中の版に含まれる場合、本文のインライン差分と
+        // 完全に重複するため、変更パターンのセクション自体を出さない。
+        var sharedChange = new DocsVersionChangeSnippet(DocsVersionChangeKind.Updated, "Shared old note", "Shared updated note");
+        var impacts = new[]
+        {
+            new DocsVersionImpactDetail(DocsVersion.Fpt, [sharedChange]),
+            new DocsVersionImpactDetail(DocsVersion.Ghec, [sharedChange]),
+        };
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            "# Hello",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Ghec,
+            versionImpacts: impacts);
+
+        Assert.DoesNotContain("data-testid=\"rsr-version-diff-summary\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1464,16 +1597,18 @@ public sealed class MarkdownPreviewRendererTests
                 [new DocsVersionChangeSnippet(DocsVersionChangeKind.Added, null, "GHES only addition")]),
         };
 
+        // 表示中の版 (GHES 3.20) はどのグループにも含まれないため、
+        // すべての変更パターンが他版限定として表示される。
         var html = MarkdownPreviewRenderer.RenderDocument(
             "content/sample.md",
             "# Hello",
             "abc1234",
             "PR HEAD",
             affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec, DocsVersion.Ghes("3.21")],
-            selectedVersion: DocsVersion.Ghec,
+            selectedVersion: DocsVersion.Ghes("3.20"),
             versionImpacts: impacts);
 
-        Assert.Contains("2 種類の変更内容があります", html, StringComparison.Ordinal);
+        Assert.Contains("2 種類の他版限定の変更があります", html, StringComparison.Ordinal);
         Assert.Contains("変更パターン 1: 2 版で同じ変更", html, StringComparison.Ordinal);
         Assert.Contains("Free, Pro, &amp; Team", html, StringComparison.Ordinal);
         Assert.Contains("Enterprise Cloud", html, StringComparison.Ordinal);
@@ -1509,7 +1644,7 @@ public sealed class MarkdownPreviewRendererTests
             "PR HEAD",
             context,
             affectedVersions: [DocsVersion.Ghec],
-            selectedVersion: DocsVersion.Ghec,
+            selectedVersion: DocsVersion.Fpt,
             versionImpacts: impacts);
 
         Assert.Contains("Using the audit log API for your enterprise", html, StringComparison.Ordinal);
@@ -1543,7 +1678,7 @@ public sealed class MarkdownPreviewRendererTests
             "PR HEAD",
             context,
             affectedVersions: [DocsVersion.Ghec],
-            selectedVersion: DocsVersion.Ghec,
+            selectedVersion: DocsVersion.Fpt,
             versionImpacts: impacts);
 
         Assert.Contains("Using the audit log API for your enterprise", html, StringComparison.Ordinal);
@@ -1870,7 +2005,7 @@ public sealed class MarkdownPreviewRendererTests
             "abc1234",
             "PR HEAD",
             affectedVersions: [DocsVersion.Fpt],
-            selectedVersion: DocsVersion.Fpt,
+            selectedVersion: DocsVersion.Ghec,
             versionImpacts: impacts);
 
         Assert.Contains("本文のレンダリング済み差分で確認してください", html, StringComparison.Ordinal);
@@ -1936,6 +2071,61 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("Streaming the audit log for your enterprise", html, StringComparison.Ordinal);
         Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Source_Diff_Summary_Hides_Ifversion_Change_When_Current_Version_Renders_It()
+    {
+        // {% ifversion fpt or ghec %} の追加は ghec の本文に出る（本文差分側で見える）ため、
+        // ghec 表示中はソース差分セクションに出してはならない。
+        var sourceDiff = new MarkdownSourceDiffSummary(
+            [new MarkdownIfversionChange(
+                DocsVersionChangeKind.Added,
+                null,
+                "fpt or ghec",
+                null,
+                "Powered by the cloud agent, you can trigger these agents.")],
+            []);
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/apps/using-github-apps/about-using-github-apps.md",
+            "# About using GitHub Apps",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Ghec,
+            sourceDiff: sourceDiff);
+
+        Assert.DoesNotContain("data-testid=\"rsr-source-diff\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("レンダリングに出ないソース差分", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Source_Diff_Summary_Shows_Ifversion_Change_When_Current_Version_Does_Not_Render_It()
+    {
+        // 同じ {% ifversion fpt or ghec %} の追加でも、ghes 3.21 表示中は本文に出ないため、
+        // 見落とし防止のためソース差分セクションに残す。
+        var sourceDiff = new MarkdownSourceDiffSummary(
+            [new MarkdownIfversionChange(
+                DocsVersionChangeKind.Added,
+                null,
+                "fpt or ghec",
+                null,
+                "Powered by the cloud agent, you can trigger these agents.")],
+            []);
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/apps/using-github-apps/about-using-github-apps.md",
+            "# About using GitHub Apps",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Ghes("3.21"),
+            sourceDiff: sourceDiff);
+
+        Assert.Contains("data-testid=\"rsr-source-diff\"", html, StringComparison.Ordinal);
+        Assert.Contains("{% ifversion fpt or ghec %}", html, StringComparison.Ordinal);
+        Assert.Contains("表示中の版では本文に出ない", html, StringComparison.Ordinal);
     }
 
     private static int CountOccurrences(string value, string search)

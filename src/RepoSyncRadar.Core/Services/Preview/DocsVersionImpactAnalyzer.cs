@@ -243,10 +243,33 @@ public static class DocsVersionImpactAnalyzer
                 AddCurrentBlock(blocks, current);
                 continue;
             }
+
+            // ATX 見出し (## ...) は常にブロック境界として扱う。Markdown では見出し
+            // 直後の空行有無はレンダリング結果に影響しないため、空行が削除/追加された
+            // だけの整形差で見出しと次の段落が結合され、版差分として誤検知されるのを防ぐ。
+            if (IsAtxHeadingLine(line))
+            {
+                AddCurrentBlock(blocks, current);
+                blocks.Add(line);
+                continue;
+            }
+
             current.Add(line);
         }
         AddCurrentBlock(blocks, current);
         return blocks;
+    }
+
+    private static bool IsAtxHeadingLine(string trimmedLine)
+    {
+        var hashCount = 0;
+        while (hashCount < trimmedLine.Length && trimmedLine[hashCount] == '#')
+        {
+            hashCount++;
+        }
+        return hashCount is >= 1 and <= 6
+            && hashCount < trimmedLine.Length
+            && trimmedLine[hashCount] == ' ';
     }
 
     private static string NormalizeForComparison(string? rendered)
