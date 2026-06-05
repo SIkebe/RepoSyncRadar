@@ -1032,6 +1032,42 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Whole_Added_Heading_When_Only_Common_Suffix_Is_Unrelated()
+    {
+        const string beforeMarkdown = "## GitHub Apps and OAuth apps";
+        const string afterMarkdown = "## Agent apps";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">Agent apps</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">Agent</span> apps", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Marks_Whole_Added_Sentence_When_Only_Common_Prefix_Is_Unrelated()
+    {
+        const string beforeMarkdown = "If the app requires additional configuration, the app will direct you to do so.";
+        const string afterMarkdown = "If the app is installed in an organization owned by an enterprise, an administrator must also enable the policy before the agent features become available.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">If the app is installed", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("If the app <span class=\"rsr-rendered-diff-added\">is installed", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Leaves_GitHub_Alert_Markers_In_Code_Fences_Untouched()
     {
         var markdown = """

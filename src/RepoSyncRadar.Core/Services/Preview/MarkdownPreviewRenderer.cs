@@ -2692,7 +2692,12 @@ internal static partial class MarkdownPreviewRenderer
             return prefixOrSuffixMatch;
         }
 
-        var minimumScore = Math.Min(12, Math.Max(1, currentParts.Content.Length / 3));
+        // Avoid treating a genuinely added line as an update just because it
+        // shares a short word or phrase with an unrelated existing line (for
+        // example "Agent apps" vs "GitHub Apps and OAuth apps", or two
+        // unrelated sentences that both start with "If the app"). In those
+        // cases the whole added line should be highlighted.
+        var minimumScore = Math.Max(12, currentParts.Content.Length / 3);
         return bestScore >= minimumScore ? bestContent : null;
     }
 
