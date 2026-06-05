@@ -367,6 +367,18 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void BuildInstallSynchronizedScrollScript_Prefers_Unchanged_Blocks_For_Anchors()
+    {
+        var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.After);
+
+        // A changed block on one pane may not exist on the other pane. Prefer an
+        // unchanged visible block so scrolling an inserted paragraph does not
+        // fall back to document-height ratio synchronization.
+        Assert.Contains("rsr-preview-diff-block", script, StringComparison.Ordinal);
+        Assert.Contains("return unchanged.length > 0 ? unchanged : blocks;", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildApplySynchronizedScrollScript_Clamps_Ratio_And_Suppresses_Feedback()
     {
         var script = MainWindow.BuildApplySynchronizedScrollScript(2.4);

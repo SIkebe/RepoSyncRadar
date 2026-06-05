@@ -1978,7 +1978,9 @@ public partial class MainWindow : Window
         // Fall back to scanning leaf elements before the highlighter has finished.
         const stamped = document.querySelectorAll('[data-rsr-diff-index]');
         if (stamped.length > 0) {
-            return Array.from(stamped);
+            const blocks = Array.from(stamped);
+            const unchanged = blocks.filter((el) => !el.classList.contains('rsr-preview-diff-block'));
+            return unchanged.length > 0 ? unchanged : blocks;
         }
         const articleRoot =
             document.querySelector('main article') ||
