@@ -52,6 +52,8 @@
     <PackageVersion Include="Microsoft.Testing.Platform" Version="1.9.1" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <PackageVersion Include="RichardSzalay.MockHttp" Version="7.0.0" />
+    <!-- Temporarily pin bUnit to the .NET 11 TFM-compatible 2.6.2 release; upgrade once a newer
+         bUnit release combines net11.0 support with the 2.7.x JS runtime constructor fixes. -->
     <PackageVersion Include="bunit" Version="2.6.2" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="11.0.0-preview.1.26104.118" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.59.0" />

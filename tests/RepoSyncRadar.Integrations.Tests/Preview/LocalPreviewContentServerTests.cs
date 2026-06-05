@@ -88,7 +88,9 @@ public sealed class LocalPreviewContentServerTests
         var root = Path.Combine(Path.GetTempPath(), "rsr-preview-assets-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "assets"));
         var cgmPath = Path.Combine(root, "assets", "diagram.cgm");
+        var svgPath = Path.Combine(root, "assets", "diagram.svg");
         await File.WriteAllBytesAsync(cgmPath, [0x43, 0x47, 0x4d], ct);
+        await File.WriteAllTextAsync(svgPath, "<svg xmlns=\"http://www.w3.org/2000/svg\" />", ct);
         using var http = new HttpClient();
 
         try
@@ -105,10 +107,14 @@ public sealed class LocalPreviewContentServerTests
                 },
                 ct);
 
-            using var response = await http.GetAsync(new Uri($"http://127.0.0.1:{port}/markdown-assets/after/assets/diagram.cgm"), ct);
+            using var cgmResponse = await http.GetAsync(new Uri($"http://127.0.0.1:{port}/markdown-assets/after/assets/diagram.cgm"), ct);
+            using var svgResponse = await http.GetAsync(new Uri($"http://127.0.0.1:{port}/markdown-assets/after/assets/diagram.svg"), ct);
 
-            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-            Assert.Equal("image/cgm", response.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(HttpStatusCode.OK, cgmResponse.StatusCode);
+            Assert.Equal("image/cgm", cgmResponse.Content.Headers.ContentType?.MediaType);
+            Assert.Equal(HttpStatusCode.OK, svgResponse.StatusCode);
+            Assert.Equal("image/svg+xml", svgResponse.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("utf-8", svgResponse.Content.Headers.ContentType?.CharSet);
         }
         finally
         {
