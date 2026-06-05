@@ -1378,6 +1378,7 @@ public partial class MainWindow : Window
                 out var ratio,
                 out var anchorOffsetPx,
                 out var anchorFingerprint,
+                out var scrollDeltaPx,
                 out var scrollDirection))
         {
             return;
@@ -1399,6 +1400,7 @@ public partial class MainWindow : Window
             ratio,
             anchorOffsetPx,
             anchorFingerprint,
+            scrollDeltaPx,
             scrollDirection,
             _previewDiffGeneration);
     }
@@ -1531,6 +1533,7 @@ public partial class MainWindow : Window
         double ratio,
         double anchorOffsetPx,
         string? anchorFingerprint,
+        double scrollDeltaPx,
         PreviewScrollDirection scrollDirection,
         int generation)
     {
@@ -1547,6 +1550,7 @@ public partial class MainWindow : Window
                 ratio,
                 double.IsNaN(anchorOffsetPx) ? null : anchorOffsetPx,
                 anchorFingerprint,
+                double.IsNaN(scrollDeltaPx) ? null : scrollDeltaPx,
                 scrollDirection);
             await targetView.ExecuteScriptAsync(script);
         }
@@ -1980,67 +1984,6 @@ public partial class MainWindow : Window
         window.removeEventListener('scroll', existing.handler);
     }
 
-    const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
-    const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
-    const renderedDiffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed,.rsr-preview-diff-block';
-
-    const isChangedBlock = (el) => el.matches(renderedDiffSelector) || !!el.querySelector(renderedDiffSelector);
-
-    const findCandidateBlocks = () => {
-        // Prefer blocks already stamped by PreviewDiffHighlighter when available,
-        // since they are guaranteed to be the same set we run diff matching on.
-        // Fall back to scanning leaf elements before the highlighter has finished.
-        const stamped = document.querySelectorAll('[data-rsr-diff-index]');
-        if (stamped.length > 0) {
-            return Array.from(stamped);
-        }
-        const articleRoot =
-            document.querySelector('main article') ||
-            document.querySelector('article') ||
-            document.querySelector('[data-testid="article-body"]') ||
-            document.querySelector('main') ||
-            document.body;
-        if (!articleRoot) {
-            return [];
-        }
-        return Array.from(articleRoot.querySelectorAll(leafSelector))
-            .filter((el) => !el.closest(blockedAncestorSelector))
-            .filter((el) => {
-                const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-                return text.length >= 4 && !el.querySelector(leafSelector);
-            });
-    };
-
-    const computeFingerprint = (el) => {
-        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-        if (text.length < 4) {
-            return '';
-        }
-        const slice = text.slice(0, 96);
-        try {
-            return btoa(unescape(encodeURIComponent(slice)));
-        } catch (_) {
-            return '';
-        }
-    };
-
-    const pickAnchor = () => {
-        const blocks = findCandidateBlocks();
-        for (const el of blocks) {
-            const rect = el.getBoundingClientRect();
-            // First block that actually intersects the viewport. Do not grab a
-            // future unchanged block below the fold while the current viewport is
-            // occupied by an inserted/deleted block; that makes the peer jump.
-            if (rect.bottom > 0 && rect.top < window.innerHeight) {
-                if (isChangedBlock(el)) {
-                    return null;
-                }
-                return { el, rect };
-            }
-        }
-        return null;
-    };
-
     const getMaxScrollTop = () => {
         const root = document.scrollingElement || document.documentElement || document.body;
         if (!root) {
@@ -2085,14 +2028,10 @@ public partial class MainWindow : Window
             if (!direction) {
                 return;
             }
+            const delta = currentTop - previousTop;
             const ratio = getScrollRatio().toFixed(6);
-            const anchor = pickAnchor();
-            const fingerprint = anchor ? computeFingerprint(anchor.el) : '';
-            if (anchor && fingerprint) {
-                const offset = anchor.rect.top.toFixed(2);
-                window.chrome?.webview?.postMessage(
-                    `rsr-preview-scroll:${pane}:${ratio}:${offset}:${fingerprint}:${direction}`);
-            }
+            window.chrome?.webview?.postMessage(
+                `rsr-preview-scroll:${pane}:${ratio}:delta:${delta.toFixed(2)}:${direction}`);
         });
     };
 
@@ -2143,11 +2082,13 @@ public partial class MainWindow : Window
             double ratio,
             double? anchorOffsetPx,
             string? anchorFingerprintBase64,
+            double? scrollDeltaPx = null,
             PreviewScrollDirection scrollDirection = PreviewScrollDirection.Unknown)
         {
                 var clampedRatio = Math.Clamp(ratio, 0, 1).ToString("R", CultureInfo.InvariantCulture);
                 var hasAnchor = !string.IsNullOrEmpty(anchorFingerprintBase64)
                     && anchorOffsetPx is { } px && double.IsFinite(px);
+                var hasDelta = scrollDeltaPx is { } deltaPx && double.IsFinite(deltaPx);
                 var anchorJson = JsonSerializer.Serialize(hasAnchor ? anchorFingerprintBase64 : string.Empty);
                 var directionJson = JsonSerializer.Serialize(scrollDirection switch
                 {
@@ -2155,6 +2096,9 @@ public partial class MainWindow : Window
                     PreviewScrollDirection.Up => "up",
                     _ => string.Empty,
                 });
+                var deltaLiteral = hasDelta
+                    ? scrollDeltaPx!.Value.ToString("R", CultureInfo.InvariantCulture)
+                    : "0";
                 var anchorOffsetLiteral = hasAnchor
                     ? anchorOffsetPx!.Value.ToString("R", CultureInfo.InvariantCulture)
                     : "0";
@@ -2168,6 +2112,7 @@ public partial class MainWindow : Window
     const ratio = {{clampedRatio}};
     const anchorFingerprint = {{anchorJson}};
     const scrollDirection = {{directionJson}};
+    const scrollDeltaPx = {{deltaLiteral}};
     const anchorOffsetPx = {{anchorOffsetLiteral}};
     const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
     const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
@@ -2211,6 +2156,19 @@ public partial class MainWindow : Window
     };
 
     let scrolled = false;
+    if (scrollDeltaPx !== 0) {
+        const maxDelta = 900;
+        const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, scrollDeltaPx));
+        const directionAllowsDelta = scrollDirection === 'down'
+            ? clampedDelta > 0
+            : scrollDirection === 'up'
+                ? clampedDelta < 0
+                : true;
+        if (directionAllowsDelta && Math.abs(clampedDelta) > 0.5) {
+            window.scrollBy({ left: 0, top: clampedDelta, behavior: 'auto' });
+        }
+        scrolled = true;
+    }
     if (anchorFingerprint) {
         for (const el of findCandidateBlocks()) {
             if (computeFingerprint(el) === anchorFingerprint) {
@@ -2244,7 +2202,7 @@ public partial class MainWindow : Window
                 string? message,
                 out PreviewDiffPane pane,
                 out double ratio)
-            => TryParsePreviewScrollMessage(message, out pane, out ratio, out _, out _, out _);
+            => TryParsePreviewScrollMessage(message, out pane, out ratio, out _, out _, out _, out _);
 
         internal static bool TryParsePreviewVersionMessage(string? message, out DocsVersion version)
         {
@@ -2409,26 +2367,29 @@ public partial class MainWindow : Window
                 out double ratio,
                 out double anchorOffsetPx,
                 out string? anchorFingerprint)
-                => TryParsePreviewScrollMessage(
+            => TryParsePreviewScrollMessage(
                 message,
                 out pane,
                 out ratio,
                 out anchorOffsetPx,
                 out anchorFingerprint,
+                out _,
                 out _);
 
-            internal static bool TryParsePreviewScrollMessage(
+        internal static bool TryParsePreviewScrollMessage(
                 string? message,
                 out PreviewDiffPane pane,
                 out double ratio,
                 out double anchorOffsetPx,
                 out string? anchorFingerprint,
+                out double scrollDeltaPx,
                 out PreviewScrollDirection scrollDirection)
         {
                 pane = default;
                 ratio = 0;
                 anchorOffsetPx = double.NaN;
                 anchorFingerprint = null;
+                scrollDeltaPx = double.NaN;
                 scrollDirection = PreviewScrollDirection.Unknown;
                 if (string.IsNullOrWhiteSpace(message))
                 {
@@ -2465,7 +2426,16 @@ public partial class MainWindow : Window
 
                 if (parts.Length is 5 or 6)
                 {
-                        if (double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedOffset)
+                    if (string.Equals(parts[3], "delta", StringComparison.Ordinal))
+                    {
+                        if (!double.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedDelta)
+                            || !double.IsFinite(parsedDelta))
+                        {
+                            return false;
+                        }
+                        scrollDeltaPx = parsedDelta;
+                    }
+                    else if (double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedOffset)
                                 && double.IsFinite(parsedOffset)
                                 && !string.IsNullOrEmpty(parts[4]))
                         {

@@ -310,8 +310,7 @@ public sealed class MainWindowPreviewComparisonTests
     [Fact]
     public void TryParsePreviewScrollMessage_Parses_Scroll_Direction()
     {
-        const string fingerprint = "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==";
-        var message = $"rsr-preview-scroll:after:0.42:120.5:{fingerprint}:down";
+        var message = "rsr-preview-scroll:after:0.42:delta:180.5:down";
 
         var parsed = MainWindow.TryParsePreviewScrollMessage(
             message,
@@ -319,14 +318,16 @@ public sealed class MainWindowPreviewComparisonTests
             out var ratio,
             out var anchorOffsetPx,
             out var anchorFingerprint,
+            out var scrollDeltaPx,
             out var direction);
 
         Assert.True(parsed);
         Assert.Equal(PreviewDiffPane.After, pane);
         Assert.Equal(0.42, ratio, precision: 6);
-        Assert.Equal(120.5, anchorOffsetPx, precision: 6);
-        Assert.Equal(fingerprint, anchorFingerprint);
-        Assert.Equal(PreviewScrollDirection.Down, direction);
+        Assert.True(double.IsNaN(anchorOffsetPx));
+        Assert.Null(anchorFingerprint);
+        Assert.Equal(180.5, scrollDeltaPx, precision: 6);
+        Assert.True(direction == PreviewScrollDirection.Down);
     }
 
     [Fact]
@@ -374,40 +375,37 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("window.addEventListener('scroll'", script, StringComparison.Ordinal);
         Assert.Contains("requestAnimationFrame", script, StringComparison.Ordinal);
         Assert.Contains("lastScrollTop", script, StringComparison.Ordinal);
-        Assert.Contains("${fingerprint}:${direction}`", script, StringComparison.Ordinal);
+        Assert.Contains("delta.toFixed(2)", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-preview-scroll:${pane}:${ratio}:delta", script, StringComparison.Ordinal);
         Assert.DoesNotContain("rsr-preview-scroll:${pane}:${ratio}`", script, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void BuildInstallSynchronizedScrollScript_Sends_Anchor_Fingerprint_For_Topmost_Visible_Block()
+    public void BuildInstallSynchronizedScrollScript_Does_Not_Scan_Anchors()
     {
         var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.After);
 
-        // The install script must look for a visible content block and include its
-        // fingerprint + viewport offset in the outgoing message so the peer can do
-        // content-anchored sync rather than relying on a height-ratio that diverges
-        // when the two pages have different chrome.
-        Assert.Contains("getBoundingClientRect", script, StringComparison.Ordinal);
-        Assert.Contains("btoa", script, StringComparison.Ordinal);
-        Assert.Contains("data-rsr-diff-index", script, StringComparison.Ordinal); // anchor candidates include stamped blocks
-        Assert.Contains("rect.bottom > 0 && rect.top < window.innerHeight", script, StringComparison.Ordinal);
+        // Anchor-based sync snapped between sections when only one pane had an
+        // inserted block. The sender now reports wheel delta only.
+        Assert.DoesNotContain("getBoundingClientRect", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("data-rsr-diff-index", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-rendered-diff-added", script, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void BuildInstallSynchronizedScrollScript_Skips_When_Top_Visible_Block_Is_Changed()
+    public void BuildApplySynchronizedScrollScript_Uses_Delta_When_Provided()
     {
-        var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.After);
+        var script = MainWindow.BuildApplySynchronizedScrollScript(
+            ratio: 0.5,
+            anchorOffsetPx: null,
+            anchorFingerprintBase64: null,
+            scrollDeltaPx: -220.25,
+            scrollDirection: PreviewScrollDirection.Up);
 
-        // A changed block on one pane may not exist on the other pane. When the
-        // top visible block is inserted/deleted, do not skip ahead to a lower
-        // unchanged block; wait until scrolling reaches shared content again.
-        // Markdown previews use rsr-rendered-diff-* spans instead of stamped
-        // preview-diff blocks.
-        Assert.Contains("rsr-preview-diff-block", script, StringComparison.Ordinal);
-        Assert.Contains("rsr-rendered-diff-added", script, StringComparison.Ordinal);
-        Assert.Contains("const isChangedBlock", script, StringComparison.Ordinal);
-        Assert.Contains("if (isChangedBlock(el))", script, StringComparison.Ordinal);
-        Assert.Contains("return null;", script, StringComparison.Ordinal);
+        Assert.Contains("const scrollDeltaPx = -220.25", script, StringComparison.Ordinal);
+        Assert.Contains("const scrollDirection = \"up\"", script, StringComparison.Ordinal);
+        Assert.Contains("const maxDelta = 900;", script, StringComparison.Ordinal);
+        Assert.Contains("window.scrollBy({ left: 0, top: clampedDelta", script, StringComparison.Ordinal);
     }
 
     [Fact]
