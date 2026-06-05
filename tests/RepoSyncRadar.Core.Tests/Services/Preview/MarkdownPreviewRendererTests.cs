@@ -1089,6 +1089,40 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Whole_Inserted_Paragraph_When_It_Ends_With_Autotitle_Link()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/copilot/how-tos/administer-copilot/manage-for-enterprise/manage-agents/about-enterprise-plugin-standards"] = "About enterprise-managed plugin standards for Copilot CLI",
+            });
+        const string beforeMarkdown = """
+            1. In your enterprise's `.github-private` repository, navigate to the `.github/copilot/` directory.
+            """;
+        const string afterMarkdown = """
+            You can apply settings to control users' available plugin marketplaces and default-installed plugins. These settings apply to users on your enterprise's Copilot plan. For more information, see [AUTOTITLE](/copilot/how-tos/administer-copilot/manage-for-enterprise/manage-agents/about-enterprise-plugin-standards).
+
+            1. In your enterprise's `.github-private` repository, navigate to the `.github/copilot/` directory.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/administer-copilot/manage-for-enterprise/manage-agents/configure-enterprise-plugin-standards.md",
+            afterMarkdown,
+            "23964e2",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">You can apply settings", html, StringComparison.Ordinal);
+        Assert.Contains("About enterprise-managed plugin standards for Copilot CLI</a>.</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("You can apply settings to control users' available plugin marketplaces and default-installed plugins. <span class=\"rsr-rendered-diff-added\">These settings apply", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Whole_Inserted_List_Items_When_Nearby_Item_Shares_Prefix()
     {
         const string beforeMarkdown = """

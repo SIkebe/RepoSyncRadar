@@ -2398,20 +2398,6 @@ internal static partial class MarkdownPreviewRenderer
     {
         if (string.IsNullOrEmpty(comparisonContent))
         {
-            if (TryFindLastMarkdownLinkLabelRange(content, out var linkLabelRange))
-            {
-                var expandedRange = ExpandRenderedDiffRange(content, linkLabelRange);
-                expandedRange = SnapRangeOutsideLiquidTokens(content, expandedRange);
-                if (expandedRange.Start > 0 && expandedRange.Length < content.Length)
-                {
-                    return content[..expandedRange.Start]
-                        + "<span class=\"" + markerClass + "\">"
-                        + content.Substring(expandedRange.Start, expandedRange.Length)
-                        + "</span>"
-                        + content[(expandedRange.Start + expandedRange.Length)..];
-                }
-            }
-
             return "<span class=\"" + markerClass + "\">" + content + "</span>";
         }
 
