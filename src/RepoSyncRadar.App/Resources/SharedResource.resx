@@ -43,8 +43,6 @@
   <data name="AppHeader.Update.Title" xml:space="preserve"><value>アップデート</value></data>
   <data name="AdoptionSession.BatchIncludesNonFocused" xml:space="preserve"><value>注目以外のコミットが含まれています: {0}.</value></data>
   <data name="AdoptionSession.BatchRequiresAtLeastTwo" xml:space="preserve"><value>個別解説は 2 件以上の注目コミットを選択して生成してください。</value></data>
-  <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>記事の取得に失敗しました ({0}): {1}</value></data>
-  <data name="ArticleBody.NotFound" xml:space="preserve"><value>記事が見つかりません (404): {0}</value></data>
   <data name="CommitList.Empty.ArchiveHint" xml:space="preserve"><value>アクティブな確認対象から外した候補がここに表示されます。</value></data>
   <data name="CommitList.Empty.ArchiveTitle" xml:space="preserve"><value>アーカイブは空です。</value></data>
   <data name="CommitList.Empty.DefaultHint" xml:space="preserve"><value>キューや検索条件を変えて確認してください。</value></data>
@@ -174,7 +172,6 @@
   <data name="LocalSettings.Label.MaxPullRequests" xml:space="preserve"><value>最大 PR 数</value></data>
   <data name="LocalSettings.Label.PullRequestCreatedAtOrAfter" xml:space="preserve"><value>作成日時以降</value></data>
   <data name="LocalSettings.Label.BaseAddress" xml:space="preserve"><value>ベース URL</value></data>
-  <data name="LocalSettings.Label.DefaultLanguage" xml:space="preserve"><value>既定言語</value></data>
   <data name="LocalSettings.Label.ClientName" xml:space="preserve"><value>クライアント名</value></data>
   <data name="LocalSettings.Label.PageListCacheSeconds" xml:space="preserve"><value>ページ一覧キャッシュ秒数</value></data>
   <data name="LocalSettings.Label.DefaultModel" xml:space="preserve"><value>既定モデル</value></data>

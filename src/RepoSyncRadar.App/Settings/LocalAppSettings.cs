@@ -60,8 +60,6 @@ public sealed class DocsApiLocalAppSettings
 {
     public string BaseAddress { get; set; } = "https://docs.github.com/";
 
-    public string DefaultLanguage { get; set; } = "en";
-
     public string ClientName { get; set; } = "reposyncradar";
 
     public int PageListCacheSeconds { get; set; } = 86_400;
@@ -70,7 +68,6 @@ public sealed class DocsApiLocalAppSettings
         => new()
         {
             BaseAddress = BaseAddress,
-            DefaultLanguage = DefaultLanguage,
             ClientName = ClientName,
             PageListCacheSeconds = PageListCacheSeconds,
         };

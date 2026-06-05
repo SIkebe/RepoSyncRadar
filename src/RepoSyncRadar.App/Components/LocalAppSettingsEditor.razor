@@ -75,10 +75,6 @@
                     <input data-testid="settings-docsapi-base-address" value="@settings.DocsApi.BaseAddress" disabled="@_saving" @oninput="e => settings.DocsApi.BaseAddress = StringValue(e)" />
                 </label>
                 <label class="local-settings-field">
-                    <span>@L["LocalSettings.Label.DefaultLanguage"]</span>
-                    <input data-testid="settings-docsapi-language" value="@settings.DocsApi.DefaultLanguage" disabled="@_saving" @oninput="e => settings.DocsApi.DefaultLanguage = StringValue(e)" />
-                </label>
-                <label class="local-settings-field">
                     <span>@L["LocalSettings.Label.ClientName"]</span>
                     <input data-testid="settings-docsapi-client-name" value="@settings.DocsApi.ClientName" disabled="@_saving" @oninput="e => settings.DocsApi.ClientName = StringValue(e)" />
                 </label>

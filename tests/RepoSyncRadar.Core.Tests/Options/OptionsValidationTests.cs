@@ -19,7 +19,6 @@ public class OptionsValidationTests
       },
       "DocsApi": {
         "BaseAddress": "https://docs.github.com/",
-        "DefaultLanguage": "en",
         "ClientName": "reposyncradar",
         "PageListCacheSeconds": 86400
       },

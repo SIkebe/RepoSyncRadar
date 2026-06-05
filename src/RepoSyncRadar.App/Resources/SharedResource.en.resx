@@ -43,8 +43,6 @@
   <data name="AppHeader.Update.Title" xml:space="preserve"><value>Updates</value></data>
   <data name="AdoptionSession.BatchIncludesNonFocused" xml:space="preserve"><value>The selection includes commits that are not watched: {0}.</value></data>
   <data name="AdoptionSession.BatchRequiresAtLeastTwo" xml:space="preserve"><value>Select at least two watched commits to generate individual explanations.</value></data>
-  <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>Failed to fetch article ({0}): {1}</value></data>
-  <data name="ArticleBody.NotFound" xml:space="preserve"><value>Article not found (404): {0}</value></data>
   <data name="CommitList.Empty.ArchiveHint" xml:space="preserve"><value>Candidates removed from active review appear here.</value></data>
   <data name="CommitList.Empty.ArchiveTitle" xml:space="preserve"><value>The archive is empty.</value></data>
   <data name="CommitList.Empty.DefaultHint" xml:space="preserve"><value>Try a different queue or search filter.</value></data>
@@ -174,7 +172,6 @@
   <data name="LocalSettings.Label.MaxPullRequests" xml:space="preserve"><value>MaxPullRequests</value></data>
   <data name="LocalSettings.Label.PullRequestCreatedAtOrAfter" xml:space="preserve"><value>PullRequestCreatedAtOrAfter</value></data>
   <data name="LocalSettings.Label.BaseAddress" xml:space="preserve"><value>BaseAddress</value></data>
-  <data name="LocalSettings.Label.DefaultLanguage" xml:space="preserve"><value>DefaultLanguage</value></data>
   <data name="LocalSettings.Label.ClientName" xml:space="preserve"><value>ClientName</value></data>
   <data name="LocalSettings.Label.PageListCacheSeconds" xml:space="preserve"><value>PageListCacheSeconds</value></data>
   <data name="LocalSettings.Label.DefaultModel" xml:space="preserve"><value>DefaultModel</value></data>

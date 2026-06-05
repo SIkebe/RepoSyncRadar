@@ -221,7 +221,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             DocsApi = new DocsApiLocalAppSettings
             {
                 BaseAddress = GetString(configuration, "DocsApi:BaseAddress", defaults.DocsApi.BaseAddress),
-                DefaultLanguage = GetString(configuration, "DocsApi:DefaultLanguage", defaults.DocsApi.DefaultLanguage),
                 ClientName = GetString(configuration, "DocsApi:ClientName", defaults.DocsApi.ClientName),
                 PageListCacheSeconds = GetInt(configuration, "DocsApi:PageListCacheSeconds", defaults.DocsApi.PageListCacheSeconds),
             },
@@ -284,7 +283,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             DocsApi = new DocsApiLocalAppSettings
             {
                 BaseAddress = GetString(root, "DocsApi", "BaseAddress", fallback.DocsApi.BaseAddress),
-                DefaultLanguage = GetString(root, "DocsApi", "DefaultLanguage", fallback.DocsApi.DefaultLanguage),
                 ClientName = GetString(root, "DocsApi", "ClientName", fallback.DocsApi.ClientName),
                 PageListCacheSeconds = GetInt(root, "DocsApi", "PageListCacheSeconds", fallback.DocsApi.PageListCacheSeconds),
             },
@@ -345,7 +343,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
 
         var docsApi = GetOrReplaceObject(root, "DocsApi");
         docsApi["BaseAddress"] = settings.DocsApi.BaseAddress;
-        docsApi["DefaultLanguage"] = settings.DocsApi.DefaultLanguage;
         docsApi["ClientName"] = settings.DocsApi.ClientName;
         docsApi["PageListCacheSeconds"] = settings.DocsApi.PageListCacheSeconds;
 
@@ -412,7 +409,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             DocsApi = new DocsApiLocalAppSettings
             {
                 BaseAddress = TrimOrEmpty(settings.DocsApi.BaseAddress),
-                DefaultLanguage = TrimOrEmpty(settings.DocsApi.DefaultLanguage),
                 ClientName = TrimOrEmpty(settings.DocsApi.ClientName),
                 PageListCacheSeconds = settings.DocsApi.PageListCacheSeconds,
             },
@@ -481,7 +477,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         {
             errors.Add("DocsApi.BaseAddress は https の絶対 URL にしてください。");
         }
-        Require(settings.DocsApi.DefaultLanguage, "DocsApi.DefaultLanguage", errors);
         Require(settings.DocsApi.ClientName, "DocsApi.ClientName", errors);
         ValidateRange(settings.DocsApi.PageListCacheSeconds, 1, int.MaxValue, "DocsApi.PageListCacheSeconds", errors);
 

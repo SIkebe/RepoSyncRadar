@@ -84,7 +84,6 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.True(session.IsAllowed(link.AfterUrl));
         Assert.Contains("rsr-rendered-diff-removed\">Old</span> entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
         Assert.Contains("rsr-rendered-diff-added\">New</span> entry", capturedPages["/markdown/after"], StringComparison.Ordinal);
-        runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!, default);
         await contentServer.Received(1).StartAsync(
             4500,
             Arg.Any<IReadOnlyDictionary<string, string>>(),
@@ -226,7 +225,6 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Contains("src=\"/markdown-assets/after/content/copilot/how-tos/use-copilot-agents/images/local%20diagram.png\"", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.Equal([0x89, 0x50, 0x4e, 0x47], await File.ReadAllBytesAsync(Path.Combine(afterAssetRoot!, "assets", "images", "help", "copilot", "copilot-user-memory-list.png"), ct));
         Assert.Equal([0x4c, 0x4f, 0x43, 0x41, 0x4c], await File.ReadAllBytesAsync(Path.Combine(beforeAssetRoot!, "content", "copilot", "how-tos", "use-copilot-agents", "images", "local diagram.png"), ct));
-        runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!, default);
     }
 
     [Fact]

@@ -12,7 +12,7 @@
 - [Step 1. テスト基盤を立てる](#step-1-テスト基盤を立てる)
 - [Step 2. オプション / 設定バインディングを固める](#step-2-オプション--設定バインディングを固める)
 - [Step 3. SQLite + EF Core スキーマを確定する](#step-3-sqlite--ef-core-スキーマを確定する)
-- [Step 4. Frontmatter パーサと `PathToUrlResolver`](#step-4-frontmatter-パーサと-pathtourlresolver)
+- [Step 4. `PathToUrlResolver`](#step-4-pathtourlresolver)
 - [Step 5. `DocsApiClient`(docs.github.com 連携)](#step-5-docsapiclientdocsgithubcom-連携)
 - [Step 6. `DocsGitHubClient`(Octokit 連携)](#step-6-docsgithubclientoctokit-連携)
 - [Step 7. コミット取り込みパイプライン(冪等取り込み)](#step-7-コミット取り込みパイプライン冪等取り込み)
@@ -179,7 +179,7 @@ DESIGN.md §10 のドメインモデルを EF Core の **初回 migration** と�
 
 ---
 
-## Step 4. Frontmatter パーサと `PathToUrlResolver`
+## Step 4. `PathToUrlResolver`
 
 ### 4.1 目的
 
@@ -187,7 +187,6 @@ DESIGN.md §10 のドメインモデルを EF Core の **初回 migration** と�
 
 ### 4.2 スコープ
 
-- `RepoSyncRadar.Core/Services/Frontmatter/FrontmatterParser.cs`(YAML フロントマター抽出 + `versions:` 部分のみ気にする最小実装)
 - `RepoSyncRadar.Core/Services/PathToUrlResolver.cs`
   - `ResolveAsync(string repoPath, string frontmatterVersions, IReadOnlyDictionary<string, IReadOnlyList<string>> pageListByVersion)`
   - pagelist は引数で受け取る(キャッシュ層は Step 5)
@@ -206,17 +205,9 @@ DESIGN.md §10 のドメインモデルを EF Core の **初回 migration** と�
 | 言語が `ja` の pagelist が無い | デフォルト言語 `en` にフォールバック | en の URL |
 | frontmatter が空 / 不正 | `FormatException` ではなく `IReadOnlyList<string>.Empty` |
 
-`Core.Tests/Services/FrontmatterParserTests.cs`
-
-| ケース | 期待 |
-|---|---|
-| 標準的な `---\nversions:\n  fpt: '*'\n---` | versions 抜き出し |
-| frontmatter 無し | `null` 返却 |
-| `---` が閉じていない | `FormatException` |
-
 ### 4.4 完了基準
 
-- 上記 9 シナリオが緑
+- 上記 6 シナリオが緑
 - `PathToUrlResolver` は **HTTP も DB もアクセスしない**(純粋関数として扱える)
 
 ---
@@ -433,7 +424,6 @@ DESIGN.md §9.3 のレンダリングモード B / C を実装。
 
 ### 10.2 スコープ
 
-- `RepoSyncRadar.App/Components/ArticleBodyPane.razor`(iframe srcdoc + Body API)
 - `RepoSyncRadar.App/MainWindow.xaml` を 2 ペイン化、左 BlazorView / 右 WebView2
 - 通信先を `Copilot:AllowedUrlHosts` で制限(WebView2 の `WebResourceRequested` で host を allow-list 照合、それ以外は cancel)
 - WebView2 を使えない環境(EvergreenBootstrapper が無い等)を検知して fallback メッセージ
@@ -443,8 +433,6 @@ DESIGN.md §9.3 のレンダリングモード B / C を実装。
 | テスト | 内容 |
 |---|---|
 | `Core.Tests/Services/UrlAllowListTests.cs` `IsAllowed_*` | `UrlAllowList(["docs.github.com"]).IsAllowed("https://docs.github.com/foo") == true` 等 6 件のパラメタライズ |
-| `App.Tests/Components/ArticleBodyPaneTests.cs` `Renders_Iframe_With_Srcdoc` | bUnit で `iframe[srcdoc]` 属性が API レスポンスで埋まる |
-| `App.Tests/Components/ArticleBodyPaneTests.cs` `Shows_Error_On_404` | `DocsArticleNotFoundException` 時にエラーメッセージ |
 
 WebView2 本体の検証は **手動スモークテスト**:`/en/copilot/...` を URL バーに入れて表示できることを確認。
 
@@ -1075,7 +1063,7 @@ Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画で�
 ## 付録 A — テスト命名規約
 
 - ファイル名: `<被テストクラス>Tests.cs`
-- メソッド名: `MethodUnderTest_StateUnderTest_ExpectedBehavior`(または日本語明示で `Frontmatter_Versions無し_NullResolverIsReturned` 等)
+- メソッド名: `MethodUnderTest_StateUnderTest_ExpectedBehavior`(または日本語明示で `PathToUrlResolver_Versions無し_EmptyIsReturned` 等)
 - カテゴリ: `[Trait("Category", "Manual")]` `[Trait("Category", "WindowsOnly")]` を活用
 - パラメタライズは `[Theory]` + `[InlineData]` / `[MemberData]`
 
@@ -1111,7 +1099,7 @@ Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画で�
   - 完了日 2026-05-13, テスト件数 7
 - [x] Step 3 — EF Core スキーマ
   - 完了日 2026-05-13, テスト件数 6
-- [x] Step 4 — Frontmatter / PathToUrlResolver
+- [x] Step 4 — PathToUrlResolver
   - 完了日 2026-05-13, テスト件数 9
 - [x] Step 5 — DocsApiClient
   - 完了日 2026-05-13, テスト件数 8
