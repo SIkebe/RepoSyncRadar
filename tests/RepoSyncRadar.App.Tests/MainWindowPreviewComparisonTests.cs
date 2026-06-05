@@ -342,7 +342,7 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
-    public void BuildInstallSynchronizedScrollScript_Posts_Before_Pane_Ratio_Message()
+    public void BuildInstallSynchronizedScrollScript_Posts_Anchored_Scroll_Message()
     {
         var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.Before);
 
@@ -350,6 +350,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const pane = \"before\"", script, StringComparison.Ordinal);
         Assert.Contains("window.addEventListener('scroll'", script, StringComparison.Ordinal);
         Assert.Contains("requestAnimationFrame", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-preview-scroll:${pane}:${ratio}`", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -363,19 +364,25 @@ public sealed class MainWindowPreviewComparisonTests
         // when the two pages have different chrome.
         Assert.Contains("getBoundingClientRect", script, StringComparison.Ordinal);
         Assert.Contains("btoa", script, StringComparison.Ordinal);
-        Assert.Contains("data-rsr-diff-index", script, StringComparison.Ordinal); // anchor candidates include diff blocks
+        Assert.Contains("data-rsr-diff-index", script, StringComparison.Ordinal); // anchor candidates include stamped blocks
+        Assert.Contains("rect.bottom > 0 && rect.top < window.innerHeight", script, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void BuildInstallSynchronizedScrollScript_Prefers_Unchanged_Blocks_For_Anchors()
+    public void BuildInstallSynchronizedScrollScript_Skips_When_Top_Visible_Block_Is_Changed()
     {
         var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.After);
 
-        // A changed block on one pane may not exist on the other pane. Prefer an
-        // unchanged visible block so scrolling an inserted paragraph does not
-        // fall back to document-height ratio synchronization.
+        // A changed block on one pane may not exist on the other pane. When the
+        // top visible block is inserted/deleted, do not skip ahead to a lower
+        // unchanged block; wait until scrolling reaches shared content again.
+        // Markdown previews use rsr-rendered-diff-* spans instead of stamped
+        // preview-diff blocks.
         Assert.Contains("rsr-preview-diff-block", script, StringComparison.Ordinal);
-        Assert.Contains("return unchanged.length > 0 ? unchanged : blocks;", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", script, StringComparison.Ordinal);
+        Assert.Contains("const isChangedBlock", script, StringComparison.Ordinal);
+        Assert.Contains("if (isChangedBlock(el))", script, StringComparison.Ordinal);
+        Assert.Contains("return null;", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -385,6 +392,7 @@ public sealed class MainWindowPreviewComparisonTests
 
         Assert.Contains("const ratio = 1", script, StringComparison.Ordinal);
         Assert.Contains("suppressUntil", script, StringComparison.Ordinal);
+        Assert.Contains("Date.now() + 1000", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollTo", script, StringComparison.Ordinal);
     }
 
@@ -399,8 +407,13 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==", script, StringComparison.Ordinal);
         Assert.Contains("120.5", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollBy", script, StringComparison.Ordinal); // anchor branch uses scrollBy(delta)
-        // Ratio fallback must still be present so anchor-miss does not freeze sync.
+        Assert.Contains("const maxDelta = Math.min(360, Math.max(160, window.innerHeight * 0.2));", script, StringComparison.Ordinal);
+        Assert.Contains("top: clampedDelta", script, StringComparison.Ordinal);
+        // Ratio fallback remains available for legacy ratio-only messages, but
+        // anchor-bearing messages should not jump by ratio when the peer lacks
+        // the changed block.
         Assert.Contains("const ratio = 0.5", script, StringComparison.Ordinal);
+        Assert.Contains("if (!scrolled && !anchorFingerprint)", script, StringComparison.Ordinal);
     }
 
     [Fact]

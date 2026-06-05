@@ -1971,6 +1971,9 @@ public partial class MainWindow : Window
 
     const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
     const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
+    const renderedDiffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed,.rsr-preview-diff-block';
+
+    const isChangedBlock = (el) => el.matches(renderedDiffSelector) || !!el.querySelector(renderedDiffSelector);
 
     const findCandidateBlocks = () => {
         // Prefer blocks already stamped by PreviewDiffHighlighter when available,
@@ -1978,9 +1981,7 @@ public partial class MainWindow : Window
         // Fall back to scanning leaf elements before the highlighter has finished.
         const stamped = document.querySelectorAll('[data-rsr-diff-index]');
         if (stamped.length > 0) {
-            const blocks = Array.from(stamped);
-            const unchanged = blocks.filter((el) => !el.classList.contains('rsr-preview-diff-block'));
-            return unchanged.length > 0 ? unchanged : blocks;
+            return Array.from(stamped);
         }
         const articleRoot =
             document.querySelector('main article') ||
@@ -2016,8 +2017,13 @@ public partial class MainWindow : Window
         const blocks = findCandidateBlocks();
         for (const el of blocks) {
             const rect = el.getBoundingClientRect();
-            // First block whose bottom edge is still on/below the viewport top.
-            if (rect.bottom > 0) {
+            // First block that actually intersects the viewport. Do not grab a
+            // future unchanged block below the fold while the current viewport is
+            // occupied by an inserted/deleted block; that makes the peer jump.
+            if (rect.bottom > 0 && rect.top < window.innerHeight) {
+                if (isChangedBlock(el)) {
+                    return null;
+                }
                 return { el, rect };
             }
         }
@@ -2059,10 +2065,6 @@ public partial class MainWindow : Window
                 const offset = anchor.rect.top.toFixed(2);
                 window.chrome?.webview?.postMessage(
                     `rsr-preview-scroll:${pane}:${ratio}:${offset}:${fingerprint}`);
-            } else {
-                // No anchor available yet (page still loading). Fall back to the
-                // legacy ratio-only message so the peer can still approximate.
-                window.chrome?.webview?.postMessage(`rsr-preview-scroll:${pane}:${ratio}`);
             }
         });
     };
@@ -2135,7 +2137,7 @@ public partial class MainWindow : Window
     const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
 
     window[stateKey] = window[stateKey] || {};
-    window[stateKey].suppressUntil = Date.now() + 250;
+    window[stateKey].suppressUntil = Date.now() + 1000;
 
     const findCandidateBlocks = () => {
         const stamped = document.querySelectorAll('[data-rsr-diff-index]');
@@ -2178,15 +2180,17 @@ public partial class MainWindow : Window
             if (computeFingerprint(el) === anchorFingerprint) {
                 const targetTop = el.getBoundingClientRect().top;
                 const delta = targetTop - anchorOffsetPx;
-                if (Math.abs(delta) > 0.5) {
-                    window.scrollBy({ left: 0, top: delta, behavior: 'auto' });
+                const maxDelta = Math.min(360, Math.max(160, window.innerHeight * 0.2));
+                const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, delta));
+                if (Math.abs(clampedDelta) > 0.5) {
+                    window.scrollBy({ left: 0, top: clampedDelta, behavior: 'auto' });
                 }
                 scrolled = true;
                 break;
             }
         }
     }
-    if (!scrolled) {
+    if (!scrolled && !anchorFingerprint) {
         const maxScrollTop = Math.max(0, root.scrollHeight - window.innerHeight);
         window.scrollTo({ left: window.scrollX || root.scrollLeft || 0, top: maxScrollTop * ratio, behavior: 'auto' });
     }
