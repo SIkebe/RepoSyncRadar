@@ -1,22 +1,23 @@
 <Project>
 
   <ItemGroup Label="Microsoft.Extensions">
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.Extensions.Localization" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="11.0.0-preview.1.26104.118" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.Extensions.Localization" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="11.0.0-preview.2.26159.112" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.6.0" />
   </ItemGroup>
 
   <ItemGroup Label="Blazor / Razor">
-    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="11.0.0-preview.1.26107.1" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="11.0.0-preview.2.26152.10" />
   </ItemGroup>
 
   <ItemGroup Label="WebView2">
@@ -24,8 +25,8 @@
   </ItemGroup>
 
   <ItemGroup Label="EF Core / SQLite">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="11.0.0-preview.1.26104.118" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0-preview.1.26104.118" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="11.0.0-preview.2.26159.112" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0-preview.2.26159.112" />
   </ItemGroup>
 
   <ItemGroup Label="UI Components">
@@ -52,10 +53,8 @@
     <PackageVersion Include="Microsoft.Testing.Platform" Version="1.9.1" />
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <PackageVersion Include="RichardSzalay.MockHttp" Version="7.0.0" />
-    <!-- Temporarily pin bUnit to the .NET 11 TFM-compatible 2.6.2 release; upgrade once a newer
-         bUnit release combines net11.0 support with the 2.7.x JS runtime constructor fixes. -->
-    <PackageVersion Include="bunit" Version="2.6.2" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="11.0.0-preview.1.26104.118" />
+    <PackageVersion Include="bunit" Version="2.7.2" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="11.0.0-preview.2.26159.112" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.59.0" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.6.0" />
   </ItemGroup>
