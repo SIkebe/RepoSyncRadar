@@ -9,9 +9,9 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// <summary>
 /// Renders a single Markdown document to a self-contained HTML page used by
 /// the Markdown-first preview path (IMPLEMENTATION_PLAN.md §Step 19.7 / 19.8).
-/// This is the substitute for the Next.js dev server: instead of compiling the
-/// whole github/docs site we read one file from the worktree and feed it to
-/// Markdig directly. Frontmatter is stripped (title / intro promoted to a
+/// Instead of compiling the whole github/docs site, it reads one file from the
+/// bare clone materialization and feeds it to Markdig directly. Frontmatter is
+/// stripped (title / intro promoted to a
 /// header), and Liquid tags such as <c>{% data variables.x %}</c> are first
 /// evaluated by <see cref="DocsLiquidEvaluator"/> using
 /// <see cref="DocsLiquidContext"/> read from the worktree; anything that

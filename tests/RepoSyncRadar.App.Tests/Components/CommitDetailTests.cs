@@ -300,8 +300,6 @@ public class CommitDetailTests
                 new Uri("http://localhost:4500/en/copilot/about-copilot"),
                 4501,
                 4500,
-                @"C:\github\.cache\docs-worktrees\parent",
-                @"C:\github\.cache\docs-worktrees\feedface",
                 "parent1234567890",
                 commit.Sha)));
 
@@ -359,8 +357,6 @@ public class CommitDetailTests
                 new Uri("http://127.0.0.1:4500/markdown/after"),
                 4500,
                 4500,
-                @"C:\github\.cache\docs-worktrees\parent",
-                @"C:\github\.cache\docs-worktrees\feedface",
                 "parent1234567890",
                 commit.Sha)));
 
@@ -590,7 +586,7 @@ public class CommitDetailTests
         {
             coordinator.Received(1).CleanupCacheAsync(Arg.Any<CancellationToken>());
             Assert.Contains(
-                "3 件の worktree",
+                "3 件",
                 cut.Find("[data-testid=\"commit-detail-preview-cleanup-status\"]").TextContent,
                 StringComparison.Ordinal);
             Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-preview-status\"]"));
@@ -789,8 +785,6 @@ public class CommitDetailTests
                     new Uri($"http://localhost:4500/en/{Path.GetFileNameWithoutExtension(path)}"),
                     4501,
                     4500,
-                    @"C:\github\.cache\docs-worktrees\parent",
-                    @"C:\github\.cache\docs-worktrees\feedface",
                     "parent1234567890",
                     commit.Sha)
                 {
@@ -992,8 +986,6 @@ public class CommitDetailTests
             new Uri($"http://localhost:4500/en/{Path.GetFileNameWithoutExtension(path)}"),
             4501,
             4500,
-            @"C:\github\.cache\docs-worktrees\parent",
-            @"C:\github\.cache\docs-worktrees\feedface",
             "parent1234567890",
             commit.Sha);
 

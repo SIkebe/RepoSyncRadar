@@ -10,192 +10,19 @@ using Xunit;
 namespace RepoSyncRadar.Integrations.Tests.Preview;
 
 /// <summary>
-/// Tests for <see cref="PreviewCoordinator"/> (IMPLEMENTATION_PLAN.md §Step 19.5). Wires
-/// the real <see cref="DocsWorktreeManager"/> + <see cref="PreviewServerHost"/> +
-/// <see cref="PreviewSession"/> with a substitute <see cref="IProcessRunner"/> so the
-/// orchestration sequence and idempotency around the cached SHA can be asserted
-/// without spawning real <c>git</c> or <c>npm</c> processes.
+/// Tests for <see cref="PreviewCoordinator"/>. Wires the real
+/// <see cref="DocsWorktreeManager"/> + <see cref="PreviewSession"/> with a
+/// substitute <see cref="IProcessRunner"/> so the Markdown preview orchestration
+/// can be asserted without spawning real <c>git</c> processes.
 /// </summary>
 public sealed class PreviewCoordinatorTests : IDisposable
 {
-    private static readonly int[] _comparisonPorts = [4500, 4501];
-
     private readonly string _tempRoot;
 
     public PreviewCoordinatorTests()
     {
         _tempRoot = Path.Combine(Path.GetTempPath(), "rsr-preview-coord-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempRoot);
-    }
-
-    [Fact]
-    public async Task PreparePreviewAsync_When_Disabled_Returns_Null()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var runner = Substitute.For<IProcessRunner>();
-        var sut = BuildSut(runner, bareCloneDir: string.Empty, cloneUrl: string.Empty);
-
-        var link = await sut.PreparePreviewAsync(123, "deadbeefcafe", "content/foo/bar.md", cancellationToken: ct);
-
-        Assert.Null(link);
-        await runner.DidNotReceiveWithAnyArgs()
-            .RunAsync(default!, default!, default!, Arg.Any<CancellationToken>());
-        runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!, default);
-    }
-
-    [Fact]
-    public async Task PreparePreviewAsync_Runs_Steps_In_Order()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var bare = Path.Combine(_tempRoot, "bare.git");
-        var wtRoot = Path.Combine(_tempRoot, "worktrees");
-        var runner = Substitute.For<IProcessRunner>();
-        var calls = new List<string>();
-        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                calls.Add($"RUN {call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
-                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
-            });
-        runner.RunAsync("git", "cat-file -e deadbeefcafe^{commit}", bare, Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                calls.Add($"RUN {call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
-                return Task.FromResult(new ProcessRunResult(128, string.Empty, "missing"));
-            });
-        var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
-            .Returns(call =>
-            {
-                calls.Add($"START {call.ArgAt<string>(0)} {call.ArgAt<string>(1)} cwd={call.ArgAt<string>(2)}");
-                return handle;
-            });
-        var session = new PreviewSession();
-        var sut = BuildSut(
-            runner,
-            bareCloneDir: bare,
-            cloneUrl: "https://example.invalid/docs.git",
-            worktreeRoot: wtRoot,
-            previewBasePort: 4500,
-            session: session);
-
-        var link = await sut.PreparePreviewAsync(123, "deadbeefcafe", "content/foo/bar.md", cancellationToken: ct);
-
-        Assert.NotNull(link);
-        Assert.Equal(4500, link!.Port);
-        Assert.Equal(new Uri("http://localhost:4500/en/foo/bar"), link.Url);
-        Assert.Equal(5, calls.Count);
-        Assert.StartsWith("RUN git -c maintenance.auto=false clone --bare", calls[0], StringComparison.Ordinal);
-        Assert.StartsWith("RUN git cat-file -e deadbeefcafe^{commit}", calls[1], StringComparison.Ordinal);
-        Assert.StartsWith("RUN git -c maintenance.auto=false fetch origin +refs/pull/123/head:refs/pull/123/head", calls[2], StringComparison.Ordinal);
-        Assert.StartsWith("RUN git worktree add", calls[3], StringComparison.Ordinal);
-        Assert.StartsWith("START npm run dev -- --port 4500", calls[4], StringComparison.Ordinal);
-        Assert.True(session.IsActive);
-        Assert.Equal(4500, session.ActivePort);
-    }
-
-    [Fact]
-    public async Task PrepareComparisonPreviewAsync_Uses_Parent_And_Head_Local_Servers()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var bare = Path.Combine(_tempRoot, "bare.git");
-        var wtRoot = Path.Combine(_tempRoot, "worktrees-compare");
-        var runner = Substitute.For<IProcessRunner>();
-        var calls = new List<string>();
-        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                calls.Add($"RUN {call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
-                return Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty));
-            });
-        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                calls.Add($"RUN {call.ArgAt<string>(0)} {call.ArgAt<string>(1)}");
-                return Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty));
-            });
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
-            .Returns(call =>
-            {
-                calls.Add($"START {call.ArgAt<string>(0)} {call.ArgAt<string>(1)} cwd={call.ArgAt<string>(2)}");
-                var handle = Substitute.For<IProcessHandle>();
-                handle.HasExited.Returns(false);
-                return handle;
-            });
-        var session = new PreviewSession();
-        var sut = BuildSut(
-            runner,
-            bareCloneDir: bare,
-            cloneUrl: "https://example.invalid/docs.git",
-            worktreeRoot: wtRoot,
-            previewBasePort: 4500,
-            session: session);
-
-        var link = await sut.PrepareComparisonPreviewAsync(123, "headsha", "content/foo/bar.md", cancellationToken: ct);
-
-        Assert.NotNull(link);
-        Assert.Equal(new Uri("http://localhost:4501/en/foo/bar"), link!.BeforeUrl);
-        Assert.Equal(new Uri("http://localhost:4500/en/foo/bar"), link.AfterUrl);
-        Assert.Equal("parentsha", link.BeforeSha);
-        Assert.Equal("headsha", link.AfterSha);
-        Assert.True(session.IsAllowed(link.BeforeUrl));
-        Assert.True(session.IsAllowed(link.AfterUrl));
-        Assert.Equal(_comparisonPorts, session.ActivePorts);
-        Assert.Contains(calls, c => c.StartsWith("RUN git rev-parse headsha^", StringComparison.Ordinal));
-        Assert.Contains(calls, c => c.StartsWith("START npm run dev -- --port 4501", StringComparison.Ordinal));
-        Assert.Contains(calls, c => c.StartsWith("START npm run dev -- --port 4500", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task PrepareComparisonPreviewAsync_Starts_Before_And_After_Servers_In_Parallel()
-    {
-        // Regression guard for the bottleneck where before-server cold start
-        // blocked after-server start, doubling total wait time. Both StartAsync
-        // invocations must reach the readiness probe concurrently — the probe
-        // uses a Barrier so a sequential implementation deadlocks and the test
-        // fails fast.
-        var ct = TestContext.Current.CancellationToken;
-        var bare = Path.Combine(_tempRoot, "bare.git");
-        var wtRoot = Path.Combine(_tempRoot, "worktrees-parallel");
-        var runner = Substitute.For<IProcessRunner>();
-        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
-        runner.RunAsync("git", "cat-file -e headsha^{commit}", bare, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProcessRunResult(128, string.Empty, "missing")));
-        runner.RunAsync("git", "rev-parse headsha^", bare, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
-            .Returns(_ =>
-            {
-                var handle = Substitute.For<IProcessHandle>();
-                handle.HasExited.Returns(false);
-                return handle;
-            });
-
-        using var barrier = new Barrier(participantCount: 2);
-        var probe = Substitute.For<IPortReadyProbe>();
-        probe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
-                Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>())
-            // Run the barrier on a thread-pool thread so the synchronous portion
-            // of PreviewServerHost.StartAsync can return Task and the caller can
-            // begin the *other* server's StartAsync. SignalAndWait blocks the
-            // worker thread until both servers signal; if the implementation is
-            // sequential the second signal never arrives, the 5-second timeout
-            // expires, the lambda returns false, and StartAsync throws — making
-            // the test fail fast instead of hanging.
-            .Returns(_ => Task.Run(() => barrier.SignalAndWait(TimeSpan.FromSeconds(5))));
-
-        var sut = BuildSut(
-            runner,
-            bareCloneDir: bare,
-            cloneUrl: "https://example.invalid/docs.git",
-            worktreeRoot: wtRoot,
-            previewBasePort: 4500,
-            probe: probe);
-
-        var link = await sut.PrepareComparisonPreviewAsync(123, "headsha", "content/foo/bar.md", cancellationToken: ct);
-
-        Assert.NotNull(link);
     }
 
     [Fact]
@@ -237,7 +64,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             previewBasePort: 4500,
             session: session,
             contentServer: contentServer,
-            onWorktreeAdd: (path, sha) =>
+            onObjectSourceMaterialized: (path, sha) =>
             {
                 var markdown = string.Equals(sha, "parentsha", StringComparison.Ordinal)
                     ? "# Changelog\n\nOld entry"
@@ -257,7 +84,6 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.True(session.IsAllowed(link.AfterUrl));
         Assert.Contains("rsr-rendered-diff-removed\">Old</span> entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
         Assert.Contains("rsr-rendered-diff-added\">New</span> entry", capturedPages["/markdown/after"], StringComparison.Ordinal);
-        runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!, default);
         await contentServer.Received(1).StartAsync(
             4500,
             Arg.Any<IReadOnlyDictionary<string, string>>(),
@@ -303,7 +129,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             worktreeRoot: wtRoot,
             previewBasePort: 4500,
             contentServer: contentServer,
-            onWorktreeAdd: (path, sha) =>
+            onObjectSourceMaterialized: (path, sha) =>
             {
                 var reusable = string.Equals(sha, "parentsha", StringComparison.Ordinal)
                     ? "`issue` | `object` | The issue itself."
@@ -377,7 +203,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             worktreeRoot: wtRoot,
             previewBasePort: 4500,
             contentServer: contentServer,
-            onWorktreeAdd: (path, _) =>
+            onObjectSourceMaterialized: (path, _) =>
             {
                 var contentDir = Path.Combine(path, "content", "copilot", "how-tos", "use-copilot-agents");
                 Directory.CreateDirectory(Path.Combine(contentDir, "images"));
@@ -399,7 +225,6 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Contains("src=\"/markdown-assets/after/content/copilot/how-tos/use-copilot-agents/images/local%20diagram.png\"", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.Equal([0x89, 0x50, 0x4e, 0x47], await File.ReadAllBytesAsync(Path.Combine(afterAssetRoot!, "assets", "images", "help", "copilot", "copilot-user-memory-list.png"), ct));
         Assert.Equal([0x4c, 0x4f, 0x43, 0x41, 0x4c], await File.ReadAllBytesAsync(Path.Combine(beforeAssetRoot!, "content", "copilot", "how-tos", "use-copilot-agents", "images", "local diagram.png"), ct));
-        runner.DidNotReceiveWithAnyArgs().Start(default!, default!, default!, default);
     }
 
     [Fact]
@@ -428,7 +253,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             cloneUrl: "https://example.invalid/docs.git",
             worktreeRoot: wtRoot,
             contentServer: contentServer,
-            onWorktreeAdd: (path, _) => File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), "# Changelog\n\nEntry"));
+            onObjectSourceMaterialized: (path, _) => File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), "# Changelog\n\nEntry"));
         var progress = new ListProgress();
 
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", "CHANGELOG.md", progress, cancellationToken: ct);
@@ -481,7 +306,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             worktreeRoot: wtRoot,
             previewBasePort: 4500,
             contentServer: contentServer,
-            onWorktreeAdd: (path, sha) =>
+            onObjectSourceMaterialized: (path, sha) =>
             {
                 if (!string.Equals(sha, "headsha", StringComparison.Ordinal))
                 {
@@ -547,7 +372,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             worktreeRoot: wtRoot,
             previewBasePort: 4500,
             contentServer: contentServer,
-            onWorktreeAdd: (path, sha) =>
+            onObjectSourceMaterialized: (path, sha) =>
             {
                 var contentRoot = Path.Combine(path, "content", "code-security", "how-tos", "secure-at-scale");
                 Directory.CreateDirectory(contentRoot);
@@ -606,7 +431,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             worktreeRoot: wtRoot,
             previewBasePort: 4500,
             contentServer: contentServer,
-            onWorktreeAdd: (path, _) =>
+            onObjectSourceMaterialized: (path, _) =>
             {
                 var sourceRoot = Path.Combine(path, "content", "code-security", "concepts", "security-at-scale");
                 Directory.CreateDirectory(sourceRoot);
@@ -662,7 +487,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             worktreeRoot: wtRoot,
             previewBasePort: 4500,
             contentServer: contentServer,
-            onWorktreeAdd: (path, _) =>
+            onObjectSourceMaterialized: (path, _) =>
             {
                 File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), "# Changelog\n\nEntry");
             });
@@ -722,7 +547,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             worktreeRoot: wtRoot,
             previewBasePort: 4500,
             contentServer: contentServer,
-            onWorktreeAdd: (path, sha) =>
+            onObjectSourceMaterialized: (path, sha) =>
             {
                 WriteRepoFile(path, "content/admin/audit.md", "---\ntitle: Audit\n---\n\n{% data reusables.audit_log.audit-log-enterprise-export-limit %}");
                 WriteRepoFile(path, "content/admin/audit-api.md", "---\ntitle: Using the audit log API\n---\n\nAPI page");
@@ -771,7 +596,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             worktreeRoot: wtRoot,
             previewBasePort: 4500,
             contentServer: contentServer,
-            onWorktreeAdd: (path, _) =>
+            onObjectSourceMaterialized: (path, _) =>
             {
                 File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), "# Changelog\n\nEntry");
             });
@@ -788,77 +613,11 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task PreparePreviewAsync_With_Same_Sha_Skips_Server_Restart()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var bare = Path.Combine(_tempRoot, "bare.git");
-        Directory.CreateDirectory(bare); // pre-create so EnsureBareCloneAsync is a no-op
-        var runner = Substitute.For<IProcessRunner>();
-        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
-        var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
-        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
-            worktreeRoot: Path.Combine(_tempRoot, "wt"));
-
-        await sut.PreparePreviewAsync(1, "shaA", "content/a.md", cancellationToken: ct);
-        await sut.PreparePreviewAsync(1, "shaA", "content/b.md", cancellationToken: ct);
-
-        // Start should only happen once for the same sha; worktree add only once too.
-        runner.Received(1).Start("npm", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>());
-        await runner.Received(1).RunAsync(
-            "git",
-            Arg.Is<string>(s => s.StartsWith("worktree add", StringComparison.Ordinal)),
-            Arg.Any<string>(),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task PreparePreviewAsync_With_Different_Sha_Restarts_Server()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var bare = Path.Combine(_tempRoot, "bare.git");
-        Directory.CreateDirectory(bare);
-        var runner = Substitute.For<IProcessRunner>();
-        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
-        var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
-        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
-            worktreeRoot: Path.Combine(_tempRoot, "wt"));
-
-        await sut.PreparePreviewAsync(1, "shaA", "content/a.md", cancellationToken: ct);
-        await sut.PreparePreviewAsync(1, "shaB", "content/a.md", cancellationToken: ct);
-
-        runner.Received(2).Start("npm", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>());
-    }
-
-    [Fact]
-    public async Task PreparePreviewAsync_Maps_Non_Content_Path_To_Root()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var bare = Path.Combine(_tempRoot, "bare.git");
-        Directory.CreateDirectory(bare);
-        var runner = Substitute.For<IProcessRunner>();
-        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
-            .Returns(Substitute.For<IProcessHandle>());
-        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
-            worktreeRoot: Path.Combine(_tempRoot, "wt"));
-
-        var link = await sut.PreparePreviewAsync(1, "sha", "data/release-notes/3.10.md", cancellationToken: ct);
-
-        Assert.NotNull(link);
-        Assert.Equal("/", link!.Url.AbsolutePath);
-    }
-
-    [Fact]
     public async Task PrewarmAsync_Runs_Bare_Clone_Eagerly()
     {
         // Background prewarm during app startup: doing `git clone --bare`
         // (1-2 minutes for github/docs) ahead of time means the user's first
-        // preview click skips the slowest non-npm step in the pipeline.
+        // preview click skips the slowest repository setup step in the pipeline.
         var ct = TestContext.Current.CancellationToken;
         var bare = Path.Combine(_tempRoot, "bare-prewarm.git");
         var runner = Substitute.For<IProcessRunner>();
@@ -934,8 +693,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
     public async Task PrepareMarkdownComparisonPreviewAsync_Reuses_Prewarmed_Session_Without_Refetching()
     {
         // §Step 19.10 (perf): ユーザ視点の中心シナリオ。PR 選択直後に PredictivePrewarmAsync が
-        // worktree まで warm up しておけば、最初のファイルクリックでは git fetch も
-        // git worktree add も走らず、ファイル単位の Markdown レンダリングだけで済む。
+        // bare clone と親 SHA 解決を warm up しておけば、最初のファイルクリックでは
+        // git fetch も git worktree add も走らず、ファイル単位の Markdown レンダリングだけで済む。
         var ct = TestContext.Current.CancellationToken;
         var bare = Path.Combine(_tempRoot, "bare-reuse.git");
         var wtRoot = Path.Combine(_tempRoot, "worktrees-reuse");
@@ -972,7 +731,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             "https://example.invalid/docs.git",
             worktreeRoot: wtRoot,
             contentServer: contentServer,
-            onWorktreeAdd: (path, _) =>
+            onObjectSourceMaterialized: (path, _) =>
             {
                 File.WriteAllText(Path.Combine(path, "CHANGELOG.md"), "# Changelog\n\nentry");
             });
@@ -1035,10 +794,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
             "https://example.invalid/docs.git",
             worktreeRoot: wtRoot,
             contentServer: contentServer,
-            onWorktreeAdd: (path, _) =>
+            onObjectSourceMaterialized: (path, _) =>
             {
-                // 同じ worktree に複数の Markdown を置いて、ファイル切替時に
-                // worktree を作り直していないことを示せるようにする。
+                // 同じ git object stub に複数の Markdown を置いて、ファイル切替時に
+                // repository setup をやり直していないことを示せるようにする。
                 File.WriteAllText(Path.Combine(path, "FILE1.md"), "# File 1\n\nentry");
                 File.WriteAllText(Path.Combine(path, "FILE2.md"), "# File 2\n\nentry");
             });
@@ -1111,56 +870,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task StopAsync_Deactivates_Session_And_Stops_Server()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var bare = Path.Combine(_tempRoot, "bare.git");
-        Directory.CreateDirectory(bare);
-        var runner = Substitute.For<IProcessRunner>();
-        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
-        var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
-        var session = new PreviewSession();
-        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
-            worktreeRoot: Path.Combine(_tempRoot, "wt"),
-            session: session);
-        await sut.PreparePreviewAsync(1, "sha", "content/a.md", cancellationToken: ct);
-        Assert.True(session.IsActive);
-
-        await sut.StopAsync(ct);
-
-        Assert.False(session.IsActive);
-        await handle.Received(1).KillAsync(Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task PreparePreviewAsync_Reports_Progress_For_Each_Step()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var bare = Path.Combine(_tempRoot, "bare.git");
-        var runner = Substitute.For<IProcessRunner>();
-        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>())
-            .Returns(Substitute.For<IProcessHandle>());
-        var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
-            worktreeRoot: Path.Combine(_tempRoot, "wt-progress"));
-        var progress = new ListProgress();
-
-        var link = await sut.PreparePreviewAsync(123, "deadbeefcafe", "content/foo/bar.md", progress, ct);
-
-        Assert.NotNull(link);
-        // We expect at least one progress message per major step so the UI can show
-        // "what is happening right now" while the (long) pipeline runs.
-        Assert.Contains(progress.Items, m => m.Contains("リポジトリ", StringComparison.Ordinal));
-        Assert.Contains(progress.Items, m => m.Contains("PR", StringComparison.Ordinal));
-        Assert.Contains(progress.Items, m => m.Contains("worktree", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(progress.Items, m => m.Contains("サーバ", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task CleanupCacheAsync_Stops_Server_And_Prunes_All_Worktrees()
+    public async Task CleanupCacheAsync_Stops_ContentServer_And_Prunes_All_Worktrees()
     {
         var ct = TestContext.Current.CancellationToken;
         var bare = Path.Combine(_tempRoot, "bare.git");
@@ -1178,22 +888,16 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 0,
                 $"worktree {leftover}\nHEAD abcdef0123456789\ndetached\n\n",
                 string.Empty)));
-        var handle = Substitute.For<IProcessHandle>();
-        runner.Start(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<IReadOnlyDictionary<string, string?>?>()).Returns(handle);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
         var session = new PreviewSession();
+        session.Activate(4500);
         var sut = BuildSut(runner, bare, "https://example.invalid/docs.git",
-            worktreeRoot: wtRoot, session: session);
-
-        // Start a preview so the server + session are active first.
-        await sut.PreparePreviewAsync(1, "newshashashash", "content/a.md", cancellationToken: ct);
-        Assert.True(session.IsActive);
+            worktreeRoot: wtRoot, session: session, contentServer: contentServer);
 
         var removed = await sut.CleanupCacheAsync(ct);
 
-        // Leftover from previous process (restored from porcelain) + the newly
-        // checked-out worktree should both be removed.
-        Assert.Equal(2, removed);
-        await handle.Received(1).KillAsync(Arg.Any<CancellationToken>());
+        Assert.Equal(1, removed);
+        await contentServer.Received(1).StopAsync(Arg.Any<CancellationToken>());
         Assert.False(session.IsActive);
         await runner.Received().RunAsync("git",
             Arg.Is<string>(a => a.StartsWith("worktree unlock", StringComparison.Ordinal)
@@ -1234,21 +938,17 @@ public sealed class PreviewCoordinatorTests : IDisposable
         int previewBasePort = 4500,
         PreviewSession? session = null,
         ILocalPreviewContentServer? contentServer = null,
-        Action<string, string>? onWorktreeAdd = null,
-        IPortReadyProbe? probe = null)
+        Action<string, string>? onObjectSourceMaterialized = null)
     {
         var options = Options.Create(new DocsRepositoryOptions
         {
             BareCloneDir = bareCloneDir,
             CloneUrl = cloneUrl,
             WorktreeRoot = worktreeRoot ?? string.Empty,
-            PreviewCommand = "npm",
-            PreviewArguments = "run dev -- --port {port}",
             PreviewBasePort = previewBasePort,
         });
-        // Tests mostly exercise the warm path where dependencies already exist.
-        // The fake IProcessRunner does not materialize the worktree, so intercept
-        // `git worktree add` and git-object reads on disk.
+        // The fake IProcessRunner answers git-object reads from per-SHA folders
+        // materialized on demand by each test.
         var objectSourceRoot = Path.Combine(worktreeRoot ?? _fallbackObjectSourceRoot, ".git-object-stubs");
         var materializedObjects = new HashSet<string>(StringComparer.Ordinal);
         void MaterializeObjectSource(string sha)
@@ -1260,7 +960,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
             var root = Path.Combine(objectSourceRoot, sha);
             Directory.CreateDirectory(root);
-            onWorktreeAdd?.Invoke(root, sha);
+            onObjectSourceMaterialized?.Invoke(root, sha);
         }
 
         runner.RunAsync(
@@ -1421,49 +1121,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 }
             });
 
-        runner.WhenForAnyArgs(r => r.RunAsync(default!, default!, default!, default))
-            .Do(call =>
-            {
-                if (!string.Equals(call.ArgAt<string>(0), "git", StringComparison.Ordinal))
-                {
-                    return;
-                }
-                var args = call.ArgAt<string>(1);
-                if (!args.StartsWith("worktree add", StringComparison.Ordinal))
-                {
-                    return;
-                }
-                var parts = args.Split(' ', 4, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 3)
-                {
-                    var target = parts[2];
-                    Directory.CreateDirectory(target);
-                    Directory.CreateDirectory(Path.Combine(target, "node_modules"));
-                    if (parts.Length >= 4)
-                    {
-                        onWorktreeAdd?.Invoke(target, parts[3]);
-                    }
-                }
-            });
         var worktree = new DocsWorktreeManager(runner, options, NullLogger<DocsWorktreeManager>.Instance);
-        if (probe is null)
-        {
-            var defaultProbe = Substitute.For<IPortReadyProbe>();
-            defaultProbe.WaitForListenAsync(Arg.Any<int>(), Arg.Any<TimeSpan>(),
-                Arg.Any<Func<bool>?>(), Arg.Any<CancellationToken>()).Returns(true);
-            probe = defaultProbe;
-        }
-        var server = new PreviewServerHost(runner, probe, options, NullLogger<PreviewServerHost>.Instance);
-        var serverFactory = new PreviewServerHostFactory(
-            runner,
-            probe,
-            options,
-            NullLogger<PreviewServerHost>.Instance);
         session ??= new PreviewSession();
         return new PreviewCoordinator(
             worktree,
-            server,
-            serverFactory,
             contentServer ?? Substitute.For<ILocalPreviewContentServer>(),
             session,
             new FixedPreviewPortAllocator(previewBasePort),

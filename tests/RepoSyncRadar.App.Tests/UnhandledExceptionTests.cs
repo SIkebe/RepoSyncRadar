@@ -22,13 +22,13 @@ public sealed class UnhandledExceptionTests
         var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<App>>();
         logger.IsEnabled(Arg.Any<Microsoft.Extensions.Logging.LogLevel>()).Returns(true);
         var dialogs = new List<string>();
-        var ex = new InvalidOperationException("git worktree add failed (exit 128)");
+        var ex = new InvalidOperationException("git show failed (exit 128)");
 
         App.HandleUnhandled(ex, logger, dialogs.Add);
 
         Assert.Single(dialogs);
         Assert.Contains("InvalidOperationException", dialogs[0], StringComparison.Ordinal);
-        Assert.Contains("git worktree add failed", dialogs[0], StringComparison.Ordinal);
+        Assert.Contains("git show failed", dialogs[0], StringComparison.Ordinal);
         logger.Received().Log(
             Microsoft.Extensions.Logging.LogLevel.Error,
             Arg.Any<Microsoft.Extensions.Logging.EventId>(),

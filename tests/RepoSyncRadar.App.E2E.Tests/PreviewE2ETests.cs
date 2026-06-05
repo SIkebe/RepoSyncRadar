@@ -6,10 +6,10 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// <summary>
 /// End-to-end checks for the "比較プレビュー" wiring added in
 /// IMPLEMENTATION_PLAN.md §Step 19.5. The pipeline itself (git clone --bare,
-/// worktree, sidecar) is exercised by Core / Integrations tests with a stubbed
-/// <c>IProcessRunner</c>; running the real tool chain inside an E2E pass would
-/// take minutes and require <c>git</c> + <c>npm</c> on the test host. Here we
-/// pin down the UI surface that wraps the pipeline:
+/// Markdown/Liquid rendering, and local content serving) is exercised by Core /
+/// Integrations tests with a stubbed <c>IProcessRunner</c>; running the real
+/// tool chain inside an E2E pass would take minutes. Here we pin down the UI
+/// surface that wraps the pipeline:
 /// <list type="bullet">
 ///   <item>The file-row preview button and cleanup button render and become
 ///         interactive once a commit is selected.</item>
@@ -26,7 +26,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// The seeded fixture intentionally clears <c>DocsRepository</c> via
 /// <c>RADAR_*</c> environment variables (see
 /// <see cref="SeededAppHostFixture"/>), so the click path is guaranteed to take
-/// the disabled branch in <c>PreviewCoordinator.PreparePreviewAsync</c>. This
+/// the disabled branch in <c>PreviewCoordinator.PrepareMarkdownComparisonPreviewAsync</c>. This
 /// avoids accidentally invoking <c>git</c> on a developer machine that already
 /// has a real bare clone in <c>appsettings.Local.json</c>.
 /// </remarks>
@@ -100,13 +100,13 @@ public sealed class PreviewE2ETests
         await cleanupButton.ClickAsync();
 
         // PreviewCoordinator.CleanupCacheAsync returns 0 when DocsWorktreeManager
-        // is disabled, and the UI maps that to the "{n} 件の worktree を削除しました"
-        // string. We assert the leading "0 件" substring so we are not coupled to
-        // future tweaks of the status wording.
+        // is disabled, and the UI maps that to a localized cache cleanup status.
+        // We assert the leading "0 件" substring so we are not coupled to future
+        // tweaks of the status wording.
         var status = page.Locator("[data-testid='commit-detail-preview-cleanup-status']");
         await status.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
         await Assertions.Expect(status).ToContainTextAsync(
-            "0 件の worktree",
+            "0 件",
             new() { Timeout = 10000 });
 
         await Assertions.Expect(cleanupButton).ToBeEnabledAsync(

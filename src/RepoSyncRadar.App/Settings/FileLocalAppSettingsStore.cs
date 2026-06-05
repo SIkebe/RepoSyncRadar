@@ -221,7 +221,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             DocsApi = new DocsApiLocalAppSettings
             {
                 BaseAddress = GetString(configuration, "DocsApi:BaseAddress", defaults.DocsApi.BaseAddress),
-                DefaultLanguage = GetString(configuration, "DocsApi:DefaultLanguage", defaults.DocsApi.DefaultLanguage),
                 ClientName = GetString(configuration, "DocsApi:ClientName", defaults.DocsApi.ClientName),
                 PageListCacheSeconds = GetInt(configuration, "DocsApi:PageListCacheSeconds", defaults.DocsApi.PageListCacheSeconds),
             },
@@ -250,12 +249,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 BareCloneDir = GetString(configuration, "DocsRepository:BareCloneDir", defaults.DocsRepository.BareCloneDir),
                 CloneUrl = GetString(configuration, "DocsRepository:CloneUrl", defaults.DocsRepository.CloneUrl),
                 WorktreeRoot = GetString(configuration, "DocsRepository:WorktreeRoot", defaults.DocsRepository.WorktreeRoot),
-                MaxWorktrees = GetInt(configuration, "DocsRepository:MaxWorktrees", defaults.DocsRepository.MaxWorktrees),
                 PrewarmOnStartup = GetBool(configuration, "DocsRepository:PrewarmOnStartup", defaults.DocsRepository.PrewarmOnStartup),
-                PreviewCommand = GetString(configuration, "DocsRepository:PreviewCommand", defaults.DocsRepository.PreviewCommand),
-                PreviewArguments = GetString(configuration, "DocsRepository:PreviewArguments", defaults.DocsRepository.PreviewArguments),
-                PreviewInstallArguments = GetString(configuration, "DocsRepository:PreviewInstallArguments", defaults.DocsRepository.PreviewInstallArguments),
-                PreviewEnvironment = GetDictionary(configuration, "DocsRepository:PreviewEnvironment", defaults.DocsRepository.PreviewEnvironment),
                 PreviewBasePort = GetInt(configuration, "DocsRepository:PreviewBasePort", defaults.DocsRepository.PreviewBasePort),
                 PreviewReadyTimeoutSeconds = GetInt(configuration, "DocsRepository:PreviewReadyTimeoutSeconds", defaults.DocsRepository.PreviewReadyTimeoutSeconds),
             },
@@ -289,7 +283,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             DocsApi = new DocsApiLocalAppSettings
             {
                 BaseAddress = GetString(root, "DocsApi", "BaseAddress", fallback.DocsApi.BaseAddress),
-                DefaultLanguage = GetString(root, "DocsApi", "DefaultLanguage", fallback.DocsApi.DefaultLanguage),
                 ClientName = GetString(root, "DocsApi", "ClientName", fallback.DocsApi.ClientName),
                 PageListCacheSeconds = GetInt(root, "DocsApi", "PageListCacheSeconds", fallback.DocsApi.PageListCacheSeconds),
             },
@@ -318,12 +311,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 BareCloneDir = GetString(root, "DocsRepository", "BareCloneDir", fallback.DocsRepository.BareCloneDir),
                 CloneUrl = GetString(root, "DocsRepository", "CloneUrl", fallback.DocsRepository.CloneUrl),
                 WorktreeRoot = GetString(root, "DocsRepository", "WorktreeRoot", fallback.DocsRepository.WorktreeRoot),
-                MaxWorktrees = GetInt(root, "DocsRepository", "MaxWorktrees", fallback.DocsRepository.MaxWorktrees),
                 PrewarmOnStartup = GetBool(root, "DocsRepository", "PrewarmOnStartup", fallback.DocsRepository.PrewarmOnStartup),
-                PreviewCommand = GetString(root, "DocsRepository", "PreviewCommand", fallback.DocsRepository.PreviewCommand),
-                PreviewArguments = GetString(root, "DocsRepository", "PreviewArguments", fallback.DocsRepository.PreviewArguments),
-                PreviewInstallArguments = GetString(root, "DocsRepository", "PreviewInstallArguments", fallback.DocsRepository.PreviewInstallArguments),
-                PreviewEnvironment = GetDictionary(root, "DocsRepository", "PreviewEnvironment", fallback.DocsRepository.PreviewEnvironment),
                 PreviewBasePort = GetInt(root, "DocsRepository", "PreviewBasePort", fallback.DocsRepository.PreviewBasePort),
                 PreviewReadyTimeoutSeconds = GetInt(root, "DocsRepository", "PreviewReadyTimeoutSeconds", fallback.DocsRepository.PreviewReadyTimeoutSeconds),
             },
@@ -355,7 +343,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
 
         var docsApi = GetOrReplaceObject(root, "DocsApi");
         docsApi["BaseAddress"] = settings.DocsApi.BaseAddress;
-        docsApi["DefaultLanguage"] = settings.DocsApi.DefaultLanguage;
         docsApi["ClientName"] = settings.DocsApi.ClientName;
         docsApi["PageListCacheSeconds"] = settings.DocsApi.PageListCacheSeconds;
 
@@ -389,12 +376,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         docsRepository["BareCloneDir"] = settings.DocsRepository.BareCloneDir;
         docsRepository["CloneUrl"] = settings.DocsRepository.CloneUrl;
         docsRepository["WorktreeRoot"] = settings.DocsRepository.WorktreeRoot;
-        docsRepository["MaxWorktrees"] = settings.DocsRepository.MaxWorktrees;
         docsRepository["PrewarmOnStartup"] = settings.DocsRepository.PrewarmOnStartup;
-        docsRepository["PreviewCommand"] = settings.DocsRepository.PreviewCommand;
-        docsRepository["PreviewArguments"] = settings.DocsRepository.PreviewArguments;
-        docsRepository["PreviewInstallArguments"] = settings.DocsRepository.PreviewInstallArguments;
-        docsRepository["PreviewEnvironment"] = ToJsonObject(settings.DocsRepository.PreviewEnvironment);
         docsRepository["PreviewBasePort"] = settings.DocsRepository.PreviewBasePort;
         docsRepository["PreviewReadyTimeoutSeconds"] = settings.DocsRepository.PreviewReadyTimeoutSeconds;
 
@@ -427,7 +409,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             DocsApi = new DocsApiLocalAppSettings
             {
                 BaseAddress = TrimOrEmpty(settings.DocsApi.BaseAddress),
-                DefaultLanguage = TrimOrEmpty(settings.DocsApi.DefaultLanguage),
                 ClientName = TrimOrEmpty(settings.DocsApi.ClientName),
                 PageListCacheSeconds = settings.DocsApi.PageListCacheSeconds,
             },
@@ -458,12 +439,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 BareCloneDir = TrimOrEmpty(settings.DocsRepository.BareCloneDir),
                 CloneUrl = TrimOrEmpty(settings.DocsRepository.CloneUrl),
                 WorktreeRoot = TrimOrEmpty(settings.DocsRepository.WorktreeRoot),
-                MaxWorktrees = settings.DocsRepository.MaxWorktrees,
                 PrewarmOnStartup = settings.DocsRepository.PrewarmOnStartup,
-                PreviewCommand = TrimOrEmpty(settings.DocsRepository.PreviewCommand),
-                PreviewArguments = TrimOrEmpty(settings.DocsRepository.PreviewArguments),
-                PreviewInstallArguments = TrimOrEmpty(settings.DocsRepository.PreviewInstallArguments),
-                PreviewEnvironment = NormalizeDictionary(settings.DocsRepository.PreviewEnvironment),
                 PreviewBasePort = settings.DocsRepository.PreviewBasePort,
                 PreviewReadyTimeoutSeconds = settings.DocsRepository.PreviewReadyTimeoutSeconds,
             },
@@ -501,7 +477,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         {
             errors.Add("DocsApi.BaseAddress は https の絶対 URL にしてください。");
         }
-        Require(settings.DocsApi.DefaultLanguage, "DocsApi.DefaultLanguage", errors);
         Require(settings.DocsApi.ClientName, "DocsApi.ClientName", errors);
         ValidateRange(settings.DocsApi.PageListCacheSeconds, 1, int.MaxValue, "DocsApi.PageListCacheSeconds", errors);
 
@@ -540,13 +515,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             }
         }
 
-        ValidateRange(settings.DocsRepository.MaxWorktrees, 1, 50, "DocsRepository.MaxWorktrees", errors);
         ValidateRange(settings.DocsRepository.PreviewBasePort, 1024, 65535, "DocsRepository.PreviewBasePort", errors);
         ValidateRange(settings.DocsRepository.PreviewReadyTimeoutSeconds, 5, 1800, "DocsRepository.PreviewReadyTimeoutSeconds", errors);
-        foreach (var key in settings.DocsRepository.PreviewEnvironment.Keys)
-        {
-            Require(key, "DocsRepository.PreviewEnvironment key", errors);
-        }
 
         Require(settings.Logging.DefaultLogLevel, "Logging.LogLevel.Default", errors);
         Require(settings.Logging.MicrosoftLogLevel, "Logging.LogLevel.Microsoft", errors);
@@ -611,16 +581,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         return array;
     }
 
-    private static JsonObject ToJsonObject(IReadOnlyDictionary<string, string> values)
-    {
-        var obj = new JsonObject();
-        foreach (var (key, value) in values.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
-        {
-            obj[key] = value;
-        }
-        return obj;
-    }
-
     private static string GetString(IConfiguration configuration, string key, string fallback)
         => string.IsNullOrWhiteSpace(configuration[key]) ? fallback : configuration[key]!;
 
@@ -644,17 +604,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             .Select(static value => value!.Trim())
             .ToList();
         return values.Count == 0 ? [.. fallback] : values;
-    }
-
-    private static Dictionary<string, string> GetDictionary(
-        IConfiguration configuration,
-        string key,
-        IReadOnlyDictionary<string, string> fallback)
-    {
-        var values = configuration.GetSection(key).GetChildren()
-            .Where(static child => !string.IsNullOrWhiteSpace(child.Key))
-            .ToDictionary(static child => child.Key, static child => child.Value ?? string.Empty, StringComparer.Ordinal);
-        return values.Count == 0 ? new Dictionary<string, string>(fallback, StringComparer.Ordinal) : values;
     }
 
     private static string GetString(JsonObject root, string sectionName, string propertyName, string fallback)
@@ -695,21 +644,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             .Where(static value => !string.IsNullOrWhiteSpace(value))
             .Select(static value => value!.Trim())
             .ToList();
-        return values;
-    }
-
-    private static Dictionary<string, string> GetDictionary(
-        JsonObject root,
-        string sectionName,
-        string propertyName,
-        IReadOnlyDictionary<string, string> fallback)
-    {
-        if (root[sectionName] is not JsonObject section || section[propertyName] is not JsonObject obj)
-        {
-            return new Dictionary<string, string>(fallback, StringComparer.Ordinal);
-        }
-
-        var values = obj.ToDictionary(static pair => pair.Key, static pair => ReadString(pair.Value) ?? string.Empty, StringComparer.Ordinal);
         return values;
     }
 
@@ -796,11 +730,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             ? uri.Host
             : trimmed;
     }
-
-    private static Dictionary<string, string> NormalizeDictionary(IReadOnlyDictionary<string, string> values)
-        => values
-            .Where(static pair => !string.IsNullOrWhiteSpace(pair.Key))
-            .ToDictionary(static pair => pair.Key.Trim(), static pair => pair.Value?.Trim() ?? string.Empty, StringComparer.Ordinal);
 
     private static void Require(string value, string name, List<string> errors)
     {

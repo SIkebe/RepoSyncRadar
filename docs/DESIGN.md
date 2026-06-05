@@ -117,7 +117,7 @@
 │  │  - DocsApiClient         (HttpClient → docs.github.com)      │   │
 │  │  - PathToUrlResolver     (frontmatter + pagelist)            │   │
 │  │  - RadarStore            (Microsoft.Data.Sqlite + EF Core)   │   │
-│  │  - PreviewServerHost     (Phase 6: Next.js を sidecar 起動)   │   │
+│  │  - PreviewCoordinator    (Markdown/Liquid local preview)     │   │
 │  │  - SecretStore           (DPAPI / Windows Credential Manager)│   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
@@ -177,7 +177,7 @@
 | 公式 docs データ取得 | HttpClient → `docs.github.com/api/*` | 自前パースが不要、redirect 解決も API 側でしてくれる |
 | エージェント | `GitHub.Copilot.SDK` | 後述。Copilot CLI 全機能を JSON-RPC で駆動 |
 | Razor UI | MudBlazor | Fluent UI Blazor でも可。差分表示は `BlazorMonaco` を併用 |
-| Git 操作 (Phase 6) | LibGit2Sharp + `git` CLI | bare クローン / worktree |
+| Git 操作 (Phase 6) | `git` CLI | bare クローンから SHA 指定で必要ファイルを読む |
 | 自動更新 | Velopack | Squirrel.Windows の後継 |
 | シークレット | DPAPI / Windows Credential Manager | OS 標準 |
 
@@ -501,7 +501,7 @@ public sealed class CopilotToolLog
 │ Filters      │ │  [ ◀ Before │ After ▶ ]   [ Open in browser ↗ ]    │ │
 │ ☑ content/   │ │                                                    │ │
 │ ☐ data/      │ │  ← Live HTML from /api/article/body                │ │
-│ ☑ release    │ │  → Local preview server (PR HEAD) — Phase 6        │ │
+│ ☑ release    │ │  → Local Markdown preview (Before / After)        │ │
 │              │ └────────────────────────────────────────────────────┘ │
 │              │                                                        │
 │              │ [ 注目 ✓ ]  [ 保留 ⏰ ] [ アーカイブ ] [ Ignore dir ] │
@@ -548,19 +548,17 @@ public sealed class CopilotToolLog
 | frontmatter (versions) | ✅ Octokit でファイル取得 |
 | pagelist と URL 解決 | ✅ `docs.github.com/api/pagelist/...` |
 | Body API (公式の見た目) | ✅ `docs.github.com/api/article/body` |
-| **PR HEAD でローカルプレビュー (`npm start`)** | ❌ ローカルクローン必要 |
+| **PR HEAD でローカル Markdown/Liquid プレビュー** | ❌ ローカル bare clone 必要 |
 
 Phase 1〜5 は **完全に API のみ**で進められる。
 
-### 12.2 Phase 6 で必要になったら bare クローン + worktree
+### 12.2 Phase 6 で必要になったら bare クローン + Markdown/Liquid renderer
 
 ```
 c:\github\
 ├─ docs\                      ← 既存の作業ツリー(触らない)
 ├─ docs.git\                  ← bare クローン(RepoSyncRadar 専用、読み取り)
-├─ docs-worktrees\            ← 必要な SHA を一時的にチェックアウト
-│   ├─ pr-12345-abc123\
-│   └─ ...
+├─ docs-preview-cache\        ← Markdown preview assets / legacy cleanup root
 └─ RepoSyncRadar\             ← アプリ本体
 ```
 
@@ -580,17 +578,17 @@ git fetch --prune
   "DocsRepository": {
     "BareCloneDir": "C:\\github\\docs.git",
     "WorktreeRoot": "C:\\github\\docs-worktrees",
-    "UpstreamUrl": "https://github.com/github/docs.git",
-    "DefaultBranch": "main",
-    "MaxWorktrees": 5
+    "CloneUrl": "https://github.com/github/docs.git",
+    "PreviewBasePort": 5055
   }
 }
 ```
 
 `DocsWorktreeManager` の責務:
 
-- 指定 SHA の worktree を作成 (`git worktree add --detach <dir> <sha>`)。
-- LRU で `MaxWorktrees` を超えたら古いものを `worktree remove --force`。
+- 指定 SHA の Markdown / Liquid / asset 入力を bare clone から `git show` / `git ls-tree` で読む。
+- 必要な静的 asset だけを preview cache に materialize する。
+- 旧バージョンが残した worktree と stale Next dev server を cleanup する。
 - `BareCloneDir` が未設定なら **Phase 6 機能をオフ** にしてアプリは動く。
 
 ---
@@ -610,7 +608,7 @@ git fetch --prune
 
 - **アプリは新規リポジトリ(`c:\github\RepoSyncRadar`)として独立**。
 - **Phase 1〜5: GitHub API + docs.github.com API オンリー**。
-- **Phase 6 でローカルプレビューが必要になったら bare クローン + worktree を追加**。
+- **Phase 6 でローカルプレビューが必要になったら bare クローン + Markdown/Liquid renderer を追加**。
 - アプリと `github/docs` の作業ツリーは完全に分離 — 既存の `c:\github\docs` を一切汚さない。
 
 ---
@@ -695,7 +693,7 @@ RepoSyncRadar.sln
 | **2. Copilot SDK 統合** | `CopilotClient` 起動、最小ツール (`radar_list_commits` / `radar_get_diff`) 登録、Morning Triage セッション | スコアと要約が SQLite に入る |
 | **3. レビュー UI** | 注目 / 保留 / アーカイブ / Ignore、Reason 入力、Sidebar フィルタ | 1 日 5 分運用が成立 |
 | **4. 共有文案** | Adoption セッション + 2 媒体テンプレート + Regenerate | 注目 → 文案 → 編集 → クリップボードで完結 |
-| **5. ローカルプレビュー** | bare clone + `git worktree` + Next.js sidecar、Before/After 並列表示 | PR HEAD の見た目で比較可能 |
+| **5. ローカルプレビュー** | bare clone + Markdown/Liquid renderer + local content server、Before/After 並列表示 | PR HEAD の見た目で比較可能 |
 | **6. 配布・運用** | 署名済み配布、更新、プライバシー/サポート/脆弱性報告導線 | 管理者が安心してインストールできる |
 
 Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Phase 5 でプレビューまで完結。
@@ -712,7 +710,7 @@ Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Ph
 | D4 | `GitHub.Copilot.SDK` を中核に据える | 2026-05-12 | エージェントオーケストレーションを自前実装しない |
 | D5 | SQLite + EF Core を採用 | 2026-05-12 | ローカル単独、バックアップ 1 ファイル、クエリ容易 |
 | D6 | submodule は不採用、アプリは独立リポジトリ | 2026-05-12 | submodule は vendoring 用途 / 毎日追跡と相性が悪い |
-| D7 | Phase 1〜4 は API オンリー、Phase 5 で bare clone + worktree | 2026-05-12 | 初期セットアップを軽量に保つ |
+| D7 | Phase 1〜4 は API オンリー、Phase 5 で bare clone + Markdown/Liquid preview | 2026-05-12 | 初期セットアップを軽量に保つ |
 | D8 | `SystemMessageMode.Append` を基本とする | 2026-05-12 | ガードレール削除を禁止 |
 | D9 | `OnPermissionRequest` で `shell` / `write` / 任意 `url` を UI 確認必須 | 2026-05-12 | `ApproveAll` は使わない |
 | D10 | 自動投稿はしない | 2026-05-12 | 信頼を失わないため、最終確認は人間 |

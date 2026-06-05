@@ -12,10 +12,6 @@ public sealed class DocsApiOptions
     [Required]
     public Uri BaseAddress { get; set; } = new("https://docs.github.com/");
 
-    /// <summary>Default language used when resolving paths to canonical URLs.</summary>
-    [Required(AllowEmptyStrings = false)]
-    public string DefaultLanguage { get; set; } = "en";
-
     /// <summary>Required by the public search API.</summary>
     [Required(AllowEmptyStrings = false)]
     public string ClientName { get; set; } = "reposyncradar";

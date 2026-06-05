@@ -6,8 +6,7 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 /// <summary>
 /// Tests for <see cref="MarkdownPreviewRenderer"/>'s github/docs flavored
 /// rendering (IMPLEMENTATION_PLAN.md §Step 19.7). The renderer is the only
-/// substitute for the Next.js dev server on the "Markdown-first" preview
-/// path, so it must safely handle frontmatter and Liquid tags that pervade
+/// Markdown-first preview renderer, so it must safely handle frontmatter and Liquid tags that pervade
 /// `content/**/*.md` without crashing or letting raw template syntax leak
 /// through as visible noise.
 /// </summary>

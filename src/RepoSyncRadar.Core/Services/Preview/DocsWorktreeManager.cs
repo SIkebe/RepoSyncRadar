@@ -8,8 +8,8 @@ using RepoSyncRadar.Core.Options;
 namespace RepoSyncRadar.Core.Services.Preview;
 
 /// <summary>
-/// Manages a bare clone of <c>github/docs</c> plus a small LRU cache of worktrees
-/// for individual commit SHAs (IMPLEMENTATION_PLAN.md §Step 19). When
+/// Manages a bare clone of <c>github/docs</c> for commit-object reads and
+/// cleanup of legacy preview worktrees. When
 /// <see cref="DocsRepositoryOptions.BareCloneDir"/> is empty every public method
 /// becomes a no-op so the app keeps starting without a configured preview path.
 /// </summary>
@@ -23,7 +23,6 @@ public sealed partial class DocsWorktreeManager
     private readonly ILogger<DocsWorktreeManager> _logger;
     private readonly IPreviewServerProcessCleaner _processCleaner;
     private readonly Dictionary<string, WorktreeEntry> _worktrees = new(StringComparer.OrdinalIgnoreCase);
-    private long _tick;
     private bool _restored;
 
     public DocsWorktreeManager(
@@ -156,113 +155,6 @@ public sealed partial class DocsWorktreeManager
 
         var parent = result.StandardOutput.Trim();
         return parent.Length == 0 ? null : parent;
-    }
-
-    /// <summary>
-    /// Adds a worktree for <paramref name="commitSha"/> if one does not already exist.
-    /// Returns the path on disk. Calling with the same SHA twice in a row reuses the
-    /// existing worktree and only refreshes its LRU position.
-    /// </summary>
-    public async Task<string?> CheckoutAsync(string commitSha, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(commitSha);
-        if (!IsEnabled)
-        {
-            return null;
-        }
-        await RestoreFromDiskAsync(cancellationToken).ConfigureAwait(false);
-        if (_worktrees.TryGetValue(commitSha, out var existing))
-        {
-            if (IsInitializingLockedWorktree(existing.Path))
-            {
-                _worktrees.Remove(commitSha);
-                await RemoveWorktreeAsync(existing.Path, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                existing.LastUsed = ++_tick;
-                await ResetWorktreeAsync(existing.Path, cancellationToken).ConfigureAwait(false);
-                await EnsureNextWebpackOptOutAsync(existing.Path, cancellationToken).ConfigureAwait(false);
-                return existing.Path;
-            }
-        }
-
-        var slug = commitSha.Length >= 12 ? commitSha[..12] : commitSha;
-        var path = Path.Combine(_options.WorktreeRoot, slug);
-        if (Directory.Exists(path))
-        {
-            var recovered = await TryRecoverExistingPathAsync(path, commitSha, cancellationToken).ConfigureAwait(false);
-            if (recovered)
-            {
-                _worktrees[commitSha] = new WorktreeEntry(path, ++_tick);
-                await ResetWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
-                await EnsureNextWebpackOptOutAsync(path, cancellationToken).ConfigureAwait(false);
-                return path;
-            }
-        }
-
-        var args = string.Create(CultureInfo.InvariantCulture, $"worktree add {path} {commitSha}");
-        ProcessRunResult result;
-        try
-        {
-            result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            await CleanupInterruptedWorktreeAsync(path).ConfigureAwait(false);
-            throw;
-        }
-        if (result.ExitCode != 0)
-        {
-            await CleanupInterruptedWorktreeAsync(path).ConfigureAwait(false);
-            throw new InvalidOperationException($"git worktree add failed (exit {result.ExitCode}): {result.StandardError}");
-        }
-        _worktrees[commitSha] = new WorktreeEntry(path, ++_tick);
-        await EnsureNextWebpackOptOutAsync(path, cancellationToken).ConfigureAwait(false);
-
-        while (_worktrees.Count > _options.MaxWorktrees)
-        {
-            var oldest = default(KeyValuePair<string, WorktreeEntry>);
-            var oldestTick = long.MaxValue;
-            foreach (var kv in _worktrees)
-            {
-                if (kv.Value.LastUsed < oldestTick)
-                {
-                    oldestTick = kv.Value.LastUsed;
-                    oldest = kv;
-                }
-            }
-            await RemoveWorktreeAsync(oldest.Value.Path, cancellationToken).ConfigureAwait(false);
-            _worktrees.Remove(oldest.Key);
-        }
-        return path;
-    }
-
-    public async Task<bool> TryRepairExistingWorktreeAsync(string path, CancellationToken cancellationToken = default)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        if (!IsEnabled || !Directory.Exists(path))
-        {
-            return false;
-        }
-
-        if (IsInitializingLockedWorktree(path))
-        {
-            await RemoveWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
-            return false;
-        }
-
-        try
-        {
-            await ResetWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
-            await EnsureNextWebpackOptOutAsync(path, cancellationToken).ConfigureAwait(false);
-            return Directory.Exists(path);
-        }
-        catch (InvalidOperationException)
-        {
-            await RemoveWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
-            return false;
-        }
     }
 
     public async Task<string?> ReadFileTextAsync(
@@ -485,81 +377,6 @@ public sealed partial class DocsWorktreeManager
         }
     }
 
-    private async Task<bool> TryRecoverExistingPathAsync(
-        string path,
-        string commitSha,
-        CancellationToken cancellationToken)
-    {
-        if (IsInitializingLockedWorktree(path))
-        {
-            await RemoveWorktreeAsync(path, cancellationToken).ConfigureAwait(false);
-            LogStaleWorktreeDeleted(_logger, path);
-            return false;
-        }
-
-        var head = await _runner.RunAsync(
-            "git",
-            "rev-parse HEAD",
-            path,
-            cancellationToken).ConfigureAwait(false);
-        if (head.ExitCode == 0 && CommitMatches(head.StandardOutput, commitSha))
-        {
-            LogExistingWorktreeReused(_logger, path, commitSha);
-            return true;
-        }
-
-        try
-        {
-            await StopStaleServersBeforeRemovalAsync(path, cancellationToken).ConfigureAwait(false);
-            await DeleteDirectoryRobustAsync(path, cancellationToken).ConfigureAwait(false);
-            LogStaleWorktreeDeleted(_logger, path);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new InvalidOperationException(
-                $"既存の preview worktree ディレクトリ '{path}' を削除できませんでした。起動中の npm/node プロセスを停止するか、キャッシュをクリーンアップしてから再試行してください。",
-                ex);
-        }
-
-        return false;
-    }
-
-    private async Task ResetWorktreeAsync(string path, CancellationToken cancellationToken)
-    {
-        var result = await _runner.RunAsync(
-            "git",
-            "reset --hard",
-            path,
-            cancellationToken).ConfigureAwait(false);
-        if (result.ExitCode != 0
-            && LooksLikeIndexLockFailure(result.StandardError)
-            && TryDeleteStaleIndexLock(path))
-        {
-            result = await _runner.RunAsync(
-                "git",
-                "reset --hard",
-                path,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        if (result.ExitCode != 0)
-        {
-            throw new InvalidOperationException($"git reset --hard failed (exit {result.ExitCode}): {result.StandardError}");
-        }
-    }
-
-    private async Task CleanupInterruptedWorktreeAsync(string path)
-    {
-        try
-        {
-            await RemoveWorktreeAsync(path, CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-        {
-            LogInterruptedWorktreeCleanupFailed(_logger, path, ex.Message);
-        }
-    }
-
     private async Task<bool> RemoveWorktreeAsync(string path, CancellationToken cancellationToken)
     {
         await StopStaleServersBeforeRemovalAsync(path, cancellationToken).ConfigureAwait(false);
@@ -594,151 +411,21 @@ public sealed partial class DocsWorktreeManager
         return Directory.Exists(path) is false;
     }
 
-    private static bool IsInitializingLockedWorktree(string worktreePath)
-    {
-        if (!TryReadWorktreeGitDir(worktreePath, out var gitDir))
-        {
-            return false;
-        }
-
-        var lockedPath = Path.Combine(gitDir, "locked");
-        if (!File.Exists(lockedPath))
-        {
-            return false;
-        }
-
-        try
-        {
-            var text = File.ReadAllText(lockedPath).Trim();
-            return string.Equals(text, "initializing", StringComparison.OrdinalIgnoreCase);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
-    private static bool TryReadWorktreeGitDir(string worktreePath, out string gitDir)
-    {
-        gitDir = string.Empty;
-        var gitFile = Path.Combine(worktreePath, ".git");
-        if (!File.Exists(gitFile))
-        {
-            return false;
-        }
-
-        string text;
-        try
-        {
-            text = File.ReadAllText(gitFile);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-
-        const string prefix = "gitdir:";
-        var line = text.Split('\n', StringSplitOptions.RemoveEmptyEntries)
-            .Select(static value => value.Trim())
-            .FirstOrDefault(static value => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-        if (line is null)
-        {
-            return false;
-        }
-
-        gitDir = line[prefix.Length..].Trim();
-        if (!Path.IsPathRooted(gitDir))
-        {
-            gitDir = Path.GetFullPath(Path.Combine(worktreePath, gitDir));
-        }
-        return true;
-    }
-
-    private static bool LooksLikeIndexLockFailure(string standardError) =>
-        standardError.Contains("index.lock", StringComparison.OrdinalIgnoreCase)
-        && standardError.Contains("File exists", StringComparison.OrdinalIgnoreCase);
-
-    private static bool TryDeleteStaleIndexLock(string worktreePath)
-    {
-        if (!TryReadWorktreeGitDir(worktreePath, out var gitDir))
-        {
-            return false;
-        }
-
-        var lockPath = Path.Combine(gitDir, "index.lock");
-        try
-        {
-            var lockInfo = new FileInfo(lockPath);
-            if (!lockInfo.Exists
-                || DateTime.UtcNow - lockInfo.LastWriteTimeUtc < TimeSpan.FromMinutes(5))
-            {
-                return false;
-            }
-
-            lockInfo.Delete();
-            return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return false;
-        }
-    }
-
-    private static bool CommitMatches(string actualHead, string requestedSha)
-    {
-        var actual = actualHead.Trim();
-        var requested = requestedSha.Trim();
-        return string.Equals(actual, requested, StringComparison.OrdinalIgnoreCase)
-            || actual.StartsWith(requested, StringComparison.OrdinalIgnoreCase)
-            || requested.StartsWith(actual, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private async Task EnsureNextWebpackOptOutAsync(string worktreePath, CancellationToken cancellationToken)
-    {
-        var nextMiddlewarePath = Path.Combine(worktreePath, "src", "frame", "middleware", "next.ts");
-        if (!File.Exists(nextMiddlewarePath))
-        {
-            return;
-        }
-
-        var text = await File.ReadAllTextAsync(nextMiddlewarePath, cancellationToken).ConfigureAwait(false);
-        if (text.Contains("webpack: true", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        const string singleLine = "export const nextApp = next({ dev: isDevelopment })";
-        const string singleLinePatched = "export const nextApp = next({ dev: isDevelopment, webpack: true })";
-        var updated = text.Replace(singleLine, singleLinePatched, StringComparison.Ordinal);
-        if (string.Equals(updated, text, StringComparison.Ordinal))
-        {
-            LogNextPatchSkipped(_logger, nextMiddlewarePath);
-            return;
-        }
-
-        await File.WriteAllTextAsync(nextMiddlewarePath, updated, cancellationToken).ConfigureAwait(false);
-        LogNextPatched(_logger, nextMiddlewarePath);
-    }
-
-    private sealed class WorktreeEntry(string path, long lastUsed)
+    private sealed class WorktreeEntry(string path)
     {
         public string Path { get; } = path;
-
-        public long LastUsed { get; set; } = lastUsed;
     }
 
     /// <summary>
     /// Populates the in-memory LRU from <c>git worktree list --porcelain</c> on first
-    /// use. Without this, restarting the app forgets every previously-created worktree
-    /// and <see cref="DocsRepositoryOptions.MaxWorktrees"/> never kicks in, so
-    /// <c>WorktreeRoot</c> grows without bound across sessions.
+    /// use. Without this, restarting the app forgets legacy worktrees created by
+    /// previous versions, so <c>WorktreeRoot</c> can grow without bound across sessions.
     /// </summary>
     /// <remarks>
     /// The porcelain output is a sequence of blank-line-separated stanzas like
     /// <c>worktree &lt;path&gt;\nHEAD &lt;sha&gt;\ndetached</c> (or a single
     /// <c>bare</c> entry for the bare repo). We ignore the <c>bare</c> stanza and key
-    /// the dictionary by HEAD sha. LastUsed is ordered by filesystem mtime so the
-    /// oldest leftover gets evicted first.
+    /// the dictionary by HEAD sha for cleanup.
     /// </remarks>
     private async Task RestoreFromDiskAsync(CancellationToken cancellationToken)
     {
@@ -771,7 +458,7 @@ public sealed partial class DocsWorktreeManager
             return;
         }
 
-        var entries = new List<(string Path, string Sha, DateTime Mtime)>();
+        var entries = new List<(string Path, string Sha)>();
         string? path = null;
         string? sha = null;
         var isBare = false;
@@ -782,8 +469,7 @@ public sealed partial class DocsWorktreeManager
             {
                 if (path is not null && sha is not null && !isBare && Directory.Exists(path))
                 {
-                    var mtime = SafeGetMtime(path);
-                    entries.Add((path, sha, mtime));
+                    entries.Add((path, sha));
                 }
                 path = null;
                 sha = null;
@@ -805,32 +491,16 @@ public sealed partial class DocsWorktreeManager
         }
         if (path is not null && sha is not null && !isBare && Directory.Exists(path))
         {
-            entries.Add((path, sha, SafeGetMtime(path)));
+            entries.Add((path, sha));
         }
 
-        foreach (var entry in entries.OrderBy(e => e.Mtime))
+        foreach (var entry in entries)
         {
-            _worktrees[entry.Sha] = new WorktreeEntry(entry.Path, ++_tick);
+            _worktrees[entry.Sha] = new WorktreeEntry(entry.Path);
         }
         if (entries.Count > 0)
         {
             LogRestored(_logger, entries.Count);
-        }
-    }
-
-    private static DateTime SafeGetMtime(string path)
-    {
-        try
-        {
-            return Directory.Exists(path) ? Directory.GetLastWriteTimeUtc(path) : DateTime.MinValue;
-        }
-        catch (IOException)
-        {
-            return DateTime.MinValue;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return DateTime.MinValue;
         }
     }
 
@@ -1099,29 +769,9 @@ public sealed partial class DocsWorktreeManager
         Message = "git worktree list --porcelain failed: {StandardError}")]
     private static partial void LogRestoreFailed(ILogger logger, string standardError);
 
-    [LoggerMessage(EventId = 4, Level = LogLevel.Information,
-        Message = "Patched github/docs Next.js custom server to use webpack: true at {Path}.")]
-    private static partial void LogNextPatched(ILogger logger, string path);
-
-    [LoggerMessage(EventId = 5, Level = LogLevel.Warning,
-        Message = "Could not patch github/docs Next.js custom server at {Path}; expected next({{ dev: isDevelopment }}) shape was not found.")]
-    private static partial void LogNextPatchSkipped(ILogger logger, string path);
-
-    [LoggerMessage(EventId = 6, Level = LogLevel.Information,
-        Message = "Reusing existing preview worktree directory {Path} for sha {Sha}.")]
-    private static partial void LogExistingWorktreeReused(ILogger logger, string path, string sha);
-
-    [LoggerMessage(EventId = 7, Level = LogLevel.Warning,
-        Message = "Deleted stale preview worktree directory {Path} before recreating it.")]
-    private static partial void LogStaleWorktreeDeleted(ILogger logger, string path);
-
     [LoggerMessage(EventId = 8, Level = LogLevel.Information,
         Message = "Stopped {Count} stale preview server process(es) before removing worktree {Path}.")]
     private static partial void LogStalePreviewServersStopped(ILogger logger, string path, int count);
-
-    [LoggerMessage(EventId = 9, Level = LogLevel.Warning,
-        Message = "Failed to clean interrupted preview worktree {Path}: {Message}")]
-    private static partial void LogInterruptedWorktreeCleanupFailed(ILogger logger, string path, string message);
 
     [LoggerMessage(EventId = 10, Level = LogLevel.Warning,
         Message = "Failed to move worktree {Path} to delete-pending: {Message}")]

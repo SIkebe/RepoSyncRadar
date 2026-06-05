@@ -165,7 +165,6 @@ public class DocsApiClientTests
         {
             BaseAddress = new Uri(_baseAddress),
             ClientName = "reposyncradar",
-            DefaultLanguage = "en",
             PageListCacheSeconds = pageListCacheSeconds,
         });
         var clock = new FakeClock(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));

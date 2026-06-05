@@ -60,7 +60,7 @@ The original phase plan is tracked in [`docs/DESIGN.md`](docs/DESIGN.md) and the
 | 2 | Copilot SDK integration / Morning Triage session |
 | 3 | Operational UI for Focus / Hold / Rejected / Archive / Ignore |
 | 4 | Channel-specific drafts (Twitter / customer-facing) |
-| 5 | Local preview (bare clone + worktree) |
+| 5 | Local preview (bare clone + Markdown/Liquid renderer) |
 | 6 | Distribution and auto-update |
 
 See [`docs/DESIGN.md`](docs/DESIGN.md#16-phase-別ロードマップ) for details.

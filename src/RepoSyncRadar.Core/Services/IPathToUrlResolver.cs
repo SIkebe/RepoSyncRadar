@@ -4,8 +4,8 @@ namespace RepoSyncRadar.Core.Services;
 /// Resolves a <c>github/docs</c> repository path to one or more canonical
 /// <c>docs.github.com</c> URLs. This is the DI-friendly counterpart to the pure
 /// <see cref="PathToUrlResolver"/> static API — UI components depend on the interface so
-/// they can be tested with a substitute. The concrete production implementation that
-/// wires Frontmatter + pagelist sources lands in Step 13 (<c>radar_resolve_url</c>).
+/// they can be tested with a substitute. Copilot-facing URL resolution is provided by
+/// <c>radar_resolve_url</c>.
 /// </summary>
 public interface IPathToUrlResolver
 {

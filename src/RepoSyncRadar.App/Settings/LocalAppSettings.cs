@@ -60,8 +60,6 @@ public sealed class DocsApiLocalAppSettings
 {
     public string BaseAddress { get; set; } = "https://docs.github.com/";
 
-    public string DefaultLanguage { get; set; } = "en";
-
     public string ClientName { get; set; } = "reposyncradar";
 
     public int PageListCacheSeconds { get; set; } = 86_400;
@@ -70,7 +68,6 @@ public sealed class DocsApiLocalAppSettings
         => new()
         {
             BaseAddress = BaseAddress,
-            DefaultLanguage = DefaultLanguage,
             ClientName = ClientName,
             PageListCacheSeconds = PageListCacheSeconds,
         };
@@ -160,21 +157,7 @@ public sealed class DocsRepositoryLocalAppSettings
 
     public string WorktreeRoot { get; set; } = Path.Combine(_defaultPreviewRoot, "worktrees");
 
-    public int MaxWorktrees { get; set; } = 5;
-
     public bool PrewarmOnStartup { get; set; }
-
-    public string PreviewCommand { get; set; } = "npm";
-
-    public string PreviewArguments { get; set; } = "run dev";
-
-    public string PreviewInstallArguments { get; set; } = "install";
-
-    public Dictionary<string, string> PreviewEnvironment { get; set; } = new(StringComparer.Ordinal)
-    {
-        ["PORT"] = "{port}",
-        ["REQUEST_TIMEOUT"] = "600000",
-    };
 
     public int PreviewBasePort { get; set; } = 4500;
 
@@ -186,12 +169,7 @@ public sealed class DocsRepositoryLocalAppSettings
             BareCloneDir = BareCloneDir,
             CloneUrl = CloneUrl,
             WorktreeRoot = WorktreeRoot,
-            MaxWorktrees = MaxWorktrees,
             PrewarmOnStartup = PrewarmOnStartup,
-            PreviewCommand = PreviewCommand,
-            PreviewArguments = PreviewArguments,
-            PreviewInstallArguments = PreviewInstallArguments,
-            PreviewEnvironment = new Dictionary<string, string>(PreviewEnvironment, StringComparer.Ordinal),
             PreviewBasePort = PreviewBasePort,
             PreviewReadyTimeoutSeconds = PreviewReadyTimeoutSeconds,
         };

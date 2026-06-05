@@ -46,7 +46,6 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
                 ["Copilot:ContextTier"] = " Long_Context ",
                 ["Copilot:OAuthScopes:0"] = "public_repo",
                 ["DocsRepository:PrewarmOnStartup"] = "true",
-                ["DocsRepository:PreviewEnvironment:PORT"] = "{port}",
             })
             .Build();
         var store = new FileLocalAppSettingsStore(path, configuration);
@@ -62,7 +61,6 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Empty(settings.Copilot.OAuthScopes);
         Assert.Equal(["docs.github.com", "github.com"], settings.WebView.AllowedUrlHosts);
         Assert.True(settings.DocsRepository.PrewarmOnStartup);
-        Assert.Equal("{port}", settings.DocsRepository.PreviewEnvironment["PORT"]);
     }
 
     [Fact]
@@ -98,11 +96,6 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.WebView.AllowedUrlHosts = ["https://github.com", "github.githubassets.com"];
         settings.DocsRepository.BareCloneDir = "C:\\github\\.cache\\docs.git";
         settings.DocsRepository.PrewarmOnStartup = true;
-        settings.DocsRepository.PreviewEnvironment = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["PORT"] = "{port}",
-            ["REQUEST_TIMEOUT"] = "600000",
-        };
         settings.Updates.Enabled = true;
         settings.Updates.FeedUrl = " https://github.com/example/RepoSyncRadar ";
         settings.Updates.Channel = " win-arm64-preview ";
@@ -133,7 +126,6 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("docs.github.com", root.GetProperty("Copilot").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("github.com", root.GetProperty("WebView").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.True(root.GetProperty("DocsRepository").GetProperty("PrewarmOnStartup").GetBoolean());
-        Assert.Equal("600000", root.GetProperty("DocsRepository").GetProperty("PreviewEnvironment").GetProperty("REQUEST_TIMEOUT").GetString());
         Assert.True(root.GetProperty("Updates").GetProperty("Enabled").GetBoolean());
         Assert.Equal("https://github.com/example/RepoSyncRadar", root.GetProperty("Updates").GetProperty("FeedUrl").GetString());
         Assert.Equal("win-arm64-preview", root.GetProperty("Updates").GetProperty("Channel").GetString());

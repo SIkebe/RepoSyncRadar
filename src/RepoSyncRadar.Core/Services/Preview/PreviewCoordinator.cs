@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Microsoft.Extensions.Logging;
@@ -12,16 +11,14 @@ namespace RepoSyncRadar.Core.Services.Preview;
 
 /// <summary>
 /// Thin orchestrator that ties <see cref="DocsWorktreeManager"/>,
-/// <see cref="PreviewServerHost"/> and <see cref="PreviewSession"/> together so the
-/// UI only has to know about a single async method to spin up a per-commit preview
-/// (IMPLEMENTATION_PLAN.md §Step 19.5).
+/// <see cref="ILocalPreviewContentServer"/> and <see cref="PreviewSession"/>
+/// together so the UI only has to know about a single async method to render a
+/// per-commit Markdown comparison preview.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The coordinator is serial: callers should not invoke
-/// <see cref="PreparePreviewAsync"/> concurrently. It caches the last SHA prepared so
-/// that switching files within the same commit reuses the running server, and only
-/// restarts on a SHA change.
+/// The coordinator caches per-PR/sha preparation so switching files within the
+/// same commit reuses the fetched commits and parent resolution.
 /// </para>
 /// <para>
 /// When <see cref="DocsWorktreeManager.IsEnabled"/> is <c>false</c> every call
@@ -32,38 +29,8 @@ namespace RepoSyncRadar.Core.Services.Preview;
 public interface IPreviewCoordinator
 {
     /// <summary>
-    /// Ensures the bare clone exists, fetches the PR, checks out a worktree for
-    /// <paramref name="sha"/>, starts (or reuses) the preview sidecar, and returns a
-    /// loopback URL pointing at the mapped article. Returns <c>null</c> when the
-    /// preview pipeline is disabled.
-    /// </summary>
-    /// <param name="progress">
-    /// Optional sink that receives a short human-readable message before each major
-    /// step (clone / fetch / worktree / server). The UI uses this to show real-time
-    /// feedback so users can tell the pipeline is running rather than frozen.
-    /// </param>
-    Task<PreviewLink?> PreparePreviewAsync(
-        int prNumber,
-        string sha,
-        string? filePath,
-        IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Starts two local preview servers for the same article: the first parent of
-    /// <paramref name="sha"/> as the before pane, and <paramref name="sha"/> as PR HEAD.
-    /// This remains useful even after docs.github.com has already deployed the PR.
-    /// </summary>
-    Task<PreviewComparisonLink?> PrepareComparisonPreviewAsync(
-        int prNumber,
-        string sha,
-        string? filePath,
-        IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Renders a non-publishable Markdown file from the first parent and PR HEAD
-    /// worktrees, hosts both rendered pages on localhost, and returns before/after URLs.
+    /// commits, hosts both rendered pages on localhost, and returns before/after URLs.
     /// </summary>
     /// <param name="version">
     /// 描画する <see cref="DocsVersion"/>。未指定なら差分が出る最初の版を使う。
@@ -100,14 +67,13 @@ public interface IPreviewCoordinator
     Task PrewarmAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Predictively warms the repository and before/after worktrees for a freshly
+    /// Predictively warms the repository and first-parent resolution for a freshly
     /// selected commit so the user's first "ローカルプレビュー" click does not pay
-    /// the network fetch or worktree setup cost when the data is already local. Performs
+    /// the network fetch or parent resolution cost when the data is already local. Performs
     /// <see cref="DocsWorktreeManager.EnsureBareCloneAsync"/>,
     /// commit availability check / PR fetch when needed,
-    /// <see cref="DocsWorktreeManager.ResolveFirstParentAsync"/>,
-    /// <see cref="DocsWorktreeManager.CheckoutAsync"/> for both the before/after
-    /// commits. Per-file Liquid context is loaded lazily from only the clicked
+    /// and <see cref="DocsWorktreeManager.ResolveFirstParentAsync"/>.
+    /// Per-file Liquid context is loaded lazily from only the clicked
     /// Markdown's referenced variables/reusables/AUTOTITLE targets. All work is
     /// serialized through a per-(prNumber, sha) <see cref="SemaphoreSlim"/>,
     /// so concurrent invocations from the predictive path and the user-click
@@ -119,9 +85,10 @@ public interface IPreviewCoordinator
     Task PredictivePrewarmAsync(int prNumber, string sha, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Stops the running preview and removes every worktree this manager tracks
-    /// (including those rehydrated from disk on startup). Returns the number of
-    /// worktrees actually removed. Returns 0 when the preview pipeline is disabled.
+    /// Stops the running preview and removes cached Markdown assets plus legacy
+    /// worktrees left by older preview implementations. Returns the number of
+    /// legacy worktree directories actually removed. Returns 0 when the preview
+    /// pipeline is disabled.
     /// </summary>
     /// <remarks>
     /// Wired to the UI &quot;キャッシュをクリーンアップ&quot; button so users can reclaim
@@ -130,23 +97,17 @@ public interface IPreviewCoordinator
     Task<int> CleanupCacheAsync(CancellationToken cancellationToken = default);
 }
 
-/// <summary>Outcome of <see cref="IPreviewCoordinator.PreparePreviewAsync"/>.</summary>
-public sealed record PreviewLink(Uri Url, int Port, string WorktreePath);
-
 /// <summary>Outcome of a local before/after visual preview comparison.</summary>
 public sealed record PreviewComparisonLink(
     Uri BeforeUrl,
     Uri AfterUrl,
     int BeforePort,
     int AfterPort,
-    string BeforeWorktreePath,
-    string AfterWorktreePath,
     string BeforeSha,
     string AfterSha)
 {
     /// <summary>
     /// Markdown プレビューで描画したときの <see cref="DocsVersion"/>。
-    /// 通常の Next.js 経路では <see cref="DocsVersionCatalog.Default"/> 固定 (= fpt)。
     /// </summary>
     public DocsVersion? CurrentVersion { get; init; }
 
@@ -181,20 +142,16 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     private const string _markdownAfterAssetRoute = "/markdown-assets/after";
 
     private readonly DocsWorktreeManager _worktree;
-    private readonly PreviewServerHost _server;
-    private readonly PreviewServerHost _beforeServer;
     private readonly ILocalPreviewContentServer _contentServer;
     private readonly PreviewSession _session;
     private readonly IPreviewPortAllocator _portAllocator;
     private readonly DocsRepositoryOptions _options;
     private readonly ILogger<PreviewCoordinator> _logger;
-    private string? _activeSha;
-    private string? _activeBeforeSha;
     private string? _activeMarkdownAssetRoot;
 
     // §Step 19.10 (perf): 同一 PR HEAD で 1/7 → 2/7 → 3/7 のように別ファイルへ
-    // 切り替えるたびに毎回 git fetch + git rev-parse + git worktree add ×2 を走らせると、
-    // 公式 docs (数千ファイル) では 1 ファイル切り替えに数秒〜10 秒掛かる。
+    // 切り替えるたびに毎回 git fetch + git rev-parse を走らせると、
+    // 公式 docs (数千ファイル) では不要な待ち時間が発生する。
     // (prNumber, sha) ごとに「準備済みセッション」をキャッシュして、ファイル切替の
     // たびに走らせるのはファイル読込 + 対象Markdown用Liquid context + Markdigだけにする。
     private readonly ConcurrentDictionary<PreparedSessionKey, PreparedMarkdownSession> _preparedSessions = new();
@@ -218,8 +175,6 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
     public PreviewCoordinator(
         DocsWorktreeManager worktree,
-        PreviewServerHost server,
-        IPreviewServerHostFactory serverFactory,
         ILocalPreviewContentServer contentServer,
         PreviewSession session,
         IPreviewPortAllocator portAllocator,
@@ -227,188 +182,17 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         ILogger<PreviewCoordinator> logger)
     {
         ArgumentNullException.ThrowIfNull(worktree);
-        ArgumentNullException.ThrowIfNull(server);
-        ArgumentNullException.ThrowIfNull(serverFactory);
         ArgumentNullException.ThrowIfNull(contentServer);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(portAllocator);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(logger);
         _worktree = worktree;
-        _server = server;
-        _beforeServer = serverFactory.Create();
         _contentServer = contentServer;
         _session = session;
         _portAllocator = portAllocator;
         _options = options.Value;
         _logger = logger;
-    }
-
-    public async Task<PreviewLink?> PreparePreviewAsync(
-        int prNumber,
-        string sha,
-        string? filePath,
-        IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(prNumber);
-        ArgumentException.ThrowIfNullOrWhiteSpace(sha);
-
-        if (!_worktree.IsEnabled || !_server.IsEnabled)
-        {
-            LogDisabled(_logger);
-            return null;
-        }
-
-        progress?.Report("リポジトリキャッシュを準備中… (初回は github/docs の取得に数分かかることがあります。次回以降はキャッシュを再利用します)");
-        await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
-
-        await _worktree.EnsureCommitAvailableAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
-
-        progress?.Report("worktree を作成中… (git worktree add)");
-        var worktreePath = await _worktree.CheckoutAsync(sha, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(worktreePath))
-        {
-            return null;
-        }
-
-        var port = string.Equals(_activeSha, sha, StringComparison.Ordinal)
-            && _server.IsProcessRunning
-            && _server.CurrentPort > 0
-                ? _server.CurrentPort
-                : _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
-        if (!string.Equals(_activeSha, sha, StringComparison.Ordinal)
-            || _server.CurrentPort != port
-            || !_server.IsProcessRunning)
-        {
-            progress?.Report(
-                $"依存関係を確認してプレビューサーバを起動中… (node_modules がなければ {_options.PreviewCommand} {_options.PreviewInstallArguments} を自動実行 / ポート {port.ToString(CultureInfo.InvariantCulture)})");
-            await _server.StartAsync(worktreePath, port, progress, cancellationToken).ConfigureAwait(false);
-            _activeSha = sha;
-        }
-        else
-        {
-            progress?.Report("既存のプレビューサーバを再利用します");
-        }
-
-        _session.Activate(port);
-
-        var path = string.IsNullOrWhiteSpace(filePath)
-            ? "/"
-            : PreviewPathMapper.Map(filePath, "en") ?? "/";
-        var url = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://localhost:{port}{path}"));
-        LogPreviewReady(_logger, sha, url.AbsoluteUri);
-        return new PreviewLink(url, port, worktreePath);
-    }
-
-    public async Task<PreviewComparisonLink?> PrepareComparisonPreviewAsync(
-        int prNumber,
-        string sha,
-        string? filePath,
-        IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(prNumber);
-        ArgumentException.ThrowIfNullOrWhiteSpace(sha);
-
-        if (!_worktree.IsEnabled || !_server.IsEnabled)
-        {
-            LogDisabled(_logger);
-            return null;
-        }
-
-        progress?.Report("リポジトリキャッシュを準備中… (初回は github/docs の取得に数分かかることがあります。次回以降はキャッシュを再利用します)");
-        await _worktree.EnsureBareCloneAsync(cancellationToken).ConfigureAwait(false);
-
-        await _worktree.EnsureCommitAvailableAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
-
-        progress?.Report("比較元の親コミットを解決中… (git rev-parse <sha>^)");
-        var beforeSha = await _worktree.ResolveFirstParentAsync(sha, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(beforeSha))
-        {
-            throw new InvalidOperationException("比較元になる親コミットを解決できませんでした。");
-        }
-
-        progress?.Report("変更前 worktree を作成中… (git worktree add)");
-        var beforeWorktreePath = await _worktree.CheckoutAsync(beforeSha, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(beforeWorktreePath))
-        {
-            return null;
-        }
-
-        progress?.Report("PR HEAD worktree を作成中… (git worktree add)");
-        var afterWorktreePath = await _worktree.CheckoutAsync(sha, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrEmpty(afterWorktreePath))
-        {
-            return null;
-        }
-
-        var ports = _portAllocator.AllocateComparison(_options.PreviewBasePort, GetReusablePorts());
-        var afterPort = ports.AfterPort;
-        var beforePort = ports.BeforePort;
-
-        var beforeNeedsStart = !string.Equals(_activeBeforeSha, beforeSha, StringComparison.Ordinal)
-            || _beforeServer.CurrentPort != beforePort
-            || !_beforeServer.IsProcessRunning;
-        var afterNeedsStart = !string.Equals(_activeSha, sha, StringComparison.Ordinal)
-            || _server.CurrentPort != afterPort
-            || !_server.IsProcessRunning;
-
-        if (beforeNeedsStart && afterNeedsStart)
-        {
-            // Parallel cold start cuts wall-clock time roughly in half because
-            // each PreviewServerHost instance is independent (own process, own
-            // worktree path) and the long phases (`npm install`, Next.js
-            // initial compile) overlap instead of running back-to-back.
-            progress?.Report(string.Create(
-                CultureInfo.InvariantCulture,
-                $"変更前 (ポート {beforePort}) と PR HEAD (ポート {afterPort}) のプレビューサーバを並列起動中…"));
-            var beforeTask = _beforeServer.StartAsync(beforeWorktreePath, beforePort, progress, cancellationToken);
-            var afterTask = _server.StartAsync(afterWorktreePath, afterPort, progress, cancellationToken);
-            await Task.WhenAll(beforeTask, afterTask).ConfigureAwait(false);
-            _activeBeforeSha = beforeSha;
-            _activeSha = sha;
-        }
-        else if (beforeNeedsStart)
-        {
-            progress?.Report(string.Create(
-                CultureInfo.InvariantCulture,
-                $"変更前プレビューサーバを起動中… (ポート {beforePort})"));
-            await _beforeServer.StartAsync(beforeWorktreePath, beforePort, progress, cancellationToken).ConfigureAwait(false);
-            _activeBeforeSha = beforeSha;
-            progress?.Report("既存の PR HEAD プレビューサーバを再利用します");
-        }
-        else if (afterNeedsStart)
-        {
-            progress?.Report("既存の変更前プレビューサーバを再利用します");
-            progress?.Report(string.Create(
-                CultureInfo.InvariantCulture,
-                $"PR HEAD プレビューサーバを起動中… (ポート {afterPort})"));
-            await _server.StartAsync(afterWorktreePath, afterPort, progress, cancellationToken).ConfigureAwait(false);
-            _activeSha = sha;
-        }
-        else
-        {
-            progress?.Report("既存の変更前および PR HEAD プレビューサーバを再利用します");
-        }
-
-        _session.Activate(afterPort, beforePort);
-
-        var path = string.IsNullOrWhiteSpace(filePath)
-            ? "/"
-            : PreviewPathMapper.Map(filePath, "en") ?? "/";
-        var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://localhost:{beforePort}{path}"));
-        var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://localhost:{afterPort}{path}"));
-        LogPreviewComparisonReady(_logger, beforeSha, sha, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
-        return new PreviewComparisonLink(
-            beforeUrl,
-            afterUrl,
-            beforePort,
-            afterPort,
-            beforeWorktreePath,
-            afterWorktreePath,
-            beforeSha,
-            sha);
     }
 
     public async Task<PreviewComparisonLink?> PrepareMarkdownComparisonPreviewAsync(
@@ -592,8 +376,6 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             afterUrl,
             port,
             port,
-            string.Empty,
-            string.Empty,
             session.BeforeSha,
             sha)
         {
@@ -737,7 +519,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
     /// <summary>
     /// §Step 19.10 (perf): 同一 (prNumber, sha) で繰り返し呼ばれても重い前準備
-    /// (git fetch / rev-parse / worktree add / data 配下の全件読み込み) を 1 回だけ走らせる。
+    /// (git fetch / rev-parse) を 1 回だけ走らせる。
     /// 2 回目以降はキャッシュヒットでほぼ即返る。<paramref name="cancellationToken"/> は
     /// 内部の git/I/O 操作にだけ流すので、キャンセル時にキャッシュは汚染されない。
     /// </summary>
@@ -749,7 +531,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     {
         var key = new PreparedSessionKey(prNumber, sha);
         progress?.Report("このファイルの比較に使う準備済みデータを確認中…");
-        if (await TryGetValidPreparedSessionAsync(key, progress, cancellationToken).ConfigureAwait(false) is { } fast)
+        if (TryGetValidPreparedSession(key) is { } fast)
         {
             progress?.Report("このファイルの比較に使う準備済みデータを再利用します");
             return fast;
@@ -765,7 +547,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             // Re-check after acquiring the lock — a concurrent prewarm may have
             // just finished and populated the cache.
-            if (await TryGetValidPreparedSessionAsync(key, progress, cancellationToken).ConfigureAwait(false) is { } slow)
+            if (TryGetValidPreparedSession(key) is { } slow)
             {
                 progress?.Report("このファイルの比較に使う準備済みデータを再利用します");
                 return slow;
@@ -793,17 +575,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
     }
 
-    private async Task<PreparedMarkdownSession?> TryGetValidPreparedSessionAsync(
-        PreparedSessionKey key,
-        IProgress<string>? progress,
-        CancellationToken cancellationToken)
-    {
-        if (_preparedSessions.TryGetValue(key, out var cached))
-        {
-            return cached;
-        }
-        return null;
-    }
+    private PreparedMarkdownSession? TryGetValidPreparedSession(PreparedSessionKey key)
+        => _preparedSessions.TryGetValue(key, out var cached) ? cached : null;
 
     private async Task<DocsLiquidContext> LoadLiquidContextCachedAsync(
         string commitSha,
@@ -831,12 +604,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await _contentServer.StopAsync(cancellationToken).ConfigureAwait(false);
-        await _beforeServer.StopAsync(cancellationToken).ConfigureAwait(false);
-        await _server.StopAsync(cancellationToken).ConfigureAwait(false);
         ReplaceActiveMarkdownAssetRoot(null);
         _session.Deactivate();
-        _activeBeforeSha = null;
-        _activeSha = null;
     }
 
     public async Task PrewarmAsync(CancellationToken cancellationToken = default)
@@ -858,9 +627,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             // §Step 19.10 (perf): 単に bare clone と git fetch を warm up するだけだと、
             // 実際に最初の Markdown ファイルをクリックしたタイミングで
-            //   - git rev-parse <sha>^
-            //   - git worktree add ×2
-            // が直列で走る。EnsurePreparedSessionAsync を呼んでおけば
+            // git rev-parse <sha>^ が走る。EnsurePreparedSessionAsync を呼んでおけば
             // ユーザクリック時は対象MarkdownのLiquid contextとレンダリングだけで済む。
             // 同じキーに対する並列呼び出しは内部 SemaphoreSlim でシリアライズされる
             // ため DocsWorktreeManager の Dictionary レースは起こらない。
@@ -887,8 +654,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return 0;
         }
 
-        // Stop the running server first so we don't try to remove a worktree that
-        // still has a child process holding file handles inside it.
+        // Stop the running Markdown server before removing cached preview assets.
         await StopAsync(cancellationToken).ConfigureAwait(false);
         DeleteMarkdownAssetCacheRoot();
         var removed = await _worktree.PruneAllAsync(cancellationToken).ConfigureAwait(false);
@@ -901,58 +667,18 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
-        Message = "Preview pipeline is disabled (DocsRepository.BareCloneDir or PreviewCommand empty).")]
+        Message = "Preview pipeline is disabled (DocsRepository.BareCloneDir or CloneUrl empty).")]
     private static partial void LogDisabled(ILogger logger);
-
-    [LoggerMessage(EventId = 2, Level = LogLevel.Information,
-        Message = "Preview ready for sha {Sha}: {Url}")]
-    private static partial void LogPreviewReady(ILogger logger, string sha, string url);
 
     private int[] GetReusablePorts()
     {
-        var ports = new List<int>(capacity: 2);
-        if (_server is { IsProcessRunning: true, CurrentPort: > 0 })
-        {
-            ports.Add(_server.CurrentPort);
-        }
-        if (_beforeServer is { IsProcessRunning: true, CurrentPort: > 0 }
-            && !ports.Contains(_beforeServer.CurrentPort))
-        {
-            ports.Add(_beforeServer.CurrentPort);
-        }
+        var ports = new List<int>(capacity: 1);
         if (_contentServer is { IsRunning: true, CurrentPort: > 0 }
             && !ports.Contains(_contentServer.CurrentPort))
         {
             ports.Add(_contentServer.CurrentPort);
         }
         return ports.ToArray();
-    }
-
-    private static async Task<string?> ReadWorktreeFileOrNullAsync(
-        string worktreePath,
-        string repoPath,
-        CancellationToken cancellationToken)
-    {
-        var fullPath = ResolveWorktreeFilePath(worktreePath, repoPath);
-        return File.Exists(fullPath)
-            ? await File.ReadAllTextAsync(fullPath, cancellationToken).ConfigureAwait(false)
-            : null;
-    }
-
-    private static string ResolveWorktreeFilePath(string worktreePath, string repoPath)
-    {
-        var root = Path.GetFullPath(worktreePath);
-        var relative = repoPath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
-        var fullPath = Path.GetFullPath(Path.Combine(root, relative));
-        var rootWithSeparator = root.EndsWith(Path.DirectorySeparatorChar)
-            ? root
-            : root + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(rootWithSeparator, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException($"worktree 外のパスはプレビューできません: {repoPath}");
-        }
-        return fullPath;
     }
 
     private async Task<(IReadOnlyDictionary<string, string> AssetRoots, string? MarkdownAssetRoot)> PrepareMarkdownAssetRootsAsync(
@@ -1158,15 +884,6 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
     [GeneratedRegex("""\bsrcset\s*=\s*(?<quote>["'])(?<value>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
     private static partial Regex MarkdownAssetSrcSetRegex();
-
-    [LoggerMessage(EventId = 3, Level = LogLevel.Information,
-        Message = "Preview comparison ready before {BeforeSha} / after {AfterSha}: {BeforeUrl} -> {AfterUrl}")]
-    private static partial void LogPreviewComparisonReady(
-        ILogger logger,
-        string beforeSha,
-        string afterSha,
-        string beforeUrl,
-        string afterUrl);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information,
         Message = "Markdown preview comparison ready for {FilePath} before {BeforeSha} / after {AfterSha}: {BeforeUrl} -> {AfterUrl}")]

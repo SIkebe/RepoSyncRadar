@@ -43,8 +43,6 @@
   <data name="AppHeader.Update.Title" xml:space="preserve"><value>アップデート</value></data>
   <data name="AdoptionSession.BatchIncludesNonFocused" xml:space="preserve"><value>注目以外のコミットが含まれています: {0}.</value></data>
   <data name="AdoptionSession.BatchRequiresAtLeastTwo" xml:space="preserve"><value>個別解説は 2 件以上の注目コミットを選択して生成してください。</value></data>
-  <data name="ArticleBody.FetchFailed" xml:space="preserve"><value>記事の取得に失敗しました ({0}): {1}</value></data>
-  <data name="ArticleBody.NotFound" xml:space="preserve"><value>記事が見つかりません (404): {0}</value></data>
   <data name="CommitList.Empty.ArchiveHint" xml:space="preserve"><value>アクティブな確認対象から外した候補がここに表示されます。</value></data>
   <data name="CommitList.Empty.ArchiveTitle" xml:space="preserve"><value>アーカイブは空です。</value></data>
   <data name="CommitList.Empty.DefaultHint" xml:space="preserve"><value>キューや検索条件を変えて確認してください。</value></data>
@@ -67,9 +65,9 @@
   <data name="CommitDetail.BeforeLabel" xml:space="preserve"><value>変更前 {0} {1}</value></data>
   <data name="CommitDetail.Category" xml:space="preserve"><value>カテゴリ</value></data>
   <data name="CommitDetail.CleanupCache" xml:space="preserve"><value>キャッシュ削除</value></data>
-  <data name="CommitDetail.CleanupCacheTitle" xml:space="preserve"><value>キャッシュされた docs worktree をすべて削除します</value></data>
+  <data name="CommitDetail.CleanupCacheTitle" xml:space="preserve"><value>ローカルプレビューのキャッシュを削除します</value></data>
   <data name="CommitDetail.CleanupInProgress" xml:space="preserve"><value>キャッシュをクリーンアップ中…</value></data>
-  <data name="CommitDetail.CleanupRemoved" xml:space="preserve"><value>{0} 件の worktree を削除しました</value></data>
+  <data name="CommitDetail.CleanupRemoved" xml:space="preserve"><value>{0} 件のキャッシュを削除しました</value></data>
   <data name="CommitDetail.ComparisonOpened" xml:space="preserve"><value>{0} を変更前 / PR HEAD で比較表示しました</value></data>
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>詳細分析</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>コミットを選択してください。</value></data>
@@ -174,7 +172,6 @@
   <data name="LocalSettings.Label.MaxPullRequests" xml:space="preserve"><value>最大 PR 数</value></data>
   <data name="LocalSettings.Label.PullRequestCreatedAtOrAfter" xml:space="preserve"><value>作成日時以降</value></data>
   <data name="LocalSettings.Label.BaseAddress" xml:space="preserve"><value>ベース URL</value></data>
-  <data name="LocalSettings.Label.DefaultLanguage" xml:space="preserve"><value>既定言語</value></data>
   <data name="LocalSettings.Label.ClientName" xml:space="preserve"><value>クライアント名</value></data>
   <data name="LocalSettings.Label.PageListCacheSeconds" xml:space="preserve"><value>ページ一覧キャッシュ秒数</value></data>
   <data name="LocalSettings.Label.DefaultModel" xml:space="preserve"><value>既定モデル</value></data>
@@ -193,12 +190,7 @@
   <data name="LocalSettings.Label.BareCloneDir" xml:space="preserve"><value>ベアクローン先</value></data>
   <data name="LocalSettings.Label.CloneUrl" xml:space="preserve"><value>クローン URL</value></data>
   <data name="LocalSettings.Label.WorktreeRoot" xml:space="preserve"><value>ワークツリー ルート</value></data>
-  <data name="LocalSettings.Label.MaxWorktrees" xml:space="preserve"><value>最大ワークツリー数</value></data>
   <data name="LocalSettings.Label.PrewarmOnStartup" xml:space="preserve"><value>起動時に事前準備</value></data>
-  <data name="LocalSettings.Label.PreviewCommand" xml:space="preserve"><value>プレビューコマンド</value></data>
-  <data name="LocalSettings.Label.PreviewArguments" xml:space="preserve"><value>プレビュー引数</value></data>
-  <data name="LocalSettings.Label.PreviewInstallArguments" xml:space="preserve"><value>インストール引数</value></data>
-  <data name="LocalSettings.Label.PreviewEnvironment" xml:space="preserve"><value>プレビュー環境変数</value></data>
   <data name="LocalSettings.Label.PreviewBasePort" xml:space="preserve"><value>プレビュー基準ポート</value></data>
   <data name="LocalSettings.Label.PreviewReadyTimeoutSeconds" xml:space="preserve"><value>プレビュー準備完了待ち秒数</value></data>
   <data name="LocalSettings.Label.Default" xml:space="preserve"><value>既定</value></data>
