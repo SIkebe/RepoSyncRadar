@@ -2281,6 +2281,20 @@ internal static partial class MarkdownPreviewRenderer
         if (content.StartsWith("> ", StringComparison.Ordinal))
         {
             var quoted = content[2..];
+            if (TrySplitGitHubAlertQuotedLine(quoted, out var alertMarkerPrefix, out var alertInlineContent))
+            {
+                if (alertInlineContent.Length == 0)
+                {
+                    parts = default;
+                    return false;
+                }
+
+                parts = new RenderedDiffLineParts(
+                    RenderedDiffLineKind.Quote,
+                    leading + "> " + alertMarkerPrefix,
+                    alertInlineContent);
+                return true;
+            }
             if (IsGitHubAlertMarker(quoted) || string.IsNullOrWhiteSpace(quoted))
             {
                 parts = default;
@@ -2695,10 +2709,13 @@ internal static partial class MarkdownPreviewRenderer
         // Avoid treating a genuinely added line as an update just because it
         // shares a short word or phrase with an unrelated existing line (for
         // example "Agent apps" vs "GitHub Apps and OAuth apps", or two
-        // unrelated sentences that both start with "If the app"). In those
-        // cases the whole added line should be highlighted.
-        var minimumScore = Math.Max(12, currentParts.Content.Length / 3);
-        return bestScore >= minimumScore ? bestContent : null;
+        // unrelated sentences that both start with "If the app"). Require both
+        // a small absolute overlap and a meaningful ratio so short real updates
+        // like "Old entry" -> "New entry" still get inline marking.
+        var minimumScore = Math.Max(4, currentParts.Content.Length / 3);
+        return bestScore >= minimumScore && bestScore * 5 >= currentParts.Content.Length * 3
+            ? bestContent
+            : null;
     }
 
     private readonly record struct RenderedDiffLineParts(RenderedDiffLineKind Kind, string Prefix, string Content);
@@ -2716,6 +2733,38 @@ internal static partial class MarkdownPreviewRenderer
 
     private static bool IsGitHubAlertMarker(string value)
         => value.TrimStart().StartsWith("[!", StringComparison.Ordinal);
+
+    private static bool TrySplitGitHubAlertQuotedLine(
+        string quoted,
+        out string markerPrefix,
+        out string inlineContent)
+    {
+        markerPrefix = string.Empty;
+        inlineContent = string.Empty;
+
+        var leadingLength = quoted.Length - quoted.TrimStart().Length;
+        var trimmed = quoted[leadingLength..];
+        if (!TryGetGitHubAlertKind(trimmed, out _, out _, out _))
+        {
+            return false;
+        }
+
+        var close = trimmed.IndexOf(']', 2);
+        if (close < 0)
+        {
+            return false;
+        }
+
+        var contentStart = leadingLength + close + 1;
+        while (contentStart < quoted.Length && char.IsWhiteSpace(quoted[contentStart]))
+        {
+            contentStart++;
+        }
+
+        markerPrefix = quoted[..contentStart];
+        inlineContent = contentStart >= quoted.Length ? string.Empty : quoted[contentStart..];
+        return true;
+    }
 
     private static int GetMarkdownHeadingMarkerLength(string content)
     {

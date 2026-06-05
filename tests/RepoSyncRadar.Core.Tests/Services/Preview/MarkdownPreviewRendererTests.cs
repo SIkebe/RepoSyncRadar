@@ -1008,6 +1008,28 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Inline_Alert_Body_When_Alert_Line_Is_Added()
+    {
+        const string beforeMarkdown = "Existing content.";
+        const string afterMarkdown = "> [!NOTE] Agent apps are currently in public preview and subject to change.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">Agent apps are currently in public preview and subject to change.</span>",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("[!NOTE]", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Does_Not_Split_Liquid_Tag_When_Marking_Rendered_Diff()
     {
         // 見出しの Liquid 変数が丸ごと差し替わったケース。差分マーカーの span が
