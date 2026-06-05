@@ -13,15 +13,47 @@ defaults:
     shell: pwsh
 
 jobs:
+  ghalint:
+    name: ghalint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install ghalint
+        run: |
+          $goModPath = 'tools/ghalint/go.mod'
+          $versionLine = Get-Content $goModPath | Where-Object { $_ -match 'github\.com/suzuki-shunsuke/ghalint\s+v\d+\.\d+\.\d+' } | Select-Object -First 1
+          if ([string]::IsNullOrWhiteSpace($versionLine)) {
+            throw "Unable to resolve ghalint version from $goModPath."
+          }
+
+          $version = [regex]::Match($versionLine, 'github\.com/suzuki-shunsuke/ghalint\s+(v\d+\.\d+\.\d+(?:[-+][^\s]+)?)').Groups[1].Value
+          go install "github.com/suzuki-shunsuke/ghalint/cmd/ghalint@$version"
+          Join-Path (go env GOPATH) 'bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Run ghalint
+        run: ghalint run
+
   build-test:
     name: Build and test
     runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
         with:
           global-json-file: global.json
 
@@ -36,7 +68,7 @@ jobs:
 
       - name: Upload test result logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-results
           path: tests/**/TestResults/**
@@ -48,12 +80,17 @@ jobs:
     name: Installed package E2E
     runs-on: windows-latest
     needs: build-test
+    timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
 
       - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
         with:
           global-json-file: global.json
 
@@ -72,7 +109,7 @@ jobs:
 
       - name: Upload installed-package test result logs
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: installed-package-test-results
           path: tests/**/TestResults/**

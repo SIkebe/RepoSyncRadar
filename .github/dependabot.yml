@@ -28,3 +28,7 @@ updates:
       actions:
         patterns:
           - "*"
+  - package-ecosystem: gomod
+    directory: "/tools/ghalint"
+    schedule:
+      interval: daily

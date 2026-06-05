@@ -21,6 +21,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Validate ordinary changes with:
   - `dotnet build RepoSyncRadar.sln -warnaserror`
   - `dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual`
+- Validate GitHub Actions workflow changes with `ghalint run`; CI installs the ghalint version tracked in `tools/ghalint/go.mod` so Dependabot can update it.
 - For focused test runs under xUnit v3/Microsoft.Testing.Platform, put filters after `--`. Examples:
   - `dotnet test tests/RepoSyncRadar.App.Tests/RepoSyncRadar.App.Tests.csproj -- --filter-class RepoSyncRadar.App.Tests.Components.AppHeaderTests`
   - `dotnet test tests/RepoSyncRadar.App.E2E.Tests -- --filter-trait Category=E2E`
