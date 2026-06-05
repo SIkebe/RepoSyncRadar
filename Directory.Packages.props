@@ -1,23 +1,23 @@
 <Project>
 
   <ItemGroup Label="Microsoft.Extensions">
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.Extensions.Localization" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.Extensions.Options" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="11.0.0-preview.3.26207.106" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.Extensions.Localization" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Json" Version="11.0.0-preview.4.26230.115" />
     <PackageVersion Include="Microsoft.Extensions.AI" Version="10.6.0" />
   </ItemGroup>
 
   <ItemGroup Label="Blazor / Razor">
-    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="11.0.0-preview.3.26203.7" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="11.0.0-preview.4.26230.3" />
   </ItemGroup>
 
   <ItemGroup Label="WebView2">
@@ -25,8 +25,8 @@
   </ItemGroup>
 
   <ItemGroup Label="EF Core / SQLite">
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="11.0.0-preview.3.26207.106" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0-preview.3.26207.106" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="11.0.0-preview.4.26230.115" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0-preview.4.26230.115" />
   </ItemGroup>
 
   <ItemGroup Label="UI Components">
@@ -54,7 +54,7 @@
     <PackageVersion Include="NSubstitute" Version="5.3.0" />
     <PackageVersion Include="RichardSzalay.MockHttp" Version="7.0.0" />
     <PackageVersion Include="bunit" Version="2.8.1-preview" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="11.0.0-preview.3.26207.106" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="11.0.0-preview.4.26230.115" />
     <PackageVersion Include="Microsoft.Playwright" Version="1.59.0" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.6.0" />
   </ItemGroup>
