@@ -267,7 +267,6 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-version-pattern-versions{display:flex;flex-wrap:wrap;gap:5px;list-style:none;margin:0 0 8px;padding:0;}");
         html.AppendLine(".rsr-version-pattern-badge{display:inline-block;padding:2px 7px;background:var(--rsr-th-bg);border:1px solid var(--rsr-border);border-radius:12px;font:inherit;font-size:.72rem;color:var(--rsr-fg);cursor:pointer;}");
         html.AppendLine(".rsr-version-pattern-badge:hover{border-color:var(--rsr-link);color:var(--rsr-link);}");
-        html.AppendLine(".rsr-version-pattern-badge--current{background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);font-weight:600;}");
         html.AppendLine(".rsr-version-change{border-left:3px solid var(--rsr-border);display:grid;gap:4px;margin-top:8px;padding-left:8px;}");
         html.AppendLine(".rsr-version-change[data-change-kind='added']{border-left-color:#2da44e;}");
         html.AppendLine(".rsr-version-change[data-change-kind='removed']{border-left-color:#cf222e;}");
@@ -1514,7 +1513,7 @@ internal static partial class MarkdownPreviewRenderer
                 .Append(WebUtility.HtmlEncode(BuildVersionImpactGroupTitle(group, groupIndex)))
                 .Append("</span></h3>");
 
-            AppendVersionPatternBadges(html, group.Versions, currentVersion);
+            AppendVersionPatternBadges(html, group.Versions);
 
             var visibleChanges = group.Changes.Take(3).ToArray();
             foreach (var change in visibleChanges)
@@ -1793,36 +1792,20 @@ internal static partial class MarkdownPreviewRenderer
 
     private static void AppendVersionPatternBadges(
         StringBuilder html,
-        IReadOnlyList<DocsVersion> versions,
-        DocsVersion currentVersion)
+        IReadOnlyList<DocsVersion> versions)
     {
+        // このヘルパーは currentVersion を含まない他版限定グループに対してのみ
+        // 呼ばれるため、表示中バージョンのハイライトは生じない。
         html.Append("<ul class=\"rsr-version-pattern-versions\" aria-label=\"この変更が出る版\">");
         foreach (var version in versions)
         {
-            var isCurrent = version == currentVersion;
-            html.Append("<li><button type=\"button\" class=\"rsr-version-pattern-badge");
-            if (isCurrent)
-            {
-                html.Append(" rsr-version-pattern-badge--current");
-            }
-            html.Append("\" data-rsr-version-slug=\"")
+            html.Append("<li><button type=\"button\" class=\"rsr-version-pattern-badge\" data-rsr-version-slug=\"")
                 .Append(WebUtility.HtmlEncode(version.Slug))
                 .Append("\" data-version-slug=\"")
                 .Append(WebUtility.HtmlEncode(version.Slug))
-                .Append('"');
-            if (isCurrent)
-            {
-                html.Append(" aria-current=\"true\" aria-label=\"")
-                    .Append(WebUtility.HtmlEncode(version.DisplayLabel + " を表示中"))
-                    .Append('"');
-            }
-            else
-            {
-                html.Append(" aria-label=\"")
-                    .Append(WebUtility.HtmlEncode(version.DisplayLabel + " に切り替え"))
-                    .Append('"');
-            }
-            html.Append('>')
+                .Append("\" aria-label=\"")
+                .Append(WebUtility.HtmlEncode(version.DisplayLabel + " に切り替え"))
+                .Append("\">")
                 .Append(WebUtility.HtmlEncode(version.DisplayLabel))
                 .Append("</button></li>");
         }
