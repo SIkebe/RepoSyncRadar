@@ -531,7 +531,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     {
         var key = new PreparedSessionKey(prNumber, sha);
         progress?.Report("このファイルの比較に使う準備済みデータを確認中…");
-        if (await TryGetValidPreparedSessionAsync(key).ConfigureAwait(false) is { } fast)
+        if (TryGetValidPreparedSession(key) is { } fast)
         {
             progress?.Report("このファイルの比較に使う準備済みデータを再利用します");
             return fast;
@@ -547,7 +547,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             // Re-check after acquiring the lock — a concurrent prewarm may have
             // just finished and populated the cache.
-            if (await TryGetValidPreparedSessionAsync(key).ConfigureAwait(false) is { } slow)
+            if (TryGetValidPreparedSession(key) is { } slow)
             {
                 progress?.Report("このファイルの比較に使う準備済みデータを再利用します");
                 return slow;
@@ -575,14 +575,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
     }
 
-    private Task<PreparedMarkdownSession?> TryGetValidPreparedSessionAsync(PreparedSessionKey key)
-    {
-        if (_preparedSessions.TryGetValue(key, out var cached))
-        {
-            return Task.FromResult<PreparedMarkdownSession?>(cached);
-        }
-        return Task.FromResult<PreparedMarkdownSession?>(null);
-    }
+    private PreparedMarkdownSession? TryGetValidPreparedSession(PreparedSessionKey key)
+        => _preparedSessions.TryGetValue(key, out var cached) ? cached : null;
 
     private async Task<DocsLiquidContext> LoadLiquidContextCachedAsync(
         string commitSha,
