@@ -10,7 +10,9 @@
          直接依存のみゲートする(間接依存は上流の更新待ち)。 -->
     <NuGetAuditMode>direct</NuGetAuditMode>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
-    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <!-- Keep the analyzer baseline stable while adopting .NET 11 previews; preview SDKs can otherwise
+         promote broad existing style suggestions to warnings-as-errors across unrelated code. -->
+    <AnalysisLevel>10.0-recommended</AnalysisLevel>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <Authors>SIkebe</Authors>
     <Company>RepoSyncRadar</Company>

@@ -80,6 +80,43 @@ public sealed class LocalPreviewContentServerTests
     }
 
     [Fact]
+    public async Task StartAsync_Serves_MediaTypeMap_Content_Types()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var server = new LocalPreviewContentServer(NullLogger<LocalPreviewContentServer>.Instance);
+        var port = GetFreeLoopbackPort();
+        var root = Path.Combine(Path.GetTempPath(), "rsr-preview-assets-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "assets"));
+        var cgmPath = Path.Combine(root, "assets", "diagram.cgm");
+        await File.WriteAllBytesAsync(cgmPath, [0x43, 0x47, 0x4d], ct);
+        using var http = new HttpClient();
+
+        try
+        {
+            await server.StartAsync(
+                port,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["/markdown/after"] = "<html><body>page</body></html>",
+                },
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["/markdown-assets/after"] = root,
+                },
+                ct);
+
+            using var response = await http.GetAsync(new Uri($"http://127.0.0.1:{port}/markdown-assets/after/assets/diagram.cgm"), ct);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("image/cgm", response.Content.Headers.ContentType?.MediaType);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task StartAsync_Rejects_Asset_Path_Traversal()
     {
         var ct = TestContext.Current.CancellationToken;

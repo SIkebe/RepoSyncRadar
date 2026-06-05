@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Net.Mime;
 using System.Net.Sockets;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -307,18 +308,12 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
     }
 
     private static string ResolveContentType(string path)
-        => Path.GetExtension(path).ToLowerInvariant() switch
-        {
-            ".avif" => "image/avif",
-            ".gif" => "image/gif",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".svg" => "image/svg+xml; charset=utf-8",
-            ".webp" => "image/webp",
-            ".mp4" => "video/mp4",
-            ".webm" => "video/webm",
-            _ => "application/octet-stream",
-        };
+    {
+        var mediaType = MediaTypeMap.GetMediaType(path) ?? "application/octet-stream";
+        return string.Equals(mediaType, "image/svg+xml", StringComparison.Ordinal)
+            ? "image/svg+xml; charset=utf-8"
+            : mediaType;
+    }
 
     private static async Task WriteResponseAsync(
         NetworkStream stream,

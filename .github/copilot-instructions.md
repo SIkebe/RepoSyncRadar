@@ -16,7 +16,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 ## Build And Test
 
-- The pinned SDK is in `global.json`: .NET SDK `10.0.300` with `rollForward: latestFeature`.
+- The pinned SDK is in `global.json`: .NET SDK `11.0.100-preview.1.26104.118` with `rollForward: latestFeature` and `allowPrerelease: true`.
 - Restore/build from the repo root. Prefer PowerShell on Windows.
 - Validate ordinary changes with:
   - `dotnet build RepoSyncRadar.sln -warnaserror`
@@ -31,7 +31,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 ## Coding Rules
 
-- Warnings are errors. `Directory.Build.props` enables nullable, analyzers, latest recommended analysis, and code style enforcement.
+- Warnings are errors. `Directory.Build.props` enables nullable, analyzers, .NET 10 recommended analysis, and code style enforcement. Keep the analyzer baseline stable during .NET 11 previews unless the PR intentionally addresses the resulting style churn.
 - The app/package version is managed by `RepoSyncRadarVersion` in `Directory.Build.props`. The GitHub Actions release workflow reads that property and is intentionally manual-only (`workflow_dispatch`), so tag pushes or manually publishing an existing GitHub Release must not trigger another release build. Local one-off packaging may override it with `-p:RepoSyncRadarVersion=<semver>` through `scripts/Build-VelopackRelease.ps1`; do not set ad hoc `<Version>` values in individual projects.
 - Official release assets are installer/update-feed only: pass `-NoPortable -NoLegacyManifest` to `scripts/Build-VelopackRelease.ps1` so unvalidated portable bundles and legacy Squirrel `RELEASES-*` manifests are not published.
 - `scripts/Build-VelopackRelease.ps1` defaults to `-PublishMode SelfContainedPartialTrim`, which bundles .NET and asks Velopack to bootstrap only WebView2. It is not Native AOT; it uses the unsupported WPF partial-trim workaround from dotnet/wpf#3811 and needs installed-package smoke validation before broad use. Pass `-PublishMode FrameworkDependent` only for explicit shared-runtime comparison builds.
