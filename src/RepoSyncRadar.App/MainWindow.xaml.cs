@@ -63,6 +63,13 @@ internal enum WebViewHistoryNavigationDirection
     Forward,
 }
 
+internal enum PreviewScrollDirection
+{
+    Unknown,
+    Up,
+    Down,
+}
+
 /// <summary>
 /// Top-level shell. Hosts a BlazorWebView (UI shell) and WebView2 docs surfaces.
 /// Rendering mode C from DESIGN.md §9.3.
@@ -1370,7 +1377,8 @@ public partial class MainWindow : Window
                 out var sourcePane,
                 out var ratio,
                 out var anchorOffsetPx,
-                out var anchorFingerprint))
+                out var anchorFingerprint,
+                out var scrollDirection))
         {
             return;
         }
@@ -1391,6 +1399,7 @@ public partial class MainWindow : Window
             ratio,
             anchorOffsetPx,
             anchorFingerprint,
+            scrollDirection,
             _previewDiffGeneration);
     }
 
@@ -1522,6 +1531,7 @@ public partial class MainWindow : Window
         double ratio,
         double anchorOffsetPx,
         string? anchorFingerprint,
+        PreviewScrollDirection scrollDirection,
         int generation)
     {
         try
@@ -1536,7 +1546,8 @@ public partial class MainWindow : Window
             var script = BuildApplySynchronizedScrollScript(
                 ratio,
                 double.IsNaN(anchorOffsetPx) ? null : anchorOffsetPx,
-                anchorFingerprint);
+                anchorFingerprint,
+                scrollDirection);
             await targetView.ExecuteScriptAsync(script);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -2048,6 +2059,11 @@ public partial class MainWindow : Window
         return Math.max(0, Math.min(1, currentTop / maxScrollTop));
     };
 
+    const getScrollTop = () => {
+        const root = document.scrollingElement || document.documentElement || document.body;
+        return window.scrollY || root?.scrollTop || 0;
+    };
+
     let frame = 0;
     const handler = () => {
         if (Date.now() < (window[stateKey]?.suppressUntil || 0) || frame !== 0) {
@@ -2058,13 +2074,24 @@ public partial class MainWindow : Window
             if (Date.now() < (window[stateKey]?.suppressUntil || 0)) {
                 return;
             }
+            const currentTop = getScrollTop();
+            const previousTop = window[stateKey]?.lastScrollTop ?? currentTop;
+            const direction = currentTop > previousTop + 0.5
+                ? 'down'
+                : currentTop < previousTop - 0.5
+                    ? 'up'
+                    : '';
+            window[stateKey].lastScrollTop = currentTop;
+            if (!direction) {
+                return;
+            }
             const ratio = getScrollRatio().toFixed(6);
             const anchor = pickAnchor();
             const fingerprint = anchor ? computeFingerprint(anchor.el) : '';
             if (anchor && fingerprint) {
                 const offset = anchor.rect.top.toFixed(2);
                 window.chrome?.webview?.postMessage(
-                    `rsr-preview-scroll:${pane}:${ratio}:${offset}:${fingerprint}`);
+                    `rsr-preview-scroll:${pane}:${ratio}:${offset}:${fingerprint}:${direction}`);
             }
         });
     };
@@ -2073,6 +2100,7 @@ public partial class MainWindow : Window
         pane,
         handler,
         suppressUntil: existing?.suppressUntil || 0,
+        lastScrollTop: existing?.lastScrollTop ?? getScrollTop(),
     };
     window.addEventListener('scroll', handler, { passive: true });
     return true;
@@ -2114,12 +2142,19 @@ public partial class MainWindow : Window
         internal static string BuildApplySynchronizedScrollScript(
             double ratio,
             double? anchorOffsetPx,
-            string? anchorFingerprintBase64)
+            string? anchorFingerprintBase64,
+            PreviewScrollDirection scrollDirection = PreviewScrollDirection.Unknown)
         {
                 var clampedRatio = Math.Clamp(ratio, 0, 1).ToString("R", CultureInfo.InvariantCulture);
                 var hasAnchor = !string.IsNullOrEmpty(anchorFingerprintBase64)
                     && anchorOffsetPx is { } px && double.IsFinite(px);
                 var anchorJson = JsonSerializer.Serialize(hasAnchor ? anchorFingerprintBase64 : string.Empty);
+                var directionJson = JsonSerializer.Serialize(scrollDirection switch
+                {
+                    PreviewScrollDirection.Down => "down",
+                    PreviewScrollDirection.Up => "up",
+                    _ => string.Empty,
+                });
                 var anchorOffsetLiteral = hasAnchor
                     ? anchorOffsetPx!.Value.ToString("R", CultureInfo.InvariantCulture)
                     : "0";
@@ -2132,6 +2167,7 @@ public partial class MainWindow : Window
     }
     const ratio = {{clampedRatio}};
     const anchorFingerprint = {{anchorJson}};
+    const scrollDirection = {{directionJson}};
     const anchorOffsetPx = {{anchorOffsetLiteral}};
     const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
     const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
@@ -2182,7 +2218,12 @@ public partial class MainWindow : Window
                 const delta = targetTop - anchorOffsetPx;
                 const maxDelta = Math.min(360, Math.max(160, window.innerHeight * 0.2));
                 const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, delta));
-                if (Math.abs(clampedDelta) > 0.5) {
+                const directionAllowsDelta = scrollDirection === 'down'
+                    ? clampedDelta > 0
+                    : scrollDirection === 'up'
+                        ? clampedDelta < 0
+                        : true;
+                if (directionAllowsDelta && Math.abs(clampedDelta) > 0.5) {
                     window.scrollBy({ left: 0, top: clampedDelta, behavior: 'auto' });
                 }
                 scrolled = true;
@@ -2203,7 +2244,7 @@ public partial class MainWindow : Window
                 string? message,
                 out PreviewDiffPane pane,
                 out double ratio)
-            => TryParsePreviewScrollMessage(message, out pane, out ratio, out _, out _);
+            => TryParsePreviewScrollMessage(message, out pane, out ratio, out _, out _, out _);
 
         internal static bool TryParsePreviewVersionMessage(string? message, out DocsVersion version)
         {
@@ -2368,11 +2409,27 @@ public partial class MainWindow : Window
                 out double ratio,
                 out double anchorOffsetPx,
                 out string? anchorFingerprint)
+                => TryParsePreviewScrollMessage(
+                message,
+                out pane,
+                out ratio,
+                out anchorOffsetPx,
+                out anchorFingerprint,
+                out _);
+
+            internal static bool TryParsePreviewScrollMessage(
+                string? message,
+                out PreviewDiffPane pane,
+                out double ratio,
+                out double anchorOffsetPx,
+                out string? anchorFingerprint,
+                out PreviewScrollDirection scrollDirection)
         {
                 pane = default;
                 ratio = 0;
                 anchorOffsetPx = double.NaN;
                 anchorFingerprint = null;
+                scrollDirection = PreviewScrollDirection.Unknown;
                 if (string.IsNullOrWhiteSpace(message))
                 {
                         return false;
@@ -2380,7 +2437,8 @@ public partial class MainWindow : Window
 
                 var parts = message.Split(':');
                 // 3-part: legacy ratio-only. 5-part: ratio + anchor (offset, base64 fingerprint).
-                if ((parts.Length != 3 && parts.Length != 5)
+                // 6-part: ratio + anchor + source scroll direction.
+                if ((parts.Length != 3 && parts.Length != 5 && parts.Length != 6)
                         || !string.Equals(parts[0], "rsr-preview-scroll", StringComparison.Ordinal))
                 {
                         return false;
@@ -2405,7 +2463,7 @@ public partial class MainWindow : Window
 
                 ratio = Math.Clamp(parsedRatio, 0, 1);
 
-                if (parts.Length == 5)
+                if (parts.Length is 5 or 6)
                 {
                         if (double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedOffset)
                                 && double.IsFinite(parsedOffset)
@@ -2415,6 +2473,20 @@ public partial class MainWindow : Window
                                 anchorFingerprint = parts[4];
                         }
                 }
+
+                        if (parts.Length == 6)
+                        {
+                            scrollDirection = parts[5] switch
+                            {
+                                "down" => PreviewScrollDirection.Down,
+                                "up" => PreviewScrollDirection.Up,
+                                _ => PreviewScrollDirection.Unknown,
+                            };
+                            if (scrollDirection == PreviewScrollDirection.Unknown)
+                            {
+                                return false;
+                            }
+                        }
 
                 return true;
         }

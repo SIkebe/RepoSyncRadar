@@ -298,12 +298,35 @@ public sealed class MainWindowPreviewComparisonTests
     [InlineData("rsr-preview-scroll:left:0.5")]
     [InlineData("rsr-preview-scroll:before:not-a-number")]
     [InlineData("unrelated:before:0.5")]
-    [InlineData("rsr-preview-scroll:before:0.5:120")] // 4-part is malformed: must be 3 or 5
+    [InlineData("rsr-preview-scroll:before:0.5:120")] // 4-part is malformed: must be 3, 5, or 6
+    [InlineData("rsr-preview-scroll:before:0.5:120:YWJj:sideways")]
     public void TryParsePreviewScrollMessage_Rejects_Invalid_Messages(string? message)
     {
         var parsed = MainWindow.TryParsePreviewScrollMessage(message, out _, out _);
 
         Assert.False(parsed);
+    }
+
+    [Fact]
+    public void TryParsePreviewScrollMessage_Parses_Scroll_Direction()
+    {
+        const string fingerprint = "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==";
+        var message = $"rsr-preview-scroll:after:0.42:120.5:{fingerprint}:down";
+
+        var parsed = MainWindow.TryParsePreviewScrollMessage(
+            message,
+            out var pane,
+            out var ratio,
+            out var anchorOffsetPx,
+            out var anchorFingerprint,
+            out var direction);
+
+        Assert.True(parsed);
+        Assert.Equal(PreviewDiffPane.After, pane);
+        Assert.Equal(0.42, ratio, precision: 6);
+        Assert.Equal(120.5, anchorOffsetPx, precision: 6);
+        Assert.Equal(fingerprint, anchorFingerprint);
+        Assert.Equal(PreviewScrollDirection.Down, direction);
     }
 
     [Fact]
@@ -350,6 +373,8 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const pane = \"before\"", script, StringComparison.Ordinal);
         Assert.Contains("window.addEventListener('scroll'", script, StringComparison.Ordinal);
         Assert.Contains("requestAnimationFrame", script, StringComparison.Ordinal);
+        Assert.Contains("lastScrollTop", script, StringComparison.Ordinal);
+        Assert.Contains("${fingerprint}:${direction}`", script, StringComparison.Ordinal);
         Assert.DoesNotContain("rsr-preview-scroll:${pane}:${ratio}`", script, StringComparison.Ordinal);
     }
 
@@ -402,13 +427,16 @@ public sealed class MainWindowPreviewComparisonTests
         var script = MainWindow.BuildApplySynchronizedScrollScript(
             ratio: 0.5,
             anchorOffsetPx: 120.5,
-            anchorFingerprintBase64: "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==");
+            anchorFingerprintBase64: "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==",
+            scrollDirection: PreviewScrollDirection.Down);
 
         Assert.Contains("U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==", script, StringComparison.Ordinal);
         Assert.Contains("120.5", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollBy", script, StringComparison.Ordinal); // anchor branch uses scrollBy(delta)
         Assert.Contains("const maxDelta = Math.min(360, Math.max(160, window.innerHeight * 0.2));", script, StringComparison.Ordinal);
         Assert.Contains("top: clampedDelta", script, StringComparison.Ordinal);
+        Assert.Contains("const scrollDirection = \"down\"", script, StringComparison.Ordinal);
+        Assert.Contains("directionAllowsDelta", script, StringComparison.Ordinal);
         // Ratio fallback remains available for legacy ratio-only messages, but
         // anchor-bearing messages should not jump by ratio when the peer lacks
         // the changed block.
