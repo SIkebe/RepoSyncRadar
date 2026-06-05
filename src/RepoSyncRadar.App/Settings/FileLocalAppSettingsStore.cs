@@ -13,6 +13,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
 
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
+        PropertyNamingPolicy = JsonNamingPolicy.PascalCase,
         WriteIndented = true,
     };
 
