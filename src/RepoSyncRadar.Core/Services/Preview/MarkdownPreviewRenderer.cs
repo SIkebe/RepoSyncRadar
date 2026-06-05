@@ -263,13 +263,11 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-version-diff-overview{color:var(--rsr-muted);font-size:.78rem;margin:0 0 10px;}");
         html.AppendLine(".rsr-version-diff-list{display:grid;gap:8px;list-style:none;margin:0;padding:0;}");
         html.AppendLine(".rsr-version-diff-item{border:1px solid var(--rsr-border);border-radius:6px;background:var(--rsr-article-bg);padding:10px;}");
-        html.AppendLine(".rsr-version-diff-item--current{box-shadow:inset 3px 0 0 var(--rsr-link);}");
         html.AppendLine(".rsr-version-diff-title{align-items:center;display:flex;flex-wrap:wrap;gap:6px;margin:0 0 6px;font-size:.84rem;}");
         html.AppendLine(".rsr-version-pattern-versions{display:flex;flex-wrap:wrap;gap:5px;list-style:none;margin:0 0 8px;padding:0;}");
         html.AppendLine(".rsr-version-pattern-badge{display:inline-block;padding:2px 7px;background:var(--rsr-th-bg);border:1px solid var(--rsr-border);border-radius:12px;font:inherit;font-size:.72rem;color:var(--rsr-fg);cursor:pointer;}");
         html.AppendLine(".rsr-version-pattern-badge:hover{border-color:var(--rsr-link);color:var(--rsr-link);}");
         html.AppendLine(".rsr-version-pattern-badge--current{background:var(--rsr-liquid-bg);color:var(--rsr-liquid-fg);border-color:var(--rsr-liquid-border);font-weight:600;}");
-        html.AppendLine(".rsr-version-current-chip{border:1px solid var(--rsr-liquid-border);border-radius:999px;color:var(--rsr-liquid-fg);font-size:.7rem;padding:1px 7px;}");
         html.AppendLine(".rsr-version-change{border-left:3px solid var(--rsr-border);display:grid;gap:4px;margin-top:8px;padding-left:8px;}");
         html.AppendLine(".rsr-version-change[data-change-kind='added']{border-left-color:#2da44e;}");
         html.AppendLine(".rsr-version-change[data-change-kind='removed']{border-left-color:#cf222e;}");
@@ -1481,40 +1479,40 @@ internal static partial class MarkdownPreviewRenderer
             return;
         }
 
+        // 表示中の版を含むグループは、本文のインライン差分 (赤/緑マーカー) で
+        // すでに見えているため重複になる。ここでは「表示中の版には出ないが、
+        // 他の版だけで変わる変更」だけを残し、レビュアーが見落としやすい
+        // 他版限定の差分に集中できるようにする (IMPLEMENTATION_PLAN.md §Step 19.9)。
         var groups = BuildVersionImpactGroups(versionImpacts, currentVersion);
+        var otherVersionGroups = groups
+            .Where(group => !group.Versions.Contains(currentVersion))
+            .ToList();
+        if (otherVersionGroups.Count == 0)
+        {
+            return;
+        }
+
         html.Append("<section class=\"rsr-version-diff-summary\" data-testid=\"rsr-version-diff-summary\" aria-label=\"版別差分\">");
         html.Append("<h2>変更パターン</h2>");
         html.Append("<p class=\"rsr-version-diff-overview\">");
-        if (groups.Count == 1)
+        if (otherVersionGroups.Count == 1)
         {
-            html.Append(versionImpacts.Count.ToString(CultureInfo.InvariantCulture))
-                .Append(" 版で同じ変更内容です。");
+            html.Append("表示中の版には出ない、他の版だけの変更です。本文の差分には含まれないため、ここで内容を確認してください。");
         }
         else
         {
-            html.Append(groups.Count.ToString(CultureInfo.InvariantCulture))
-                .Append(" 種類の変更内容があります。版チップが同じ変更を共有する範囲です。");
+            html.Append(otherVersionGroups.Count.ToString(CultureInfo.InvariantCulture))
+                .Append(" 種類の他版限定の変更があります。表示中の版の本文には出ないため、ここで確認してください。");
         }
         html.Append("</p>");
         html.Append("<ul class=\"rsr-version-diff-list\">");
-        for (var groupIndex = 0; groupIndex < groups.Count; groupIndex++)
+        for (var groupIndex = 0; groupIndex < otherVersionGroups.Count; groupIndex++)
         {
-            var group = groups[groupIndex];
-            var isCurrent = group.Versions.Contains(currentVersion);
-            html.Append("<li class=\"rsr-version-diff-item");
-            if (isCurrent)
-            {
-                html.Append(" rsr-version-diff-item--current");
-            }
-            html.Append("\">");
+            var group = otherVersionGroups[groupIndex];
+            html.Append("<li class=\"rsr-version-diff-item\">");
             html.Append("<h3 class=\"rsr-version-diff-title\"><span>")
                 .Append(WebUtility.HtmlEncode(BuildVersionImpactGroupTitle(group, groupIndex)))
-                .Append("</span>");
-            if (isCurrent)
-            {
-                html.Append("<span class=\"rsr-version-current-chip\">表示中</span>");
-            }
-            html.Append("</h3>");
+                .Append("</span></h3>");
 
             AppendVersionPatternBadges(html, group.Versions, currentVersion);
 

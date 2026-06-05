@@ -1418,8 +1418,10 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
-    public void Version_Diff_Summary_Renders_Per_Version_Changes()
+    public void Version_Diff_Summary_Hides_Current_Version_And_Shows_Other_Versions()
     {
+        // 表示中の版 (Ghec) の変更は本文のインライン差分で見えるため、
+        // 変更パターンには出さず、他版限定の変更 (Fpt) だけを残す。
         var impacts = new[]
         {
             new DocsVersionImpactDetail(
@@ -1441,14 +1443,38 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("data-testid=\"rsr-version-diff-summary\"", html, StringComparison.Ordinal);
         Assert.Contains("変更パターン", html, StringComparison.Ordinal);
+        Assert.Contains("Free, Pro, &amp; Team のみ", html, StringComparison.Ordinal);
         Assert.Contains("rsr-version-change-excerpt--removed", html, StringComparison.Ordinal);
         Assert.Contains("rsr-version-change-excerpt--added", html, StringComparison.Ordinal);
         Assert.Contains("text-decoration-line:line-through", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("rsr-version-change-excerpt--removed\">Free old note", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("rsr-version-change-excerpt--added\">Free updated note", html, StringComparison.Ordinal);
-        Assert.Contains("Enterprise Cloud only addition", html, StringComparison.Ordinal);
-        Assert.Contains("rsr-version-diff-item--current", html, StringComparison.Ordinal);
-        Assert.Contains("data-change-kind=\"added\"", html, StringComparison.Ordinal);
+        // 表示中の版 (Ghec) の変更は本文で見えるため重複表示しない。
+        Assert.DoesNotContain("Enterprise Cloud only addition", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-version-diff-item--current", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-version-current-chip", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Version_Diff_Summary_Omitted_When_All_Changes_Are_In_Current_Version()
+    {
+        // すべての差分が表示中の版に含まれる場合、本文のインライン差分と
+        // 完全に重複するため、変更パターンのセクション自体を出さない。
+        var sharedChange = new DocsVersionChangeSnippet(DocsVersionChangeKind.Updated, "Shared old note", "Shared updated note");
+        var impacts = new[]
+        {
+            new DocsVersionImpactDetail(DocsVersion.Fpt, [sharedChange]),
+            new DocsVersionImpactDetail(DocsVersion.Ghec, [sharedChange]),
+        };
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            "# Hello",
+            "abc1234",
+            "PR HEAD",
+            affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec],
+            selectedVersion: DocsVersion.Ghec,
+            versionImpacts: impacts);
+
+        Assert.DoesNotContain("data-testid=\"rsr-version-diff-summary\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1464,16 +1490,18 @@ public sealed class MarkdownPreviewRendererTests
                 [new DocsVersionChangeSnippet(DocsVersionChangeKind.Added, null, "GHES only addition")]),
         };
 
+        // 表示中の版 (GHES 3.20) はどのグループにも含まれないため、
+        // すべての変更パターンが他版限定として表示される。
         var html = MarkdownPreviewRenderer.RenderDocument(
             "content/sample.md",
             "# Hello",
             "abc1234",
             "PR HEAD",
             affectedVersions: [DocsVersion.Fpt, DocsVersion.Ghec, DocsVersion.Ghes("3.21")],
-            selectedVersion: DocsVersion.Ghec,
+            selectedVersion: DocsVersion.Ghes("3.20"),
             versionImpacts: impacts);
 
-        Assert.Contains("2 種類の変更内容があります", html, StringComparison.Ordinal);
+        Assert.Contains("2 種類の他版限定の変更があります", html, StringComparison.Ordinal);
         Assert.Contains("変更パターン 1: 2 版で同じ変更", html, StringComparison.Ordinal);
         Assert.Contains("Free, Pro, &amp; Team", html, StringComparison.Ordinal);
         Assert.Contains("Enterprise Cloud", html, StringComparison.Ordinal);
@@ -1509,7 +1537,7 @@ public sealed class MarkdownPreviewRendererTests
             "PR HEAD",
             context,
             affectedVersions: [DocsVersion.Ghec],
-            selectedVersion: DocsVersion.Ghec,
+            selectedVersion: DocsVersion.Fpt,
             versionImpacts: impacts);
 
         Assert.Contains("Using the audit log API for your enterprise", html, StringComparison.Ordinal);
@@ -1543,7 +1571,7 @@ public sealed class MarkdownPreviewRendererTests
             "PR HEAD",
             context,
             affectedVersions: [DocsVersion.Ghec],
-            selectedVersion: DocsVersion.Ghec,
+            selectedVersion: DocsVersion.Fpt,
             versionImpacts: impacts);
 
         Assert.Contains("Using the audit log API for your enterprise", html, StringComparison.Ordinal);
@@ -1870,7 +1898,7 @@ public sealed class MarkdownPreviewRendererTests
             "abc1234",
             "PR HEAD",
             affectedVersions: [DocsVersion.Fpt],
-            selectedVersion: DocsVersion.Fpt,
+            selectedVersion: DocsVersion.Ghec,
             versionImpacts: impacts);
 
         Assert.Contains("本文のレンダリング済み差分で確認してください", html, StringComparison.Ordinal);
