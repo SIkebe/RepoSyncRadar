@@ -29,11 +29,11 @@ public sealed class AppHost : IAsyncDisposable
     /// <c>appsettings.Local.json</c> usually populates the <c>DocsRepository</c>
     /// section with a real <c>github/docs</c> bare clone path, which would let an
     /// accidental click on "ローカルプレビュー" shell out to <c>git clone --bare</c>
-    /// (5–15 min cold) or fail outright on CI runners without <c>git</c>. The App
+    /// (1-2 min cold) or fail outright on CI runners without <c>git</c>. The App
     /// composes configuration in the order JSON → JSON Local → env vars
     /// (<c>RADAR_</c> prefix), so these trailing entries win and flip
-    /// <c>DocsWorktreeManager.IsEnabled</c> / <c>PreviewServerHost.IsEnabled</c> to
-    /// <c>false</c>. The fake <c>COPILOT_GITHUB_TOKEN</c> value exercises the
+    /// <c>DocsWorktreeManager.IsEnabled</c> to <c>false</c>. The fake
+    /// <c>COPILOT_GITHUB_TOKEN</c> value exercises the
     /// debug-token branch of startup sign-in so CI does not enter OAuth Device Flow
     /// before Blazor has rendered.
     /// </summary>
@@ -43,7 +43,6 @@ public sealed class AppHost : IAsyncDisposable
             ["RADAR_DocsRepository__BareCloneDir"] = string.Empty,
             ["RADAR_DocsRepository__CloneUrl"] = string.Empty,
             ["RADAR_DocsRepository__WorktreeRoot"] = string.Empty,
-            ["RADAR_DocsRepository__PreviewCommand"] = string.Empty,
             ["COPILOT_GITHUB_TOKEN"] = "ghu_e2e_startup_auth_placeholder",
         };
 

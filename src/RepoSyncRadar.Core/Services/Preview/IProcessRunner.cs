@@ -2,12 +2,11 @@ namespace RepoSyncRadar.Core.Services.Preview;
 
 /// <summary>
 /// Thin wrapper around <see cref="System.Diagnostics.Process"/> so that the
-/// preview pipeline (IMPLEMENTATION_PLAN.md §Step 19) can be unit-tested without
-/// spawning real processes. Two flavors:
+/// preview pipeline can be unit-tested without spawning real processes. Two flavors:
 /// <list type="bullet">
 /// <item><see cref="RunAsync"/> — fire-and-wait, captures stdout/stderr (used for <c>git</c> commands).</item>
 /// <item><see cref="Start(string, string, string, IReadOnlyDictionary{string, string?}?)"/>
-/// — long-running sidecar (used for the docs <c>npm run dev</c> server); the caller owns the handle.</item>
+/// — long-running child process; the caller owns the handle.</item>
 /// </list>
 /// </summary>
 public interface IProcessRunner
@@ -26,11 +25,9 @@ public interface IProcessRunner
         => Start(fileName, arguments, workingDirectory, environment: null);
 
     /// <summary>
-    /// Starts <paramref name="fileName"/> as a long-running sidecar with the
+    /// Starts <paramref name="fileName"/> as a long-running child process with the
     /// supplied environment overrides merged on top of the parent process'
-    /// environment. Needed because some preview targets (notably
-    /// <c>github/docs</c>) honor <c>PORT</c> only via environment variables and
-    /// ignore command-line <c>--port</c> flags.
+    /// environment.
     /// </summary>
     IProcessHandle Start(
         string fileName,
@@ -60,10 +57,7 @@ public interface IProcessHandle : IAsyncDisposable
 
     /// <summary>
     /// Most recent lines written to the child's <c>stderr</c>, oldest first.
-    /// <see cref="PreviewServerHost"/> surfaces these in the
-    /// <see cref="InvalidOperationException"/> it throws on startup failure so
-    /// the UI can show <c>cross-env: not found</c> / <c>ENOENT node_modules</c>
-    /// instead of the opaque "did not become ready" message.
+    /// Implementations should keep this bounded for long-running children.
     /// </summary>
     IReadOnlyList<string> RecentStderrLines => Array.Empty<string>();
 }

@@ -3,8 +3,8 @@ using System.Globalization;
 namespace RepoSyncRadar.Core.Services.Preview;
 
 /// <summary>
-/// Maps a <c>github/docs</c> repository path to the URL path the Next.js preview
-/// server expects (IMPLEMENTATION_PLAN.md §Step 19.5). Pure string-only function —
+/// Maps a <c>github/docs</c> repository path to the docs URL path used by
+/// fallback navigation and preview query metadata. Pure string-only function —
 /// no frontmatter or pagelist lookup, so the result is a best-effort guess that
 /// works for the dominant case (English <c>content/&lt;product&gt;/&lt;article&gt;.md</c>)
 /// without requiring network access. The user can still navigate within the

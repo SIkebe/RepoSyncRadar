@@ -96,9 +96,8 @@ Use these repository instructions as the starting point. When code or validated 
 ### Preview Infrastructure
 
 - Official `docs.github.com` may already match a Repo sync PR if deployed. Visual comparison should use local preview of parent SHA vs PR HEAD, not production pages.
-- Preview worktrees and npm/Next dev servers are process-sensitive. Use existing `PreviewServerHost`, `DocsWorktreeManager`, `NextDevServerProcessCleaner`, and `PreviewPortAllocator` patterns instead of ad hoc process cleanup.
+- Markdown preview should use existing `PreviewCoordinator`, `DocsWorktreeManager`, `LocalPreviewContentServer`, and `PreviewPortAllocator` patterns instead of ad hoc git/object reading or local HTTP hosting. `NextDevServerProcessCleaner` remains only for cleaning up legacy worktrees that may be locked by old Next dev servers.
 - Startup docs preview prewarm is opt-in via `DocsRepository:PrewarmOnStartup`; the default must not clone/fetch `github/docs` until a preview action or predictive prewarm needs it.
-- github/docs preview needs `REQUEST_TIMEOUT=600000` because Windows ARM64 first-page compilation can exceed the default 15 seconds.
 
 ### WebView2 Behavior
 
@@ -111,7 +110,7 @@ Use these repository instructions as the starting point. When code or validated 
 ### Markdown/Liquid Rendering
 
 - Markdown/Liquid preview should mimic github/docs rendering. Render `{% octicon "name" ... %}` as Primer Octicons inline SVG with appropriate classes/attributes. Preserve data tag indentation, alert blocks, tool/platform blocks, prompt blocks, code tab blocks, and Copilot links where practical.
-- Markdown comparison preview should read Markdown and referenced Liquid inputs from the bare clone by SHA (`git show`/`git ls-tree`) instead of creating full worktrees; reserve full worktrees for npm/Next preview. For binary or static assets referenced by Markdown, extract only the needed files from the same commit into the preview asset cache so screenshots do not break.
+- Markdown comparison preview should read Markdown and referenced Liquid inputs from the bare clone by SHA (`git show`/`git ls-tree`) instead of creating full worktrees. For binary or static assets referenced by Markdown, extract only the needed files from the same commit into the preview asset cache so screenshots do not break.
 - Markdown preview Liquid context must stay lazy but complete for the clicked file: load referenced reusables, AUTOTITLE targets, and referenced `data/**/*.yml` sequence files used by `for` loops such as `tables.copilot.models-and-pricing`; do not fall back to all-repo reusable/content scans for interactivity.
 - Markdown preview should also load referenced `data/tables/**/*.yml` mapping objects and the GHES `enterpriseServerReleases` object when pages use Liquid mapping loops, `assign`, `case/when`, dynamic bracket lookups, or release-date tables.
 - Markdown preview `ifversion` evaluation should load referenced `data/features/*.yml` files so known feature flags use their real `versions` mapping; unknown feature flags should remain conservatively visible.

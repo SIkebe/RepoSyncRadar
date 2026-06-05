@@ -10,10 +10,10 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 /// Tests for <see cref="SystemProcessRunner"/>'s executable resolution.
 /// On Windows, <see cref="System.Diagnostics.Process.Start(System.Diagnostics.ProcessStartInfo)"/>
 /// with <c>UseShellExecute = false</c> delegates to the Win32 <c>CreateProcess</c> API,
-/// which only auto-appends <c>.exe</c> when searching <c>PATH</c>. Tools like
-/// <c>npm</c> ship as <c>npm.cmd</c> on Windows, so a bare command name like
-/// <c>"npm"</c> fails with "the system cannot find the file specified" even when
-/// <c>nodejs</c> is on PATH. <see cref="SystemProcessRunner.ResolveExecutable"/>
+/// which only auto-appends <c>.exe</c> when searching <c>PATH</c>. Some tools
+/// ship as <c>.cmd</c> wrappers on Windows, so a bare command name can fail
+/// with "the system cannot find the file specified" even when the tool
+/// directory is on PATH. <see cref="SystemProcessRunner.ResolveExecutable"/>
 /// walks <c>PATH</c> × <c>PATHEXT</c> to recover the full path before handing it
 /// to <c>CreateProcess</c>.
 /// </summary>
@@ -40,55 +40,55 @@ public sealed class SystemProcessRunnerTests
     [Fact]
     public void ResolveExecutable_Returns_Input_When_FileName_Already_Has_Extension()
     {
-        // If the caller explicitly typed "npm.cmd" we should not second-guess them.
+        // If the caller explicitly typed "tool.cmd" we should not second-guess them.
         var resolved = SystemProcessRunner.ResolveExecutable(
-            "npm.cmd",
-            pathEnv: @"C:\nodejs",
+            "tool.cmd",
+            pathEnv: @"C:\tools",
             pathExtEnv: ".COM;.EXE;.BAT;.CMD",
             fileExists: _ => true);
 
-        Assert.Equal("npm.cmd", resolved);
+        Assert.Equal("tool.cmd", resolved);
     }
 
     [Fact]
     public void ResolveExecutable_Finds_Cmd_On_Path_When_Extension_Is_Omitted()
     {
-        // The whole point: PATH has C:\nodejs which contains npm.cmd. CreateProcess
+        // The whole point: PATH has C:\tools which contains tool.cmd. CreateProcess
         // would not find this without help because it only auto-appends .exe.
         // The returned path mirrors the PATHEXT entry's casing (Windows treats
         // filenames case-insensitively, so this is purely cosmetic).
         var fakeFs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            @"C:\nodejs\npm.cmd",
+            @"C:\tools\tool.cmd",
         };
 
         var resolved = SystemProcessRunner.ResolveExecutable(
-            "npm",
-            pathEnv: @"C:\Windows;C:\nodejs",
+            "tool",
+            pathEnv: @"C:\Windows;C:\tools",
             pathExtEnv: ".COM;.EXE;.BAT;.CMD",
             fileExists: fakeFs.Contains);
 
-        Assert.Equal(@"C:\nodejs\npm.CMD", resolved);
+        Assert.Equal(@"C:\tools\tool.CMD", resolved);
     }
 
     [Fact]
     public void ResolveExecutable_Prefers_Earlier_Path_Entry()
     {
-        // Mimics a user who has two Node installs on PATH; the first one wins,
+        // Mimics a user who has two tool installs on PATH; the first one wins,
         // matching CreateProcess search semantics.
         var fakeFs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            @"C:\nodejs-lts\npm.cmd",
-            @"C:\nodejs-current\npm.cmd",
+            @"C:\tools-old\tool.cmd",
+            @"C:\tools-new\tool.cmd",
         };
 
         var resolved = SystemProcessRunner.ResolveExecutable(
-            "npm",
-            pathEnv: @"C:\nodejs-lts;C:\nodejs-current",
+            "tool",
+            pathEnv: @"C:\tools-old;C:\tools-new",
             pathExtEnv: ".CMD",
             fileExists: fakeFs.Contains);
 
-        Assert.Equal(@"C:\nodejs-lts\npm.CMD", resolved);
+        Assert.Equal(@"C:\tools-old\tool.CMD", resolved);
     }
 
     [Fact]
@@ -118,7 +118,7 @@ public sealed class SystemProcessRunnerTests
         // wrapping path in RunAsync/Start so the UX message stays consistent.
         var resolved = SystemProcessRunner.ResolveExecutable(
             "definitely-not-on-path-xyz",
-            pathEnv: @"C:\Windows;C:\nodejs",
+            pathEnv: @"C:\Windows;C:\tools",
             pathExtEnv: ".COM;.EXE;.BAT;.CMD",
             fileExists: _ => false);
 
@@ -129,19 +129,19 @@ public sealed class SystemProcessRunnerTests
     public void ResolveExecutable_Ignores_Empty_And_Quoted_Path_Entries()
     {
         // Windows PATH frequently contains stray semicolons and quoted entries
-        // ("C:\Program Files\nodejs"). Both should resolve cleanly.
+        // ("C:\Program Files\Tools"). Both should resolve cleanly.
         var fakeFs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            @"C:\Program Files\nodejs\npm.cmd",
+            @"C:\Program Files\Tools\tool.cmd",
         };
 
         var resolved = SystemProcessRunner.ResolveExecutable(
-            "npm",
-            pathEnv: ";;\"C:\\Program Files\\nodejs\";",
+            "tool",
+            pathEnv: ";;\"C:\\Program Files\\Tools\";",
             pathExtEnv: ".CMD",
             fileExists: fakeFs.Contains);
 
-        Assert.Equal(@"C:\Program Files\nodejs\npm.CMD", resolved);
+        Assert.Equal(@"C:\Program Files\Tools\tool.CMD", resolved);
     }
 
     [Fact]
@@ -161,13 +161,11 @@ public sealed class SystemProcessRunnerTests
     [Fact]
     public void AppendBuffered_Collapses_Consecutive_Identical_Lines()
     {
-        // Real-world trigger: Next.js' App Router prints the same `i18n
-        // configuration ... unsupported` warning once per affected page,
-        // which would otherwise flood the 64-line ring buffer and push the
-        // real root-cause line out before the UI can sample it.
+        // Repeated warnings would otherwise flood the 64-line ring buffer and
+        // push the real root-cause line out before the UI can sample it.
         var buffer = new List<string>();
         var gate = new object();
-        const string warning = "⚠ i18n configuration in next.config.ts is unsupported in App Router.";
+        const string warning = "⚠ repeated warning from child process.";
 
         for (var i = 0; i < 5; i++)
         {

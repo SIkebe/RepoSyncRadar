@@ -171,29 +171,9 @@
                     <span>@L["LocalSettings.Label.WorktreeRoot"]</span>
                     <input data-testid="settings-docsrepo-worktree-root" value="@settings.DocsRepository.WorktreeRoot" disabled="@_saving" @oninput="e => settings.DocsRepository.WorktreeRoot = StringValue(e)" />
                 </label>
-                <label class="local-settings-field">
-                    <span>@L["LocalSettings.Label.MaxWorktrees"]</span>
-                    <input type="number" min="1" max="50" data-testid="settings-docsrepo-max-worktrees" value="@settings.DocsRepository.MaxWorktrees" disabled="@_saving" @oninput="e => settings.DocsRepository.MaxWorktrees = IntValue(e)" />
-                </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-docsrepo-prewarm-on-startup" checked="@settings.DocsRepository.PrewarmOnStartup" disabled="@_saving" @onchange="e => settings.DocsRepository.PrewarmOnStartup = BoolValue(e)" />
                     <span>@L["LocalSettings.Label.PrewarmOnStartup"]</span>
-                </label>
-                <label class="local-settings-field">
-                    <span>@L["LocalSettings.Label.PreviewCommand"]</span>
-                    <input data-testid="settings-docsrepo-preview-command" value="@settings.DocsRepository.PreviewCommand" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewCommand = StringValue(e)" />
-                </label>
-                <label class="local-settings-field wide">
-                    <span>@L["LocalSettings.Label.PreviewArguments"]</span>
-                    <input data-testid="settings-docsrepo-preview-arguments" value="@settings.DocsRepository.PreviewArguments" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewArguments = StringValue(e)" />
-                </label>
-                <label class="local-settings-field wide">
-                    <span>@L["LocalSettings.Label.PreviewInstallArguments"]</span>
-                    <input data-testid="settings-docsrepo-preview-install-arguments" value="@settings.DocsRepository.PreviewInstallArguments" disabled="@_saving" @oninput="e => settings.DocsRepository.PreviewInstallArguments = StringValue(e)" />
-                </label>
-                <label class="local-settings-field wide">
-                    <span>@L["LocalSettings.Label.PreviewEnvironment"]</span>
-                    <textarea rows="3" data-testid="settings-docsrepo-preview-environment" disabled="@_saving" @bind="_previewEnvironmentText" @bind:event="oninput"></textarea>
                 </label>
                 <label class="local-settings-field">
                     <span>@L["LocalSettings.Label.PreviewBasePort"]</span>
@@ -261,7 +241,6 @@
     private string _allowedHostsText = string.Empty;
     private string _webViewAllowedHostsText = string.Empty;
     private string _oauthScopesText = string.Empty;
-    private string _previewEnvironmentText = string.Empty;
 
     private void ApplyDisplayCultureForRender()
         => AppDisplayCulture.Apply(DisplayCulture);
@@ -308,8 +287,6 @@
             next.Copilot.AllowedUrlHosts = SplitLines(_allowedHostsText);
             next.WebView.AllowedUrlHosts = SplitLines(_webViewAllowedHostsText);
             next.Copilot.OAuthScopes = SplitLines(_oauthScopesText);
-            next.DocsRepository.PreviewEnvironment = ParseKeyValueLines(_previewEnvironmentText);
-
             var store = Services.GetRequiredService<ILocalAppSettingsStore>();
             await store.SaveAsync(next, CancellationToken.None);
             _settings = store.Current.Clone();
@@ -339,11 +316,6 @@
         _allowedHostsText = JoinLines(settings.Copilot.AllowedUrlHosts);
         _webViewAllowedHostsText = JoinLines(settings.WebView.AllowedUrlHosts);
         _oauthScopesText = JoinLines(settings.Copilot.OAuthScopes);
-        _previewEnvironmentText = string.Join(
-            Environment.NewLine,
-            settings.DocsRepository.PreviewEnvironment
-                .OrderBy(static pair => pair.Key, StringComparer.Ordinal)
-                .Select(static pair => $"{pair.Key}={pair.Value}"));
     }
 
     private static string StringValue(ChangeEventArgs e)
@@ -384,33 +356,4 @@
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-    private static Dictionary<string, string> ParseKeyValueLines(string value)
-    {
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var rawLine in value.Split(["\r\n", "\n"], StringSplitOptions.None))
-        {
-            var line = rawLine.Trim();
-            if (line.Length == 0)
-            {
-                continue;
-            }
-
-            var separator = line.IndexOf('=', StringComparison.Ordinal);
-            if (separator <= 0)
-            {
-                throw new FormatException("PreviewEnvironment は KEY=VALUE 形式で指定してください。");
-            }
-
-            var key = line[..separator].Trim();
-            var settingValue = line[(separator + 1)..].Trim();
-            if (key.Length == 0)
-            {
-                throw new FormatException("PreviewEnvironment のキーは空にできません。");
-            }
-
-            result[key] = settingValue;
-        }
-
-        return result;
-    }
 }

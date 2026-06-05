@@ -47,9 +47,9 @@ This checklist captures the current public-release blockers and must-fix follow-
 4. **Document organization approval behavior**
    - Required: explain that organizations with OAuth App access restrictions may require owner approval for the RepoSyncRadar OAuth App before organization resources can be accessed.
 
-5. **Review local preview execution risk**
-   - Current state: optional local preview can run `npm install` and `npm run dev` in a `github/docs` worktree when configured.
-   - Required: keep preview disabled by default, document that it executes repository scripts locally, and consider a first-use confirmation before running install/dev commands.
+5. **Review local preview data handling**
+   - Current state: optional local preview reads public `github/docs` content from a bare clone and renders Markdown/Liquid in-process.
+   - Required: keep preview disabled by default until configured and document local clone/cache storage plus cleanup behavior.
 
 ## P2: Should Fix For A Polished Public Release
 

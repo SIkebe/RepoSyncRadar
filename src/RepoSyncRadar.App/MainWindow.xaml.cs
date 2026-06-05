@@ -965,7 +965,7 @@ public partial class MainWindow : Window
     /// <summary>
     /// §Step 19.9: ヘッダーの Version ComboBox を request.CurrentVersion / AffectedVersions に
     /// 同期させる。Markdown プレビュー (= CurrentVersion もう) のときにのみ
-    /// 可視にし、Next.js 経路や URL 取照表示時は隠す。
+    /// 可視にし、単一 URL 表示時は隠す。
     /// </summary>
     private void UpdateDocsVersionSelector(PreviewComparisonRequest request)
     {
@@ -1103,7 +1103,7 @@ public partial class MainWindow : Window
         ShowPreviewPaneStatus(
             isBeforePane,
             isBeforePane ? "変更前ページを読み込み中…" : "PR HEAD ページを読み込み中…",
-            "localhost の応答と WebView2 の描画完了を待っています。初回は Next.js のページコンパイルで時間がかかることがあります。");
+            "localhost の応答と WebView2 の描画完了を待っています。初回は Markdown/Liquid の入力解決で時間がかかることがあります。");
     }
 
     private void OnDocsViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -1670,7 +1670,7 @@ public partial class MainWindow : Window
 
     private void ShowInitialComparisonLoadingStatus(PreviewComparisonRequest request)
     {
-        var detail = "サーバ起動後、WebView2 のナビゲーションと Next.js のページコンパイル完了を待っています。";
+        var detail = "サーバ起動後、WebView2 のナビゲーションと Markdown/Liquid preview の描画完了を待っています。";
         ShowPreviewPaneStatus(isBeforePane: true, "変更前ページを準備中…", detail);
         ShowPreviewPaneStatus(isBeforePane: false, "PR HEAD ページを準備中…", detail);
     }

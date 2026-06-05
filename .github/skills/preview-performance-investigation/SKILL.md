@@ -13,9 +13,9 @@ RepoSyncRadar の docs preview / Markdown comparison / cache cleanup の遅延�
 ## いつ使うか
 
 - 「このコミットのプレビューが遅い」「180秒かかった」など、特定の commit / PR / file で preview が重いとき
-- cache cleanup、worktree cleanup、Next/dev server cleanup が長く UI を止めるとき
+- cache cleanup、legacy worktree cleanup、stale server cleanup が長く UI を止めるとき
 - Markdown preview に未展開の Liquid、AUTOTITLE、reusables、data table が残るとき
-- `github/docs` の docs preview で fetch、checkout、worktree、Liquid rendering、WebView2 navigation のどこが詰まっているか切り分けたいとき
+- `github/docs` の docs preview で fetch、git show、git ls-tree、Liquid rendering、WebView2 navigation のどこが詰まっているか切り分けたいとき
 - 性能修正を実アプリ操作と full build/test gate まで通して確認したいとき
 
 ## 絶対ルール
@@ -35,7 +35,7 @@ RepoSyncRadar の docs preview / Markdown comparison / cache cleanup の遅延�
 ユーザーの説明から、次を抽出する。
 
 - commit SHA、PR番号、PRタイトル、分類キュー
-- 遅い操作: preview open / Markdown comparison / Next preview / cache cleanup / first navigation
+- 遅い操作: preview open / Markdown comparison / cache cleanup / first navigation
 - 遅い対象file path
 - 体感時間または実測時間
 - 許容目標: 数秒、十数秒、UIをブロックしない、など
@@ -94,7 +94,7 @@ dotnet run --project src/RepoSyncRadar.App
 - 1ファイルのMarkdown比較なら full worktree を作らない。
 - bare clone に対する `git show <sha>:<path>` で before/after Markdown を読む。
 - file listing は `git ls-tree` で必要ディレクトリだけ見る。
-- full worktree は npm/Next preview など本当に必要なときだけ使う。
+- full worktree は legacy cleanup など本当に必要なときだけ使う。
 
 #### Liquid context loading が遅い
 

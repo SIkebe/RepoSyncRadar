@@ -9,8 +9,7 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 /// Tests covering <see cref="SystemProcessRunner.BuildStartInfo"/>, the bit of
 /// <see cref="SystemProcessRunner.Start(string, string, string, IReadOnlyDictionary{string, string?}?)"/>
 /// that can be exercised without spawning a real child. The merge semantics
-/// are the contract <see cref="PreviewServerHost"/> relies on to thread
-/// <c>PORT</c> through to the docs server.
+/// keep callers from mutating the parent process environment.
 /// </summary>
 public sealed class SystemProcessRunnerStartInfoTests
 {
@@ -33,10 +32,9 @@ public sealed class SystemProcessRunnerStartInfoTests
     [Fact]
     public void Forces_Utf8_For_Redirected_Streams()
     {
-        // Required so child diagnostics with non-ASCII glyphs (e.g. Next.js'
-        // "⚠ i18n configuration ... unsupported" App Router warning) survive
-        // the pipe intact on locales where Console.OutputEncoding defaults
-        // to a Windows code page (CP932 on Japanese Windows).
+        // Required so child diagnostics with non-ASCII glyphs survive the pipe
+        // intact on locales where Console.OutputEncoding defaults to a Windows
+        // code page (CP932 on Japanese Windows).
         var psi = SystemProcessRunner.BuildStartInfo(
             "where",
             "PATH",

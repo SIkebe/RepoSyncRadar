@@ -6,7 +6,7 @@ namespace RepoSyncRadar.Integrations.Tests.Preview;
 /// <summary>
 /// Tests for <see cref="SystemProcessRunner"/>. The crucial behaviour for the UI is
 /// that <see cref="System.ComponentModel.Win32Exception"/> from <c>Process.Start</c>
-/// (e.g. "the system cannot find the file specified" when <c>git</c> / <c>npm</c>
+/// (e.g. "the system cannot find the file specified" when <c>git</c>
 /// is not on PATH) gets wrapped into an <see cref="InvalidOperationException"/>
 /// so the calling Blazor component can show a friendly status message instead of
 /// the WPF host crashing with an unhandled exception.
@@ -45,8 +45,8 @@ public sealed class SystemProcessRunnerTests
     {
         // We need this to be reliable on Windows (the project's only target).
         // `cmd /c echo ... & echo ... 1>&2` exits immediately and writes one line
-        // to each stream — exactly the surface PreviewServerHost queries when
-        // emitting "なぜ起動できなかったか" to the UI.
+        // to each stream — the surface callers use when surfacing startup
+        // diagnostics to the UI.
         if (!OperatingSystem.IsWindows())
         {
             return;

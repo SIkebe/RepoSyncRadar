@@ -1,14 +1,14 @@
 namespace RepoSyncRadar.Core.Services.Preview;
 
 /// <summary>
-/// Tracks the currently-active local preview servers so that the WebView2 resource
+/// Tracks the currently-active local preview server so that the WebView2 resource
 /// filter in <c>MainWindow</c> can let <c>http://localhost:{port}/*</c> through
-/// alongside the regular HTTPS allow-list (IMPLEMENTATION_PLAN.md §Step 19.5).
+/// alongside the regular HTTPS allow-list.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Registered as a singleton. <see cref="PreviewCoordinator"/> calls
-/// <see cref="Activate(int[])"/> after starting the sidecars, and <c>MainWindow</c>
+/// <see cref="Activate(int[])"/> after starting the local content server, and <c>MainWindow</c>
 /// checks <see cref="IsAllowed(Uri)"/> from the WebView2 <c>WebResourceRequested</c>
 /// handler. Both operations are guarded by an internal lock — the writer (the
 /// Razor button on the dispatcher) and the reader (the WebView2 worker) live on

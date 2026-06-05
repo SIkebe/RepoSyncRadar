@@ -27,10 +27,10 @@
 - [Step 16. Review UI(注目 / 保留 / 見送り候補 / アーカイブ / Ignore)](#step-16-review-ui注目--保留--見送り候補--アーカイブ--ignore)
 - [Step 17. Adoption セッション + 共有文案](#step-17-adoption-セッション--共有文案)
 - [Step 18. Ask Palette 再設計待ち](#step-18-ask-palette-再設計待ち)
-- [Step 19. ローカルプレビュー(bare clone + worktree)](#step-19-ローカルプレビューbare-clone--worktree)
+- [Step 19. ローカルプレビュー(bare clone + Markdown/Liquid renderer)](#step-19-ローカルプレビューbare-clone--markdownliquid-renderer)
 - [Step 19.5. ローカルプレビューの UI 配線](#step-195-ローカルプレビューの-ui-配線)
 - [Step 19.6. ローカルプレビューの起動時間を抜本短縮](#step-196-ローカルプレビューの起動時間を抜本短縮)
-- [Step 19.7. 対象ページのインプロセス・レンダリング (Next.js バイパス)](#step-197-対象ページのインプロセスレンダリング-nextjs-バイパス)
+- [Step 19.7. 対象ページのインプロセス・レンダリング](#step-197-対象ページのインプロセスレンダリング)
 - [Step 19.8. 公式 docs へのジャンプ + Liquid タグの可視化](#step-198-公式-docs-へのジャンプ--liquid-タグの可視化)
 - [Step 19.9. ifversion / バージョン認識 + Version ComboBox](#step-199-ifversion--バージョン認識--version-combobox)
 - [Step 20. 配布(Velopack)とシークレット保管(DPAPI)](#step-20-配布velopackとシークレット保管dpapi)
@@ -742,7 +742,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 ---
 
-## Step 19. ローカルプレビュー(bare clone + worktree)
+## Step 19. ローカルプレビュー(bare clone + Markdown/Liquid renderer)
 
 ### 19.1 目的
 
@@ -753,11 +753,10 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
 - `RepoSyncRadar.Core/Services/Preview/DocsWorktreeManager.cs`
   - `EnsureBareCloneAsync()` — 存在しなければ `git clone --bare`
   - `FetchPrAsync(int pr)` — `git fetch origin +refs/pull/N/head:refs/pull/N/head`
-  - `CheckoutAsync(string sha)` → worktree のパスを返す
-  - LRU で `MaxWorktrees` を超えたら古いものを `git worktree remove --force`
-- `RepoSyncRadar.Core/Services/Preview/PreviewServerHost.cs`
-  - sidecar `next dev` を子プロセスで起動、ポート割当
-  - プロセスは `IAsyncDisposable` で確実に終了
+  - `ReadFileTextAsync` / `ListFilesAsync` / `MaterializeFilesAsync` — 指定 SHA の入力を bare clone から読む
+- `RepoSyncRadar.Core/Services/Preview/LocalPreviewContentServer.cs`
+  - Markdown/Liquid renderer の出力を loopback HTTP で配信する
+  - `PreviewSession` の allow-list に必要なポートだけを登録する
 - 設定が空ならこの機能はオフ。失敗してもアプリ全体は起動する(Graceful degradation)
 
 ### 19.3 テスト
@@ -770,23 +769,16 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
 |---|---|
 | `EnsureBareCloneAsync_Skips_When_Exists` | `Directory.Exists` true で `clone` を呼ばない |
 | `FetchPrAsync_Builds_Correct_Refspec` | `+refs/pull/123/head:refs/pull/123/head` |
-| `CheckoutAsync_Reuses_Existing_Worktree` | 同じ SHA で 2 回呼んでも `worktree add` は 1 回 |
-| `Lru_Evicts_Oldest` | `MaxWorktrees=3` で 4 つ目を追加 → 最古が remove される |
+| `ReadFileTextAsync_Quotes_Sha_Pathspec` | SHA と pathspec を安全に `git show` へ渡す |
+| `MaterializeFilesAsync_Extracts_Assets` | 必要な静的 asset だけを preview cache に展開する |
 | `Disabled_When_Path_Empty` | `Options.BareCloneDir` が空文字なら全メソッドが no-op |
-
-`Integrations.Tests/Preview/PreviewServerHostTests.cs`
-
-| テスト | 内容 |
-|---|---|
-| `Start_Spawns_Process_With_Port` | `IProcessRunner` のスタブが正しい引数を受ける |
-| `DisposeAsync_Kills_Process` | プロセス kill が呼ばれる |
 
 ### 19.4 完了基準
 
 - 上記 7 件が緑
 - 手動: `appsettings.Local.json` に `DocsRepository` セクションを書いた状態で、PR HEAD を Before/After 表示できる
 
-> **補足 (2026-05-14):** Step 19 では Core 層の `DocsWorktreeManager` / `PreviewServerHost` および単体テストまでが範囲。UI 配線 (ボタン → coordinator → WebView2) は Step 19.5 で扱う。
+> **補足 (2026-06-05):** 旧 Node/real-site preview 経路は死んだ経路として削除済み。Step 19 系の現在の実装は bare clone から必要入力だけを読み、Markdown/Liquid renderer と `LocalPreviewContentServer` で表示する。
 
 ---
 
@@ -794,20 +786,18 @@ Phase 6 相当。PR HEAD の見た目を `Before` / `After` で並べる。
 
 ### 19.5.1 目的
 
-Step 19 で完成した Core サービスを **実際に画面から呼べる** ようにする。コミット詳細ペインに「ローカルプレビュー」ボタンを置き、bare clone + worktree + sidecar 起動を 1 クリックで実行し、右側の WebView2 に `http://localhost:{port}/...` を表示する。
+Step 19 で完成した Core サービスを **実際に画面から呼べる** ようにする。コミット詳細ペインに「ローカルプレビュー」ボタンを置き、bare clone から読み出した Markdown/Liquid preview を右側の WebView2 に表示する。
 
 ### 19.5.2 スコープ
 
 - `RepoSyncRadar.Core/Services/Preview/PreviewPathMapper.cs` — `content/foo/bar.md` → `/en/foo/bar`、`content/foo/index.md` → `/en/foo`。純粋関数。`data/...` や frontmatter 不要パスは `null`。
 - `RepoSyncRadar.Core/Services/Preview/PreviewSession.cs` — アクティブなプレビューの port 状態を保持するシングルトン。`Activate(int port)` / `Deactivate()` / `IsAllowed(Uri)` (loopback + 同 port のみ通す)。WebView2 リソースフィルタが allow-list の OR として使う。
-- `RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs` — `IPreviewCoordinator.PreparePreviewAsync(int prNumber, string sha, string filePath, CancellationToken)` を実装:
+- `RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs` — `IPreviewCoordinator.PrepareMarkdownComparisonPreviewAsync(int prNumber, string beforeSha, string afterSha, string filePath, string? docsVersion, CancellationToken)` を実装:
   1. `DocsWorktreeManager.EnsureBareCloneAsync`
   2. `DocsWorktreeManager.FetchPrAsync(prNumber)`
-  3. `DocsWorktreeManager.CheckoutAsync(sha)`
-  4. 同 SHA で前回起動していなければ `PreviewServerHost.StartAsync(worktree, port)` で sidecar 起動
-  5. `PreviewPathMapper` で `filePath` → URL パスを解決 (失敗時はトップへフォールバック)
-  6. `PreviewSession.Activate(port)` を呼んで allow-list を開ける
-  7. `PreviewLink(Uri Url, int Port, string WorktreePath)` を返す。disabled なら `null`。
+  3. before / after SHA の Markdown と参照 Liquid 入力を読み出す
+  4. `MarkdownPreviewRenderer` で比較 HTML を生成する
+  5. `LocalPreviewContentServer` の URL と `PreviewComparisonLink` を返す。disabled なら `null`。
 - `RepoSyncRadar.App/Components/IPreviewNavigator.cs` — Razor → WPF 用の event-based pub/sub (`IReviewBroadcaster` と同じパターン)。`event EventHandler<Uri>? Requested;` + `Publish(Uri)`。
 - `RepoSyncRadar.App/Components/PreviewActions.razor` — 選択中コミットの隣に表示するボタン。クリックで `IPreviewCoordinator` を呼び、戻り値の URL を `IPreviewNavigator.Publish` へ。状態 (idle / running / error) と最終 URL を表示。
 - `RepoSyncRadar.App/MainWindow.xaml.cs` — `IPreviewNavigator.Requested` を購読し、`Dispatcher` 経由で `DocsView.Source` を差し替え。`OnWebResourceRequested` を `_allowList.IsAllowed(uri) || _previewSession.IsAllowed(uri)` に変更。
@@ -838,9 +828,9 @@ Step 19 で完成した Core サービスを **実際に画面から呼べる** 
 | テスト | 内容 |
 |---|---|
 | `Disabled_Returns_Null` | `BareCloneDir` 空文字 → `null` を返し他のサービスは呼ばれない |
-| `Runs_Steps_In_Order` | Ensure → Fetch → Checkout → Start の呼び出し順を `Received.InOrder` で検証 |
-| `Same_Sha_Skips_Server_Restart` | 連続 2 回呼んでも `StartAsync` は 1 回だけ |
-| `Different_Sha_Restarts_Server` | SHA を切り替えると `StartAsync` が 2 回呼ばれる |
+| `Runs_Steps_In_Order` | Ensure → Fetch → read/render の呼び出し順を検証 |
+| `Same_File_Reuses_Content_Server` | 連続 2 回呼んでも content server を再作成しない |
+| `Different_File_Updates_Content` | ファイルを切り替えると preview URL が更新される |
 | `Maps_File_Path_To_Url` | `filePath = content/foo/bar.md` → 戻り値の `Url.PathAndQuery` が `/en/foo/bar` |
 | `Activates_Preview_Session` | 成功時に `PreviewSession.IsAllowed(http://localhost:port)` が `true` になる |
 
@@ -863,15 +853,13 @@ Step 19 で完成した Core サービスを **実際に画面から呼べる** 
 
 ### 19.6.1 目的
 
-Step 19.5 完了後、ユーザから「プレビューが利用できるようになるまでの時間がかかりすぎ」というフィードバック。コールドスタートで「ローカルプレビュー」を押してから WebView2 が表示されるまでに、bare clone (1〜2 分) + `git fetch` (10〜30 秒) + `npm install` (30 秒〜1 分) + Next.js 初回コンパイル (10〜30 秒) が直列で積み上がっていた。各フェーズを並列化・先取り・共有することで、ユーザ視点の体感待ち時間を「Next.js コンパイル時間 + α」まで圧縮する。
+Step 19.5 完了後、ユーザから「プレビューが利用できるようになるまでの時間がかかりすぎ」というフィードバック。コールドスタートで「ローカルプレビュー」を押してから WebView2 が表示されるまでに、bare clone (1〜2 分) + `git fetch` (10〜30 秒) が残るため、bare clone / fetch を先取りしてユーザ視点の体感待ち時間を圧縮する。
 
 ### 19.6.2 スコープ(5 イテレーション分)
 
-1. **比較プレビューサーバの並列起動** — `PreviewCoordinator.PrepareComparisonPreviewAsync` で before / after の `PreviewServerHost.StartAsync` を `Task.WhenAll` で同時実行 (どちらも単一プロセスを持つ別インスタンス)。冷スタート時間が概ね半分に。
-2. **`node_modules` ジャンクション共有** — `INodeModulesShareManager` + `NodeModulesShareManager` を新設。`<WorktreeRoot>/.shared-node-modules/<package-lock SHA-256 先頭 16hex>/node_modules` を Windows directory junction (`cmd /c mklink /J`) で各 worktree に張る。lockfile が同一なら 2 つ目以降の worktree は `npm install` を完全スキップ。`.complete` センチネルを書く前にプロセス内 `SemaphoreSlim` ゲートで並列インストールを直列化。失敗時は通常の `npm install` にフォールバック。
-3. **App 起動時の bare clone プリウォーム** — `IPreviewCoordinator.PrewarmAsync(CT)` を追加し、`App.OnStartup` で fire-and-forget。初回起動時の `git clone --bare` (github/docs で 1〜2 分) を背景で済ませる。失敗は `LogPreviewPrewarmFailed` でログのみ。
-4. **PR 選択時の予測プリウォーム** — `IPreviewCoordinator.PredictivePrewarmAsync(prNumber, sha, CT)` を追加。`PreviewActions.OnParametersSet` で `_activePreviewSha` が変わるたびに fire-and-forget で発火 (前回ぶんは `CancellationTokenSource.Cancel`)。`EnsureBareCloneAsync` + `FetchPrAsync` までを進める (`CheckoutAsync` は本筋経路と Dictionary を共有するので含めない)。ユーザがボタンを押した時点で `git fetch` が完了済み。
-5. **インストール / コンパイル フェーズ可視化** — `PreviewServerHost.StartAsync` に `IProgress<string>?` 引数を追加。`node_modules` 不在時は「node_modules を準備中… (このリポジトリでの初回は数分かかります)」を、その後常に「Next.js dev サーバを起動中…」を順に Report。`PreviewCoordinator` から `progress` をそのまま渡して、ユーザは「まだ install 中」と「Next.js が起動中」を区別できる。
+1. **App 起動時の bare clone プリウォーム** — `IPreviewCoordinator.PrewarmAsync(CT)` を追加し、`App.OnStartup` で fire-and-forget。初回起動時の `git clone --bare` (github/docs で 1〜2 分) を背景で済ませる。失敗は `LogPreviewPrewarmFailed` でログのみ。
+2. **PR 選択時の予測プリウォーム** — `IPreviewCoordinator.PredictivePrewarmAsync(prNumber, sha, CT)` を追加。`PreviewActions.OnParametersSet` で `_activePreviewSha` が変わるたびに fire-and-forget で発火 (前回ぶんは `CancellationTokenSource.Cancel`)。`EnsureBareCloneAsync` + `FetchPrAsync` までを進める。ユーザがボタンを押した時点で `git fetch` が完了済み。
+3. **レンダリング フェーズ可視化** — Markdown/Liquid 入力の読み込み、Liquid context 解決、HTML rendering の progress を `PreviewCoordinator` からそのまま渡す。
 
 ### 19.6.3 テスト
 
@@ -879,56 +867,38 @@ Step 19.5 完了後、ユーザから「プレビューが利用できるよう�
 
 | テスト | 内容 |
 |---|---|
-| `PrepareComparisonPreviewAsync_Starts_Before_And_After_Servers_In_Parallel` | `Barrier(2)` を使い、両 `StartAsync` が同時に probe へ到達することを検証 |
 | `PrewarmAsync_Runs_Bare_Clone_Eagerly` | `PrewarmAsync` 1 回呼ぶと `git clone --bare` が記録される |
 | `PrewarmAsync_When_Disabled_Is_NoOp` | `BareCloneDir`/`CloneUrl` が空のときランナーは一切呼ばれない |
-| `PredictivePrewarmAsync_Runs_Clone_And_Fetch_But_Not_Worktree` | `git clone --bare` と `git fetch origin +refs/pull/N/head:...` が記録され、`git worktree add` は呼ばれない |
+| `PredictivePrewarmAsync_Runs_Clone_And_Fetch` | `git clone --bare` と `git fetch origin +refs/pull/N/head:...` が記録される |
 | `PredictivePrewarmAsync_When_Disabled_Is_NoOp` | パイプライン無効時はランナー無起動 |
 | `PredictivePrewarmAsync_Swallows_Fetch_Failure` | `git fetch` が exit 128 でも例外を投げない (ベストエフォート契約) |
-
-`Integrations.Tests/Preview/NodeModulesShareManagerTests.cs` (新規, 5 件)
-
-| テスト | 内容 |
-|---|---|
-| `EnsureAsync_Without_PackageLock_Falls_Back_To_Install` | `package-lock.json` 無し → コールバック (`npm install`) を直接呼ぶ |
-| `EnsureAsync_Without_WorktreeRoot_Falls_Back_To_Install` | オプションの `WorktreeRoot` が空 → 同上 |
-| `EnsureAsync_First_Time_Links_And_Runs_Install` | 初回は junction を作り `installFallback` を 1 回呼んで `.complete` を書く |
-| `EnsureAsync_Second_Worktree_Reuses_Junction_Skipping_Install` | 同一 lockfile の 2 個目 worktree は `installFallback` を呼ばない |
-| `EnsureAsync_Falls_Back_When_Junction_Creation_Fails` | `mklink /J` が exit≠0 → コールバックを呼んでも `.complete` は書かない |
-
-`Integrations.Tests/Preview/PreviewServerHostTests.cs` (+ 2 件)
-
-| テスト | 内容 |
-|---|---|
-| `StartAsync_Reports_Dev_Server_Progress_On_Warm_Path` | `node_modules` 既存 → "Next.js" メッセージのみ Report |
-| `StartAsync_Reports_Install_Phase_When_Node_Modules_Missing` | `node_modules` 不在 → "node_modules" と "Next.js" の両方が順に Report |
 
 ### 19.6.4 完了基準
 
 - 新規 13 件 + 既存テスト = `Category!=Manual` で 439/439 緑
 - `dotnet build -warnaserror` 緑
-- 手動: コールド (キャッシュ全削除) でアプリ起動 → PR を選択 → 数十秒後に「ローカルプレビュー」クリック → "Next.js dev サーバを起動中…" 表示後、Next.js コンパイル分のみで preview が表示される。冷スタートのチェーン (`git clone --bare` + `git fetch` + `npm install`) が体感ゼロになっている
+- 手動: コールド (キャッシュ全削除) でアプリ起動 → PR を選択 → 数十秒後に「ローカルプレビュー」クリック → preview が表示される。冷スタートのチェーン (`git clone --bare` + `git fetch`) が体感上短縮されている
 
 ---
 
-## Step 19.7. 対象ページのインプロセス・レンダリング (Next.js バイパス)
+## Step 19.7. 対象ページのインプロセス・レンダリング
 
 ### 19.7.1 目的
 
-Step 19.6 を 5 イテレーション回しても、`content/**/*.md` の比較プレビューは Next.js dev サーバの初回コンパイル (10〜30 秒) が hot path に残るため、ユーザ視点では依然として「遅い」と感じる。github/docs の重い Next.js ランタイムを丸ごとロードする必要はなく、**変更が入った 1 ファイルだけ** を Markdig で in-process レンダリングできれば、起動コストは数十ミリ秒オーダーまで落ちる。Step 19 以前から非 content 配下の Markdown 専用に存在していた `MarkdownPreviewRenderer` + `LocalPreviewContentServer` の経路を、`content/` 配下の Markdown まで拡張する。
+Step 19.6 後も、`content/**/*.md` の比較プレビューは **変更が入った 1 ファイルだけ** を Markdig で in-process レンダリングできれば十分だった。Step 19 以前から非 content 配下の Markdown 専用に存在していた `MarkdownPreviewRenderer` + `LocalPreviewContentServer` の経路を、`content/` 配下の Markdown まで拡張する。
 
 ### 19.7.2 スコープ
 
 1. **ルーティングの切替** — `PreviewActions.razor` と `CommitDetail.razor` の発火条件を以下に変更。
     - `PreviewPathMapper.IsMarkdown(path)` が真 → `PrepareMarkdownComparisonPreviewAsync` (Markdig 経路)。
-    - それ以外で `PreviewPathMapper.Map(path, lang)` が非 null → `PrepareComparisonPreviewAsync` (Next.js 経路、将来の非 .md 用に温存)。
-    - これにより `content/**/*.md` も Markdig 経路へ流れ、Next.js dev サーバを一切触らない。
+    - それ以外は公式 docs URL へのフォールバックを表示する。
+    - これにより `content/**/*.md` は常に Markdig 経路へ流れる。
 2. **`MarkdownPreviewRenderer` の強化** — `content/` の Markdown は Jekyll/Liquid 風 frontmatter + Liquid タグを含むため、そのままだと title が抽出されず Liquid タグが生のまま表示される。以下を追加。
     - **Frontmatter 解析**: ファイル先頭の `---` 〜 `---` ブロックを抽出し、`title` / `intro` スカラーをトップレベルから取り出す (ネスト行はスキップ、`'…'` / `"…"` を unquote)。残りの本文だけを Markdig に渡す。
     - **Liquid プレースホルダ化**: `{% … %}` (ブロック) と `{{ … }}` (変数) を `<span class="rsr-liquid" title="…">…</span>` に置換 (`[GeneratedRegex]` + `RegexOptions.Singleline`)。Markdig が誤って解釈するのを防ぎつつ、ソースをそのまま視認できる。
     - **ヘッダ表示**: `<h1>{title}</h1>` + `<p class="rsr-meta">{label} · {sha8}</p>`。title がパスと異なる場合のみ `<p class="rsr-path">{repoPath}</p>` を併記。`intro` があれば lead paragraph として表示。
     - **CSS**: `.rsr-path` (淡色 monospace)、`.rsr-intro` (太字 lead)、`.rsr-liquid` (淡黄ハイライト、dark-mode 対応) を style ブロックに追加。
-3. **テストの再配線** — 既存 13 件の `App.Tests` (PreviewActions / CommitDetail) は `content/**/*.md` 経路を `PrepareComparisonPreviewAsync` でモックしていたため、`PrepareMarkdownComparisonPreviewAsync` に置換 (filePath は non-nullable なので `Arg.Any<string?>()` → `Arg.Any<string>()` も連動)。検証の本意 (ボタン押下 → URL 公開、ファイル切替、プログレス、エラー、キャンセル等) は不変。
+3. **テストの再配線** — 既存 13 件の `App.Tests` (PreviewActions / CommitDetail) は `content/**/*.md` 経路を `PrepareMarkdownComparisonPreviewAsync` でモックする。検証の本意 (ボタン押下 → URL 公開、ファイル切替、プログレス、エラー、キャンセル等) は不変。
 
 ### 19.7.3 テスト
 
@@ -951,7 +921,7 @@ Step 19.6 を 5 イテレーション回しても、`content/**/*.md` の比較�
 
 - 新規 9 件 + 既存テスト総数 = `Category!=Manual` で 449/449 緑 (Integrations 59 + Core 168 + App 210 + E2E 12)
 - `dotnet build -warnaserror` 緑
-- 手動: コールド起動でも `content/**/*.md` の比較プレビューが Next.js を一切起動せず、サブ秒で表示される。Liquid タグはハイライト span として可視化される
+- 手動: コールド起動でも `content/**/*.md` の比較プレビューが外部 dev server を起動せず、サブ秒で表示される。Liquid タグはハイライト span として可視化される
 
 ---
 
@@ -1175,10 +1145,10 @@ Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画で�
   - 完了日 2026-05-13, テスト件数 7
 - [x] Step 19.5 — ローカルプレビュー UI 配線
 - [x] Step 19.6 — ローカルプレビュー起動時間の抜本短縮 (5 イテレーション)
-  - 並列起動 / `node_modules` ジャンクション共有 / bare clone プリウォーム / 予測プリウォーム / フェーズ可視化
+  - bare clone プリウォーム / 予測プリウォーム / フェーズ可視化
   - 新規テスト件数 13 (合計 439/439 緑)
-- [x] Step 19.7 — 対象ページのインプロセス・レンダリング (Next.js バイパス)
-  - `content/**/*.md` を Markdig + LocalPreviewContentServer で in-process 描画。Next.js dev サーバはバイパス
+- [x] Step 19.7 — 対象ページのインプロセス・レンダリング
+  - `content/**/*.md` を Markdig + LocalPreviewContentServer で in-process 描画。
   - `MarkdownPreviewRenderer` に frontmatter (title / intro) 解析と Liquid プレースホルダ化を追加
   - 新規テスト件数 9 (合計 449/449 緑、App.Tests の 13 件はモック差し替えで再緑化)
 - [x] Step 19.8 — 公式 docs ジャンプ + Liquid 評価 MVP
@@ -1259,4 +1229,3 @@ E2E は WebView2 の OS window を実際に開くため、Windows のデスク�
 ### C.6 Playwright ドライバ
 
 CDP **接続のみ** を行うので Playwright の付属ブラウザバイナリインストール (`playwright.ps1 install`) は不要です (`Microsoft.Playwright.dll` 内蔵のドライバスタブで足ります)。新規開発機でいきなり E2E を回してもインストール手順は発生しません。
-

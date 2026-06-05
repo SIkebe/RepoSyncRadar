@@ -12,15 +12,14 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// Default <see cref="IProcessRunner"/> implementation backed by
 /// <see cref="System.Diagnostics.Process"/>. Stdout/stderr are buffered into
 /// <see cref="StringBuilder"/> so callers can include them in errors, and
-/// long-running sidecars additionally tee each line into <see cref="ILogger"/>
-/// so failures inside <c>npm run dev</c> surface in the app's log file instead
-/// of vanishing.
+/// long-running children additionally tee each line into <see cref="ILogger"/>
+/// so failures surface in the app's log file instead of vanishing.
 /// </summary>
 /// <remarks>
 /// Both <see cref="RunAsync"/> and <see cref="Start(string, string, string, System.Collections.Generic.IReadOnlyDictionary{string, string?}?)"/>
 /// wrap <see cref="Win32Exception"/>
 /// thrown by <see cref="Process.Start(ProcessStartInfo)"/> (typically "the system cannot
-/// find the file specified" when <c>git</c> or <c>npm</c> is missing from PATH) into a
+/// find the file specified" when <c>git</c> is missing from PATH) into a
 /// uniform <see cref="InvalidOperationException"/>. This lets the Blazor UI catch a
 /// single exception type and surface a friendly status without the WPF host process
 /// terminating from an unhandled exception.
@@ -61,7 +60,7 @@ public sealed partial class SystemProcessRunner : IProcessRunner
             RedirectStandardOutput = true,
             UseShellExecute = false,
             CreateNoWindow = true,
-            // npm / next.js / git emit UTF-8 (including Unicode glyphs like
+            // git and other CLI tools often emit UTF-8 (including Unicode glyphs like
             // "⚠") regardless of the active Windows code page. Without
             // setting these explicitly, .NET decodes the redirected streams
             // using Console.OutputEncoding (CP932 on Japanese Windows), which
@@ -216,15 +215,15 @@ public sealed partial class SystemProcessRunner : IProcessRunner
     }
 
     /// <summary>
-    /// Resolves a bare command name (e.g. <c>npm</c>) into a full path such as
-    /// <c>C:\Program Files\nodejs\npm.cmd</c> by combining each <c>PATH</c> entry
+    /// Resolves a bare command name (e.g. <c>tool</c>) into a full path such as
+    /// <c>C:\Tools\tool.cmd</c> by combining each <c>PATH</c> entry
     /// with each <c>PATHEXT</c> extension. Needed because the Win32
     /// <c>CreateProcess</c> API (used when <c>UseShellExecute = false</c>) only
     /// auto-appends <c>.exe</c>, so <c>.cmd</c>/<c>.bat</c> wrappers shipped by
-    /// tools like <c>npm</c>, <c>yarn</c>, and <c>pnpm</c> are otherwise invisible.
+    /// tools distributed as batch wrappers are otherwise invisible.
     /// </summary>
-    /// <param name="fileName">Command name passed by the caller. May be a bare name (<c>npm</c>), a
-    /// name with extension (<c>npm.cmd</c>), or an absolute path.</param>
+    /// <param name="fileName">Command name passed by the caller. May be a bare name (<c>tool</c>), a
+    /// name with extension (<c>tool.cmd</c>), or an absolute path.</param>
     /// <param name="pathEnv">Contents of the <c>PATH</c> environment variable. Entries are split on
     /// the platform path separator; surrounding quotes are tolerated.</param>
     /// <param name="pathExtEnv">Contents of the <c>PATHEXT</c> environment variable. Falls back to
@@ -318,8 +317,8 @@ public sealed partial class SystemProcessRunner : IProcessRunner
     private sealed class ProcessHandle : IProcessHandle
     {
         // 64 lines × ~200 chars ≈ 12 KB upper bound per stream. Enough to catch
-        // a typical npm / next.js stack trace without unbounded growth for
-        // sidecars that may run for hours.
+        // a typical child process stack trace without unbounded growth for
+        // children that may run for hours.
         private const int _maxBufferedLines = 64;
 
         private readonly Process _process;
@@ -338,8 +337,7 @@ public sealed partial class SystemProcessRunner : IProcessRunner
             _process.OutputDataReceived += OnStdout;
             _process.ErrorDataReceived += OnStderr;
             // Without BeginOutputReadLine / BeginErrorReadLine the OS pipes fill up
-            // quickly for chatty children (npm/next dev print megabytes of output
-            // during cold start) and the child eventually blocks on its next
+            // quickly for chatty children and the child eventually blocks on its next
             // write. Always drain.
             _process.BeginOutputReadLine();
             _process.BeginErrorReadLine();
@@ -410,8 +408,7 @@ public sealed partial class SystemProcessRunner : IProcessRunner
     }
 
     // Marker used to collapse consecutive identical lines into a single
-    // "(x N)" tail. Chosen because ASCII " (x N)" is unambiguous (no real
-    // npm/next output ends with this exact suffix) and renders correctly
+    // "(x N)" tail. Chosen because ASCII " (x N)" is unambiguous and renders correctly
     // regardless of the consumer's locale or font support.
     internal const string RepeatPrefix = " (x ";
     internal const string RepeatSuffix = ")";
@@ -419,11 +416,10 @@ public sealed partial class SystemProcessRunner : IProcessRunner
     /// <summary>
     /// Appends <paramref name="line"/> to <paramref name="buffer"/>, but
     /// collapses runs of identical consecutive lines into a single
-    /// <c>"&lt;line&gt; (x N)"</c> tail. Next.js' App Router emits the same
-    /// <c>i18n configuration ... unsupported</c> warning once per affected
-    /// page, which would otherwise flood the 64-line ring buffer and push
-    /// the real failure cause out before the UI samples it. Internal so unit
-    /// tests can exercise the collapse logic without a real Process.
+    /// <c>"&lt;line&gt; (x N)"</c> tail. Repeated child-process warnings would
+    /// otherwise flood the 64-line ring buffer and push the real failure cause
+    /// out before the UI samples it. Internal so unit tests can exercise the
+    /// collapse logic without a real Process.
     /// </summary>
     internal static void AppendBuffered(List<string> buffer, object gate, string line, int maxBufferedLines)
     {

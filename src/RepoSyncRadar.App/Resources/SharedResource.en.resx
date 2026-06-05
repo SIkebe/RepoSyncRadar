@@ -67,9 +67,9 @@
   <data name="CommitDetail.BeforeLabel" xml:space="preserve"><value>Before {0} {1}</value></data>
   <data name="CommitDetail.Category" xml:space="preserve"><value>Category</value></data>
   <data name="CommitDetail.CleanupCache" xml:space="preserve"><value>Clear cache</value></data>
-  <data name="CommitDetail.CleanupCacheTitle" xml:space="preserve"><value>Delete all cached docs worktrees</value></data>
+  <data name="CommitDetail.CleanupCacheTitle" xml:space="preserve"><value>Delete local preview caches</value></data>
   <data name="CommitDetail.CleanupInProgress" xml:space="preserve"><value>Cleaning up cache...</value></data>
-  <data name="CommitDetail.CleanupRemoved" xml:space="preserve"><value>Removed {0} worktrees</value></data>
+  <data name="CommitDetail.CleanupRemoved" xml:space="preserve"><value>Removed {0} cached items</value></data>
   <data name="CommitDetail.ComparisonOpened" xml:space="preserve"><value>Opened {0} for parent / PR HEAD comparison</value></data>
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>Detailed analysis</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>Select a commit.</value></data>
@@ -193,12 +193,7 @@
   <data name="LocalSettings.Label.BareCloneDir" xml:space="preserve"><value>BareCloneDir</value></data>
   <data name="LocalSettings.Label.CloneUrl" xml:space="preserve"><value>CloneUrl</value></data>
   <data name="LocalSettings.Label.WorktreeRoot" xml:space="preserve"><value>WorktreeRoot</value></data>
-  <data name="LocalSettings.Label.MaxWorktrees" xml:space="preserve"><value>MaxWorktrees</value></data>
   <data name="LocalSettings.Label.PrewarmOnStartup" xml:space="preserve"><value>PrewarmOnStartup</value></data>
-  <data name="LocalSettings.Label.PreviewCommand" xml:space="preserve"><value>PreviewCommand</value></data>
-  <data name="LocalSettings.Label.PreviewArguments" xml:space="preserve"><value>PreviewArguments</value></data>
-  <data name="LocalSettings.Label.PreviewInstallArguments" xml:space="preserve"><value>PreviewInstallArguments</value></data>
-  <data name="LocalSettings.Label.PreviewEnvironment" xml:space="preserve"><value>PreviewEnvironment</value></data>
   <data name="LocalSettings.Label.PreviewBasePort" xml:space="preserve"><value>PreviewBasePort</value></data>
   <data name="LocalSettings.Label.PreviewReadyTimeoutSeconds" xml:space="preserve"><value>PreviewReadyTimeoutSeconds</value></data>
   <data name="LocalSettings.Label.Default" xml:space="preserve"><value>Default</value></data>

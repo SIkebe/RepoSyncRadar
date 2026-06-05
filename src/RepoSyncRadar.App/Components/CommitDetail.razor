@@ -190,27 +190,12 @@
                                             <span class="progress-metric-label">@L["Common.Limit"]</span>
                                             <span class="progress-metric-value">@L["Common.Seconds", _previewTimeoutSec]</span>
                                         </span>
-                                        @if (_previewPid is { } pid)
-                                        {
-                                            <span class="progress-metric preview-progress-pid" data-testid="commit-detail-preview-progress-pid">
-                                                <span class="progress-metric-label">PID</span>
-                                                <span class="progress-metric-value">@pid</span>
-                                            </span>
-                                        }
                                         <button type="button"
                                                 data-testid="commit-detail-preview-cancel-button"
                                                 class="preview-cancel"
                                                 disabled="@_previewCanceling"
                                                 @onclick="CancelPreviewAsync">@(_previewCanceling ? L["Common.Canceling"] : L["Common.Cancel"])</button>
                                     </div>
-                                    @if (_previewStdoutTail.Count > 0)
-                                    {
-                                        <pre class="preview-log-tail preview-log-stdout" data-testid="commit-detail-preview-stdout">@string.Join('\n', _previewStdoutTail)</pre>
-                                    }
-                                    @if (_previewStderrTail.Count > 0)
-                                    {
-                                        <pre class="preview-log-tail preview-log-stderr" data-testid="commit-detail-preview-stderr">@string.Join('\n', _previewStderrTail)</pre>
-                                    }
                                 </div>
                             }
                             else if (IsPreviewFeedbackFile(file))
@@ -238,7 +223,6 @@
 </section>
 
 @code {
-    private const int MaxLogTailLines = 10;
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
@@ -270,9 +254,6 @@
     private DateTimeOffset _previewStartedAt;
     private int _previewElapsedSec;
     private int _previewTimeoutSec = 600;
-    private List<string> _previewStdoutTail = new();
-    private List<string> _previewStderrTail = new();
-    private int? _previewPid;
     private long _previewOperationSerial;
     private PreviewOperation? _previewOperation;
     private CancellationTokenSource? _predictivePrewarmCts;
@@ -408,10 +389,10 @@
 
     /// <summary>
     /// Picks the right URL for the "WebView2 で開く" button on a single file row.
-    /// Priority: (1) active local preview server + path mappable → http://localhost
-    /// rewrite, (2) any resolver-supplied docs.github.com URL (relative paths are
-    /// absolutised against <see cref="DocsApiOptions.BaseAddress"/>), (3) <c>null</c>
-    /// → button hidden (the file is not a publishable content page).
+    /// Priority: (1) active local Markdown preview server + path mappable →
+    /// loopback rewrite, (2) any resolver-supplied docs.github.com URL (relative
+    /// paths are absolutised against <see cref="DocsApiOptions.BaseAddress"/>),
+    /// (3) <c>null</c> → button hidden.
     /// </summary>
     private Uri? ResolvePreviewTarget(CommitFile file)
     {
@@ -553,90 +534,13 @@
 
         var commit = Commit;
 
-        if (commit is not null && IsPreviewMappable(file) && !IsMarkdownPreviewable(file)
-            && Services.GetService<IPreviewCoordinator>() is { } coordinator)
-        {
-            // Step 19.7: Markdown ファイルは下の Markdig 経路に流す。ここに来るのは
-            // content/ 配下で .md/.markdown 以外の公開対象 (現状は事実上存在しない)
-            // のみで、将来 YAML データファイル等を公開した場合の保険として残す。
-            var operation = StartPreviewOperation(commit.Sha, file.Path, L["CommitDetail.LocalPreviewPreparing", file.Path], L["CommitDetail.PreviewStartup"]);
-            var token = operation.Cancellation.Token;
-            var host = Services.GetService<PreviewServerHost>();
-            operation.PollTask = Task.Run(
-                () => PollPreviewProgressAsync(host, includePreviewServerState: host is not null, token),
-                CancellationToken.None);
-            try
-            {
-                var progress = new Progress<string>(message =>
-                {
-                    _ = InvokeAsync(() =>
-                    {
-                        _previewStatus = message;
-                        StateHasChanged();
-                    });
-                });
-                var link = await coordinator.PrepareComparisonPreviewAsync(
-                    commit.PrNumber,
-                    commit.Sha,
-                    file.Path,
-                    progress,
-                    token);
-                if (link is not null)
-                {
-                    if (!CanPublishPreview(operation, commit.Sha))
-                    {
-                        return;
-                    }
-
-                    var previewPosition = GetPreviewPosition(file);
-                    navigator.PublishComparison(new PreviewComparisonRequest(
-                        link.BeforeUrl,
-                        link.AfterUrl,
-                        L["CommitDetail.BeforeLabel", ShortSha(link.BeforeSha), "localhost"],
-                        $"PR HEAD {ShortSha(link.AfterSha)} localhost",
-                        file.Path,
-                        previewPosition.Ordinal,
-                        previewPosition.Total));
-                    _activePreviewPath = file.Path;
-                    _previewStatus = L["CommitDetail.ComparisonOpened", file.Path];
-                    return;
-                }
-                if (CanUpdatePreviewFeedback(operation))
-                {
-                    _previewStatus = L["CommitDetail.PreviewDisabled"];
-                }
-                return;
-            }
-            catch (OperationCanceledException)
-            {
-                if (CanUpdatePreviewFeedback(operation))
-                {
-                    _previewStatus = BuildPreviewCancellationStatus(operation);
-                }
-                return;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                if (CanUpdatePreviewFeedback(operation))
-                {
-                    _previewStatus = ex.Message;
-                }
-                return;
-            }
-            finally
-            {
-                await FinishPreviewOperationAsync(operation);
-            }
-        }
-
         if (commit is not null && IsMarkdownPreviewable(file)
             && Services.GetService<IPreviewCoordinator>() is { } markdownCoordinator)
         {
             var operation = StartPreviewOperation(commit.Sha, file.Path, L["CommitDetail.MarkdownPreviewPreparing", file.Path], L["CommitDetail.PreviewStartup"]);
             var token = operation.Cancellation.Token;
-            var host = Services.GetService<PreviewServerHost>();
             operation.PollTask = Task.Run(
-                () => PollPreviewProgressAsync(host, includePreviewServerState: host is not null, token),
+                () => PollPreviewProgressAsync(token),
                 CancellationToken.None);
             try
             {
@@ -762,9 +666,6 @@
         _previewCanceling = false;
         _previewStatus = status;
         _previewStatusIsCleanup = _previewCleanupBusy;
-        _previewStdoutTail = new List<string>();
-        _previewStderrTail = new List<string>();
-        _previewPid = null;
         _previewStartedAt = DateTimeOffset.UtcNow;
         _previewElapsedSec = 0;
         _previewTimeoutSec = Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.PreviewReadyTimeoutSeconds ?? 600;
@@ -832,7 +733,7 @@
         var operation = StartPreviewOperation(sha: null, busyPath: null, L["CommitDetail.CleanupInProgress"], L["CommitDetail.CleanupCache"]);
         var token = operation.Cancellation.Token;
         operation.PollTask = Task.Run(
-            () => PollPreviewProgressAsync(host: null, includePreviewServerState: false, token),
+            () => PollPreviewProgressAsync(token),
             CancellationToken.None);
         try
         {
@@ -888,28 +789,16 @@
             ? L["CommitDetail.OperationCanceled", operation.CancellationSubject]
             : L["CommitDetail.OperationTimedOut", operation.CancellationSubject, _previewTimeoutSec];
 
-    private async Task PollPreviewProgressAsync(PreviewServerHost? host, bool includePreviewServerState, CancellationToken token)
+    private async Task PollPreviewProgressAsync(CancellationToken token)
     {
         try
         {
             using var timer = new PeriodicTimer(PollInterval);
             while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
-                var stdoutTail = includePreviewServerState && host is not null
-                    ? TakeTail(host.RecentStdoutLines, MaxLogTailLines)
-                    : _previewStdoutTail;
-                var stderrTail = includePreviewServerState && host is not null
-                    ? TakeTail(host.RecentStderrLines, MaxLogTailLines)
-                    : _previewStderrTail;
-                var pid = includePreviewServerState && host is not null
-                    ? host.CurrentProcessId
-                    : _previewPid;
                 var actualElapsed = (int)(DateTimeOffset.UtcNow - _previewStartedAt).TotalSeconds;
                 await InvokeAsync(() =>
                 {
-                    _previewStdoutTail = stdoutTail;
-                    _previewStderrTail = stderrTail;
-                    _previewPid = pid;
                     _previewElapsedSec = ProgressElapsedDisplay.SmoothElapsedSeconds(_previewElapsedSec, actualElapsed);
                     StateHasChanged();
                 });
@@ -919,20 +808,6 @@
         {
             // expected when startup completes or the user cancels
         }
-    }
-
-    private static List<string> TakeTail(IReadOnlyList<string> source, int take)
-    {
-        if (source.Count <= take)
-        {
-            return new List<string>(source);
-        }
-        var result = new List<string>(take);
-        for (var i = source.Count - take; i < source.Count; i++)
-        {
-            result.Add(source[i]);
-        }
-        return result;
     }
 
     private void StartPredictivePrewarm(Commit commit)

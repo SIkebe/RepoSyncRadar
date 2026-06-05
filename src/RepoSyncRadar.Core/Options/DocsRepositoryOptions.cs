@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
 
@@ -6,10 +5,10 @@ namespace RepoSyncRadar.Core.Options;
 
 /// <summary>
 /// Options for the optional local preview pipeline (IMPLEMENTATION_PLAN.md §Step 19).
-/// By default, preview cache/worktree files are stored under the user's local
+/// By default, preview clone/cache files are stored under the user's local
 /// application data folder so installed builds can preview without manual path setup.
-/// When <see cref="BareCloneDir"/> or <see cref="PreviewCommand"/> is cleared, the
-/// preview pipeline is treated as disabled and every public surface becomes a no-op.
+/// When <see cref="BareCloneDir"/> is cleared, the preview pipeline is treated as
+/// disabled and every public surface becomes a no-op.
 /// </summary>
 public sealed class DocsRepositoryOptions
 {
@@ -26,64 +25,21 @@ public sealed class DocsRepositoryOptions
     /// <summary>URL passed to <c>git clone --bare</c>. Required when <see cref="BareCloneDir"/> is set.</summary>
     public string CloneUrl { get; set; } = "https://github.com/github/docs.git";
 
-    /// <summary>Directory under which transient worktrees are added.</summary>
+    /// <summary>Directory used for Markdown preview assets and cleanup of legacy preview worktrees.</summary>
     public string WorktreeRoot { get; set; } = Path.Combine(_defaultPreviewRoot, "worktrees");
-
-    /// <summary>Maximum number of worktrees to keep around. Oldest is evicted on overflow.</summary>
-    [Range(1, 50)]
-    public int MaxWorktrees { get; set; } = 5;
 
     /// <summary>Whether app startup should eagerly create/fetch the bare clone before the first preview action.</summary>
     public bool PrewarmOnStartup { get; set; }
-
-    /// <summary>Command that launches the preview server (e.g. <c>npm</c>).</summary>
-    public string PreviewCommand { get; set; } = "npm";
-
-    /// <summary>
-    /// Command arguments. The substring <c>{port}</c> is replaced with the chosen
-    /// port. Default is <c>run dev</c> which works for the <c>github/docs</c>
-    /// repo — that repo's <c>dev</c> script ignores <c>--port</c> and only honors
-    /// the <c>PORT</c> environment variable populated via <see cref="PreviewEnvironment"/>.
-    /// </summary>
-    public string PreviewArguments { get; set; } = "run dev";
-
-    /// <summary>
-    /// Arguments used to install dependencies automatically when a Node-based
-    /// preview command is configured and the worktree has no <c>node_modules</c>
-    /// directory yet. Empty means the install step is skipped.
-    /// </summary>
-    public string PreviewInstallArguments { get; set; } = "install";
-
-    /// <summary>
-    /// Environment variables to merge on top of the parent process environment
-    /// before starting <see cref="PreviewCommand"/>. Values support the <c>{port}</c>
-    /// placeholder. Defaults to <c>PORT={port}</c> so the <c>github/docs</c>
-    /// server (<c>nodemon src/frame/server.ts</c>) listens on the requested port
-    /// rather than its built-in default of 4000. Also defaults
-    /// <c>REQUEST_TIMEOUT=600000</c> because <c>github/docs</c> returns a 503 after
-    /// 15 seconds in development mode, while the first Next.js page compile on
-    /// Windows ARM64 often takes longer than that.
-    /// </summary>
-    public Dictionary<string, string> PreviewEnvironment { get; set; } = new(System.StringComparer.Ordinal)
-    {
-        ["PORT"] = "{port}",
-        ["REQUEST_TIMEOUT"] = "600000",
-    };
 
     /// <summary>First port to try when starting the preview server.</summary>
     [Range(1024, 65535)]
     public int PreviewBasePort { get; set; } = 4500;
 
     /// <summary>
-    /// Maximum time the preview server is allowed to take before it must accept
-    /// TCP connections on <see cref="PreviewBasePort"/>. <c>github/docs</c>'s
-    /// Next.js App Router cold start with full MDX content can comfortably take
-    /// 5–10 minutes on Windows ARM64 on the very first run after a
-    /// <c>node_modules</c> wipe, so the default is generous. Tune downwards via
-    /// <c>appsettings.local.json</c> on a warm machine where you want fast
-    /// feedback on real misconfigurations.
+    /// Maximum time a preview operation is allowed to run before the UI cancels
+    /// it. First-time repository fetches and Liquid context loading can still
+    /// take several minutes on large docs changes, so the default is generous.
     /// </summary>
     [Range(5, 1800)]
     public int PreviewReadyTimeoutSeconds { get; set; } = 600;
 }
-

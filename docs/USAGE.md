@@ -79,20 +79,13 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
       "OAuthClientId": "Iv23liXXXXXXXXXXXXXX",
     "OAuthScopes": [ "public_repo" ]
   },
-  // Step 19 を使う場合のみ。空ならローカルプレビュー機能はオフ。
+  // ローカル Markdown プレビューを使う場合のみ。空ならローカルプレビュー機能はオフ。
   "DocsRepository": {
     "BareCloneDir": "C:\\github\\.cache\\docs.git",
     "CloneUrl": "https://github.com/github/docs.git",
     "WorktreeRoot": "C:\\github\\.cache\\docs-worktrees",
-    "MaxWorktrees": 5,
-    "PreviewCommand": "npm",
-    "PreviewArguments": "run dev -- --port {port}",
-    "PreviewInstallArguments": "install",
-      "PreviewEnvironment": {
-         "PORT": "{port}",
-         "REQUEST_TIMEOUT": "600000"
-      },
-    "PreviewBasePort": 4500
+    "PreviewBasePort": 4500,
+    "PreviewReadyTimeoutSeconds": 600
   }
 }
 ```
@@ -196,9 +189,9 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
 
 ## 5. オプション機能
 
-### 5.1 ローカルプレビュー(Step 19 / 19.5)
+### 5.1 ローカル Markdown プレビュー
 
-`DocsRepository` セクションを埋めておくと、PR HEAD の見た目を bare clone + worktree で確認できます。空のままなら **完全に no-op** で他機能には影響しません。起動時に bare clone を事前作成したい場合だけ `DocsRepository:PrewarmOnStartup` を `true` にしてください。既定では、初回起動だけで `github/docs` の大きな clone/fetch は始まりません。
+`DocsRepository` セクションを埋めておくと、PR HEAD の Markdown 変更を bare clone から読み出し、アプリ内の Markdown/Liquid レンダラーとローカル content server で before/after 比較できます。空のままなら **完全に no-op** で他機能には影響しません。起動時に bare clone を事前作成したい場合だけ `DocsRepository:PrewarmOnStartup` を `true` にしてください。既定では、初回起動だけで `github/docs` の大きな clone/fetch は始まりません。
 
 #### 使い方
 
@@ -207,49 +200,30 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
    - 初回のみ `git clone --bare <DocsRepoUrl> <BareCloneDir>`
    - `git fetch origin +refs/pull/{PR}/head:...` で PR head を取得
    - `git rev-parse <sha>^` で変更前の親コミットを解決
-   - `git worktree add <WorktreeRoot>/<parent-sha> <parent-sha>` と `git worktree add <WorktreeRoot>/<sha> <sha>` で変更前 / PR HEAD の作業ディレクトリを生成
-   - worktree に `node_modules` が無ければ `npm install` を自動実行
-   - `PreviewBasePort` から空いている連続 2 port を探し、PR HEAD と変更前の sidecar として起動(同じ SHA / 同じ port に対しては再起動しない)
+   - `git show` / `git ls-tree` / `git grep` でクリックした Markdown と参照先 reusable/data/AUTOTITLE 対象だけを bare clone から読む
+   - Markdown/Liquid を HTML に変換し、`PreviewBasePort` から空いている 1 port のローカル content server で before/after を配信
 3. 右側の WebView2 が左右 2 ペインになり、左に変更前 localhost、右に PR HEAD localhost を表示します。読み込み完了後、変更された本文ブロックは左側に取り消し線、右側に淡いハイライトで表示されます。公式 `docs.github.com` が既に更新済みでも、コミット単位の見た目差分を確認できます
-4. ボタン下に表示されている URL は外部ブラウザでも開けます
 
 #### 前提
 
-- Node.js + npm が PATH に通っていること(`PreviewCommand="npm"` を上書きすれば他ツールでも可)
-- worktree に `node_modules` が無い場合、`PreviewServerHost` が `PreviewCommand` + `PreviewInstallArguments` (既定: `npm install`) を自動実行してから preview server を起動します
-- `github/docs` の初回 Next.js コンパイルは 15 秒を超えることがあるため、`REQUEST_TIMEOUT=600000` を preview sidecar に渡します。これを短くすると PR HEAD 側が `Service Unavailable` になることがあります
-- WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中に割り当てた `http://localhost:<port>` だけを動的に許可します。前回プロセスの異常終了などで `PreviewBasePort` が既に使われている場合は、次の空き port にずらします。同じ worktree で古い Next dev server が残っている場合も、起動前に `.next/dev/logs/next-development.log` の PID を確認して停止し、`Another next dev server is already running` の再発を防ぎます
+- Node.js / npm は不要です。プレビューはアプリ内の .NET Markdown/Liquid レンダラーで生成します。
+- WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中に割り当てた `http://localhost:<port>` だけを動的に許可します。前回プロセスの異常終了などで `PreviewBasePort` が既に使われている場合は、次の空き port にずらします。
 
-#### node_modules の扱い (案 A / 案 B)
+#### キャッシュのクリーンアップ
 
-worktree ごとに作業ディレクトリが分かれるため、`npm install` の置き場所を選ぶ必要があります。**案 B (junction で共有)** をアプリが自動で行うようになったため、通常は手動の設定は不要です。
-
-- **案 A — 各 worktree で個別に `npm install`** (フォールバック・確実):
-   1. アプリが `node_modules` 不在を検知したら自動で `npm install` を実行
-   2. 初回 5〜15 分・1〜2 GB 消費。worktree を削除すれば一緒に消えます
-- **案 B — `<WorktreeRoot>/.shared-node-modules/<hash>` に 1 度だけ `npm install` → 各 worktree から junction で共有** (既定・高速・ディスク節約):
-   1. `NodeModulesShareManager` が `package-lock.json` の SHA-256 短ハッシュをスロット ID に使い、`<WorktreeRoot>/.shared-node-modules/<hash>/node_modules` を 1 度だけ作成
-   2. 各 worktree の `node_modules` は `cmd /c mklink /J` で共有スロットへの directory junction
-   3. `next dev` の watch は junction を透過するため、PR head を切り替えるたびに `node_modules` を再生成しなくて済みます (2 回目以降の起動は数秒)
-   4. junction 作成に失敗した場合や package-lock.json が見つからない場合は自動的に案 A にフォールバックします
-   - 注意: `package.json` の依存が PR 内で書き換わっている (= `package-lock.json` のハッシュが変わっている) と新しいスロットが切られて再 install されます。これは期待動作です
-
-#### キャッシュ (worktree) のクリーンアップ
-
-放置すると `<WorktreeRoot>` 配下に PR head ごとの作業ディレクトリが溜まり続けます (1 件あたり 1〜2 GB)。次のいずれかで一括削除できます:
+ローカルプレビューは bare clone、Markdown asset cache、旧バージョンで作られた worktree を使うことがあります。次のいずれかで一括削除できます:
 
 - **アプリ内**: プレビューパネルの **「キャッシュをクリーンアップ」** ボタン
-   - 起動時に `git worktree list --porcelain` で既存 worktree を再ハイドレートしているため、前回プロセスで作られたものも含めて削除されます
+   - 旧バージョンで作られた worktree も `git worktree list --porcelain` から検出して削除します
 - **CLI**: `pwsh ./scripts/Clean-Worktrees.ps1` (確認だけしたい場合は `-WhatIf`)
    - 既定で `appsettings.local.json → appsettings.json` の順に `DocsRepository:BareCloneDir` を読みます。明示指定したい場合は `-BareCloneDir <path>`
 
 #### 仕組み
 
-- [`DocsWorktreeManager`](../src/RepoSyncRadar.Core/Services/Preview/DocsWorktreeManager.cs) が `git clone --bare` した親リポから変更前 / PR HEAD の worktree を切り、[`PreviewServerHost`](../src/RepoSyncRadar.Core/Services/Preview/PreviewServerHost.cs) がそれぞれ `npm run dev` を sidecar 起動
-- [`PreviewCoordinator`](../src/RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs) が clone → fetch → parent 解決 → checkout → start → `PreviewSession.Activate(port...)` を 1 ステップで束ねます
+- [`DocsWorktreeManager`](../src/RepoSyncRadar.Core/Services/Preview/DocsWorktreeManager.cs) が `git clone --bare` した親リポから Markdown と参照ファイルを SHA 指定で読みます
+- [`PreviewCoordinator`](../src/RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs) が clone → fetch → parent 解決 → Markdown/Liquid render → `LocalPreviewContentServer` 起動 → `PreviewSession.Activate(port)` を 1 ステップで束ねます
 - [`PreviewPathMapper`](../src/RepoSyncRadar.Core/Services/Preview/PreviewPathMapper.cs) が `content/foo/bar.md` を `/en/foo/bar` に、`content/index.md` を `/en` に変換します
-- LRU で `MaxWorktrees` を超えたら最も古い worktree を `git worktree remove --force`
-- アプリ終了時に preview プロセスは確実に kill されます(`IAsyncDisposable`)
+- Markdown 内の相対画像や `/assets/...` 参照は、必要なファイルだけを bare clone から asset cache に展開して配信します
 
 ### 5.2 監査ログ
 
