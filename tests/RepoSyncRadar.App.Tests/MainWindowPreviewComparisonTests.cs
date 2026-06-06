@@ -381,15 +381,19 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
-    public void BuildInstallSynchronizedScrollScript_Does_Not_Scan_Anchors()
+    public void BuildInstallSynchronizedScrollScript_Schedules_Gentle_Anchor_Correction()
     {
         var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.After);
 
-        // Anchor-based sync snapped between sections when only one pane had an
-        // inserted block. The sender now reports wheel delta only.
-        Assert.DoesNotContain("getBoundingClientRect", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("data-rsr-diff-index", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("rsr-rendered-diff-added", script, StringComparison.Ordinal);
+        // Wheel motion is synchronized immediately by delta, then a debounced
+        // correction nudges visible shared content back into alignment. Changed
+        // blocks are excluded so inserted-only regions do not snap sections.
+        Assert.Contains("scheduleCorrection", script, StringComparison.Ordinal);
+        Assert.Contains("window.setTimeout", script, StringComparison.Ordinal);
+        Assert.Contains("}, 220)", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", script, StringComparison.Ordinal);
+        Assert.Contains("!el.matches(renderedDiffSelector)", script, StringComparison.Ordinal);
+        Assert.Contains("anchor.rect.top.toFixed(2)", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -431,10 +435,10 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==", script, StringComparison.Ordinal);
         Assert.Contains("120.5", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollBy", script, StringComparison.Ordinal); // anchor branch uses scrollBy(delta)
-        Assert.Contains("const maxDelta = Math.min(360, Math.max(160, window.innerHeight * 0.2));", script, StringComparison.Ordinal);
+        Assert.Contains("const maxDelta = 120;", script, StringComparison.Ordinal);
         Assert.Contains("top: clampedDelta", script, StringComparison.Ordinal);
         Assert.Contains("const scrollDirection = \"down\"", script, StringComparison.Ordinal);
-        Assert.Contains("directionAllowsDelta", script, StringComparison.Ordinal);
+        Assert.Contains("const maxDelta = 120;", script, StringComparison.Ordinal);
         // Ratio fallback remains available for legacy ratio-only messages, but
         // anchor-bearing messages should not jump by ratio when the peer lacks
         // the changed block.

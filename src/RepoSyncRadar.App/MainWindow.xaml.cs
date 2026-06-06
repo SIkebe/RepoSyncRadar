@@ -1983,6 +1983,13 @@ public partial class MainWindow : Window
     if (existing && existing.handler) {
         window.removeEventListener('scroll', existing.handler);
     }
+    if (existing && existing.correctionTimer) {
+        window.clearTimeout(existing.correctionTimer);
+    }
+
+    const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
+    const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
+    const renderedDiffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed,.rsr-preview-diff-block';
 
     const getMaxScrollTop = () => {
         const root = document.scrollingElement || document.documentElement || document.body;
@@ -2005,6 +2012,71 @@ public partial class MainWindow : Window
     const getScrollTop = () => {
         const root = document.scrollingElement || document.documentElement || document.body;
         return window.scrollY || root?.scrollTop || 0;
+    };
+
+    const findCandidateBlocks = () => {
+        const stamped = document.querySelectorAll('[data-rsr-diff-index]');
+        const blocks = stamped.length > 0
+            ? Array.from(stamped)
+            : (() => {
+                const articleRoot =
+                    document.querySelector('main article') ||
+                    document.querySelector('article') ||
+                    document.querySelector('[data-testid="article-body"]') ||
+                    document.querySelector('main') ||
+                    document.body;
+                if (!articleRoot) {
+                    return [];
+                }
+                return Array.from(articleRoot.querySelectorAll(leafSelector))
+                    .filter((el) => !el.closest(blockedAncestorSelector))
+                    .filter((el) => {
+                        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+                        return text.length >= 4 && !el.querySelector(leafSelector);
+                    });
+            })();
+        return blocks.filter((el) => !el.matches(renderedDiffSelector) && !el.querySelector(renderedDiffSelector));
+    };
+
+    const computeFingerprint = (el) => {
+        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text.length < 4) {
+            return '';
+        }
+        const slice = text.slice(0, 96);
+        try {
+            return btoa(unescape(encodeURIComponent(slice)));
+        } catch (_) {
+            return '';
+        }
+    };
+
+    const pickVisibleCorrectionAnchor = () => {
+        for (const el of findCandidateBlocks()) {
+            const rect = el.getBoundingClientRect();
+            if (rect.bottom > 0 && rect.top < window.innerHeight) {
+                return { el, rect };
+            }
+        }
+        return null;
+    };
+
+    const scheduleCorrection = (ratio, direction) => {
+        if (window[stateKey]?.correctionTimer) {
+            window.clearTimeout(window[stateKey].correctionTimer);
+        }
+        window[stateKey].correctionTimer = window.setTimeout(() => {
+            if (Date.now() < (window[stateKey]?.suppressUntil || 0)) {
+                return;
+            }
+            const anchor = pickVisibleCorrectionAnchor();
+            const fingerprint = anchor ? computeFingerprint(anchor.el) : '';
+            if (!anchor || !fingerprint) {
+                return;
+            }
+            window.chrome?.webview?.postMessage(
+                `rsr-preview-scroll:${pane}:${ratio}:${anchor.rect.top.toFixed(2)}:${fingerprint}:${direction}`);
+        }, 220);
     };
 
     let frame = 0;
@@ -2032,6 +2104,7 @@ public partial class MainWindow : Window
             const ratio = getScrollRatio().toFixed(6);
             window.chrome?.webview?.postMessage(
                 `rsr-preview-scroll:${pane}:${ratio}:delta:${delta.toFixed(2)}:${direction}`);
+            scheduleCorrection(ratio, direction);
         });
     };
 
@@ -2040,6 +2113,7 @@ public partial class MainWindow : Window
         handler,
         suppressUntil: existing?.suppressUntil || 0,
         lastScrollTop: existing?.lastScrollTop ?? getScrollTop(),
+        correctionTimer: 0,
     };
     window.addEventListener('scroll', handler, { passive: true });
     return true;
@@ -2174,14 +2248,9 @@ public partial class MainWindow : Window
             if (computeFingerprint(el) === anchorFingerprint) {
                 const targetTop = el.getBoundingClientRect().top;
                 const delta = targetTop - anchorOffsetPx;
-                const maxDelta = Math.min(360, Math.max(160, window.innerHeight * 0.2));
+                const maxDelta = 120;
                 const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, delta));
-                const directionAllowsDelta = scrollDirection === 'down'
-                    ? clampedDelta > 0
-                    : scrollDirection === 'up'
-                        ? clampedDelta < 0
-                        : true;
-                if (directionAllowsDelta && Math.abs(clampedDelta) > 0.5) {
+                if (Math.abs(clampedDelta) > 0.5) {
                     window.scrollBy({ left: 0, top: clampedDelta, behavior: 'auto' });
                 }
                 scrolled = true;
