@@ -327,7 +327,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.True(double.IsNaN(anchorOffsetPx));
         Assert.Null(anchorFingerprint);
         Assert.Equal(180.5, scrollDeltaPx, precision: 6);
-        Assert.True(direction == PreviewScrollDirection.Down);
+        Assert.Equal(PreviewScrollDirection.Down, direction);
     }
 
     [Fact]
