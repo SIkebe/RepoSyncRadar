@@ -2514,19 +2514,19 @@ public partial class MainWindow : Window
                         }
                 }
 
-                    if (parts.Length == 6)
+                if (parts.Length == 6)
+                {
+                    scrollDirection = parts[5] switch
                     {
-                        scrollDirection = parts[5] switch
-                        {
-                            "down" => PreviewScrollDirection.Down,
-                            "up" => PreviewScrollDirection.Up,
-                            _ => PreviewScrollDirection.Unknown,
-                        };
-                        if (scrollDirection == PreviewScrollDirection.Unknown)
-                        {
-                            return false;
-                        }
+                        "down" => PreviewScrollDirection.Down,
+                        "up" => PreviewScrollDirection.Up,
+                        _ => PreviewScrollDirection.Unknown,
+                    };
+                    if (scrollDirection == PreviewScrollDirection.Unknown)
+                    {
+                        return false;
                     }
+                }
 
                 return true;
         }
