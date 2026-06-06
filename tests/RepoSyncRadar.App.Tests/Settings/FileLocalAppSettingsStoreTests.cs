@@ -75,6 +75,18 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
               "GitHub": {
                 "Owner": "old",
                 "Unknown": "keep"
+                            },
+                            "DocsRepository": {
+                                "MaxWorktrees": 5,
+                                "PreviewCommand": "npm",
+                                "PreviewArguments": "run dev",
+                                "InstallArguments": "install",
+                                "PreviewInstallArguments": "install",
+                                "PreviewEnvironment": {
+                                    "PORT": "{port}"
+                                },
+                                "PreviewEnvironmentVariables": "PORT={port}",
+                                "Unknown": "keep-docsrepo"
               }
             }
             """,
@@ -125,7 +137,16 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.False(root.GetProperty("Copilot").GetProperty("EnableSessionTelemetry").GetBoolean());
         Assert.Equal("docs.github.com", root.GetProperty("Copilot").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("github.com", root.GetProperty("WebView").GetProperty("AllowedUrlHosts")[0].GetString());
-        Assert.True(root.GetProperty("DocsRepository").GetProperty("PrewarmOnStartup").GetBoolean());
+        var docsRepository = root.GetProperty("DocsRepository");
+        Assert.True(docsRepository.GetProperty("PrewarmOnStartup").GetBoolean());
+        Assert.Equal("keep-docsrepo", docsRepository.GetProperty("Unknown").GetString());
+        Assert.False(docsRepository.TryGetProperty("MaxWorktrees", out _));
+        Assert.False(docsRepository.TryGetProperty("PreviewCommand", out _));
+        Assert.False(docsRepository.TryGetProperty("PreviewArguments", out _));
+        Assert.False(docsRepository.TryGetProperty("InstallArguments", out _));
+        Assert.False(docsRepository.TryGetProperty("PreviewInstallArguments", out _));
+        Assert.False(docsRepository.TryGetProperty("PreviewEnvironment", out _));
+        Assert.False(docsRepository.TryGetProperty("PreviewEnvironmentVariables", out _));
         Assert.True(root.GetProperty("Updates").GetProperty("Enabled").GetBoolean());
         Assert.Equal("https://github.com/example/RepoSyncRadar", root.GetProperty("Updates").GetProperty("FeedUrl").GetString());
         Assert.Equal("win-arm64-preview", root.GetProperty("Updates").GetProperty("Channel").GetString());

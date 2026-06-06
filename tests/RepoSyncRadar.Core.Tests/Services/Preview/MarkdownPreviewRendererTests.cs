@@ -1089,6 +1089,84 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Whole_Inserted_Paragraph_When_It_Ends_With_Autotitle_Link()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/copilot/how-tos/administer-copilot/manage-for-enterprise/manage-agents/about-enterprise-plugin-standards"] = "About enterprise-managed plugin standards for Copilot CLI",
+            });
+        const string beforeMarkdown = """
+            1. In your enterprise's `.github-private` repository, navigate to the `.github/copilot/` directory.
+            """;
+        const string afterMarkdown = """
+            You can apply settings to control users' available plugin marketplaces and default-installed plugins. These settings apply to users on your enterprise's Copilot plan. For more information, see [AUTOTITLE](/copilot/how-tos/administer-copilot/manage-for-enterprise/manage-agents/about-enterprise-plugin-standards).
+
+            1. In your enterprise's `.github-private` repository, navigate to the `.github/copilot/` directory.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/administer-copilot/manage-for-enterprise/manage-agents/configure-enterprise-plugin-standards.md",
+            afterMarkdown,
+            "23964e2",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">You can apply settings", html, StringComparison.Ordinal);
+        Assert.Contains("About enterprise-managed plugin standards for Copilot CLI</a>.</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("You can apply settings to control users' available plugin marketplaces and default-installed plugins. <span class=\"rsr-rendered-diff-added\">These settings apply", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Marks_Whole_Inserted_List_Items_When_Nearby_Item_Shares_Prefix()
+    {
+        const string beforeMarkdown = """
+            ## European Union
+
+            * GPT-4o mini
+            * GPT-4.1
+            * GPT-5 mini
+            * GPT-5.2
+            * GPT-5.3-Codex
+            * GPT-5.4
+            * Claude Haiku 4.5
+            """;
+        const string afterMarkdown = """
+            ## European Union
+
+            * GPT-4o mini
+            * GPT-4.1
+            * GPT-5 mini
+            * GPT-5.2
+            * GPT-5.3-Codex
+            * GPT-5.4
+            * GPT-5.4 mini
+            * GPT-5.4 nano
+            * GPT-5.5
+            * Claude Haiku 4.5
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/reference/copilot-billing/models-and-pricing.md",
+            afterMarkdown,
+            "7bdd8fc",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">GPT-5.4 mini</span>", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">GPT-5.4 nano</span>", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">GPT-5.5</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("GPT-5.4 <span class=\"rsr-rendered-diff-added\">mini</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("GPT-5.<span class=\"rsr-rendered-diff-added\">5</span>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Leaves_GitHub_Alert_Markers_In_Code_Fences_Untouched()
     {
         var markdown = """

@@ -298,12 +298,36 @@ public sealed class MainWindowPreviewComparisonTests
     [InlineData("rsr-preview-scroll:left:0.5")]
     [InlineData("rsr-preview-scroll:before:not-a-number")]
     [InlineData("unrelated:before:0.5")]
-    [InlineData("rsr-preview-scroll:before:0.5:120")] // 4-part is malformed: must be 3 or 5
+    [InlineData("rsr-preview-scroll:before:0.5:120")] // 4-part is malformed: must be 3, 5, or 6
+    [InlineData("rsr-preview-scroll:before:0.5:120:YWJj:sideways")]
     public void TryParsePreviewScrollMessage_Rejects_Invalid_Messages(string? message)
     {
         var parsed = MainWindow.TryParsePreviewScrollMessage(message, out _, out _);
 
         Assert.False(parsed);
+    }
+
+    [Fact]
+    public void TryParsePreviewScrollMessage_Parses_Scroll_Direction()
+    {
+        var message = "rsr-preview-scroll:after:0.42:delta:180.5:down";
+
+        var parsed = MainWindow.TryParsePreviewScrollMessage(
+            message,
+            out var pane,
+            out var ratio,
+            out var anchorOffsetPx,
+            out var anchorFingerprint,
+            out var scrollDeltaPx,
+            out var direction);
+
+        Assert.True(parsed);
+        Assert.Equal(PreviewDiffPane.After, pane);
+        Assert.Equal(0.42, ratio, precision: 6);
+        Assert.True(double.IsNaN(anchorOffsetPx));
+        Assert.Null(anchorFingerprint);
+        Assert.Equal(180.5, scrollDeltaPx, precision: 6);
+        Assert.Equal(PreviewScrollDirection.Down, direction);
     }
 
     [Fact]
@@ -342,7 +366,7 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
-    public void BuildInstallSynchronizedScrollScript_Posts_Before_Pane_Ratio_Message()
+    public void BuildInstallSynchronizedScrollScript_Posts_Anchored_Scroll_Message()
     {
         var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.Before);
 
@@ -350,20 +374,42 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const pane = \"before\"", script, StringComparison.Ordinal);
         Assert.Contains("window.addEventListener('scroll'", script, StringComparison.Ordinal);
         Assert.Contains("requestAnimationFrame", script, StringComparison.Ordinal);
+        Assert.Contains("lastScrollTop", script, StringComparison.Ordinal);
+        Assert.Contains("delta.toFixed(2)", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-preview-scroll:${pane}:${ratio}:delta", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("rsr-preview-scroll:${pane}:${ratio}`", script, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void BuildInstallSynchronizedScrollScript_Sends_Anchor_Fingerprint_For_Topmost_Visible_Block()
+    public void BuildInstallSynchronizedScrollScript_Schedules_Gentle_Anchor_Correction()
     {
         var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.After);
 
-        // The install script must look for a visible content block and include its
-        // fingerprint + viewport offset in the outgoing message so the peer can do
-        // content-anchored sync rather than relying on a height-ratio that diverges
-        // when the two pages have different chrome.
-        Assert.Contains("getBoundingClientRect", script, StringComparison.Ordinal);
-        Assert.Contains("btoa", script, StringComparison.Ordinal);
-        Assert.Contains("data-rsr-diff-index", script, StringComparison.Ordinal); // anchor candidates include diff blocks
+        // Wheel motion is synchronized immediately by delta, then a debounced
+        // correction nudges visible shared content back into alignment. Changed
+        // blocks are excluded so inserted-only regions do not snap sections.
+        Assert.Contains("scheduleCorrection", script, StringComparison.Ordinal);
+        Assert.Contains("window.setTimeout", script, StringComparison.Ordinal);
+        Assert.Contains("}, 220)", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", script, StringComparison.Ordinal);
+        Assert.Contains("!el.matches(renderedDiffSelector)", script, StringComparison.Ordinal);
+        Assert.Contains("anchor.rect.top.toFixed(2)", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildApplySynchronizedScrollScript_Uses_Delta_When_Provided()
+    {
+        var script = MainWindow.BuildApplySynchronizedScrollScript(
+            ratio: 0.5,
+            anchorOffsetPx: null,
+            anchorFingerprintBase64: null,
+            scrollDeltaPx: -220.25,
+            scrollDirection: PreviewScrollDirection.Up);
+
+        Assert.Contains("const scrollDeltaPx = -220.25", script, StringComparison.Ordinal);
+        Assert.Contains("const scrollDirection = \"up\"", script, StringComparison.Ordinal);
+        Assert.Contains("const maxDelta = 900;", script, StringComparison.Ordinal);
+        Assert.Contains("window.scrollBy({ left: 0, top: clampedDelta", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -373,6 +419,7 @@ public sealed class MainWindowPreviewComparisonTests
 
         Assert.Contains("const ratio = 1", script, StringComparison.Ordinal);
         Assert.Contains("suppressUntil", script, StringComparison.Ordinal);
+        Assert.Contains("Date.now() + 1000", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollTo", script, StringComparison.Ordinal);
     }
 
@@ -382,13 +429,20 @@ public sealed class MainWindowPreviewComparisonTests
         var script = MainWindow.BuildApplySynchronizedScrollScript(
             ratio: 0.5,
             anchorOffsetPx: 120.5,
-            anchorFingerprintBase64: "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==");
+            anchorFingerprintBase64: "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==",
+            scrollDirection: PreviewScrollDirection.Down);
 
         Assert.Contains("U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==", script, StringComparison.Ordinal);
         Assert.Contains("120.5", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollBy", script, StringComparison.Ordinal); // anchor branch uses scrollBy(delta)
-        // Ratio fallback must still be present so anchor-miss does not freeze sync.
+        Assert.Contains("const maxDelta = 120;", script, StringComparison.Ordinal);
+        Assert.Contains("top: clampedDelta", script, StringComparison.Ordinal);
+        Assert.Contains("const scrollDirection = \"down\"", script, StringComparison.Ordinal);
+        // Ratio fallback remains available for legacy ratio-only messages, but
+        // anchor-bearing messages should not jump by ratio when the peer lacks
+        // the changed block.
         Assert.Contains("const ratio = 0.5", script, StringComparison.Ordinal);
+        Assert.Contains("if (!scrolled && !anchorFingerprint)", script, StringComparison.Ordinal);
     }
 
     [Fact]
