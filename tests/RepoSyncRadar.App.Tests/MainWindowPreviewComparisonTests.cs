@@ -438,7 +438,6 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const maxDelta = 120;", script, StringComparison.Ordinal);
         Assert.Contains("top: clampedDelta", script, StringComparison.Ordinal);
         Assert.Contains("const scrollDirection = \"down\"", script, StringComparison.Ordinal);
-        Assert.Contains("const maxDelta = 120;", script, StringComparison.Ordinal);
         // Ratio fallback remains available for legacy ratio-only messages, but
         // anchor-bearing messages should not jump by ratio when the peer lacks
         // the changed block.
