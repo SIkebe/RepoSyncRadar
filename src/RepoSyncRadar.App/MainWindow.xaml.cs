@@ -2466,8 +2466,9 @@ public partial class MainWindow : Window
                 }
 
                 var parts = message.Split(':');
-                // 3-part: legacy ratio-only. 5-part: ratio + anchor (offset, base64 fingerprint).
-                // 6-part: ratio + anchor + source scroll direction.
+                // 3-part: legacy ratio-only.
+                // 5-part: ratio + anchor (offset, base64 fingerprint).
+                // 6-part: ratio + either anchor or delta payload + source scroll direction.
                 if ((parts.Length != 3 && parts.Length != 5 && parts.Length != 6)
                         || !string.Equals(parts[0], "rsr-preview-scroll", StringComparison.Ordinal))
                 {
@@ -2513,19 +2514,19 @@ public partial class MainWindow : Window
                         }
                 }
 
-                        if (parts.Length == 6)
+                    if (parts.Length == 6)
+                    {
+                        scrollDirection = parts[5] switch
                         {
-                            scrollDirection = parts[5] switch
-                            {
-                                "down" => PreviewScrollDirection.Down,
-                                "up" => PreviewScrollDirection.Up,
-                                _ => PreviewScrollDirection.Unknown,
-                            };
-                            if (scrollDirection == PreviewScrollDirection.Unknown)
-                            {
-                                return false;
-                            }
+                            "down" => PreviewScrollDirection.Down,
+                            "up" => PreviewScrollDirection.Up,
+                            _ => PreviewScrollDirection.Unknown,
+                        };
+                        if (scrollDirection == PreviewScrollDirection.Unknown)
+                        {
+                            return false;
                         }
+                    }
 
                 return true;
         }
