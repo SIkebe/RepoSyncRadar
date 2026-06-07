@@ -602,14 +602,7 @@
         IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
-        var detailedTask = agent.RunMorningTriageWithResultAsync(progress, cancellationToken);
-        if (detailedTask is not null)
-        {
-            return await detailedTask.ConfigureAwait(false);
-        }
-
-        var report = await agent.RunMorningTriageAsync(progress, cancellationToken).ConfigureAwait(false);
-        return new TriageRunResult(report, [], CopilotSessionStarted: report.Total > 0, LastStage: null);
+        return await agent.RunMorningTriageWithResultAsync(progress, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<TriageDigest> BuildDigestAsync(
