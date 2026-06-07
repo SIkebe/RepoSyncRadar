@@ -13,7 +13,7 @@ It combines deterministic ingestion of Repo sync PRs with GitHub Copilot SDK tri
 
 - Ingests recent `github/docs` Repo sync PRs and stores commit, file, scoring, review, ignore-rule, and draft data in SQLite.
 - Uses the **GitHub Copilot SDK** (`GitHub.Copilot.SDK` 1.0.0) to run Morning Triage, score candidate commits, and generate review summaries.
-- Keeps operator decisions explicit with **Unreviewed**, **Focus**, **Hold**, **Rejected**, **Archived**, directory ignore rules, and importance boost data.
+- Keeps operator decisions explicit with **Unseen**, **Watch**, **Later**, **Rejected**, **Archive**, directory ignore rules, and importance boost data.
 - Maps changed docs paths to `docs.github.com` URLs so reviewers can jump from a commit to the public article context.
 - Renders local before/after Markdown previews for docs changes through the app's .NET Markdown/Liquid pipeline and WebView2, without requiring Node.js.
 - Generates human-reviewed sharing drafts for short-form updates and customer-facing notices.
@@ -55,7 +55,7 @@ Installed builds can check Velopack update feeds and apply newer releases withou
 
 1. Start the app and confirm the header shows a signed-in GitHub user.
 2. Run **Triage** to fetch Repo sync PRs, ingest new commits, and let Copilot score likely operator-impacting changes.
-3. Review the **Unreviewed** queue, then mark commits as **Focus**, **Hold**, **Rejected**, or **Archived**.
+3. Review the **Unseen** queue, then mark commits as **Watch**, **Later**, **Rejected**, or **Archive**.
 4. Open changed docs URLs or use local preview for Markdown changes that need rendered before/after inspection.
 5. For focused commits, generate or copy sharing drafts, then make the final human decision outside the app.
 
