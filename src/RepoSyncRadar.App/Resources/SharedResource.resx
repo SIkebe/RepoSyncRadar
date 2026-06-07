@@ -235,7 +235,7 @@
   <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits と Premium Request cost は SDK の usage event / session metrics から表示します。SDK が AI Credits を返さない場合は未報告のままにします。プロンプト本文は保存しません。</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>セッション metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
   <data name="Settings.DefaultTheme" xml:space="preserve"><value>既定テーマ</value></data>
-  <data name="Settings.Description" xml:space="preserve"><value>表示言語、既定テーマ、アプリ設定、ライセンス、無視リストを確認できます。</value></data>
+  <data name="Settings.Description" xml:space="preserve"><value>目的別のセクションから表示言語、アプリ設定、自動化、ライセンスを確認できます。</value></data>
   <data name="Settings.DisplayLanguage" xml:space="preserve"><value>表示言語</value></data>
   <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>表示言語を切り替えています…</value></data>
   <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>表示言語を {0} に切り替えました。</value></data>
@@ -246,6 +246,11 @@
   <data name="Settings.IgnoreList.Empty" xml:space="preserve"><value>無視リストはまだ設定されていません。</value></data>
   <data name="Settings.IgnoreList.LoadFailed" xml:space="preserve"><value>無視リストの読み込みに失敗しました</value></data>
   <data name="Settings.IgnoreList.Refresh" xml:space="preserve"><value>無視リストを更新</value></data>
+  <data name="Settings.Section.AppSettings" xml:space="preserve"><value>アプリ設定</value></data>
+  <data name="Settings.Section.Automation" xml:space="preserve"><value>自動化</value></data>
+  <data name="Settings.Section.General" xml:space="preserve"><value>一般</value></data>
+  <data name="Settings.Section.LegalAbout" xml:space="preserve"><value>サードパーティ ライセンス</value></data>
+  <data name="Settings.Section.Navigation" xml:space="preserve"><value>設定セクション</value></data>
   <data name="Settings.Theme.Dark" xml:space="preserve"><value>ダーク</value></data>
   <data name="Settings.Theme.Light" xml:space="preserve"><value>ライト</value></data>
   <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>テーマ設定の読み込みに失敗しました</value></data>

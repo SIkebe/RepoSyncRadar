@@ -454,6 +454,53 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Settings_Opens_General_And_Defers_Section_Content()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+
+        var sp = BuildServices(session, out _, out _, repo);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-section-nav-general\"]").GetAttribute("aria-current"));
+            Assert.NotNull(cut.Find("[data-testid=\"settings-display-language-section\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"settings-default-theme-section\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-local-appsettings\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-check-updates\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-third-party-notices\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-third-party-license-text\"]"));
+        });
+
+        SelectSettingsSection(cut, "settings-section-nav-app-settings");
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-local-appsettings\"]")));
+
+        SelectSettingsSection(cut, "settings-section-nav-automation");
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-check-updates\"]")));
+
+        SelectSettingsSection(cut, "settings-section-nav-legal-about");
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-section-nav-legal-about\"]").GetAttribute("aria-current"));
+            Assert.NotNull(cut.Find("[data-testid=\"settings-third-party-notices\"]"));
+            Assert.NotEmpty(cut.FindAll("[data-testid=\"settings-third-party-license-text\"]"));
+        });
+    }
+
+    [Fact]
     public void Settings_Button_Loads_And_Renders_Ignore_Rules()
     {
         var session = Substitute.For<IGitHubAuthSession>();
@@ -486,15 +533,11 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
 
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
-            Assert.NotNull(cut.Find("[data-testid=\"settings-third-party-notices\"]"));
-            Assert.True(
-                cut.Markup.IndexOf("data-testid=\"settings-ignore-rules\"", StringComparison.Ordinal) <
-                cut.Markup.IndexOf("data-testid=\"settings-third-party-notices\"", StringComparison.Ordinal),
-                "Ignore rules should appear before third-party notices in Settings.");
             Assert.DoesNotContain("無視リストを更新", cut.Find(".app-settings-header").TextContent, StringComparison.Ordinal);
             Assert.Equal(
                 "無視リストを更新",
@@ -541,6 +584,7 @@ public sealed class AppHeaderTests
         Assert.Contains("0.1230", cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent);
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
         Assert.Contains("AI Credits0.1230 credits", summary, StringComparison.Ordinal);
@@ -630,6 +674,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
         Assert.Contains("AI Credits0.2500 credits", summary, StringComparison.Ordinal);
@@ -682,6 +727,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"settings-ignore-rule\"]").Count));
 
         cut.FindAll("[data-testid=\"settings-delete-ignore-rule\"]")[0].Click();
@@ -745,6 +791,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"settings-ignore-rule\"]").Count));
         cut.FindAll("[data-testid=\"settings-ignore-rule-select\"]")[0].Change(true);
         cut.FindAll("[data-testid=\"settings-ignore-rule-select\"]")[2].Change(true);
@@ -793,6 +840,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
 
         cut.WaitForAssertion(() =>
         {
@@ -911,6 +959,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-check-updates\"]")));
         cut.Find("[data-testid=\"settings-check-updates\"]").Click();
 
@@ -940,6 +989,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-check-updates\"]")));
         cut.Find("[data-testid=\"settings-check-updates\"]").Click();
 
@@ -1010,6 +1060,9 @@ public sealed class AppHeaderTests
 
         cut.WaitForAssertion(() => Assert.Equal(1, updateService.RestartCount));
     }
+
+    private static void SelectSettingsSection(IRenderedComponent<AppHeader> cut, string sectionTestId)
+        => cut.Find($"[data-testid=\"{sectionTestId}\"]").Click();
 
     private static ServiceProvider BuildServices(
         IGitHubAuthSession session,
