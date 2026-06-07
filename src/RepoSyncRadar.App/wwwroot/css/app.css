@@ -1671,6 +1671,39 @@ html, body {
     grid-template-columns: minmax(12rem, 2fr) minmax(6rem, 0.7fr) minmax(10rem, 1.4fr) auto;
 }
 
+.settings-rule-registration {
+    background: #f6f8fa;
+    border: 1px solid #d8dee4;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 0.7rem;
+}
+
+.settings-rule-quick-picks {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.settings-rule-helper-label {
+    color: #57606a;
+    flex: 0 0 auto;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.settings-rule-suggestion-chip {
+    font-size: 0.74rem;
+    padding-block: 0.22rem;
+}
+
+.settings-rule-delta-preset {
+    min-width: 3.25rem;
+}
+
 .settings-rule-add-form label {
     display: flex;
     flex-direction: column;
@@ -1688,6 +1721,16 @@ html, body {
     font: inherit;
     min-width: 0;
     padding: 0.35rem 0.45rem;
+}
+
+.settings-rule-add-form input::placeholder {
+    color: #8c959f;
+}
+
+@media (max-width: 860px) {
+    .settings-rule-add-form {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 .ignore-rule-row {
@@ -2375,7 +2418,8 @@ html, body {
     color: var(--radar-fg) !important;
 }
 
-.radar-theme-dark .settings-rule-add-form span {
+.radar-theme-dark .settings-rule-add-form span,
+.radar-theme-dark .settings-rule-helper-label {
     color: var(--radar-muted-fg) !important;
 }
 
@@ -2408,6 +2452,7 @@ html, body {
 .radar-theme-dark .settings-theme-options,
 .radar-theme-dark .settings-theme-option,
 .radar-theme-dark .settings-usage-grid div,
+.radar-theme-dark .settings-rule-registration,
 .radar-theme-dark .local-settings-group,
 .radar-theme-dark .local-settings-field input,
 .radar-theme-dark .local-settings-field textarea,
@@ -2434,6 +2479,10 @@ html, body {
     background: var(--radar-panel-alt-bg) !important;
     border-color: var(--radar-border) !important;
     color: var(--radar-fg) !important;
+}
+
+.radar-theme-dark .settings-rule-add-form input::placeholder {
+    color: var(--radar-muted-fg) !important;
 }
 
 .radar-theme-dark .settings-section-nav-button:hover {

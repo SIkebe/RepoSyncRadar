@@ -295,11 +295,15 @@
   <data name="Settings.BoostRules.DeleteFailed" xml:space="preserve"><value>Failed to delete boost rules</value></data>
   <data name="Settings.BoostRules.Deleted" xml:space="preserve"><value>Deleted {0} boost rule(s)</value></data>
   <data name="Settings.BoostRules.Delta" xml:space="preserve"><value>Delta</value></data>
+  <data name="Settings.BoostRules.DeltaPresets" xml:space="preserve"><value>Common deltas</value></data>
   <data name="Settings.BoostRules.Description" xml:space="preserve"><value>Raise or lower scores for changes matching a path pattern. Delta must be between -5.0 and +5.0.</value></data>
   <data name="Settings.BoostRules.Empty" xml:space="preserve"><value>No boost rules have been configured yet.</value></data>
   <data name="Settings.BoostRules.LoadFailed" xml:space="preserve"><value>Failed to load boost rules</value></data>
   <data name="Settings.BoostRules.Pattern" xml:space="preserve"><value>Pattern</value></data>
+  <data name="Settings.BoostRules.PatternPlaceholder" xml:space="preserve"><value>Example: content/copilot/**</value></data>
+  <data name="Settings.BoostRules.PatternSuggestions" xml:space="preserve"><value>Common patterns</value></data>
   <data name="Settings.BoostRules.Reason" xml:space="preserve"><value>Reason</value></data>
+  <data name="Settings.BoostRules.ReasonPlaceholder" xml:space="preserve"><value>Example: Copilot docs</value></data>
   <data name="Settings.BoostRules.Refresh" xml:space="preserve"><value>Refresh boost rules</value></data>
   <data name="Settings.BoostRules.Validation.DeltaInvalid" xml:space="preserve"><value>Enter a numeric delta.</value></data>
   <data name="Settings.BoostRules.Validation.DeltaRange" xml:space="preserve"><value>Delta must be between {0} and {1}.</value></data>

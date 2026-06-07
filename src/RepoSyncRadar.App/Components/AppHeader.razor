@@ -386,36 +386,65 @@
                                     disabled="@_settingsBoostLoading"
                                     @onclick="LoadBoostRulesAsync">@L["Settings.BoostRules.Refresh"]</button>
                         </header>
-                        <div class="settings-rule-add-form" data-testid="settings-boost-rule-add-form">
-                            <label>
-                                <span>@L["Settings.BoostRules.Pattern"]</span>
-                                <input type="text"
-                                       data-testid="settings-boost-rule-pattern-input"
-                                       value="@_boostRulePattern"
-                                       disabled="@_settingsBoostSaving"
-                                       @oninput="OnBoostRulePatternInput" />
-                            </label>
-                            <label>
-                                <span>@L["Settings.BoostRules.Delta"]</span>
-                                <input type="text"
-                                       data-testid="settings-boost-rule-delta-input"
-                                       value="@_boostRuleDelta"
-                                       disabled="@_settingsBoostSaving"
-                                       @oninput="OnBoostRuleDeltaInput" />
-                            </label>
-                            <label>
-                                <span>@L["Settings.BoostRules.Reason"]</span>
-                                <input type="text"
-                                       data-testid="settings-boost-rule-reason-input"
-                                       value="@_boostRuleReason"
-                                       disabled="@_settingsBoostSaving"
-                                       @oninput="OnBoostRuleReasonInput" />
-                            </label>
-                            <button type="button"
-                                    class="toolbar-button compact"
-                                    data-testid="settings-add-boost-rule"
-                                    disabled="@_settingsBoostSaving"
-                                    @onclick="AddBoostRuleAsync">@L["Settings.BoostRules.Add"]</button>
+                        <div class="settings-rule-registration" data-testid="settings-boost-rule-registration">
+                            <div class="settings-rule-quick-picks" data-testid="settings-boost-rule-pattern-suggestions">
+                                <span class="settings-rule-helper-label">@L["Settings.BoostRules.PatternSuggestions"]</span>
+                                @foreach (var suggestion in BoostRulePatternSuggestions)
+                                {
+                                    <button type="button"
+                                            class="review-suggestion-chip settings-rule-suggestion-chip"
+                                            data-testid="settings-boost-rule-pattern-suggestion"
+                                            disabled="@_settingsBoostSaving"
+                                            @onclick="() => SelectBoostRulePatternSuggestion(suggestion)">
+                                        <span class="review-suggestion-pattern">@suggestion</span>
+                                    </button>
+                                }
+                            </div>
+                            <div class="settings-rule-add-form" data-testid="settings-boost-rule-add-form">
+                                <label class="settings-rule-pattern-field">
+                                    <span>@L["Settings.BoostRules.Pattern"]</span>
+                                    <input type="text"
+                                           data-testid="settings-boost-rule-pattern-input"
+                                           placeholder="@L["Settings.BoostRules.PatternPlaceholder"]"
+                                           value="@_boostRulePattern"
+                                           disabled="@_settingsBoostSaving"
+                                           @oninput="OnBoostRulePatternInput" />
+                                </label>
+                                <label class="settings-rule-delta-field">
+                                    <span>@L["Settings.BoostRules.Delta"]</span>
+                                    <input type="text"
+                                           data-testid="settings-boost-rule-delta-input"
+                                           placeholder="+1"
+                                           value="@_boostRuleDelta"
+                                           disabled="@_settingsBoostSaving"
+                                           @oninput="OnBoostRuleDeltaInput" />
+                                </label>
+                                <label class="settings-rule-reason-field">
+                                    <span>@L["Settings.BoostRules.Reason"]</span>
+                                    <input type="text"
+                                           data-testid="settings-boost-rule-reason-input"
+                                           placeholder="@L["Settings.BoostRules.ReasonPlaceholder"]"
+                                           value="@_boostRuleReason"
+                                           disabled="@_settingsBoostSaving"
+                                           @oninput="OnBoostRuleReasonInput" />
+                                </label>
+                                <button type="button"
+                                        class="toolbar-button compact"
+                                        data-testid="settings-add-boost-rule"
+                                        disabled="@_settingsBoostSaving"
+                                        @onclick="AddBoostRuleAsync">@L["Settings.BoostRules.Add"]</button>
+                            </div>
+                            <div class="settings-rule-quick-picks" data-testid="settings-boost-rule-delta-presets">
+                                <span class="settings-rule-helper-label">@L["Settings.BoostRules.DeltaPresets"]</span>
+                                @foreach (var preset in BoostRuleDeltaPresets)
+                                {
+                                    <button type="button"
+                                            class="toolbar-button compact secondary settings-rule-delta-preset"
+                                            data-testid="settings-boost-rule-delta-preset"
+                                            disabled="@_settingsBoostSaving"
+                                            @onclick="() => SelectBoostRuleDeltaPreset(preset)">@FormatBoostDelta(preset)</button>
+                                }
+                            </div>
                         </div>
                         @if (!string.IsNullOrWhiteSpace(_settingsBoostStatus))
                         {
@@ -576,6 +605,17 @@
 
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
+    private const string DefaultBoostRuleDeltaText = "1";
+    private static readonly string[] BoostRulePatternSuggestions =
+    [
+        "content/copilot/**",
+        "content/copilot/reference/**",
+        "content/copilot/reference/ai-models/**",
+        "content/copilot/reference/copilot-billing/**",
+        "data/reusables/copilot/**",
+        "data/tables/copilot/**",
+    ];
+    private static readonly double[] BoostRuleDeltaPresets = [1, 2, 3, 0.5, -1];
 
     private GitHubAuthState _state = GitHubAuthState.NotSignedIn;
     private bool _busy;
@@ -609,7 +649,7 @@
     private IReadOnlyList<BoostRule> _boostRules = [];
     private readonly HashSet<string> _selectedBoostRulePatterns = new(StringComparer.Ordinal);
     private string _boostRulePattern = string.Empty;
-    private string _boostRuleDelta = string.Empty;
+    private string _boostRuleDelta = DefaultBoostRuleDeltaText;
     private string _boostRuleReason = string.Empty;
     private bool _settingsBoostLoading;
     private bool _settingsBoostSaving;
@@ -1120,6 +1160,18 @@
         ClearBoostRuleAddMessages();
     }
 
+    private void SelectBoostRulePatternSuggestion(string pattern)
+    {
+        _boostRulePattern = pattern;
+        ClearBoostRuleAddMessages();
+    }
+
+    private void SelectBoostRuleDeltaPreset(double delta)
+    {
+        _boostRuleDelta = delta.ToString("0.###", System.Globalization.CultureInfo.CurrentCulture);
+        ClearBoostRuleAddMessages();
+    }
+
     private void ClearBoostRuleAddMessages()
     {
         _settingsBoostError = null;
@@ -1174,7 +1226,7 @@
             _boostRules = await repo.GetBoostRulesAsync(CancellationToken.None);
             RemoveSelectionsNotInBoostRules();
             _boostRulePattern = string.Empty;
-            _boostRuleDelta = string.Empty;
+            _boostRuleDelta = DefaultBoostRuleDeltaText;
             _boostRuleReason = string.Empty;
             _settingsBoostStatus = L["Settings.BoostRules.Added", pattern];
         }
@@ -1774,9 +1826,8 @@
     }
     private static int GetReviewCount(IReadOnlyDictionary<ReviewStatus, int> counts, ReviewStatus status)
         => counts.TryGetValue(status, out var count) ? count : 0;
-        => counts.TryGetValue(status, out var count) ? count : 0;
+
     private static string FormatBoostDelta(double delta)
-        => delta.ToString("+#,0.###;-#,0.###;0", System.Globalization.CultureInfo.CurrentCulture);
         => delta.ToString("+#,0.###;-#,0.###;0", System.Globalization.CultureInfo.CurrentCulture);
 
     private static string FormatTokens(double tokens)

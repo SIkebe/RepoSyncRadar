@@ -732,6 +732,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
 
         cut.WaitForAssertion(() =>
         {
@@ -777,6 +778,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-boost-rules-empty\"]")));
         cut.Find("[data-testid=\"settings-boost-rule-pattern-input\"]").Input("content/copilot/**");
         cut.Find("[data-testid=\"settings-boost-rule-delta-input\"]").Input("2.5");
@@ -796,6 +798,38 @@ public sealed class AppHeaderTests
             2.5,
             "important",
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Settings_Boost_Rule_Quick_Picks_Fill_Form()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+
+        var sp = BuildServices(session, out _, out _, repo);
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([]));
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-boost-rule-registration\"]")));
+
+        cut.FindAll("[data-testid=\"settings-boost-rule-pattern-suggestion\"]")[1].Click();
+        cut.FindAll("[data-testid=\"settings-boost-rule-delta-preset\"]")[2].Click();
+
+        Assert.Equal("content/copilot/reference/**", cut.Find("[data-testid=\"settings-boost-rule-pattern-input\"]").GetAttribute("value"));
+        Assert.Equal("3", cut.Find("[data-testid=\"settings-boost-rule-delta-input\"]").GetAttribute("value"));
     }
 
     [Fact]
@@ -822,6 +856,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-add-boost-rule\"]")));
 
         cut.Find("[data-testid=\"settings-add-boost-rule\"]").Click();
@@ -896,6 +931,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"settings-boost-rule\"]").Count));
         cut.FindAll("[data-testid=\"settings-boost-rule-select\"]")[0].Change(true);
         cut.FindAll("[data-testid=\"settings-boost-rule-select\"]")[2].Change(true);
