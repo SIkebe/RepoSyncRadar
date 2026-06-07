@@ -131,6 +131,7 @@ public sealed class MorningTriageSessionTests
         Assert.Contains("最大 90 文字程度", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("0.44 以下", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("自動で見送り候補", capturedPrompt, StringComparison.Ordinal);
+        AssertContainsGitHubScopeTerminologyRule(capturedPrompt);
         Assert.DoesNotContain("Skim", capturedPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("`Seen`", capturedPrompt, StringComparison.Ordinal);
     }
@@ -223,6 +224,7 @@ public sealed class MorningTriageSessionTests
             Assert.Contains("radar_score_commit", prompt, StringComparison.Ordinal);
             Assert.Contains("0.44 以下", prompt, StringComparison.Ordinal);
             Assert.Contains("自動で見送り候補", prompt, StringComparison.Ordinal);
+            AssertContainsGitHubScopeTerminologyRule(prompt);
         });
     }
 
@@ -498,5 +500,12 @@ public sealed class MorningTriageSessionTests
         public List<string> Messages { get; } = [];
 
         public void Report(string value) => Messages.Add(value);
+    }
+
+    private static void AssertContainsGitHubScopeTerminologyRule(string prompt)
+    {
+        Assert.Contains("Organization", prompt, StringComparison.Ordinal);
+        Assert.Contains("Enterprise", prompt, StringComparison.Ordinal);
+        Assert.Contains("`組織` と訳さない", prompt, StringComparison.Ordinal);
     }
 }

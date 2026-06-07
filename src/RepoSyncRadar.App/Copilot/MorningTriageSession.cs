@@ -63,6 +63,7 @@ public sealed partial class MorningTriageSession
 
             Style:
             - 出力はすべて日本語。
+            - GitHub の product scope としての `Organization` / `Enterprise` は英語のまま書き、どちらも `組織` と訳さない。
             - 段落を長くしない。
             - 同じ内容を `SummaryJa` / `WhyJa` / `DetailsJa` で繰り返さない。
             - 「新しい」「重要」だけで済ませず、何が誰にどう効くかを書く。
@@ -318,6 +319,7 @@ public sealed partial class MorningTriageSession
             - `WhyJa`: 1 文、80 文字以内。
             - `DetailsJa`: `変更内容` / `根拠` / `影響` / `確認観点` をこの順序で含める。
             - 根拠に書けるのは差分またはレンダリング済み本文で確認した事実だけ。
+            - GitHub の product scope としての `Organization` / `Enterprise` は英語のまま書き、どちらも `組織` と訳さない。
             """;
     }
 
