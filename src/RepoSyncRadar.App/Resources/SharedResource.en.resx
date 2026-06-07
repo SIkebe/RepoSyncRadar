@@ -235,7 +235,7 @@
   <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits and Premium Request cost are shown from SDK usage events and session metrics. If the SDK does not report AI Credits, they remain unreported. Prompt text is not stored.</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>Session metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
   <data name="Settings.DefaultTheme" xml:space="preserve"><value>Default Theme</value></data>
-  <data name="Settings.Description" xml:space="preserve"><value>Review display language, default theme, app settings, licenses, and ignore rules.</value></data>
+  <data name="Settings.Description" xml:space="preserve"><value>Review display language, app settings, automation, and licenses in focused sections.</value></data>
   <data name="Settings.DisplayLanguage" xml:space="preserve"><value>Display Language</value></data>
   <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>Switching display language...</value></data>
   <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>Display language switched to {0}.</value></data>
@@ -246,6 +246,11 @@
   <data name="Settings.IgnoreList.Empty" xml:space="preserve"><value>No ignore rules have been configured yet.</value></data>
   <data name="Settings.IgnoreList.LoadFailed" xml:space="preserve"><value>Failed to load ignore rules</value></data>
   <data name="Settings.IgnoreList.Refresh" xml:space="preserve"><value>Refresh ignore list</value></data>
+  <data name="Settings.Section.AppSettings" xml:space="preserve"><value>App settings</value></data>
+  <data name="Settings.Section.Automation" xml:space="preserve"><value>Automation</value></data>
+  <data name="Settings.Section.General" xml:space="preserve"><value>General</value></data>
+  <data name="Settings.Section.LegalAbout" xml:space="preserve"><value>Legal/about</value></data>
+  <data name="Settings.Section.Navigation" xml:space="preserve"><value>Settings sections</value></data>
   <data name="Settings.Theme.Dark" xml:space="preserve"><value>Dark</value></data>
   <data name="Settings.Theme.Light" xml:space="preserve"><value>Light</value></data>
   <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>Failed to load theme settings</value></data>

@@ -1129,6 +1129,46 @@ html, body {
     overflow-wrap: anywhere;
 }
 
+.settings-section-nav {
+    align-items: center;
+    border-bottom: 1px solid #d8dee4;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding-bottom: 0.5rem;
+}
+
+.settings-section-nav-button {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: #57606a;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.35rem 0.7rem;
+}
+
+.settings-section-nav-button:hover {
+    background: #f6f8fa;
+    border-color: #d0d7de;
+    color: #0969da;
+}
+
+.settings-section-nav-button.active {
+    background: #0969da;
+    border-color: #0969da;
+    color: #fff;
+}
+
+.settings-section-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
 .settings-muted[data-testid="settings-local-appsettings-path"] {
     overflow-wrap: anywhere;
 }
@@ -2092,6 +2132,7 @@ html, body {
 .radar-theme-dark .radar-commit-detail .scoring-note,
 .radar-theme-dark .action-panel,
 .radar-theme-dark .app-settings-panel,
+.radar-theme-dark .settings-section-nav,
 .radar-theme-dark .ignore-rule-list,
 .radar-theme-dark .ignore-rule-row + .ignore-rule-row,
 .radar-theme-dark .third-party-notice-list,
@@ -2195,6 +2236,7 @@ html, body {
 .radar-theme-dark .toolbar-button,
 .radar-theme-dark .review-button,
 .radar-theme-dark .review-reason-chip,
+.radar-theme-dark .settings-section-nav-button,
 .radar-theme-dark .settings-theme-options,
 .radar-theme-dark .settings-theme-option,
 .radar-theme-dark .settings-usage-grid div,
@@ -2223,6 +2265,12 @@ html, body {
     background: var(--radar-panel-alt-bg) !important;
     border-color: var(--radar-border) !important;
     color: var(--radar-fg) !important;
+}
+
+.radar-theme-dark .settings-section-nav-button:hover {
+    background: var(--radar-hover-bg) !important;
+    border-color: var(--radar-active-border) !important;
+    color: var(--radar-active-border) !important;
 }
 
 .radar-theme-dark .radar-commit-detail .scoring,
@@ -2254,7 +2302,8 @@ html, body {
 }
 
 .radar-theme-dark .radar-commit-detail .score-tile,
-.radar-theme-dark .review-suggestion-chip {
+.radar-theme-dark .review-suggestion-chip,
+.radar-theme-dark .settings-section-nav-button.active {
     background: var(--radar-active-bg) !important;
     border-color: var(--radar-active-border) !important;
     color: var(--radar-chip-fg) !important;
