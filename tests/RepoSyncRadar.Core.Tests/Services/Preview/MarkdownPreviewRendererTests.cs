@@ -283,6 +283,8 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("permissions: Enterprise owners and billing managers can download the usage report for enterprises.", html, StringComparison.Ordinal);
         Assert.Contains("Organization owners can download the usage report for standalone organizations.", html, StringComparison.Ordinal);
         Assert.Contains("Same rendered body.", html, StringComparison.Ordinal);
+        Assert.Contains("本文の差分とあわせて確認してください", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("本文がないため、レビュー対象は主にこの YAML", html, StringComparison.Ordinal);
     }
 
     [Fact]
