@@ -7,6 +7,8 @@ It combines deterministic ingestion of Repo sync PRs with GitHub Copilot SDK tri
 > [!IMPORTANT]
 > RepoSyncRadar is a review aid for administrators. It does not replace official GitHub release notes, GitHub Changelog posts, support guidance, or human approval before communicating changes.
 
+![RepoSyncRadar dashboard showing a focused docs commit, review actions, and Copilot scoring](docs/assets/readme-dashboard.png)
+
 ## What it does
 
 - Ingests recent `github/docs` Repo sync PRs and stores commit, file, scoring, review, ignore-rule, and draft data in SQLite.
