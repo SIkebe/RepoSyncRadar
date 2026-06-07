@@ -125,43 +125,15 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Cache NuGet packages
-        id: nuget-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'Directory.Packages.props', '**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
       - name: Build win-x64 Velopack package
-        env:
-          NUGET_CACHE_HIT: ${{ steps.nuget-cache.outputs.cache-hit }}
         run: |
-          $elapsed = Measure-Command {
-            ./scripts/Build-VelopackRelease.ps1 `
-              -Runtime win-x64 `
-              -Channel win-x64-ci `
-              -OutputRoot artifacts/ci-release `
-              -Force `
-              -NoPortable `
-              -NoLegacyManifest
-          }
-          $seconds = [Math]::Round($elapsed.TotalSeconds, 2)
-          $cacheSize = Get-ChildItem "$HOME\.nuget\packages" -Recurse -File -ErrorAction SilentlyContinue |
-            Measure-Object -Property Length -Sum
-          $cacheMiB = [Math]::Round(($cacheSize.Sum ?? 0) / 1MB, 2)
-          Write-Host "MEASUREMENT kind=velopack-package runtime=win-x64 cache_hit=$env:NUGET_CACHE_HIT seconds=$seconds cache_mib=$cacheMiB"
-
-          @"
-          ### Velopack package measurement
-
-          | Metric | Value |
-          | --- | --- |
-          | NuGet cache hit | $env:NUGET_CACHE_HIT |
-          | Package seconds | $seconds |
-          | NuGet cache size MiB | $cacheMiB |
-          "@ >> $env:GITHUB_STEP_SUMMARY
+          ./scripts/Build-VelopackRelease.ps1 `
+            -Runtime win-x64 `
+            -Channel win-x64-ci `
+            -OutputRoot artifacts/ci-release `
+            -Force `
+            -NoPortable `
+            -NoLegacyManifest
 
       - name: Smoke test installed package
         run: ./scripts/Test-VelopackInstalledE2E.ps1 -Runtime win-x64 -ReleaseDir artifacts/ci-release/velopack/win-x64 -CleanInstallRoot
