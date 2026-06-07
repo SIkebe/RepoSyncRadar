@@ -131,6 +131,7 @@ internal static partial class MarkdownPreviewRenderer
         string titleHtml;
         string? introHtml;
         var showRepoPath = false;
+        var hasVisibleBody = false;
         string body;
 
         if (markdown is null)
@@ -178,7 +179,8 @@ internal static partial class MarkdownPreviewRenderer
             var liquidNeutralized = NeutralizeLiquid(autotitleMarkdownRewritten);
             body = Markdown.ToHtml(liquidNeutralized, _pipeline);
             body = RestoreEscapedRenderedDiffMarkers(body);
-            if (!HasVisibleBodyMarkup(body))
+            hasVisibleBody = HasVisibleBodyMarkup(body);
+            if (!hasVisibleBody)
             {
                 body = frontmatterTitle is null && frontmatterIntro is null
                     ? "<p class=\"rsr-empty\">空の Markdown ファイルです。</p>"
@@ -333,7 +335,7 @@ internal static partial class MarkdownPreviewRenderer
         }
         if (markdown is not null)
         {
-            html.Append(RenderFrontmatterDiff(frontmatterChanges));
+            html.Append(RenderFrontmatterDiff(frontmatterChanges, hasVisibleBody));
         }
         html.AppendLine(body);
         html.AppendLine("</article>");
@@ -1776,7 +1778,7 @@ internal static partial class MarkdownPreviewRenderer
         });
     }
 
-    private static string RenderFrontmatterDiff(IReadOnlyList<MarkdownFrontmatterChange>? changes)
+    private static string RenderFrontmatterDiff(IReadOnlyList<MarkdownFrontmatterChange>? changes, bool hasVisibleBody)
     {
         if (changes is null || changes.Count == 0)
         {
@@ -1788,7 +1790,9 @@ internal static partial class MarkdownPreviewRenderer
         html.Append("<h2>フロントマターの変更</h2>");
         html.Append("<p class=\"rsr-frontmatter-diff-overview\">")
             .Append(changes.Count.ToString(CultureInfo.InvariantCulture))
-            .Append(" 件のメタデータ差分があります。本文がないため、レビュー対象は主にこの YAML です。</p>");
+            .Append(hasVisibleBody
+                ? " 件のメタデータ差分があります。本文の差分とあわせて確認してください。</p>"
+                : " 件のメタデータ差分があります。本文がないため、レビュー対象は主にこの YAML です。</p>");
         html.Append("<ul class=\"rsr-frontmatter-diff-list\">");
         foreach (var change in changes.Take(12))
         {
