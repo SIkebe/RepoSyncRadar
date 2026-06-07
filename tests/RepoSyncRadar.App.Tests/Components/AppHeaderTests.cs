@@ -721,8 +721,6 @@ public sealed class AppHeaderTests
             .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>("octocat"));
         var repo = Substitute.For<IRadarRepository>();
-        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([]));
         repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
 
@@ -756,8 +754,6 @@ public sealed class AppHeaderTests
             .Returns(Task.FromResult<string?>("octocat"));
         var rules = new List<BoostRule>();
         var repo = Substitute.For<IRadarRepository>();
-        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult<IReadOnlyList<BoostRule>>(rules.ToArray()));
         repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
         repo.AddBoostRuleAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
@@ -813,8 +809,6 @@ public sealed class AppHeaderTests
             .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<string?>("octocat"));
         var repo = Substitute.For<IRadarRepository>();
-        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([]));
         repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
         repo.AddBoostRuleAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
@@ -885,8 +879,6 @@ public sealed class AppHeaderTests
             },
         };
         var repo = Substitute.For<IRadarRepository>();
-        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult<IReadOnlyList<BoostRule>>(rules.ToArray()));
         repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
         repo.DeleteBoostRulesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
