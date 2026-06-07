@@ -572,7 +572,10 @@ public sealed class DraftsPanelTests
     }
 
     private static string TextAreaValue(IRenderedComponent<DraftsPanel> cut, string channel)
-        => Assert.IsAssignableFrom<IHtmlTextAreaElement>(cut.Find($"[data-testid=\"drafts-body-{channel}\"]")).Value;
+    {
+        var textarea = Assert.IsAssignableFrom<IHtmlTextAreaElement>(cut.Find($"[data-testid=\"drafts-body-{channel}\"]"));
+        return textarea.GetAttribute("value") ?? textarea.Value;
+    }
 
     private sealed class FailingAfterFirstContextFactory(IDbContextFactory<RadarDbContext> inner) : IDbContextFactory<RadarDbContext>
     {
