@@ -123,7 +123,7 @@ public sealed class WorkbenchTests
                 Assert.Contains("Default Theme", shellText, StringComparison.Ordinal);
                 Assert.Contains("App Settings", shellText, StringComparison.Ordinal);
                 Assert.Contains("Automation", shellText, StringComparison.Ordinal);
-                Assert.Contains("Legal/about", shellText, StringComparison.Ordinal);
+                Assert.Contains("Third-Party Licenses", shellText, StringComparison.Ordinal);
                 Assert.DoesNotContain("サインイン済み", shellText, StringComparison.Ordinal);
                 Assert.DoesNotContain("未確認", shellText, StringComparison.Ordinal);
                 Assert.DoesNotContain("注目", shellText, StringComparison.Ordinal);

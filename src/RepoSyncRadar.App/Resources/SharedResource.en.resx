@@ -249,7 +249,7 @@
   <data name="Settings.Section.AppSettings" xml:space="preserve"><value>App Settings</value></data>
   <data name="Settings.Section.Automation" xml:space="preserve"><value>Automation</value></data>
   <data name="Settings.Section.General" xml:space="preserve"><value>General</value></data>
-  <data name="Settings.Section.LegalAbout" xml:space="preserve"><value>Legal/about</value></data>
+  <data name="Settings.Section.LegalAbout" xml:space="preserve"><value>Third-Party Licenses</value></data>
   <data name="Settings.Section.Navigation" xml:space="preserve"><value>Settings sections</value></data>
   <data name="Settings.Theme.Dark" xml:space="preserve"><value>Dark</value></data>
   <data name="Settings.Theme.Light" xml:space="preserve"><value>Light</value></data>

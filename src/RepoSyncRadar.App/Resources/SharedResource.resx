@@ -249,7 +249,7 @@
   <data name="Settings.Section.AppSettings" xml:space="preserve"><value>アプリ設定</value></data>
   <data name="Settings.Section.Automation" xml:space="preserve"><value>自動化</value></data>
   <data name="Settings.Section.General" xml:space="preserve"><value>一般</value></data>
-  <data name="Settings.Section.LegalAbout" xml:space="preserve"><value>法務/About</value></data>
+  <data name="Settings.Section.LegalAbout" xml:space="preserve"><value>サードパーティ ライセンス</value></data>
   <data name="Settings.Section.Navigation" xml:space="preserve"><value>設定セクション</value></data>
   <data name="Settings.Theme.Dark" xml:space="preserve"><value>ダーク</value></data>
   <data name="Settings.Theme.Light" xml:space="preserve"><value>ライト</value></data>
