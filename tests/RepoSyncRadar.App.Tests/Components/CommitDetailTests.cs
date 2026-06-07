@@ -171,6 +171,11 @@ public class CommitDetailTests
         Assert.Equal("スコア", cut.Find(".score-label").TextContent);
         var score = cut.Find("[data-testid=\"commit-detail-score\"]");
         Assert.Contains("0.72", score.TextContent);
+        Assert.Equal("重要", cut.Find("[data-testid=\"commit-detail-score-band\"]").TextContent);
+        Assert.Contains(
+            "0.70-0.84",
+            cut.Find("[data-testid=\"commit-detail-score-band-description\"]").TextContent,
+            StringComparison.Ordinal);
         Assert.Equal("feature-update", cut.Find("[data-testid=\"commit-detail-category\"]").TextContent);
         var audience = cut.Find("[data-testid=\"commit-detail-audience\"]").TextContent;
         Assert.Contains("devrel", audience);
@@ -185,6 +190,62 @@ public class CommitDetailTests
         Assert.Contains("変更内容", details, StringComparison.Ordinal);
         Assert.Contains("根拠", details, StringComparison.Ordinal);
         Assert.Contains("確認観点", details, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0.44, "低シグナル")]
+    [InlineData(0.449, "有用・急ぎではない")]
+    [InlineData(0.69, "有用・急ぎではない")]
+    [InlineData(0.70, "重要")]
+    [InlineData(0.84, "重要")]
+    [InlineData(0.85, "すぐ確認")]
+    [InlineData(-0.10, "低シグナル")]
+    [InlineData(1.20, "すぐ確認")]
+    public void CommitDetail_Explains_Score_Band(double rawScore, string expectedBand)
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        commit.Scoring = new Scoring
+        {
+            Sha = commit.Sha,
+            Score = rawScore,
+            Category = "feature-update",
+            AudienceJson = "[]",
+            SummaryJa = "summary",
+            WhyJa = "why",
+            ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        Assert.Equal(expectedBand, cut.Find("[data-testid=\"commit-detail-score-band\"]").TextContent);
+    }
+
+    [Fact]
+    public void CommitDetail_Shows_Missing_Rationale_For_Legacy_Score()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        commit.Scoring = new Scoring
+        {
+            Sha = commit.Sha,
+            Score = 0.72,
+            Category = "feature-update",
+            AudienceJson = "[]",
+            SummaryJa = "summary",
+            WhyJa = string.Empty,
+            ScoredAt = new DateTime(2026, 5, 13, 0, 0, 0, DateTimeKind.Utc),
+        };
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        Assert.Contains("理由が保存されていません", cut.Find("[data-testid=\"commit-detail-why\"]").TextContent, StringComparison.Ordinal);
     }
 
     [Fact]

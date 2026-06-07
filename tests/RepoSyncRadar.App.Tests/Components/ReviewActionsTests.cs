@@ -158,6 +158,8 @@ public sealed class ReviewActionsTests : IDisposable
         Assert.Equal("e.g. aspnet/security/**", cut.Find("[data-testid=\"review-ignore-pattern\"]").GetAttribute("placeholder"));
         Assert.Contains("Add to ignore list", cut.Find("[data-testid=\"review-ignore\"]").TextContent);
         Assert.Contains("Boost similar directories", cut.Find("[data-testid=\"review-boost-details\"]").TextContent);
+        Assert.Contains("Score adjustment", cut.Find("[data-testid=\"review-boost-details\"]").TextContent);
+        Assert.Contains("Added to future Triage scores", cut.Find("[data-testid=\"review-boost-delta-help\"]").TextContent);
         Assert.Contains("Add to boost rules", cut.Find("[data-testid=\"review-boost\"]").TextContent);
     }
 

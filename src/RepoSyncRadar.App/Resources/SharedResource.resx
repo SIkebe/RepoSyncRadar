@@ -102,7 +102,7 @@
   <data name="CommitDetail.CleanupInProgress" xml:space="preserve"><value>キャッシュをクリーンアップ中…</value></data>
   <data name="CommitDetail.CleanupRemoved" xml:space="preserve"><value>{0} 件のキャッシュを削除しました</value></data>
   <data name="CommitDetail.ComparisonOpened" xml:space="preserve"><value>{0} を変更前 / PR HEAD で比較表示しました</value></data>
-  <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>詳細分析</value></data>
+  <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>根拠・影響・確認観点</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>コミットを選択してください。</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>ファイル</value></data>
   <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>{0} のローカルプレビューを準備中…</value></data>
@@ -125,6 +125,16 @@
   <data name="CommitDetail.PreviewDisabled" xml:space="preserve"><value>プレビュー機能は無効です (DocsRepository 未設定)</value></data>
   <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>プレビュー起動</value></data>
   <data name="CommitDetail.Score" xml:space="preserve"><value>スコア</value></data>
+  <data name="CommitDetail.ScoreBand.Immediate" xml:space="preserve"><value>すぐ確認</value></data>
+  <data name="CommitDetail.ScoreBand.Immediate.Description" xml:space="preserve"><value>0.85-1.00: 新 API・破壊的変更・セキュリティなど、すぐ共有や確認が必要な変更。</value></data>
+  <data name="CommitDetail.ScoreBand.Important" xml:space="preserve"><value>重要</value></data>
+  <data name="CommitDetail.ScoreBand.Important.Description" xml:space="preserve"><value>0.70-0.84: 機能追加、公開プレビュー、設定・運用・統合に影響する変更。</value></data>
+  <data name="CommitDetail.ScoreBand.LowSignal" xml:space="preserve"><value>低シグナル</value></data>
+  <data name="CommitDetail.ScoreBand.LowSignal.Description" xml:space="preserve"><value>0.00-0.44: typo、リンク修正、内部整理など。通常は見送り候補です。</value></data>
+  <data name="CommitDetail.ScoreBand.Useful" xml:space="preserve"><value>有用・急ぎではない</value></data>
+  <data name="CommitDetail.ScoreBand.Useful.Description" xml:space="preserve"><value>0.45-0.69: 有用な追加や説明改善だが、急ぎの共有までは不要な変更。</value></data>
+  <data name="CommitDetail.ScoreRationale" xml:space="preserve"><value>採点理由</value></data>
+  <data name="CommitDetail.ScoreRationaleMissing" xml:space="preserve"><value>この採点結果には理由が保存されていません。次回以降の Triage では、スコア帯・根拠・影響が理由に入ります。</value></data>
   <data name="CommitDetail.Showing" xml:space="preserve"><value>表示中</value></data>
   <data name="CommitDetail.Starting" xml:space="preserve"><value>起動中…</value></data>
   <data name="CommitDetail.Summary" xml:space="preserve"><value>要約</value></data>
@@ -266,12 +276,13 @@
   <data name="ReviewActions.ArchiveReason" xml:space="preserve"><value>アーカイブする理由</value></data>
   <data name="ReviewActions.ArchiveReasonPlaceholder" xml:space="preserve"><value>例: 既存情報のみ / 対象外</value></data>
   <data name="ReviewActions.Description" xml:space="preserve"><value>選択中の通知をどのキューへ移すかを決めます。</value></data>
-  <data name="ReviewActions.BoostDelta" xml:space="preserve"><value>Delta</value></data>
+  <data name="ReviewActions.BoostDelta" xml:space="preserve"><value>スコア補正</value></data>
   <data name="ReviewActions.BoostPathPattern" xml:space="preserve"><value>ブーストするパスパターン</value></data>
   <data name="ReviewActions.BoostPathPatternPlaceholder" xml:space="preserve"><value>例: content/copilot/**</value></data>
   <data name="ReviewActions.BoostReason" xml:space="preserve"><value>理由</value></data>
   <data name="ReviewActions.BoostReasonPlaceholder" xml:space="preserve"><value>例: Copilot docs は見逃したくない</value></data>
   <data name="ReviewActions.BoostRuleAdded" xml:space="preserve"><value>{0} を今後のブースト対象に追加しました</value></data>
+  <data name="ReviewActions.BoostScoreAdjustmentHelp" xml:space="preserve"><value>今後の Triage でスコアに足す値です。+1 は軽く優先、+3 は強く優先、-1 は少し下げます。</value></data>
   <data name="ReviewActions.BoostSimilarDirectories" xml:space="preserve"><value>類似ディレクトリを今後ブースト</value></data>
   <data name="ReviewActions.IgnoreSimilarDirectories" xml:space="preserve"><value>類似ディレクトリをまとめて自動見送り</value></data>
   <data name="ReviewActions.Later" xml:space="preserve"><value>保留する</value></data>
@@ -303,9 +314,9 @@
   <data name="Settings.BoostRules.AddFailed" xml:space="preserve"><value>ブーストルールの追加に失敗しました</value></data>
   <data name="Settings.BoostRules.DeleteFailed" xml:space="preserve"><value>ブーストルールの削除に失敗しました</value></data>
   <data name="Settings.BoostRules.Deleted" xml:space="preserve"><value>{0} 件のブーストルールを削除しました</value></data>
-  <data name="Settings.BoostRules.Delta" xml:space="preserve"><value>Delta</value></data>
-  <data name="Settings.BoostRules.DeltaPresets" xml:space="preserve"><value>よく使う Delta</value></data>
-  <data name="Settings.BoostRules.Description" xml:space="preserve"><value>登録済みのブーストルールを確認・削除します。新しいルールは個別コミットのレビュー判断から追加します。Delta は -5.0 から +5.0 までです。</value></data>
+  <data name="Settings.BoostRules.Delta" xml:space="preserve"><value>スコア補正</value></data>
+  <data name="Settings.BoostRules.DeltaPresets" xml:space="preserve"><value>よく使うスコア補正</value></data>
+  <data name="Settings.BoostRules.Description" xml:space="preserve"><value>登録済みのブーストルールを確認・削除します。新しいルールは個別コミットのレビュー判断から追加します。スコア補正は今後の Triage でスコアに足す値で、-5.0 から +5.0 までです。</value></data>
   <data name="Settings.BoostRules.Empty" xml:space="preserve"><value>ブーストルールはまだ設定されていません。</value></data>
   <data name="Settings.BoostRules.LoadFailed" xml:space="preserve"><value>ブーストルールの読み込みに失敗しました</value></data>
   <data name="Settings.BoostRules.Pattern" xml:space="preserve"><value>パターン</value></data>
@@ -314,8 +325,8 @@
   <data name="Settings.BoostRules.Reason" xml:space="preserve"><value>理由</value></data>
   <data name="Settings.BoostRules.ReasonPlaceholder" xml:space="preserve"><value>例: Copilot 関連 docs</value></data>
   <data name="Settings.BoostRules.Refresh" xml:space="preserve"><value>ブーストルールを更新</value></data>
-  <data name="Settings.BoostRules.Validation.DeltaInvalid" xml:space="preserve"><value>Delta には数値を入力してください。</value></data>
-  <data name="Settings.BoostRules.Validation.DeltaRange" xml:space="preserve"><value>Delta は {0} から {1} の範囲で入力してください。</value></data>
+  <data name="Settings.BoostRules.Validation.DeltaInvalid" xml:space="preserve"><value>スコア補正には数値を入力してください。</value></data>
+  <data name="Settings.BoostRules.Validation.DeltaRange" xml:space="preserve"><value>スコア補正は {0} から {1} の範囲で入力してください。</value></data>
   <data name="Settings.BoostRules.Validation.Duplicate" xml:space="preserve"><value>{0} のブーストルールはすでに存在します。</value></data>
   <data name="Settings.BoostRules.Validation.PatternRequired" xml:space="preserve"><value>パターンを入力してください。</value></data>
   <data name="Settings.DefaultTheme" xml:space="preserve"><value>既定テーマ</value></data>

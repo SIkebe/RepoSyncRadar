@@ -785,6 +785,26 @@ html, body {
     margin-top: 0.12rem;
 }
 
+.radar-commit-detail .score-band {
+    display: inline-flex;
+    margin-top: 0.3rem;
+    border-radius: 999px;
+    background: #dbeafe;
+    color: #1f4f99;
+    font-size: 0.74rem;
+    font-weight: 700;
+    line-height: 1.25;
+    padding: 0.12rem 0.45rem;
+}
+
+.radar-commit-detail .score-band-description {
+    display: block;
+    margin-top: 0.35rem;
+    color: #57606a;
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
 .radar-commit-detail .scoring-meta,
 .radar-commit-detail .scoring-notes {
     margin: 0;
@@ -1874,6 +1894,13 @@ html, body {
     font-weight: 700;
 }
 
+.review-boost-field small {
+    color: #57606a;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
 .review-boost-field input {
     border: 1px solid #d0d7de;
     border-radius: 6px;
@@ -2375,6 +2402,7 @@ html, body {
 .radar-theme-dark .radar-commit-detail .commit-header .author,
 .radar-theme-dark .radar-commit-detail .commit-header .sha,
 .radar-theme-dark .radar-commit-detail .score-label,
+.radar-theme-dark .radar-commit-detail .score-band-description,
 .radar-theme-dark .radar-commit-detail .scoring-meta dt,
 .radar-theme-dark .radar-commit-detail .scoring-note dt,
 .radar-theme-dark .radar-commit-detail .file-row .stats,
@@ -2416,7 +2444,8 @@ html, body {
     color: var(--radar-fg) !important;
 }
 
-.radar-theme-dark .review-boost-field span {
+.radar-theme-dark .review-boost-field span,
+.radar-theme-dark .review-boost-field small {
     color: var(--radar-muted-fg) !important;
 }
 
@@ -2516,6 +2545,7 @@ html, body {
 }
 
 .radar-theme-dark .radar-commit-detail .score-tile,
+.radar-theme-dark .radar-commit-detail .score-band,
 .radar-theme-dark .review-suggestion-chip,
 .radar-theme-dark .settings-section-nav-button.active {
     background: var(--radar-active-bg) !important;
@@ -2524,6 +2554,7 @@ html, body {
 }
 
 .radar-theme-dark .radar-commit-detail .score-value,
+.radar-theme-dark .radar-commit-detail .score-band,
 .radar-theme-dark .review-suggestion-pattern,
 .radar-theme-dark .review-archived-reason strong,
 .radar-theme-dark .third-party-package,

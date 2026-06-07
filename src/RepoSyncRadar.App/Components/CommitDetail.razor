@@ -60,6 +60,8 @@
                     <div class="score-tile">
                         <span class="score-label">@L["CommitDetail.Score"]</span>
                         <span class="score-value" data-testid="commit-detail-score">@FormatScore(scoring.Score)</span>
+                        <span class="score-band" data-testid="commit-detail-score-band">@BuildScoreBandLabel(scoring.Score)</span>
+                        <small class="score-band-description" data-testid="commit-detail-score-band-description">@BuildScoreBandDescription(scoring.Score)</small>
                     </div>
                     <dl class="scoring-meta">
                         <div class="scoring-meta-item">
@@ -86,8 +88,8 @@
                         <dd data-testid="commit-detail-summary">@scoring.SummaryJa</dd>
                     </div>
                     <div class="scoring-note">
-                        <dt>@L["CommitDetail.Why"]</dt>
-                        <dd data-testid="commit-detail-why">@scoring.WhyJa</dd>
+                        <dt>@L["CommitDetail.ScoreRationale"]</dt>
+                        <dd data-testid="commit-detail-why">@BuildScoreRationale(scoring)</dd>
                     </div>
                     @if (!string.IsNullOrWhiteSpace(scoring.DetailsJa))
                     {
@@ -1136,6 +1138,41 @@
 
     private static string FormatScore(double score)
         => score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
+    private string BuildScoreRationale(Scoring scoring)
+        => string.IsNullOrWhiteSpace(scoring.WhyJa)
+            ? L["CommitDetail.ScoreRationaleMissing"]
+            : scoring.WhyJa;
+
+    private string BuildScoreBandLabel(double score)
+        => BuildScoreBandResourceKey(score) switch
+        {
+            "LowSignal" => L["CommitDetail.ScoreBand.LowSignal"],
+            "Useful" => L["CommitDetail.ScoreBand.Useful"],
+            "Important" => L["CommitDetail.ScoreBand.Important"],
+            _ => L["CommitDetail.ScoreBand.Immediate"],
+        };
+
+    private string BuildScoreBandDescription(double score)
+        => BuildScoreBandResourceKey(score) switch
+        {
+            "LowSignal" => L["CommitDetail.ScoreBand.LowSignal.Description"],
+            "Useful" => L["CommitDetail.ScoreBand.Useful.Description"],
+            "Important" => L["CommitDetail.ScoreBand.Important.Description"],
+            _ => L["CommitDetail.ScoreBand.Immediate.Description"],
+        };
+
+    private static string BuildScoreBandResourceKey(double score)
+    {
+        var displayedScore = Math.Round(score, 2, MidpointRounding.AwayFromZero);
+        return displayedScore switch
+        {
+            >= 0.85 => "Immediate",
+            >= 0.70 => "Important",
+            >= 0.45 => "Useful",
+            _ => "LowSignal",
+        };
+    }
 
     private static IReadOnlyList<string>? TryParseAudience(string audienceJson)
     {

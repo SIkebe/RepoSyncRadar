@@ -188,6 +188,7 @@
                            value="@_boostDelta"
                            disabled="@_busy"
                            @oninput="OnBoostDeltaChanged" />
+                    <small data-testid="review-boost-delta-help">@L["ReviewActions.BoostScoreAdjustmentHelp"]</small>
                 </label>
                 <div class="review-boost-presets" data-testid="review-boost-delta-presets">
                     @foreach (var preset in BoostRuleDeltaPresets)
