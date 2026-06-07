@@ -303,7 +303,6 @@ public sealed partial class MorningTriageSession
             {
                 LogFinished(_logger, session.SessionId);
             }
-
         }
         catch (OperationCanceledException)
         {
