@@ -24,6 +24,8 @@ public sealed class Commit
     public Review? Review { get; set; }
 
     public List<Draft> Drafts { get; set; } = new();
+
+    public List<ReviewHistory> ReviewHistory { get; set; } = new();
 }
 
 /// <summary>
@@ -93,6 +95,28 @@ public sealed class Review
     public string? Reason { get; set; }
 
     public DateTime? ReviewedAt { get; set; }
+}
+
+public sealed class ReviewHistory
+{
+    public int Id { get; set; }
+
+    public string Sha { get; set; } = default!;
+
+    public ReviewStatus Status { get; set; } = ReviewStatus.Unseen;
+
+    public string? Reason { get; set; }
+
+    public DateTime ChangedAt { get; set; }
+
+    public string Source { get; set; } = ReviewHistorySources.User;
+}
+
+public static class ReviewHistorySources
+{
+    public const string User = "user";
+    public const string AutoIgnore = "auto-ignore";
+    public const string BulkIgnore = "bulk-ignore";
 }
 
 /// <summary>
@@ -175,3 +199,9 @@ public sealed class CopilotToolLog
 
     public DateTime EndedAt { get; set; }
 }
+
+public sealed record CommitHistorySnapshot(
+    Commit? Commit,
+    IReadOnlyList<ReviewHistory> ReviewHistory,
+    IReadOnlyList<Draft> Drafts,
+    IReadOnlyList<IgnoreRule> IgnoreRules);

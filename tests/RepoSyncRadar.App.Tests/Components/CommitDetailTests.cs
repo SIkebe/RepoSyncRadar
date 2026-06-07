@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using NSubstitute;
 using System.IO;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Options;
 using RepoSyncRadar.Core.Services;
@@ -202,6 +203,127 @@ public class CommitDetailTests
         var hint = cut.Find("[data-testid=\"commit-detail-unscored\"]");
         Assert.Contains("未スコアリング", hint.TextContent);
         Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-score\"]"));
+    }
+
+    [Fact]
+    public void CommitDetail_Shows_Chronological_History()
+    {
+        var commit = MakeCommit(("content/copilot/concepts/billing.md", 1, 0));
+        commit.Scoring = new Scoring
+        {
+            Sha = commit.Sha,
+            Score = 0.82,
+            Category = "feature-update",
+            AudienceJson = "[]",
+            SummaryJa = "summary",
+            WhyJa = "why",
+            Model = "gpt-5",
+            PromptHash = "prompt-123",
+            ScoredAt = new DateTime(2026, 5, 13, 0, 5, 0, DateTimeKind.Utc),
+        };
+        commit.Review = new Review
+        {
+            Sha = commit.Sha,
+            Status = ReviewStatus.Archived,
+            Reason = "off-topic",
+            ReviewedAt = new DateTime(2026, 5, 13, 0, 10, 0, DateTimeKind.Utc),
+        };
+        var snapshot = new CommitHistorySnapshot(
+            commit,
+            [
+                new ReviewHistory
+                {
+                    Sha = commit.Sha,
+                    Status = ReviewStatus.Archived,
+                    Reason = "off-topic",
+                    ChangedAt = new DateTime(2026, 5, 13, 0, 10, 0, DateTimeKind.Utc),
+                    Source = ReviewHistorySources.User,
+                },
+            ],
+            [
+                new Draft
+                {
+                    Sha = commit.Sha,
+                    Channel = "twitter",
+                    Body = "not shown",
+                    GeneratedAt = new DateTime(2026, 5, 13, 0, 12, 0, DateTimeKind.Utc),
+                },
+                new Draft
+                {
+                    Sha = commit.Sha,
+                    Channel = "teams",
+                    Body = "legacy",
+                    GeneratedAt = new DateTime(2026, 5, 13, 0, 13, 0, DateTimeKind.Utc),
+                },
+            ],
+            [
+                new IgnoreRule
+                {
+                    Pattern = "content/copilot/**",
+                    Reason = "ignore-directory",
+                    CreatedAt = new DateTime(2026, 5, 13, 0, 3, 0, DateTimeKind.Utc),
+                },
+            ]);
+
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver, historySnapshot: snapshot);
+
+        var text = cut.Find("[data-testid=\"commit-detail-history\"]").TextContent;
+        Assert.Contains("コミットを取得", text);
+        Assert.Contains("Copilot スコアを保存", text);
+        Assert.Contains("prompt-123", text);
+        Assert.Contains("レビュー判断: アーカイブ", text);
+        Assert.Contains("off-topic", text);
+        Assert.Contains("Twitter 文案を生成", text);
+        Assert.DoesNotContain("teams", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("not shown", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CommitDetail_Shows_Legacy_Archived_Reason_In_History()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+        commit.Review = new Review
+        {
+            Sha = commit.Sha,
+            Status = ReviewStatus.Archived,
+            Reason = "already reviewed",
+            ReviewedAt = new DateTime(2026, 5, 13, 0, 10, 0, DateTimeKind.Utc),
+        };
+
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        var history = cut.Find("[data-testid=\"commit-detail-history\"]").TextContent;
+        Assert.Contains("レビュー判断 (最新状態): アーカイブ", history);
+        Assert.Contains("already reviewed", history);
+        Assert.Contains("履歴機能追加前", cut.Find("[data-testid=\"commit-detail-history-legacy-note\"]").TextContent);
+    }
+
+    [Fact]
+    public void CommitDetail_Shows_Partial_History_For_Unreviewed_Commit()
+    {
+        var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
+
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        var entries = cut.FindAll("[data-testid=\"commit-detail-history-entry\"]");
+        var entry = Assert.Single(entries);
+        Assert.Contains("コミットを取得", entry.TextContent);
+        Assert.Contains("未スコアリング", cut.Find("[data-testid=\"commit-detail-unscored\"]").TextContent);
     }
 
     [Fact]
@@ -920,8 +1042,9 @@ public class CommitDetailTests
 
     private static IRenderedComponent<CommitDetail> RenderDetailWith(
         Commit commit,
-        IPathToUrlResolver resolver)
-        => RenderDetailWith(commit, resolver, navigator: null, session: null);
+        IPathToUrlResolver resolver,
+        CommitHistorySnapshot? historySnapshot = null)
+        => RenderDetailWith(commit, resolver, navigator: null, session: null, coordinator: null, historySnapshot: historySnapshot);
 
     private static IRenderedComponent<CommitDetail> RenderDetailWith(
         Commit commit,
@@ -936,7 +1059,8 @@ public class CommitDetailTests
         IPreviewNavigator? navigator,
         PreviewSession? session,
         IPreviewCoordinator? coordinator,
-        int previewReadyTimeoutSeconds = 600)
+        int previewReadyTimeoutSeconds = 600,
+        CommitHistorySnapshot? historySnapshot = null)
     {
         var services = new ServiceCollection()
             .AddSingleton(resolver)
@@ -954,6 +1078,11 @@ public class CommitDetailTests
         {
             services.AddSingleton(coordinator);
         }
+        var repository = Substitute.For<IRadarRepository>();
+        repository.GetCommitHistoryAsync(commit.Sha, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<CommitHistorySnapshot?>(
+                historySnapshot ?? new CommitHistorySnapshot(commit, [], commit.Drafts, [])));
+        services.AddSingleton(repository);
         // Wire the docs base address so CommitDetail can absolutise the relative
         // paths returned by IPathToUrlResolver — matches the production DI setup.
         services.AddSingleton<IOptions<DocsApiOptions>>(

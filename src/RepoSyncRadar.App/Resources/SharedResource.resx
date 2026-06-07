@@ -96,6 +96,27 @@
   <data name="CommitDetail.Starting" xml:space="preserve"><value>起動中…</value></data>
   <data name="CommitDetail.Summary" xml:space="preserve"><value>要約</value></data>
   <data name="CommitDetail.Unscored" xml:space="preserve"><value>未スコアリング (Triage 未実行)</value></data>
+  <data name="CommitDetail.History.Title" xml:space="preserve"><value>履歴</value></data>
+  <data name="CommitDetail.History.Empty" xml:space="preserve"><value>このコミットの履歴メタデータはまだありません。</value></data>
+  <data name="CommitDetail.History.LegacyNote" xml:space="preserve"><value>このレビュー判断は履歴機能追加前の最新状態から復元しています。詳細な変更履歴は今後の判断から記録されます。</value></data>
+  <data name="CommitDetail.History.Fetched.Title" xml:space="preserve"><value>コミットを取得</value></data>
+  <data name="CommitDetail.History.Fetched.Description" xml:space="preserve"><value>Repo sync PR #{0} からローカル DB に取り込みました。</value></data>
+  <data name="CommitDetail.History.Scored.Title" xml:space="preserve"><value>Copilot スコアを保存</value></data>
+  <data name="CommitDetail.History.Scored.Description" xml:space="preserve"><value>スコア {0}、カテゴリ {1}、モデル {2}</value></data>
+  <data name="CommitDetail.History.UnknownModel" xml:space="preserve"><value>不明</value></data>
+  <data name="CommitDetail.History.PromptHash" xml:space="preserve"><value>Prompt hash: {0}</value></data>
+  <data name="CommitDetail.History.Review.Title" xml:space="preserve"><value>レビュー判断: {0}</value></data>
+  <data name="CommitDetail.History.Review.LegacyTitle" xml:space="preserve"><value>レビュー判断 (最新状態): {0}</value></data>
+  <data name="CommitDetail.History.Review.Description" xml:space="preserve"><value>記録元: {0}</value></data>
+  <data name="CommitDetail.History.Review.DescriptionWithReason" xml:space="preserve"><value>記録元: {0}。理由: {1}</value></data>
+  <data name="CommitDetail.History.Source.User" xml:space="preserve"><value>ユーザー操作</value></data>
+  <data name="CommitDetail.History.Source.AutoIgnore" xml:space="preserve"><value>ignore ルール</value></data>
+  <data name="CommitDetail.History.Source.BulkIgnore" xml:space="preserve"><value>一括 ignore</value></data>
+  <data name="CommitDetail.History.Draft.Title" xml:space="preserve"><value>{0} 文案を生成</value></data>
+  <data name="CommitDetail.History.Draft.Description" xml:space="preserve"><value>{0} に表示する共有文案を保存しました。</value></data>
+  <data name="CommitDetail.History.IgnoreRule.Title" xml:space="preserve"><value>ignore ルールが一致</value></data>
+  <data name="CommitDetail.History.IgnoreRule.Description" xml:space="preserve"><value>{0} がこのコミットのファイルに一致しました。</value></data>
+  <data name="CommitDetail.History.IgnoreRule.DescriptionWithReason" xml:space="preserve"><value>{0} がこのコミットのファイルに一致しました。理由: {1}</value></data>
   <data name="CommitDetail.Why" xml:space="preserve"><value>理由</value></data>
   <data name="Common.CacheRead" xml:space="preserve"><value>キャッシュ読込</value></data>
   <data name="Common.CacheWrite" xml:space="preserve"><value>キャッシュ書込</value></data>
