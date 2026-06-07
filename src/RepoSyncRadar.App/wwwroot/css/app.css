@@ -1919,6 +1919,11 @@ html, body {
     background: #fff;
 }
 
+.radar-theme-dark .drafts-channel .drafts-body:focus {
+    outline-color: #58a6ff;
+    background: var(--radar-input-bg);
+}
+
 .drafts-placeholder {
     margin: 0;
     min-height: 2.5rem;
