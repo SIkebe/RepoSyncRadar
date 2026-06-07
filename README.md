@@ -7,7 +7,7 @@ It combines deterministic ingestion of Repo sync PRs with GitHub Copilot SDK tri
 > [!IMPORTANT]
 > RepoSyncRadar is a review aid for administrators. It does not replace official GitHub release notes, GitHub Changelog posts, support guidance, or human approval before communicating changes.
 
-![RepoSyncRadar dashboard showing a focused docs commit, review actions, and Copilot scoring](docs/assets/readme-dashboard.png)
+![RepoSyncRadar rendered GitHub Docs comparison preview showing removed and added content](docs/assets/readme-preview-comparison.png)
 
 ## What it does
 
@@ -20,30 +20,36 @@ It combines deterministic ingestion of Repo sync PRs with GitHub Copilot SDK tri
 - Authenticates with GitHub OAuth Device Flow and stores the resulting token locally with Windows DPAPI.
 - Supports installed-package updates through Velopack release feeds.
 
+## Screenshots
+
+### Triage dashboard
+
+![RepoSyncRadar dashboard showing a focused docs commit, review actions, and Copilot scoring](docs/assets/readme-dashboard.png)
+
+### Sharing drafts
+
+![RepoSyncRadar English sharing drafts for Twitter and customer-facing communication](docs/assets/readme-drafts.png)
+
 ## Requirements
 
 | Requirement | Notes |
 |---|---|
 | Windows | Windows 11 is the primary target. WebView2 Runtime is required and is normally preinstalled. |
-| .NET SDK | The preview SDK pinned in [`global.json`](global.json): `11.0.100-preview.4.26230.115` with prerelease roll-forward enabled. |
 | GitHub account | The signed-in account must have an active GitHub Copilot subscription. |
-| Git | Required for local docs preview because the app reads `github/docs` content by commit SHA from a bare clone. |
+| Git | Optional for basic triage, but required for local docs preview because the app reads `github/docs` content by commit SHA from a bare clone. |
 
-The Copilot CLI used by the SDK is supplied by the `GitHub.Copilot.SDK` package and is prepared automatically at runtime.
+The installed app is self-contained and does not require a separate .NET Desktop Runtime. The Copilot CLI used by the SDK is supplied by the `GitHub.Copilot.SDK` package and is prepared automatically at runtime.
 
-## Quick start from source
+## Install and run
 
-```powershell
-git clone <this-repo-url> C:\github\RepoSyncRadar
-cd C:\github\RepoSyncRadar
-dotnet restore
-dotnet build RepoSyncRadar.sln -warnaserror
-dotnet run --project src\RepoSyncRadar.App
-```
+1. Download the latest `SIkebe.RepoSyncRadar-*-Setup.exe` from the [Releases page](https://github.com/SIkebe/RepoSyncRadar/releases/latest). Choose the asset that matches your Windows architecture and channel, such as `win-x64-stable` or `win-arm64-stable`.
+2. Run the installer and launch **RepoSyncRadar** from the Start Menu.
+3. Complete GitHub OAuth Device Flow on first launch. The app opens GitHub's device login page, copies the user code to the clipboard, and stores the resulting token in `%LocalAppData%\RepoSyncRadar\github-token.bin` using Windows DPAPI.
+4. Press **Triage** to ingest recent `github/docs` Repo sync PRs and let Copilot score candidate changes.
 
-On first launch, RepoSyncRadar opens GitHub OAuth Device Flow, copies the user code to the clipboard, and stores the resulting OAuth token in `%LocalAppData%\RepoSyncRadar\github-token.bin` using DPAPI. The same user token is used for Copilot SDK sessions and Octokit reads of `github/docs`.
+Distribution builds include the public RepoSyncRadar OAuth Client ID. Organizations that require a managed OAuth App can override `Copilot:OAuthClientId` in `%LocalAppData%\RepoSyncRadar\appsettings.local.json` or with `RADAR_Copilot__OAuthClientId`.
 
-Distribution builds include the public RepoSyncRadar OAuth Client ID. Forks or organizations that require a managed OAuth App can override `Copilot:OAuthClientId` in `src\RepoSyncRadar.App\appsettings.local.json`, `%LocalAppData%\RepoSyncRadar\appsettings.local.json`, or the `RADAR_Copilot__OAuthClientId` environment variable.
+Installed builds can check Velopack update feeds and apply newer releases without rebuilding from source.
 
 ## Daily workflow
 
@@ -57,7 +63,7 @@ Local preview is opt-in. By default, startup does not clone or fetch `github/doc
 
 ## Configuration
 
-The committed defaults live in [`src\RepoSyncRadar.App\appsettings.json`](src/RepoSyncRadar.App/appsettings.json). Environment-specific overrides belong in `appsettings.local.json`, either beside the app during development or under `%LocalAppData%\RepoSyncRadar\` for installed builds.
+Installed builds read per-user overrides from `%LocalAppData%\RepoSyncRadar\appsettings.local.json`. Source builds can also use `src\RepoSyncRadar.App\appsettings.local.json`. The committed defaults live in [`src\RepoSyncRadar.App\appsettings.json`](src/RepoSyncRadar.App/appsettings.json).
 
 Key settings:
 
@@ -71,6 +77,18 @@ Key settings:
 | `Updates` | Velopack update-feed behavior for installed builds. |
 
 For a full setup walkthrough, OAuth details, local-preview behavior, and release-update notes, see [`docs/USAGE.md`](docs/USAGE.md).
+
+## Develop from source
+
+Source builds require the preview .NET SDK pinned in [`global.json`](global.json): `11.0.100-preview.4.26230.115` with prerelease roll-forward enabled.
+
+```powershell
+git clone <this-repo-url> C:\github\RepoSyncRadar
+cd C:\github\RepoSyncRadar
+dotnet restore
+dotnet build RepoSyncRadar.sln -warnaserror
+dotnet run --project src\RepoSyncRadar.App
+```
 
 ## Project layout
 
