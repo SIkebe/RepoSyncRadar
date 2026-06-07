@@ -2,6 +2,11 @@
 
 - 
 
+## Related Issues
+
+- If this PR closes, resolves, or fixes an issue, list the keyword line explicitly, for example: `Closes #123`.
+- If no issue is closed by this PR, replace this section with `N/A - no issue to close`.
+
 ## Scope
 
 - [ ] App UI / workflow
