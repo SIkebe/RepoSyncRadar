@@ -98,6 +98,7 @@
                     <textarea class="drafts-body"
                               data-testid="drafts-body-@state.Channel"
                               rows="@state.Rows"
+                              aria-label="@state.Label"
                               @oninput="e => OnBodyInput(state, e.Value?.ToString() ?? string.Empty)">@state.EditedBody</textarea>
                     <div class="drafts-channel-meta">
                         @if (state.Channel == TwitterChannel)
