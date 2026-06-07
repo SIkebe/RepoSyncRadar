@@ -121,7 +121,7 @@ public sealed class WorkbenchTests
                 Assert.Contains("Display Language", shellText, StringComparison.Ordinal);
                 Assert.DoesNotContain("The screen updates immediately.", shellText, StringComparison.Ordinal);
                 Assert.Contains("Default Theme", shellText, StringComparison.Ordinal);
-                Assert.Contains("App settings", shellText, StringComparison.Ordinal);
+                Assert.Contains("App Settings", shellText, StringComparison.Ordinal);
                 Assert.Contains("Automation", shellText, StringComparison.Ordinal);
                 Assert.Contains("Legal/about", shellText, StringComparison.Ordinal);
                 Assert.DoesNotContain("サインイン済み", shellText, StringComparison.Ordinal);

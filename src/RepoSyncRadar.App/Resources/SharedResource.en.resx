@@ -246,7 +246,7 @@
   <data name="Settings.IgnoreList.Empty" xml:space="preserve"><value>No ignore rules have been configured yet.</value></data>
   <data name="Settings.IgnoreList.LoadFailed" xml:space="preserve"><value>Failed to load ignore rules</value></data>
   <data name="Settings.IgnoreList.Refresh" xml:space="preserve"><value>Refresh ignore list</value></data>
-  <data name="Settings.Section.AppSettings" xml:space="preserve"><value>App settings</value></data>
+  <data name="Settings.Section.AppSettings" xml:space="preserve"><value>App Settings</value></data>
   <data name="Settings.Section.Automation" xml:space="preserve"><value>Automation</value></data>
   <data name="Settings.Section.General" xml:space="preserve"><value>General</value></data>
   <data name="Settings.Section.LegalAbout" xml:space="preserve"><value>Legal/about</value></data>
