@@ -39,10 +39,10 @@ public sealed class LegacyTeamsDraftE2ETests
         // the rename did not collide with neighbouring sections.
         Assert.Equal(
             SeededAppHostFixture.SeededTwitterBody,
-            (await page.Locator("[data-testid='drafts-body-twitter']").InnerTextAsync()).Trim());
+            (await page.Locator("[data-testid='drafts-body-twitter']").InputValueAsync()).Trim());
         Assert.Equal(
             SeededAppHostFixture.SeededCustomerBody,
-            (await page.Locator("[data-testid='drafts-body-customer']").InnerTextAsync()).Trim());
+            (await page.Locator("[data-testid='drafts-body-customer']").InputValueAsync()).Trim());
     }
 
     [Fact]

@@ -1,6 +1,4 @@
-@* Displays the diff explanation and media-specific drafts for a focused
-    commit. Loads existing drafts on initialization; "Regenerate" re-invokes the Adoption
-   session. Implemented per IMPLEMENTATION_PLAN.md §Step 17. *@
+@* Editable workspace for generated diff explanations and sharing drafts. *@
 
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.Extensions.DependencyInjection
@@ -19,11 +17,21 @@
         </div>
         @if (!string.IsNullOrEmpty(Sha) && !_busy)
         {
-            <button type="button"
-                    class="toolbar-button secondary"
-                    data-testid="drafts-regenerate"
-                    disabled="@_busy"
-                    @onclick="RegenerateAsync">@L["Drafts.Regenerate"]</button>
+            <div class="drafts-header-actions">
+                <button type="button"
+                        class="toolbar-button secondary"
+                        data-testid="drafts-regenerate"
+                        disabled="@_busy"
+                        @onclick="() => RegenerateAsync(confirmOverwrite: false)">@L["Drafts.Regenerate"]</button>
+                @if (_confirmRegenerate)
+                {
+                    <button type="button"
+                            class="toolbar-button danger"
+                            data-testid="drafts-regenerate-confirm"
+                            disabled="@_busy"
+                            @onclick="() => RegenerateAsync(confirmOverwrite: true)">@L["Drafts.RegenerateConfirm"]</button>
+                }
+            </div>
         }
     </header>
 
@@ -54,9 +62,62 @@
     }
     else
     {
-        @RenderChannel("explanation", L["Drafts.Channel.Explanation"], _bundle?.ExplanationJa, large: true)
-        @RenderChannel("twitter", "Twitter", _bundle?.TwitterJa)
-        @RenderChannel("customer", L["Drafts.Channel.Customer"], _bundle?.CustomerJa)
+        @foreach (var state in _channels)
+        {
+            <section class="@GetChannelClass(state)" data-testid="drafts-section-@state.Channel">
+                <header>
+                    <h4>@state.Label</h4>
+                    <div class="drafts-channel-actions">
+                        @if (state.HasDraft)
+                        {
+                            <button type="button"
+                                    class="toolbar-button secondary compact"
+                                    data-testid="drafts-save-@state.Channel"
+                                    disabled="@(!state.IsDirty)"
+                                    @onclick="() => SaveAsync(state)">@L["Common.Save"]</button>
+                            <button type="button"
+                                    class="toolbar-button secondary compact"
+                                    data-testid="drafts-revert-@state.Channel"
+                                    disabled="@(!state.IsDirty)"
+                                    @onclick="() => Revert(state)">@L["Drafts.Revert"]</button>
+                        }
+                        <button type="button"
+                                class="toolbar-button secondary compact"
+                                data-testid="drafts-copy-@state.Channel"
+                                disabled="@(!state.HasDraft || string.IsNullOrEmpty(state.EditedBody))"
+                                @onclick="() => CopyAsync(state)">@L["Common.Copy"]</button>
+                    </div>
+                </header>
+
+                @if (!state.HasDraft)
+                {
+                    <p class="drafts-placeholder" data-testid="drafts-empty-@state.Channel">@L["Drafts.ChannelEmpty"]</p>
+                }
+                else
+                {
+                    <textarea class="drafts-body"
+                              data-testid="drafts-body-@state.Channel"
+                              rows="@state.Rows"
+                              aria-label="@state.Label"
+                              value="@state.EditedBody"
+                              @oninput="e => OnBodyInput(state, e.Value?.ToString() ?? string.Empty)"></textarea>
+                    <div class="drafts-channel-meta">
+                        @if (state.Channel == TwitterChannel)
+                        {
+                            <span data-testid="drafts-count-twitter">@L["Drafts.TwitterCount", CountTwitterCharacters(state.EditedBody)]</span>
+                        }
+                        @if (state.IsDirty)
+                        {
+                            <span data-testid="drafts-dirty-@state.Channel">@L["Drafts.Unsaved"]</span>
+                        }
+                    </div>
+                    @foreach (var warning in GetWarnings(state))
+                    {
+                        <p class="drafts-validation" data-testid="drafts-warning-@state.Channel">@warning</p>
+                    }
+                }
+            </section>
+        }
         @if (!string.IsNullOrEmpty(_status))
         {
             <p class="drafts-status" data-testid="drafts-status">@_status</p>
@@ -65,6 +126,11 @@
 </div>
 
 @code {
+    private const string ExplanationChannel = "explanation";
+    private const string TwitterChannel = "twitter";
+    private const string CustomerChannel = "customer";
+    private const int TwitterUrlLength = 23;
+
     [Parameter] public string? Sha { get; set; }
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
@@ -72,10 +138,12 @@
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
-    private DraftBundle? _bundle;
+    private readonly List<DraftChannelState> _channels = new();
+    private IReadOnlyList<string> _officialDocUrls = [];
     private string? _lastLoadedSha;
     private bool _busy;
     private bool _canceling;
+    private bool _confirmRegenerate;
     private DateTimeOffset _startedAt;
     private TimeSpan _elapsed;
     private CancellationTokenSource? _cts;
@@ -87,8 +155,10 @@
     {
         if (string.IsNullOrEmpty(Sha))
         {
-            _bundle = null;
+            _channels.Clear();
+            _officialDocUrls = [];
             _lastLoadedSha = null;
+            _confirmRegenerate = false;
             return;
         }
         if (Sha == _lastLoadedSha)
@@ -96,7 +166,8 @@
             return;
         }
         _status = null;
-        await LoadAsync();
+        _confirmRegenerate = false;
+        await LoadAsync(preserveDirty: false);
         _lastLoadedSha = Sha;
     }
 
@@ -115,7 +186,7 @@
         {
             await InvokeAsync(async () =>
             {
-                await LoadAsync();
+                await LoadAsync(preserveDirty: true);
                 StateHasChanged();
             });
         }
@@ -124,7 +195,7 @@
         }
     }
 
-    private async Task LoadAsync()
+    private async Task LoadAsync(bool preserveDirty)
     {
         var sha = Sha;
         if (string.IsNullOrEmpty(sha))
@@ -137,31 +208,63 @@
             return;
         }
         await using var db = await dbFactory.CreateDbContextAsync();
-        var drafts = await db.Drafts.AsNoTracking().Where(d => d.Sha == sha).ToListAsync();
-        if (drafts.Count == 0)
-        {
-            _bundle = null;
-            return;
-        }
-        _bundle = new DraftBundle(
-            FindDraft(drafts, "twitter"),
-            string.Empty,
-            FindDraft(drafts, "customer"),
-            FindDraft(drafts, "explanation"));
+        var drafts = await db.Drafts
+            .AsNoTracking()
+            .Where(d => d.Sha == sha)
+            .OrderByDescending(d => d.GeneratedAt)
+            .ThenByDescending(d => d.Id)
+            .ToListAsync();
+        var commit = await db.Commits
+            .AsNoTracking()
+            .Include(c => c.Files)
+            .FirstOrDefaultAsync(c => c.Sha == sha);
+        _officialDocUrls = commit is null
+            ? []
+            : await OfficialDocsUrlResolver.LoadAsync(db, commit, CancellationToken.None);
+        SetChannels(drafts, preserveDirty);
     }
 
-    private static string FindDraft(IEnumerable<Draft> drafts, string channel)
+    private void SetChannels(IReadOnlyList<Draft> drafts, bool preserveDirty)
     {
-        var match = drafts.FirstOrDefault(d => string.Equals(d.Channel, channel, StringComparison.OrdinalIgnoreCase));
-        return match?.Body ?? string.Empty;
+        var previous = _channels.ToDictionary(static state => state.Channel, StringComparer.OrdinalIgnoreCase);
+        var next = new[]
+        {
+            CreateState(ExplanationChannel, L["Drafts.Channel.Explanation"], rows: 8),
+            CreateState(TwitterChannel, "Twitter", rows: 5),
+            CreateState(CustomerChannel, L["Drafts.Channel.Customer"], rows: 5),
+        };
+
+        _channels.Clear();
+        foreach (var state in next)
+        {
+            var draft = drafts.FirstOrDefault(d => string.Equals(d.Channel, state.Channel, StringComparison.OrdinalIgnoreCase));
+            state.HasDraft = draft is not null;
+            state.SavedBody = draft?.Body ?? string.Empty;
+            state.EditedBody = preserveDirty
+                && previous.TryGetValue(state.Channel, out var old)
+                && old.IsDirty
+                    ? old.EditedBody
+                    : state.SavedBody;
+            _channels.Add(state);
+        }
     }
 
-    private async Task RegenerateAsync()
+    private static DraftChannelState CreateState(string channel, string label, int rows)
+        => new(channel, label, rows);
+
+    private async Task RegenerateAsync(bool confirmOverwrite)
     {
         if (string.IsNullOrEmpty(Sha) || _busy)
         {
             return;
         }
+        if (HasDirtyDrafts() && !confirmOverwrite)
+        {
+            _confirmRegenerate = true;
+            _status = L["Drafts.RegenerateUnsaved"];
+            return;
+        }
+
         var agent = Services.GetService<ICopilotAgent>();
         if (agent is null)
         {
@@ -170,10 +273,12 @@
         }
         StartProgress();
         _status = null;
+        _confirmRegenerate = false;
         StateHasChanged();
         try
         {
-            _bundle = await agent.GenerateDraftsAsync(Sha, _cts!.Token);
+            var bundle = await agent.GenerateDraftsAsync(Sha, _cts!.Token);
+            ApplyBundle(bundle);
             _broadcaster?.Publish();
         }
         catch (OperationCanceledException)
@@ -189,6 +294,176 @@
             await StopProgressAsync();
             StateHasChanged();
         }
+    }
+
+    private void ApplyBundle(DraftBundle bundle)
+    {
+        SetBody(ExplanationChannel, bundle.ExplanationJa);
+        SetBody(TwitterChannel, bundle.TwitterJa);
+        SetBody(CustomerChannel, bundle.CustomerJa);
+
+        void SetBody(string channel, string body)
+        {
+            var state = _channels.FirstOrDefault(s => string.Equals(s.Channel, channel, StringComparison.Ordinal));
+            if (state is null)
+            {
+                return;
+            }
+            state.HasDraft = true;
+            state.SavedBody = body;
+            state.EditedBody = body;
+        }
+    }
+
+    private async Task SaveAsync(DraftChannelState state)
+    {
+        if (string.IsNullOrEmpty(Sha) || !state.HasDraft)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(state.EditedBody))
+        {
+            _status = L["Drafts.SaveBlockedEmpty", state.Label];
+            return;
+        }
+
+        var dbFactory = Services.GetService<IDbContextFactory<RadarDbContext>>();
+        if (dbFactory is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var drafts = await db.Drafts
+                .Where(d => d.Sha == Sha && d.Channel == state.Channel)
+                .OrderByDescending(d => d.GeneratedAt)
+                .ThenByDescending(d => d.Id)
+                .ToListAsync();
+            var nowUtc = DateTime.UtcNow;
+            var current = drafts.FirstOrDefault();
+            if (current is null)
+            {
+                current = new Draft
+                {
+                    Sha = Sha,
+                    Channel = state.Channel,
+                    Posted = false,
+                    GeneratedAt = nowUtc,
+                };
+                db.Drafts.Add(current);
+            }
+            else
+            {
+                current.GeneratedAt = nowUtc;
+                if (drafts.Count > 1)
+                {
+                    db.Drafts.RemoveRange(drafts.Skip(1));
+                }
+            }
+
+            current.Body = state.EditedBody;
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _status = $"{L["Drafts.SaveFailed"]}: {BuildFriendlyErrorMessage(ex)}";
+            return;
+        }
+
+        state.SavedBody = state.EditedBody;
+        state.HasDraft = true;
+        _confirmRegenerate = false;
+        _status = L["Drafts.Saved", state.Label];
+        _broadcaster?.Publish();
+    }
+
+    private void Revert(DraftChannelState state)
+    {
+        state.EditedBody = state.SavedBody;
+        _confirmRegenerate = false;
+        _status = L["Drafts.Reverted", state.Label];
+    }
+
+    private void OnBodyInput(DraftChannelState state, string value)
+    {
+        state.EditedBody = value;
+        _confirmRegenerate = false;
+    }
+
+    private bool HasDirtyDrafts()
+        => _channels.Any(static state => state.IsDirty);
+
+    private IEnumerable<string> GetWarnings(DraftChannelState state)
+    {
+        if (string.IsNullOrWhiteSpace(state.EditedBody))
+        {
+            yield return L["Drafts.Warning.Empty"];
+        }
+        if (RequiresDocsUrlWarning(state))
+        {
+            yield return L["Drafts.Warning.MissingDocsUrl"];
+        }
+    }
+
+    private bool RequiresDocsUrlWarning(DraftChannelState state)
+        => _officialDocUrls.Count > 0
+            && (state.Channel == TwitterChannel || state.Channel == CustomerChannel)
+            && !state.EditedBody.Contains("docs.github.com", StringComparison.OrdinalIgnoreCase);
+
+    private static int CountTwitterCharacters(string text)
+    {
+        var count = 0;
+        for (var i = 0; i < text.Length;)
+        {
+            var urlStart = StartsWithUrl(text, i);
+            if (urlStart)
+            {
+                count += TwitterUrlLength;
+                i = AdvancePastUrl(text, i);
+            }
+            else
+            {
+                count++;
+                i++;
+            }
+        }
+        return count;
+    }
+
+    private static bool StartsWithUrl(string text, int index)
+        => text.AsSpan(index).StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            || text.AsSpan(index).StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+
+    private static int AdvancePastUrl(string text, int index)
+    {
+        while (index < text.Length && !char.IsWhiteSpace(text[index]))
+        {
+            index++;
+        }
+        return index;
+    }
+
+    private static string GetChannelClass(DraftChannelState state)
+        => state.Channel == ExplanationChannel
+            ? "drafts-channel drafts-channel-large"
+            : "drafts-channel";
+
+    private async Task CopyAsync(DraftChannelState state)
+    {
+        if (!state.HasDraft || string.IsNullOrEmpty(state.EditedBody))
+        {
+            return;
+        }
+        var clipboard = Services.GetService<IClipboard>();
+        if (clipboard is null)
+        {
+            _status = L["Drafts.ClipboardUnavailable"];
+            return;
+        }
+        await clipboard.SetTextAsync(state.EditedBody);
+        _status = L["Drafts.Copied", state.Label];
     }
 
     private void StartProgress()
@@ -260,62 +535,6 @@
             ? L["Drafts.NonJsonResponse"]
             : ex.Message;
 
-    private async Task CopyAsync(string? text, string channel)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-        var clipboard = Services.GetService<IClipboard>();
-        if (clipboard is null)
-        {
-            _status = L["Drafts.ClipboardUnavailable"];
-            return;
-        }
-        await clipboard.SetTextAsync(text);
-        _status = L["Drafts.Copied", channel];
-    }
-
-    private RenderFragment RenderChannel(string channel, string label, string? body, bool large = false) => builder =>
-    {
-        builder.OpenElement(0, "section");
-        builder.AddAttribute(1, "class", large ? "drafts-channel drafts-channel-large" : "drafts-channel");
-        builder.AddAttribute(2, "data-testid", $"drafts-section-{channel}");
-
-        builder.OpenElement(3, "header");
-        builder.OpenElement(4, "h4");
-        builder.AddContent(5, label);
-        builder.CloseElement();
-        builder.OpenElement(6, "button");
-        builder.AddAttribute(7, "type", "button");
-        builder.AddAttribute(8, "class", "toolbar-button secondary compact");
-        builder.AddAttribute(9, "data-testid", $"drafts-copy-{channel}");
-        builder.AddAttribute(10, "disabled", string.IsNullOrEmpty(body));
-        builder.AddAttribute(11, "onclick",
-            Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => CopyAsync(body, label)));
-        builder.AddContent(12, L["Common.Copy"]);
-        builder.CloseElement();
-        builder.CloseElement();
-
-        if (string.IsNullOrWhiteSpace(body))
-        {
-            builder.OpenElement(13, "p");
-            builder.AddAttribute(14, "class", "drafts-placeholder");
-            builder.AddAttribute(15, "data-testid", $"drafts-empty-{channel}");
-            builder.AddContent(16, L["Drafts.ChannelEmpty"]);
-            builder.CloseElement();
-        }
-        else
-        {
-            builder.OpenElement(13, "pre");
-            builder.AddAttribute(14, "data-testid", $"drafts-body-{channel}");
-            builder.AddContent(15, body);
-            builder.CloseElement();
-        }
-
-        builder.CloseElement();
-    };
-
     public void Dispose()
     {
         if (_broadcaster is not null)
@@ -325,5 +544,29 @@
         CancelProgress();
         _cts?.Dispose();
         _cts = null;
+    }
+
+    private sealed class DraftChannelState
+    {
+        public DraftChannelState(string channel, string label, int rows)
+        {
+            Channel = channel;
+            Label = label;
+            Rows = rows;
+        }
+
+        public string Channel { get; }
+
+        public string Label { get; }
+
+        public int Rows { get; }
+
+        public bool HasDraft { get; set; }
+
+        public string SavedBody { get; set; } = string.Empty;
+
+        public string EditedBody { get; set; } = string.Empty;
+
+        public bool IsDirty => !string.Equals(SavedBody, EditedBody, StringComparison.Ordinal);
     }
 }

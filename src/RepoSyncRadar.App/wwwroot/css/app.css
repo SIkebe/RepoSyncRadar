@@ -2149,18 +2149,42 @@ html, body {
     color: #24292f;
 }
 
-.drafts-channel pre {
+.drafts-header-actions,
+.drafts-channel-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.drafts-channel .drafts-body {
     min-height: 2.5rem;
     max-height: 12rem;
     overflow: auto;
     margin: 0;
+    width: 100%;
+    border: 0;
     padding: 0.6rem;
+    resize: vertical;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    background: transparent;
     color: #24292f;
     font-family: "Segoe UI", "Yu Gothic UI", sans-serif;
     font-size: 0.85rem;
     line-height: 1.45;
+}
+
+.drafts-channel .drafts-body:focus {
+    outline: 2px solid #0969da;
+    outline-offset: -2px;
+    background: #fff;
+}
+
+.radar-theme-dark .drafts-channel .drafts-body:focus {
+    outline-color: #58a6ff;
+    background: var(--radar-input-bg);
 }
 
 .drafts-placeholder {
@@ -2172,7 +2196,25 @@ html, body {
     line-height: 1.45;
 }
 
-.drafts-channel-large pre {
+.drafts-channel-meta {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0 0.6rem 0.5rem;
+    color: #57606a;
+    font-size: 0.78rem;
+    line-height: 1.3;
+}
+
+.drafts-validation {
+    margin: 0;
+    padding: 0 0.6rem 0.5rem;
+    color: #9a6700;
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
+
+.drafts-channel-large .drafts-body {
     max-height: 22rem;
 }
 
@@ -2389,7 +2431,7 @@ html, body {
 .radar-theme-dark .local-settings-group legend,
 .radar-theme-dark .review-field-label,
 .radar-theme-dark .drafts-channel h4,
-.radar-theme-dark .drafts-channel pre {
+.radar-theme-dark .drafts-channel .drafts-body {
     color: var(--radar-fg) !important;
 }
 
@@ -2429,6 +2471,7 @@ html, body {
 .radar-theme-dark .drafts-empty,
 .radar-theme-dark .drafts-placeholder,
 .radar-theme-dark .drafts-busy,
+.radar-theme-dark .drafts-channel-meta,
 .radar-theme-dark .preview-progress-text,
 .radar-theme-dark .preview-progress-elapsed,
 .radar-theme-dark .preview-progress-pid,
