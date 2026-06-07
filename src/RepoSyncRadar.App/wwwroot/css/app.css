@@ -2444,6 +2444,14 @@ html, body {
     color: var(--radar-fg) !important;
 }
 
+.radar-theme-dark .review-action-error {
+    color: var(--radar-danger-fg) !important;
+}
+
+.radar-theme-dark .review-action-status {
+    color: var(--radar-muted-fg) !important;
+}
+
 .radar-theme-dark .review-boost-field span,
 .radar-theme-dark .review-boost-field small {
     color: var(--radar-muted-fg) !important;

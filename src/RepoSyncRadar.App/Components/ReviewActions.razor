@@ -245,6 +245,7 @@
     [Parameter] public EventCallback<ReviewStatus> Reviewed { get; set; }
 
     private const int MaxSuggestedIgnorePatterns = 6;
+    private const int MaxSuggestedBoostPatterns = 6;
     private const string DefaultBoostRuleDeltaText = "1";
     private static readonly double[] BoostRuleDeltaPresets = [1, 2, 3, 0.5, -1];
     private static readonly IReadOnlyList<RejectReasonPreset> RejectReasonPresets =
@@ -524,7 +525,7 @@
             .ThenByDescending(static suggestion => suggestion.MatchCount)
             .ThenByDescending(static suggestion => CountPathSegments(suggestion.Pattern))
             .ThenBy(static suggestion => suggestion.Pattern, StringComparer.Ordinal)
-            .Take(MaxSuggestedIgnorePatterns)
+            .Take(MaxSuggestedBoostPatterns)
             .ToList();
     }
 
