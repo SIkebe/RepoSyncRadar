@@ -1,69 +1,119 @@
 # RepoSyncRadar
 
-RepoSyncRadar is a Windows desktop app for GitHub Enterprise Cloud administrators who need to watch [`github/docs`](https://github.com/github/docs) repo sync changes and understand whether they may affect the environments they manage. It helps spot product, policy, billing, security, and operational changes that can appear in documentation before, alongside, or without a dedicated GitHub Changelog post.
+RepoSyncRadar is a Windows desktop app for GitHub Enterprise Cloud administrators who need to review [`github/docs`](https://github.com/github/docs) Repo sync changes and decide which documentation updates deserve operational attention.
+
+It combines deterministic ingestion of Repo sync PRs with GitHub Copilot SDK triage, local review history, rendered docs previews, and sharing-draft generation so a daily docs review can fit into a short operator workflow.
 
 > [!IMPORTANT]
-> This app is aimed at operator review and triage. It does not replace official GitHub release notes, GitHub Changelog posts, or support guidance; it helps administrators notice docs-driven signals that deserve review.
+> RepoSyncRadar is a review aid for administrators. It does not replace official GitHub release notes, GitHub Changelog posts, support guidance, or human approval before communicating changes.
 
-## Highlights
+## What it does
 
-- **C# / .NET 10 / WPF + BlazorWebView** — fast startup as a native Windows app
-- Driven by the **GitHub Copilot SDK** ([`github/copilot-sdk`](https://github.com/github/copilot-sdk)) at its core
-- Reviews `github/docs` repo sync PRs for changes that may affect GitHub Enterprise Cloud administration and operations
-- Surfaces docs previews and file-path → public-URL mapping so reviewers can inspect the rendered impact
-- Generates operator-facing sharing drafts for Twitter and customer-facing notices
-- Stores Focus / Hold / Rejected / Archive / Ignore / Boost data with **SQLite + EF Core**
-- Uses GitHub OAuth Device Flow by default; the public OAuth Client ID is bundled, and organizations can override it with their own OAuth App if policy requires it
-- **No submodules.** The app is a standalone repository; no local clone is needed for normal triage.
+- Ingests recent `github/docs` Repo sync PRs and stores commit, file, scoring, review, ignore-rule, and draft data in SQLite.
+- Uses the **GitHub Copilot SDK** (`GitHub.Copilot.SDK` 1.0.0) to run Morning Triage, score candidate commits, and generate review summaries.
+- Keeps operator decisions explicit with **Unreviewed**, **Focus**, **Hold**, **Rejected**, **Archived**, directory ignore rules, and importance boost data.
+- Maps changed docs paths to `docs.github.com` URLs so reviewers can jump from a commit to the public article context.
+- Renders local before/after Markdown previews for docs changes through the app's .NET Markdown/Liquid pipeline and WebView2, without requiring Node.js.
+- Generates human-reviewed sharing drafts for short-form updates and customer-facing notices.
+- Authenticates with GitHub OAuth Device Flow and stores the resulting token locally with Windows DPAPI.
+- Supports installed-package updates through Velopack release feeds.
 
-## Quick start
+## Requirements
 
-> [!NOTE]
-> Requires Windows 11, the .NET SDK pinned in [`global.json`](global.json), and an active GitHub Copilot subscription. The Copilot CLI used by the SDK is downloaded on first run.
+| Requirement | Notes |
+|---|---|
+| Windows | Windows 11 is the primary target. WebView2 Runtime is required and is normally preinstalled. |
+| .NET SDK | The preview SDK pinned in [`global.json`](global.json): `11.0.100-preview.4.26230.115` with prerelease roll-forward enabled. |
+| GitHub account | The signed-in account must have an active GitHub Copilot subscription. |
+| Git | Required for local docs preview because the app reads `github/docs` content by commit SHA from a bare clone. |
+
+The Copilot CLI used by the SDK is supplied by the `GitHub.Copilot.SDK` package and is prepared automatically at runtime.
+
+## Quick start from source
 
 ```powershell
 git clone <this-repo-url> C:\github\RepoSyncRadar
 cd C:\github\RepoSyncRadar
 dotnet restore
-dotnet build
-dotnet run --project src/RepoSyncRadar.App
+dotnet build RepoSyncRadar.sln -warnaserror
+dotnet run --project src\RepoSyncRadar.App
 ```
 
-On first launch, RepoSyncRadar signs in with GitHub OAuth Device Flow. Normal distribution builds include the public RepoSyncRadar OAuth Client ID, so users do not need to create their own OAuth App. Organizations that require a managed OAuth App can override `Copilot:OAuthClientId` in `src/RepoSyncRadar.App/appsettings.local.json` or with `RADAR_Copilot__OAuthClientId`.
+On first launch, RepoSyncRadar opens GitHub OAuth Device Flow, copies the user code to the clipboard, and stores the resulting OAuth token in `%LocalAppData%\RepoSyncRadar\github-token.bin` using DPAPI. The same user token is used for Copilot SDK sessions and Octokit reads of `github/docs`.
 
-For the public OAuth App description, use wording like:
+Distribution builds include the public RepoSyncRadar OAuth Client ID. Forks or organizations that require a managed OAuth App can override `Copilot:OAuthClientId` in `src\RepoSyncRadar.App\appsettings.local.json`, `%LocalAppData%\RepoSyncRadar\appsettings.local.json`, or the `RADAR_Copilot__OAuthClientId` environment variable.
 
-> RepoSyncRadar helps GitHub Enterprise Cloud administrators review GitHub Docs updates for product, policy, and operational changes that may affect their managed environments.
+## Daily workflow
 
-Public-release blockers and follow-ups are tracked in [`docs/PUBLIC_RELEASE_READINESS.md`](docs/PUBLIC_RELEASE_READINESS.md).
+1. Start the app and confirm the header shows a signed-in GitHub user.
+2. Run **Triage** to fetch Repo sync PRs, ingest new commits, and let Copilot score likely operator-impacting changes.
+3. Review the **Unreviewed** queue, then mark commits as **Focus**, **Hold**, **Rejected**, or **Archived**.
+4. Open changed docs URLs or use local preview for Markdown changes that need rendered before/after inspection.
+5. For focused commits, generate or copy sharing drafts, then make the final human decision outside the app.
+
+Local preview is opt-in. By default, startup does not clone or fetch `github/docs`; preview work begins only when a preview action needs it, unless `DocsRepository:PrewarmOnStartup` is set to `true`.
+
+## Configuration
+
+The committed defaults live in [`src\RepoSyncRadar.App\appsettings.json`](src/RepoSyncRadar.App/appsettings.json). Environment-specific overrides belong in `appsettings.local.json`, either beside the app during development or under `%LocalAppData%\RepoSyncRadar\` for installed builds.
+
+Key settings:
+
+| Section | Purpose |
+|---|---|
+| `GitHub` | Source repo, Repo sync title filter, maximum PR count, and optional PR-created cutoff. |
+| `DocsApi` | `docs.github.com` API base address and page-list cache settings. |
+| `Copilot` | Default Copilot model, SDK telemetry, remote-session toggle, OAuth Client ID, and OAuth scopes. |
+| `WebView` | Host allow-list for docs, GitHub, assets, and GitHub Copilot Chat traffic inside WebView2. |
+| `DocsRepository` | `github/docs` clone URL, preview prewarm toggle, preview base port, and preview timeout. |
+| `Updates` | Velopack update-feed behavior for installed builds. |
+
+For a full setup walkthrough, OAuth details, local-preview behavior, and release-update notes, see [`docs/USAGE.md`](docs/USAGE.md).
 
 ## Project layout
 
-```
+```text
 src/
-├─ RepoSyncRadar.App/    ← WPF + BlazorWebView startup assembly
-└─ RepoSyncRadar.Core/   ← Models / DbContext / options / service interfaces
+  RepoSyncRadar.App/       WPF startup assembly, Blazor UI, Copilot orchestration, auth, preview UI, update UI
+  RepoSyncRadar.Core/      EF Core models, options, service interfaces, GitHub/docs clients, preview rendering
+tests/
+  RepoSyncRadar.App.Tests/            bUnit, UI component, Copilot workflow, auth, preview, and style tests
+  RepoSyncRadar.Core.Tests/           Core model, data, service, resolver, preview, and sanitization tests
+  RepoSyncRadar.Integrations.Tests/   External-facing service integration tests
+  RepoSyncRadar.App.E2E.Tests/        WebView/WPF-oriented end-to-end tests
 docs/
-├─ DESIGN.md                    ← Product design and architecture notes
-├─ PUBLIC_RELEASE_READINESS.md  ← Public release blockers and checklist
-└─ USAGE.md                     ← Setup, OAuth, and day-to-day usage
+  DESIGN.md                  Product design and architecture notes
+  USAGE.md                   Setup and operator guide
+  RELEASE.md                 Packaging, release, and update-feed details
+  IMPLEMENTATION_PLAN.md     Historical implementation checklist
 ```
 
-## Roadmap
+## Build and test
 
-The original phase plan is tracked in [`docs/DESIGN.md`](docs/DESIGN.md) and the implementation checklist in [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+```powershell
+dotnet build RepoSyncRadar.sln -warnaserror
+dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual
+```
 
-| Phase | Scope |
-|---|---|
-| 0 | Scaffold + design document |
-| 1 | Repo sync PR ingestion / commit display / official page embedding |
-| 2 | Copilot SDK integration / Morning Triage session |
-| 3 | Operational UI for Focus / Hold / Rejected / Archive / Ignore |
-| 4 | Channel-specific drafts (Twitter / customer-facing) |
-| 5 | Local preview (bare clone + Markdown/Liquid renderer) |
-| 6 | Distribution and auto-update |
+Manual tests are intentionally excluded from the default test command. Automated WebView/WPF coverage lives in `tests\RepoSyncRadar.App.E2E.Tests` and uses the `Category=E2E` trait.
 
-See [`docs/DESIGN.md`](docs/DESIGN.md#16-phase-別ロードマップ) for details.
+## Release packaging
+
+RepoSyncRadar uses Velopack for installed Windows releases and update feeds. The release workflow publishes installer/update-feed assets rather than portable bundles.
+
+For local package validation, use:
+
+```powershell
+.\scripts\Build-VelopackRelease.ps1 -NoPortable -NoLegacyManifest
+```
+
+See [`docs/RELEASE.md`](docs/RELEASE.md) for release channels, asset expectations, and installed-package smoke guidance.
+
+## Further reading
+
+- [`docs/DESIGN.md`](docs/DESIGN.md) explains the product goals, architecture, Copilot SDK integration, data model, and preview strategy.
+- [`docs/USAGE.md`](docs/USAGE.md) is the operator guide for setup, OAuth, daily review, local preview, and updates.
+- [`docs/PUBLIC_RELEASE_READINESS.md`](docs/PUBLIC_RELEASE_READINESS.md) tracks public-release blockers and follow-ups.
 
 ## License
 
