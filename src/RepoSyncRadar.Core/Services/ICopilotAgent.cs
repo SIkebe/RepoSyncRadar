@@ -18,6 +18,11 @@ public interface ICopilotAgent
         IProgress<string>? progress,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Runs morning triage and returns session-local details for the post-run digest.</summary>
+    Task<TriageRunResult> RunMorningTriageWithResultAsync(
+        IProgress<string>? progress,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Generates the sharing drafts and detailed diff explanation for a single focused commit.</summary>
     Task<DraftBundle> GenerateDraftsAsync(string commitSha, CancellationToken cancellationToken = default);
 
@@ -32,3 +37,35 @@ public interface ICopilotAgent
 /// Focused-commit draft bundle. Each member is the raw body the user can copy or edit.
 /// </summary>
 public sealed record DraftBundle(string TwitterJa, string TeamsJa, string CustomerJa, string ExplanationJa);
+
+public sealed record TriageRunResult(
+    IngestionReport Report,
+    IReadOnlyList<string> TargetShas,
+    bool CopilotSessionStarted,
+    string? LastStage);
+
+public sealed class TriageRunFailedException : Exception
+{
+    public TriageRunFailedException(
+        string message,
+        IngestionReport? report,
+        IReadOnlyList<string> targetShas,
+        bool copilotSessionStarted,
+        string? lastStage,
+        Exception innerException)
+        : base(message, innerException)
+    {
+        Report = report;
+        TargetShas = targetShas;
+        CopilotSessionStarted = copilotSessionStarted;
+        LastStage = lastStage;
+    }
+
+    public IngestionReport? Report { get; }
+
+    public IReadOnlyList<string> TargetShas { get; }
+
+    public bool CopilotSessionStarted { get; }
+
+    public string? LastStage { get; }
+}

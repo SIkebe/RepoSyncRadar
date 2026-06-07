@@ -5,6 +5,7 @@ using NSubstitute.ExceptionExtensions;
 using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
+using RepoSyncRadar.App.Copilot.Tools;
 using RepoSyncRadar.App.Settings;
 using RepoSyncRadar.App.Updates;
 using RepoSyncRadar.Core.Data;
@@ -150,6 +151,157 @@ public sealed class AppHeaderTests
         agent.Received(1).RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>());
         broadcaster.Received(1).Publish();
         Assert.Contains("新規 2", cut.Find("[data-testid=\"app-header-last-sync\"]").TextContent);
+    }
+
+    [Fact]
+    public void Triage_Success_Renders_Post_Run_Digest_With_Candidates_And_Usage_Delta()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var usageTracker = new CopilotUsageTracker();
+        var repo = Substitute.For<IRadarRepository>();
+        var high = MakeDigestCommit(
+            "aaa1111aaa1111aaa1111aaa1111aaa1111aaa1",
+            "Feature update\n\nCo-authored-by: bot",
+            0.91,
+            "feature-update",
+            "重要な更新です",
+            review: null);
+        var low = MakeDigestCommit(
+            "bbb2222bbb2222bbb2222bbb2222bbb2222bbb2",
+            "Typo fix",
+            0.22,
+            "low-signal",
+            "見送りでよい",
+            new Review { Sha = "bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", Status = ReviewStatus.Rejected, Reason = RadarWriteTools.AutoRejectedLowScoreReason });
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<Commit>>([high, low]));
+
+        var sp = BuildServices(session, out var agent, out _, repo, usageTracker: usageTracker);
+        agent
+            .RunMorningTriageWithResultAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                usageTracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+                    new DateTimeOffset(2026, 6, 6, 12, 0, 0, TimeSpan.Zero),
+                    "session-1",
+                    SessionPurpose.Triage.ToString(),
+                    "gpt-5",
+                    1000,
+                    250,
+                    50,
+                    0,
+                    0,
+                    500_000_000,
+                    2,
+                    3,
+                    800,
+                    200,
+                    []));
+                return Task.FromResult(new TriageRunResult(
+                    new IngestionReport(Total: 4, Inserted: 2, Skipped: 2),
+                    [high.Sha, low.Sha],
+                    CopilotSessionStarted: true,
+                    LastStage: "Triage が完了しました。画面を更新しています…"));
+            });
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var digest = cut.Find("[data-testid=\"triage-digest\"]");
+            Assert.Contains("今回の対象 2 件のうち 2 件を採点", digest.TextContent, StringComparison.Ordinal);
+            Assert.Contains("取得4", NormalizeText(cut.Find("[data-testid=\"triage-digest-metrics\"]").TextContent), StringComparison.Ordinal);
+            Assert.Contains("採点2", NormalizeText(cut.Find("[data-testid=\"triage-digest-metrics\"]").TextContent), StringComparison.Ordinal);
+            Assert.Contains("自動見送り1", NormalizeText(cut.Find("[data-testid=\"triage-digest-metrics\"]").TextContent), StringComparison.Ordinal);
+            Assert.Contains("0.5000 credits", cut.Find("[data-testid=\"triage-digest-usage\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("2.00 PR", cut.Find("[data-testid=\"triage-digest-usage\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("3 requests", cut.Find("[data-testid=\"triage-digest-usage\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("1,300 tokens", cut.Find("[data-testid=\"triage-digest-usage\"]").TextContent, StringComparison.Ordinal);
+            var row = Assert.Single(cut.FindAll("[data-testid=\"triage-digest-candidate\"]"));
+            Assert.Contains("Feature update", row.TextContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("Co-authored-by", row.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Triage_NoWork_Renders_Nothing_Needed_Scoring_Digest()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .RunMorningTriageWithResultAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new TriageRunResult(
+                new IngestionReport(Total: 0, Inserted: 0, Skipped: 0),
+                [],
+                CopilotSessionStarted: false,
+                LastStage: "今回の未スコア未確認コミットはありません。画面を更新しています…")));
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("nothing needed scoring", cut.Find("[data-testid=\"triage-digest-title\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("スコアリングが必要な未確認コミットはありません", cut.Find("[data-testid=\"triage-digest-summary\"]").TextContent, StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[data-testid=\"triage-digest-candidate\"]"));
+        });
+    }
+
+    [Fact]
+    public void Triage_Failure_Renders_Digest_With_Last_Stage()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var sp = BuildServices(session, out var agent, out var broadcaster);
+        agent
+            .RunMorningTriageWithResultAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new TriageRunFailedException(
+                "Morning triage failed.",
+                new IngestionReport(Total: 2, Inserted: 1, Skipped: 1),
+                ["aaa1111aaa1111aaa1111aaa1111aaa1111aaa1"],
+                copilotSessionStarted: true,
+                lastStage: "Copilot セッションを準備しています…",
+                new InvalidOperationException("network down")));
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("failed", cut.Find("[data-testid=\"triage-digest-title\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("network down", cut.Find("[data-testid=\"triage-digest-summary\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("Copilot セッションを準備", cut.Find("[data-testid=\"triage-digest-stage\"]").TextContent, StringComparison.Ordinal);
+        });
+        broadcaster.DidNotReceive().Publish();
     }
 
     [Fact]
@@ -1011,6 +1163,36 @@ public sealed class AppHeaderTests
         cut.WaitForAssertion(() => Assert.Equal(1, updateService.RestartCount));
     }
 
+    private static Commit MakeDigestCommit(
+        string sha,
+        string message,
+        double score,
+        string category,
+        string why,
+        Review? review)
+        => new()
+        {
+            Sha = sha,
+            PrNumber = 123,
+            Message = message,
+            Author = "docs-bot",
+            AuthoredAt = new DateTime(2026, 6, 6, 0, 0, 0, DateTimeKind.Utc),
+            FetchedAt = new DateTime(2026, 6, 6, 0, 0, 0, DateTimeKind.Utc),
+            Review = review,
+            Scoring = new Scoring
+            {
+                Sha = sha,
+                Score = score,
+                Category = category,
+                SummaryJa = "要約",
+                WhyJa = why,
+                DetailsJa = "詳細",
+                Model = "gpt-5",
+                PromptHash = "prompt",
+                ScoredAt = new DateTime(2026, 6, 6, 0, 0, 0, DateTimeKind.Utc),
+            },
+        };
+
     private static ServiceProvider BuildServices(
         IGitHubAuthSession session,
         out ICopilotAgent agent,
@@ -1021,7 +1203,24 @@ public sealed class AppHeaderTests
         IAppUpdateService? updateService = null,
         IAppVersionProvider? versionProvider = null)
     {
-        agent = Substitute.For<ICopilotAgent>();
+        var localAgent = Substitute.For<ICopilotAgent>();
+        localAgent.RunMorningTriageWithResultAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var progress = call.Arg<IProgress<string>?>();
+                var cancellationToken = call.Arg<CancellationToken>();
+                return localAgent.RunMorningTriageAsync(progress, cancellationToken)
+                    .ContinueWith(
+                        task => new TriageRunResult(
+                            task.GetAwaiter().GetResult(),
+                            [],
+                            CopilotSessionStarted: true,
+                            LastStage: null),
+                        CancellationToken.None,
+                        TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
+            });
+        agent = localAgent;
         broadcaster = Substitute.For<IReviewBroadcaster>();
         var resolvedSettingsStore = settingsStore ?? Substitute.For<IAppUserSettingsStore>();
         var localSettingsStore = Substitute.For<ILocalAppSettingsStore>();

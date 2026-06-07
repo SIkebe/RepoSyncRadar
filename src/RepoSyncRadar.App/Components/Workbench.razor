@@ -40,7 +40,9 @@
         <main class="radar-workbench">
             <AppHeader DisplayCultureChanged="HandleDisplayCultureChanged"
                        SettingsOpen="_settingsOpen"
-                       AuthStateVersion="_authStateVersion" />
+                       AuthStateVersion="_authStateVersion"
+                       QueueRequested="HandleDigestQueueRequested"
+                       CommitRequested="HandleDigestCommitRequestedAsync" />
 
             @if (!_settingsOpen)
             {
@@ -346,6 +348,43 @@
         _listRefreshVersion++;
         return Task.CompletedTask;
     }
+
+    private Task HandleDigestQueueRequested(ReviewStatus? status)
+        => HandleStatusChanged(status);
+
+    private async Task HandleDigestCommitRequestedAsync(string sha)
+    {
+        if (string.IsNullOrWhiteSpace(sha))
+        {
+            return;
+        }
+
+        var repo = Services.GetRequiredService<IRadarRepository>();
+        var matches = await repo.QueryCommitsAsync(new CommitQueryFilter { Shas = [sha] });
+        if (matches.Count == 0)
+        {
+            return;
+        }
+
+        var commit = matches[0];
+        SetSettingsOpen(false);
+        _selectedStatus = ResolveDigestCommitStatus(commit);
+        _commitHashQuery = string.Empty;
+        _filter = BuildCurrentFilter();
+        _selectedCommit = commit;
+        _selectedCommitShas.Clear();
+        _bulkReviewStatus = null;
+        ClearBatchExplanation();
+        _listRefreshVersion++;
+    }
+
+    private static ReviewStatus ResolveDigestCommitStatus(Commit commit)
+        => commit.Review?.Status switch
+        {
+            ReviewStatus.Seen => ReviewStatus.Unseen,
+            { } status => status,
+            _ => ReviewStatus.Unseen,
+        };
 
     private Task ToggleSettingsAsync()
     {

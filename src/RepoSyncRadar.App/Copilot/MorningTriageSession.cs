@@ -3,6 +3,7 @@ using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Services;
+using System.Runtime.ExceptionServices;
 
 namespace RepoSyncRadar.App.Copilot;
 
@@ -136,65 +137,126 @@ public sealed partial class MorningTriageSession
 
     /// <summary>Runs the full Morning Triage workflow. Returns the ingestion stats for status display.</summary>
     public async Task<IngestionReport> RunAsync(CancellationToken cancellationToken = default)
-        => await RunAsync(progress: null, cancellationToken).ConfigureAwait(false);
+    {
+        try
+        {
+            return (await RunDetailedAsync(progress: null, cancellationToken).ConfigureAwait(false)).Report;
+        }
+        catch (TriageRunFailedException ex) when (ex.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw;
+        }
+    }
 
     /// <summary>Runs the full Morning Triage workflow. Returns the ingestion stats for status display.</summary>
     public async Task<IngestionReport> RunAsync(
         IProgress<string>? progress,
         CancellationToken cancellationToken = default)
     {
+        try
+        {
+            return (await RunDetailedAsync(progress, cancellationToken).ConfigureAwait(false)).Report;
+        }
+        catch (TriageRunFailedException ex) when (ex.InnerException is not null)
+        {
+            ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            throw;
+        }
+    }
+
+    /// <summary>Runs the full Morning Triage workflow and returns session-local digest inputs.</summary>
+    public async Task<TriageRunResult> RunDetailedAsync(
+        IProgress<string>? progress,
+        CancellationToken cancellationToken = default)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         LogStarting(_logger);
+        IngestionReport? report = null;
+        IReadOnlyList<Commit>? scoringTargets = null;
+        var copilotSessionStarted = false;
+        string? lastStage = null;
 
-        progress?.Report("Repo sync PR を取得しています…");
-        var ingestionProgress = new TriageIngestionProgress(progress, _reviewBroadcaster);
-        var report = await _ingestion.IngestAsync(ingestionProgress, cancellationToken).ConfigureAwait(false);
-        LogIngested(_logger, report.Total, report.Inserted, report.Skipped);
-        progress?.Report($"取り込み完了: 取得 {report.Total} / 新規 {report.Inserted} / スキップ {report.Skipped}");
-
-        var scoringTargets = await LoadScoringTargetsAsync(cancellationToken).ConfigureAwait(false);
-        if (scoringTargets is { Count: 0 })
+        try
         {
-            progress?.Report("今回の未スコア未確認コミットはありません。画面を更新しています…");
-            return report;
-        }
+            ReportStage(progress, "Repo sync PR を取得しています…", ref lastStage);
+            var ingestionProgress = new TriageIngestionProgress(progress, _reviewBroadcaster, stage => lastStage = stage);
+            report = await _ingestion.IngestAsync(ingestionProgress, cancellationToken).ConfigureAwait(false);
+            LogIngested(_logger, report.Total, report.Inserted, report.Skipped);
+            ReportStage(progress, $"取り込み完了: 取得 {report.Total} / 新規 {report.Inserted} / スキップ {report.Skipped}", ref lastStage);
 
-        progress?.Report("Copilot セッションを準備しています…");
-        using var scoringScope = _scoringProgress.Begin(progress);
-        if (scoringTargets is { Count: >= 2 })
-        {
-            await RunParallelScoringAsync(scoringTargets, progress, cancellationToken).ConfigureAwait(false);
-            return report;
-        }
-
-        var session = await _sessionFactory.CreateSessionAsync(SessionPurpose.Triage, cancellationToken).ConfigureAwait(false);
-        await using (session.ConfigureAwait(false))
-        {
-            try
+            scoringTargets = await LoadScoringTargetsAsync(cancellationToken).ConfigureAwait(false);
+            if (scoringTargets is { Count: 0 })
             {
-                LogSending(_logger, session.SessionId);
-                progress?.Report("Copilot が未確認コミット一覧を取得し、スコアリングを開始しています…");
-                _ = await session.SendAsync(TriagePrompt, TriageSendTimeout, cancellationToken).ConfigureAwait(false);
-                progress?.Report("Triage が完了しました。画面を更新しています…");
-                LogFinished(_logger, session.SessionId);
+                ReportStage(progress, "今回の未スコア未確認コミットはありません。画面を更新しています…", ref lastStage);
+                return BuildResult(report, scoringTargets, copilotSessionStarted, lastStage);
             }
-            catch (OperationCanceledException)
+
+            ReportStage(progress, "Copilot セッションを準備しています…", ref lastStage);
+            using var scoringScope = _scoringProgress.Begin(progress);
+            if (scoringTargets is { Count: >= 2 })
             {
-                LogAborting(_logger, session.SessionId);
+                copilotSessionStarted = true;
+                await RunParallelScoringAsync(scoringTargets, progress, stage => lastStage = stage, cancellationToken).ConfigureAwait(false);
+                return BuildResult(report, scoringTargets, copilotSessionStarted, lastStage);
+            }
+
+            var session = await _sessionFactory.CreateSessionAsync(SessionPurpose.Triage, cancellationToken).ConfigureAwait(false);
+            copilotSessionStarted = true;
+            await using (session.ConfigureAwait(false))
+            {
                 try
                 {
-                    await session.AbortAsync(CancellationToken.None).ConfigureAwait(false);
+                    LogSending(_logger, session.SessionId);
+                    ReportStage(progress, "Copilot が未確認コミット一覧を取得し、スコアリングを開始しています…", ref lastStage);
+                    _ = await session.SendAsync(TriagePrompt, TriageSendTimeout, cancellationToken).ConfigureAwait(false);
+                    ReportStage(progress, "Triage が完了しました。画面を更新しています…", ref lastStage);
+                    LogFinished(_logger, session.SessionId);
                 }
-                catch (Exception abortEx)
+                catch (OperationCanceledException)
                 {
-                    LogAbortFailed(_logger, abortEx, session.SessionId);
+                    LogAborting(_logger, session.SessionId);
+                    try
+                    {
+                        await session.AbortAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception abortEx)
+                    {
+                        LogAbortFailed(_logger, abortEx, session.SessionId);
+                    }
+                    throw;
                 }
-                throw;
             }
-        }
 
-        return report;
+            return BuildResult(report, scoringTargets, copilotSessionStarted, lastStage);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new TriageRunFailedException(
+                "Morning triage failed.",
+                report,
+                BuildTargetShas(scoringTargets),
+                copilotSessionStarted,
+                lastStage,
+                ex);
+        }
     }
+
+    private static void ReportStage(IProgress<string>? progress, string message, ref string? lastStage)
+    {
+        lastStage = message;
+        progress?.Report(message);
+    }
+
+    private static TriageRunResult BuildResult(
+        IngestionReport report,
+        IReadOnlyList<Commit>? scoringTargets,
+        bool copilotSessionStarted,
+        string? lastStage)
+        => new(report, BuildTargetShas(scoringTargets), copilotSessionStarted, lastStage);
+
+    private static string[] BuildTargetShas(IReadOnlyList<Commit>? scoringTargets)
+        => scoringTargets?.Select(static commit => commit.Sha).ToArray() ?? [];
 
     private async Task<IReadOnlyList<Commit>?> LoadScoringTargetsAsync(CancellationToken cancellationToken)
     {
@@ -216,6 +278,7 @@ public sealed partial class MorningTriageSession
     private async Task RunParallelScoringAsync(
         IReadOnlyList<Commit> commits,
         IProgress<string>? progress,
+        Action<string> stageChanged,
         CancellationToken cancellationToken)
     {
         _scoringProgress.ReportCommitList(commits.Select(static commit => commit.Sha).ToArray());
@@ -230,16 +293,17 @@ public sealed partial class MorningTriageSession
                 LogSending(_logger, session.SessionId);
             }
 
-            progress?.Report($"Copilot が {shards.Count} セッションで未確認コミットを並列スコアリングしています…");
+            ReportStage(progress, $"Copilot が {shards.Count} セッションで未確認コミットを並列スコアリングしています…", stageChanged);
             var tasks = sessions
                 .Zip(shards, static (session, shard) => (session, shard))
                 .Select(pair => pair.session.SendAsync(BuildShardPrompt(pair.shard), TriageSendTimeout, cancellationToken));
             _ = await Task.WhenAll(tasks).ConfigureAwait(false);
-            progress?.Report("Triage が完了しました。画面を更新しています…");
+            ReportStage(progress, "Triage が完了しました。画面を更新しています…", stageChanged);
             foreach (var session in sessions)
             {
                 LogFinished(_logger, session.SessionId);
             }
+
         }
         catch (OperationCanceledException)
         {
@@ -262,6 +326,12 @@ public sealed partial class MorningTriageSession
                 await session.DisposeAsync().ConfigureAwait(false);
             }
         }
+    }
+
+    private static void ReportStage(IProgress<string>? progress, string message, Action<string> stageChanged)
+    {
+        stageChanged(message);
+        progress?.Report(message);
     }
 
     private static List<IReadOnlyList<Commit>> SplitIntoShards(IReadOnlyList<Commit> commits, int shardCount)
@@ -351,26 +421,37 @@ public sealed partial class MorningTriageSession
     {
         private readonly IProgress<string>? _progress;
         private readonly IReviewBroadcaster? _reviewBroadcaster;
+        private readonly Action<string> _stageChanged;
 
-        public TriageIngestionProgress(IProgress<string>? progress, IReviewBroadcaster? reviewBroadcaster)
+        public TriageIngestionProgress(
+            IProgress<string>? progress,
+            IReviewBroadcaster? reviewBroadcaster,
+            Action<string> stageChanged)
         {
             _progress = progress;
             _reviewBroadcaster = reviewBroadcaster;
+            _stageChanged = stageChanged;
         }
 
         public void Report(CommitIngestionProgress value)
         {
             if (value.Total == 0)
             {
-                _progress?.Report("Repo sync PR に新規未確認コミットはありません。");
+                Report("Repo sync PR に新規未確認コミットはありません。");
                 return;
             }
 
             if (value.InsertedSha is { Length: > 0 } sha)
             {
                 _reviewBroadcaster?.Publish();
-                _progress?.Report($"未確認コミットを取り込み中: 新規 {value.Inserted} / 取得 {value.Total} 件 ({ShortSha(sha)})");
+                Report($"未確認コミットを取り込み中: 新規 {value.Inserted} / 取得 {value.Total} 件 ({ShortSha(sha)})");
             }
+        }
+
+        private void Report(string message)
+        {
+            _stageChanged(message);
+            _progress?.Report(message);
         }
 
         private static string ShortSha(string sha)

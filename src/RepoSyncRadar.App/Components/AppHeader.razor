@@ -1,8 +1,11 @@
 @using Microsoft.Extensions.DependencyInjection
 @using RepoSyncRadar.App.Auth
 @using RepoSyncRadar.App.Copilot
+@using RepoSyncRadar.App.Copilot.Tools
 @using RepoSyncRadar.App.Settings
 @using RepoSyncRadar.App.Updates
+@using RepoSyncRadar.Core.Data
+@using RepoSyncRadar.Core.Models
 @using RepoSyncRadar.Core.Services
 @implements IDisposable
 
@@ -113,6 +116,64 @@
               style="font-size:0.8em; opacity:0.7; font-variant-numeric:tabular-nums;">v@_appVersion</span>
     </div>
     </header>
+
+    @if (!_settingsOpen && _triageDigest is not null)
+    {
+        <section class="@BuildDigestClass(_triageDigest)" data-testid="triage-digest">
+            <header class="triage-digest-header">
+                <div>
+                    <h3 data-testid="triage-digest-title">@BuildDigestTitle(_triageDigest)</h3>
+                    <p data-testid="triage-digest-summary">@BuildDigestSummary(_triageDigest)</p>
+                </div>
+                <div class="triage-digest-queue-actions" aria-label="Triage digest queue navigation">
+                    <button type="button" class="toolbar-button compact secondary" data-testid="triage-digest-queue-unseen" @onclick="() => RequestQueueAsync(ReviewStatus.Unseen)">@L["Sidebar.Unseen.Label"]</button>
+                    <button type="button" class="toolbar-button compact secondary" data-testid="triage-digest-queue-watch" @onclick="() => RequestQueueAsync(ReviewStatus.Adopted)">@L["Sidebar.Watch.Label"]</button>
+                    <button type="button" class="toolbar-button compact secondary" data-testid="triage-digest-queue-later" @onclick="() => RequestQueueAsync(ReviewStatus.Later)">@L["Sidebar.Later.Label"]</button>
+                    <button type="button" class="toolbar-button compact secondary" data-testid="triage-digest-queue-rejected" @onclick="() => RequestQueueAsync(ReviewStatus.Rejected)">@L["Sidebar.Rejected.Label"]</button>
+                </div>
+            </header>
+            <div class="triage-digest-metrics" data-testid="triage-digest-metrics">
+                <span class="progress-metric"><span class="progress-metric-label">取得</span><span class="progress-metric-value">@FormatNumber(_triageDigest.Total)</span></span>
+                <span class="progress-metric"><span class="progress-metric-label">新規</span><span class="progress-metric-value">@FormatNumber(_triageDigest.Inserted)</span></span>
+                <span class="progress-metric"><span class="progress-metric-label">スキップ</span><span class="progress-metric-value">@FormatNumber(_triageDigest.Skipped)</span></span>
+                <span class="progress-metric"><span class="progress-metric-label">採点</span><span class="progress-metric-value">@FormatNumber(_triageDigest.ScoredCount)</span></span>
+                <span class="progress-metric"><span class="progress-metric-label">自動見送り</span><span class="progress-metric-value">@FormatNumber(_triageDigest.AutoRejectedCount)</span></span>
+            </div>
+            @if (_triageDigest.Usage is { } usage)
+            {
+                <div class="triage-digest-usage" data-testid="triage-digest-usage">
+                    <span>Copilot</span>
+                    <span>@FormatUsageDeltaAiCredits(usage)</span>
+                    <span>@FormatUsageDeltaCost(usage)</span>
+                    <span>@FormatUsageDeltaRequests(usage)</span>
+                    <span>@FormatTokensWithUnit(usage.TotalTokens)</span>
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(_triageDigest.LastStage))
+            {
+                <p class="triage-digest-stage" data-testid="triage-digest-stage">最終ステージ: @_triageDigest.LastStage</p>
+            }
+            @if (_triageDigest.TopCandidates.Count > 0)
+            {
+                <div class="triage-digest-candidates" data-testid="triage-digest-candidates">
+                    @foreach (var candidate in _triageDigest.TopCandidates)
+                    {
+                        <button type="button"
+                                class="triage-digest-candidate"
+                                data-testid="triage-digest-candidate"
+                                data-sha="@candidate.Sha"
+                                @onclick="() => RequestCommitAsync(candidate.Sha)">
+                            <span class="sha">@ShortSha(candidate.Sha)</span>
+                            <span class="message">@candidate.MessageFirstLine</span>
+                            <span class="score">@FormatScore(candidate.Score)</span>
+                            <span class="category">@candidate.Category</span>
+                            <span class="reason">@candidate.Reason</span>
+                        </button>
+                    }
+                </div>
+            }
+        </section>
+    }
 
     @if (_settingsOpen)
     {
@@ -330,6 +391,10 @@
 
     [Parameter] public int AuthStateVersion { get; set; }
 
+    [Parameter] public EventCallback<ReviewStatus?> QueueRequested { get; set; }
+
+    [Parameter] public EventCallback<string> CommitRequested { get; set; }
+
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
@@ -338,6 +403,7 @@
     private IngestionReport? _lastReport;
     private string? _lastError;
     private string? _triageStatus;
+    private TriageDigest? _triageDigest;
     private DateTimeOffset? _triageStartedAt;
     private TimeSpan _triageElapsed;
     private CancellationTokenSource? _triageTimerCts;
@@ -486,6 +552,7 @@
         _busy = true;
         _lastError = null;
         _lastReport = null;
+        _triageDigest = null;
         _triageStartedAt = DateTimeOffset.UtcNow;
         _triageElapsed = TimeSpan.Zero;
         _triageStatus = L["AppHeader.TriageStarting"];
@@ -499,17 +566,29 @@
                 _triageStatus = message;
                 _ = InvokeAsync(StateHasChanged);
             });
-            _lastReport = await agent.RunMorningTriageAsync(progress, CancellationToken.None);
+            var usageBefore = _usageTracker?.GetSnapshot() ?? EmptyCopilotUsage;
+            var result = await RunTriageAgentAsync(agent, progress, CancellationToken.None);
+            var usageAfter = _usageTracker?.GetSnapshot() ?? _copilotUsage;
+            _lastReport = result.Report;
+            _triageDigest = await BuildDigestAsync(result, usageBefore, usageAfter, error: null);
             // Reuse the review broadcaster so Sidebar/CommitList re-query their
             // data the moment Triage finishes. The broadcaster is a no-op
             // pub/sub so we can publish freely without coupling to a triage-specific bus.
             _broadcaster?.Publish();
             _triageStatus = L["AppHeader.TriageCompleted"];
         }
+        catch (TriageRunFailedException ex)
+        {
+            _lastReport = ex.Report;
+            _lastError = $"{L["AppHeader.TriageFailed"]}: {ex.InnerException?.Message ?? ex.Message}";
+            _triageStatus = L["AppHeader.TriageFailedStatus"];
+            _triageDigest = await BuildFailureDigestAsync(ex);
+        }
         catch (Exception ex)
         {
             _lastError = $"{L["AppHeader.TriageFailed"]}: {ex.Message}";
             _triageStatus = L["AppHeader.TriageFailedStatus"];
+            _triageDigest = BuildFailureDigest(_lastReport, [], copilotSessionStarted: false, _triageStatus, ex.Message);
         }
         finally
         {
@@ -517,6 +596,180 @@
             StopTriageTimer();
         }
     }
+
+    private static async Task<TriageRunResult> RunTriageAgentAsync(
+        ICopilotAgent agent,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        var detailedTask = agent.RunMorningTriageWithResultAsync(progress, cancellationToken);
+        if (detailedTask is not null)
+        {
+            return await detailedTask.ConfigureAwait(false);
+        }
+
+        var report = await agent.RunMorningTriageAsync(progress, cancellationToken).ConfigureAwait(false);
+        return new TriageRunResult(report, [], CopilotSessionStarted: report.Total > 0, LastStage: null);
+    }
+
+    private async Task<TriageDigest> BuildDigestAsync(
+        TriageRunResult result,
+        CopilotUsageSnapshot usageBefore,
+        CopilotUsageSnapshot usageAfter,
+        string? error)
+    {
+        var commits = await LoadDigestCommitsAsync(result.TargetShas);
+        return BuildDigest(
+            result.Report,
+            result.TargetShas,
+            result.CopilotSessionStarted,
+            result.LastStage,
+            error,
+            commits,
+            CalculateUsageDelta(usageBefore, usageAfter));
+    }
+
+    private async Task<TriageDigest> BuildFailureDigestAsync(TriageRunFailedException exception)
+    {
+        var commits = await LoadDigestCommitsAsync(exception.TargetShas);
+        return BuildDigest(
+            exception.Report ?? new IngestionReport(0, 0, 0),
+            exception.TargetShas,
+            exception.CopilotSessionStarted,
+            exception.LastStage,
+            exception.InnerException?.Message ?? exception.Message,
+            commits,
+            usage: null);
+    }
+
+    private TriageDigest BuildFailureDigest(
+        IngestionReport? report,
+        IReadOnlyList<string> targetShas,
+        bool copilotSessionStarted,
+        string? lastStage,
+        string error)
+        => BuildDigest(
+            report ?? new IngestionReport(0, 0, 0),
+            targetShas,
+            copilotSessionStarted,
+            lastStage,
+            error,
+            [],
+            usage: null);
+
+    private async Task<IReadOnlyList<Commit>> LoadDigestCommitsAsync(IReadOnlyList<string> shas)
+    {
+        if (shas.Count == 0 || Services.GetService<IRadarRepository>() is not { } repo)
+        {
+            return [];
+        }
+
+        return await repo.QueryCommitsAsync(
+            new CommitQueryFilter { Shas = shas },
+            CancellationToken.None);
+    }
+
+    private static TriageDigest BuildDigest(
+        IngestionReport report,
+        IReadOnlyList<string> targetShas,
+        bool copilotSessionStarted,
+        string? lastStage,
+        string? error,
+        IReadOnlyList<Commit> commits,
+        TriageUsageDelta? usage)
+    {
+        var scored = commits.Where(static commit => commit.Scoring is not null).ToArray();
+        var lowScoreRejected = scored.Count(static commit => IsAutoRejectedForLowScore(commit));
+        var ignoreRejected = scored.Count(static commit => IsAutoRejectedForIgnoreRule(commit));
+        var topCandidates = scored
+            .Where(static commit => commit.Review?.Status != ReviewStatus.Rejected)
+            .OrderByDescending(static commit => commit.Scoring!.Score)
+            .ThenByDescending(static commit => commit.AuthoredAt)
+            .Take(5)
+            .Select(static commit => new TriageDigestCandidate(
+                commit.Sha,
+                FirstLine(commit.Message),
+                commit.Scoring!.Score,
+                commit.Scoring.Category,
+                string.IsNullOrWhiteSpace(commit.Scoring.WhyJa) ? commit.Scoring.SummaryJa : commit.Scoring.WhyJa))
+            .ToArray();
+
+        return new TriageDigest(
+            report.Total,
+            report.Inserted,
+            report.Skipped,
+            targetShas.Count,
+            scored.Length,
+            lowScoreRejected,
+            ignoreRejected,
+            copilotSessionStarted,
+            error is not null,
+            error,
+            lastStage,
+            topCandidates,
+            usage);
+    }
+
+    private static bool IsAutoRejectedForLowScore(Commit commit)
+        => commit.Review is { Status: ReviewStatus.Rejected, Reason: RadarWriteTools.AutoRejectedLowScoreReason };
+
+    private static bool IsAutoRejectedForIgnoreRule(Commit commit)
+        => commit.Review is { Status: ReviewStatus.Rejected, Reason: { } reason }
+            && !string.Equals(reason, RadarWriteTools.AutoRejectedLowScoreReason, StringComparison.Ordinal)
+            && reason.Contains("ignore", StringComparison.OrdinalIgnoreCase);
+
+    private static TriageUsageDelta? CalculateUsageDelta(CopilotUsageSnapshot before, CopilotUsageSnapshot after)
+    {
+        var totalTokens = after.TotalTokens - before.TotalTokens;
+        var inputTokens = after.InputTokens - before.InputTokens;
+        var outputTokens = after.OutputTokens - before.OutputTokens;
+        var reasoningTokens = after.ReasoningTokens - before.ReasoningTokens;
+        var requests = after.SessionMetrics.Sum(static metrics => metrics.TotalUserRequests)
+            - before.SessionMetrics.Sum(static metrics => metrics.TotalUserRequests);
+        var aiCredits = CalculateAiCreditDelta(before, after);
+        var cost = CalculateNullableDelta(before.Cost, after.Cost);
+
+        if (totalTokens < 0 || inputTokens < 0 || outputTokens < 0 || reasoningTokens < 0 || requests < 0)
+        {
+            return null;
+        }
+
+        if (totalTokens == 0 && requests == 0 && aiCredits is null && cost is null)
+        {
+            return null;
+        }
+
+        return new TriageUsageDelta(aiCredits, cost, requests, totalTokens, inputTokens, outputTokens, reasoningTokens);
+    }
+
+    private static double? CalculateAiCreditDelta(CopilotUsageSnapshot before, CopilotUsageSnapshot after)
+    {
+        if (after.TotalNanoAiu is not { } afterNanoAiu)
+        {
+            return null;
+        }
+
+        var beforeNanoAiu = before.TotalNanoAiu ?? 0;
+        var delta = afterNanoAiu - beforeNanoAiu;
+        return delta >= 0 ? delta / CopilotUsageTracker.NanoAiuPerAiCredit : null;
+    }
+
+    private static double? CalculateNullableDelta(double? before, double? after)
+    {
+        if (after is null)
+        {
+            return null;
+        }
+
+        var delta = after.Value - (before ?? 0);
+        return delta >= 0 ? delta : null;
+    }
+
+    private Task RequestQueueAsync(ReviewStatus? status)
+        => QueueRequested.InvokeAsync(status);
+
+    private Task RequestCommitAsync(string sha)
+        => CommitRequested.InvokeAsync(sha);
 
     private async Task LoadSettingsPanelAsync()
     {
@@ -1247,6 +1500,60 @@
             _ => cost.ToString("N6", System.Globalization.CultureInfo.CurrentCulture),
         };
 
+    private static string ShortSha(string sha)
+        => sha.Length <= 8 ? sha : sha[..8];
+
+    private static string FirstLine(string value)
+        => value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? value;
+
+    private static string FormatScore(double score)
+        => score.ToString("0.00", System.Globalization.CultureInfo.CurrentCulture);
+
+    private static string BuildDigestClass(TriageDigest digest)
+        => digest.Failed ? "triage-digest failed" : "triage-digest";
+
+    private static string BuildDigestTitle(TriageDigest digest)
+    {
+        if (digest.Failed)
+        {
+            return "Triage digest: failed";
+        }
+
+        return digest.NoWork ? "Triage digest: nothing needed scoring" : "Triage digest";
+    }
+
+    private static string BuildDigestSummary(TriageDigest digest)
+    {
+        if (digest.Failed)
+        {
+            return string.IsNullOrWhiteSpace(digest.Error)
+                ? "Triage failed before the run completed."
+                : $"Triage failed: {digest.Error}";
+        }
+
+        if (digest.NoWork)
+        {
+            return "今回スコアリングが必要な未確認コミットはありませんでした。";
+        }
+
+        return $"今回の対象 {digest.TargetCount} 件のうち {digest.ScoredCount} 件を採点しました。";
+    }
+
+    private static string FormatUsageDeltaAiCredits(TriageUsageDelta usage)
+        => usage.AiCredits is { } value
+            ? $"AI Credits {FormatAiCredits(value)} credits"
+            : "AI Credits 未報告";
+
+    private static string FormatUsageDeltaCost(TriageUsageDelta usage)
+        => usage.PremiumRequestCost is { } value
+            ? $"{FormatCost(value)} PR"
+            : "PR 未報告";
+
+    private static string FormatUsageDeltaRequests(TriageUsageDelta usage)
+        => usage.Requests > 0
+            ? $"{FormatNumber(usage.Requests)} requests"
+            : "requests 未報告";
+
     private string BuildThemeOptionClass(DocsThemeMode theme)
         => _defaultDocsTheme == theme
             ? "settings-theme-option active"
@@ -1273,6 +1580,42 @@
 
     private string DefaultThemeLabel
         => L["Settings.DefaultTheme"];
+
+    private sealed record TriageDigest(
+        int Total,
+        int Inserted,
+        int Skipped,
+        int TargetCount,
+        int ScoredCount,
+        int LowScoreAutoRejectedCount,
+        int IgnoreRuleAutoRejectedCount,
+        bool CopilotSessionStarted,
+        bool Failed,
+        string? Error,
+        string? LastStage,
+        IReadOnlyList<TriageDigestCandidate> TopCandidates,
+        TriageUsageDelta? Usage)
+    {
+        public int AutoRejectedCount => LowScoreAutoRejectedCount + IgnoreRuleAutoRejectedCount;
+
+        public bool NoWork => !Failed && !CopilotSessionStarted && TargetCount == 0;
+    }
+
+    private sealed record TriageDigestCandidate(
+        string Sha,
+        string MessageFirstLine,
+        double Score,
+        string Category,
+        string Reason);
+
+    private sealed record TriageUsageDelta(
+        double? AiCredits,
+        double? PremiumRequestCost,
+        double Requests,
+        double TotalTokens,
+        double InputTokens,
+        double OutputTokens,
+        double ReasoningTokens);
 
     public void Dispose()
     {

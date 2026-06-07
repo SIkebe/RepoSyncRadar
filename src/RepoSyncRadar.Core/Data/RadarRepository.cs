@@ -238,6 +238,11 @@ public sealed class RadarRepository : IRadarRepository
                 : query.Where(c => c.Review != null && c.Review.Status == status);
         }
 
+        if (NormalizeShaSet(filter.Shas) is { Count: > 0 } shas)
+        {
+            query = query.Where(c => shas.Contains(c.Sha));
+        }
+
         if (filter.UnscoredOnly)
         {
             query = query.Where(c => c.Scoring == null);
@@ -277,6 +282,13 @@ public sealed class RadarRepository : IRadarRepository
         => string.IsNullOrWhiteSpace(value)
             ? string.Empty
             : value.Trim().ToLowerInvariant();
+
+    private static List<string> NormalizeShaSet(IReadOnlyList<string>? shas)
+        => shas?
+            .Where(static sha => !string.IsNullOrWhiteSpace(sha))
+            .Select(static sha => sha.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList() ?? [];
 
     public async Task<IReadOnlyDictionary<ReviewStatus, int>> GetReviewCountsAsync(
         CancellationToken cancellationToken = default)

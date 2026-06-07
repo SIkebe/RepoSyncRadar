@@ -28,6 +28,11 @@ public sealed record CommitQueryFilter
     public string? ShaQuery { get; init; }
 
     /// <summary>
+    /// When supplied, only commits whose SHA is in this set are returned.
+    /// </summary>
+    public IReadOnlyList<string>? Shas { get; init; }
+
+    /// <summary>
     /// When true, only commits that do not yet have a <see cref="Scoring"/> row are returned.
     /// </summary>
     public bool UnscoredOnly { get; init; }

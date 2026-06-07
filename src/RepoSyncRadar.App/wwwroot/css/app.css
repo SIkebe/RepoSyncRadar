@@ -171,6 +171,89 @@ html, body {
     overflow-wrap: anywhere;
 }
 
+.triage-digest {
+    background: var(--radar-panel-alt-bg);
+    border: 1px solid var(--radar-border-subtle);
+    border-radius: 8px;
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.75rem;
+    padding: 0.7rem;
+}
+
+.triage-digest.failed {
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.triage-digest-header {
+    align-items: flex-start;
+    display: flex;
+    gap: 0.75rem;
+    justify-content: space-between;
+}
+
+.triage-digest-header h3 {
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.triage-digest-header p,
+.triage-digest-stage {
+    color: var(--radar-muted-fg);
+    font-size: 0.82rem;
+    margin: 0.15rem 0 0;
+}
+
+.triage-digest-queue-actions,
+.triage-digest-metrics,
+.triage-digest-usage {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.triage-digest-usage {
+    color: var(--radar-muted-fg);
+    font-size: 0.82rem;
+}
+
+.triage-digest-candidates {
+    display: grid;
+    gap: 0.3rem;
+}
+
+.triage-digest-candidate {
+    align-items: center;
+    background: var(--radar-panel-bg);
+    border: 1px solid var(--radar-border-subtle);
+    border-radius: 6px;
+    color: var(--radar-fg);
+    cursor: pointer;
+    display: grid;
+    gap: 0.45rem;
+    grid-template-columns: 5.5rem minmax(10rem, 1fr) 3rem 8rem minmax(10rem, 1fr);
+    padding: 0.4rem 0.55rem;
+    text-align: left;
+}
+
+.triage-digest-candidate:hover {
+    border-color: var(--radar-accent-fg);
+}
+
+.triage-digest-candidate .sha,
+.triage-digest-candidate .score {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+
+.triage-digest-candidate .category,
+.triage-digest-candidate .reason {
+    color: var(--radar-muted-fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .radar-sidebar {
     display: flex;
     flex-direction: column;

@@ -307,6 +307,30 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
+    public async Task QueryCommitsAsync_Filters_By_Sha_Set()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+        var baseTime = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await repository.UpsertCommitsAsync(
+            new[]
+            {
+                MakeCommit("sha-older", prNumber: 1, authoredAt: baseTime),
+                MakeCommit("sha-newer", prNumber: 1, authoredAt: baseTime.AddDays(1)),
+                MakeCommit("sha-other", prNumber: 1, authoredAt: baseTime.AddDays(2)),
+            },
+            ct);
+
+        var commits = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { Shas = ["sha-older", "sha-newer", "sha-older"] },
+            ct);
+
+        Assert.Equal(["sha-newer", "sha-older"], commits.Select(static commit => commit.Sha).ToArray());
+    }
+
+    [Fact]
     public async Task QueryCommitsAsync_Includes_Scoring_When_Present()
     {
         using var fixture = new SqliteFixture();
