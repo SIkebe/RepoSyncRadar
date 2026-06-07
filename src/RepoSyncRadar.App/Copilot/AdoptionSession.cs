@@ -221,6 +221,9 @@ public sealed partial class AdoptionSession
         sb.AppendLine("- twitter は 140 文字以内、customer は 1600 文字以内を目安。");
         sb.AppendLine("- twitter / customer には、必ず下記の公式ドキュメント URL を 1 つ以上含める。");
         sb.AppendLine();
+        sb.AppendLine("## 用語ルール");
+        sb.AppendLine("- GitHub の product scope としての `Organization` / `Enterprise` は英語のまま書き、どちらも `組織` と訳さない。");
+        sb.AppendLine();
         sb.AppendLine("## explanation の要件");
         sb.AppendLine("- 次の見出しをこの順序で含める: `何が変わったか`, `差分の見方`, `重要なポイント`, `影響と次に見るべき点`。");
         sb.AppendLine("- `何が変わったか`: 変更の目的と利用者に見える差分を要約する。");
@@ -464,6 +467,7 @@ public sealed partial class AdoptionSession
         sb.AppendLine("前回の内容から、次のスキーマに合う JSON object だけを返してください。");
         sb.AppendLine("説明文、Markdown、コードブロック、前置き、後置きは禁止です。");
         sb.AppendLine("スキーマ: { \"explanation\": string, \"twitter\": string, \"customer\": string }");
+        sb.AppendLine("GitHub の product scope としての `Organization` / `Enterprise` は英語のまま残し、どちらも `組織` と訳さないでください。");
         sb.AppendLine();
         sb.AppendLine("前回の応答:");
         sb.AppendLine("```text");

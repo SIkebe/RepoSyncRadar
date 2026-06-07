@@ -241,6 +241,16 @@ public sealed class AdoptionSessionTests
         Assert.Contains("差分の見方", capturedPrompt);
         Assert.Contains("重要なポイント", capturedPrompt);
         Assert.Contains("細部を読まなくても変更点を理解", capturedPrompt);
+        AssertContainsGitHubScopeTerminologyRule(capturedPrompt);
+    }
+
+    [Fact]
+    public void BuildRepairPrompt_Includes_GitHub_Scope_Terminology_Rule()
+    {
+        var prompt = AdoptionSession.BuildRepairPrompt(
+            "{\"explanation\":\"GitHub Organization settings changed\",\"twitter\":\"\",\"customer\":\"\"}");
+
+        AssertContainsGitHubScopeTerminologyRule(prompt);
     }
 
     [Fact]
@@ -318,6 +328,7 @@ public sealed class AdoptionSessionTests
         Assert.Contains("src/rest/data/fpt-2026-03-10/copilot.json", prompt, StringComparison.Ordinal);
         Assert.Contains("src/github-apps/data/ghec-2026-03-10/server-to-server-rest.json", prompt, StringComparison.Ordinal);
         Assert.Contains("src/webhooks/lib/config.json", prompt, StringComparison.Ordinal);
+        AssertContainsGitHubScopeTerminologyRule(prompt);
     }
 
     [Fact]
@@ -337,6 +348,7 @@ public sealed class AdoptionSessionTests
         var prompt = AdoptionSession.BuildPrompt(commit, [], "diff");
 
         Assert.DoesNotContain("## OpenAPI / API reference 差分の追加要件", prompt, StringComparison.Ordinal);
+        AssertContainsGitHubScopeTerminologyRule(prompt);
     }
 
     [Fact]
@@ -503,6 +515,13 @@ public sealed class AdoptionSessionTests
         var markerBytes = System.Text.Encoding.UTF8.GetByteCount(AdoptionSession.TruncatedMarker);
         Assert.True(System.Text.Encoding.UTF8.GetByteCount(truncated) <=
                     AdoptionSession.MaxDiffBytes + markerBytes);
+    }
+
+    private static void AssertContainsGitHubScopeTerminologyRule(string prompt)
+    {
+        Assert.Contains("Organization", prompt, StringComparison.Ordinal);
+        Assert.Contains("Enterprise", prompt, StringComparison.Ordinal);
+        Assert.Contains("`組織` と訳さない", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Microsoft.EntityFrameworkCore;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
@@ -321,6 +322,31 @@ public sealed class WriteToolsTests
                 Assert.NotEqual(true, value);
             }
         });
+    }
+
+    [Fact]
+    public void ScoreCommit_Metadata_Includes_GitHub_Scope_Terminology_Rule()
+    {
+        var description = string.Join(
+            "\n",
+            GetDescription(nameof(ScoreCommitArgs.SummaryJa)),
+            GetDescription(nameof(ScoreCommitArgs.WhyJa)),
+            GetDescription(nameof(ScoreCommitArgs.DetailsJa)));
+
+        Assert.Contains("Organization", description, StringComparison.Ordinal);
+        Assert.Contains("Enterprise", description, StringComparison.Ordinal);
+        Assert.Contains("組織", description, StringComparison.Ordinal);
+    }
+
+    private static string GetDescription(string propertyName)
+    {
+        var property = typeof(ScoreCommitArgs).GetProperty(propertyName)
+            ?? throw new InvalidOperationException($"Property not found: {propertyName}.");
+        return property
+            .GetCustomAttributes(typeof(DescriptionAttribute), inherit: false)
+            .OfType<DescriptionAttribute>()
+            .Single()
+            .Description;
     }
 
     private sealed class CapturingProgress : IProgress<string>
