@@ -12,6 +12,7 @@ public sealed class RadarDbContext(DbContextOptions<RadarDbContext> options) : D
     public DbSet<CommitFile> CommitFiles => Set<CommitFile>();
     public DbSet<Scoring> Scorings => Set<Scoring>();
     public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<ReviewHistory> ReviewHistories => Set<ReviewHistory>();
     public DbSet<Draft> Drafts => Set<Draft>();
     public DbSet<PathUrlMap> PathUrlMaps => Set<PathUrlMap>();
     public DbSet<IgnoreRule> IgnoreRules => Set<IgnoreRule>();
@@ -37,6 +38,9 @@ public sealed class RadarDbContext(DbContextOptions<RadarDbContext> options) : D
             e.HasMany(c => c.Drafts).WithOne()
                 .HasForeignKey(d => d.Sha)
                 .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(c => c.ReviewHistory).WithOne()
+                .HasForeignKey(h => h.Sha)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<CommitFile>(e =>
@@ -56,6 +60,14 @@ public sealed class RadarDbContext(DbContextOptions<RadarDbContext> options) : D
             e.HasKey(r => r.Sha);
             e.HasIndex(r => r.Status);
             e.Property(r => r.Status).HasConversion<string>();
+        });
+
+        modelBuilder.Entity<ReviewHistory>(e =>
+        {
+            e.HasKey(h => h.Id);
+            e.HasIndex(h => h.Sha);
+            e.HasIndex(h => h.ChangedAt);
+            e.Property(h => h.Status).HasConversion<string>();
         });
 
         modelBuilder.Entity<Draft>(e =>

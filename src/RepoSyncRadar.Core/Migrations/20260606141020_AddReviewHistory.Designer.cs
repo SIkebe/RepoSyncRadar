@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using RepoSyncRadar.Core.Data;
 
@@ -10,14 +11,11 @@ using RepoSyncRadar.Core.Data;
 namespace RepoSyncRadar.Core.Migrations
 {
     [DbContext(typeof(RadarDbContext))]
-    partial class RadarDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260606141020_AddReviewHistory")]
+    partial class AddReviewHistory
     {
-        // If you encounter a merge conflict in the line below, it means you need to
-        // discard one of the migration branches and recreate its migrations on top of
-        // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-        public override string LatestMigrationId => "20260606141020_AddReviewHistory";
-
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "11.0.0-preview.4.26230.115");

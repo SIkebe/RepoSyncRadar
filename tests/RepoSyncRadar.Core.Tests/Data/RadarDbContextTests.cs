@@ -26,6 +26,7 @@ public sealed class RadarDbContextTests
         Assert.Empty(db.CommitFiles.ToList());
         Assert.Empty(db.Scorings.ToList());
         Assert.Empty(db.Reviews.ToList());
+        Assert.Empty(db.ReviewHistories.ToList());
         Assert.Empty(db.Drafts.ToList());
         Assert.Empty(db.PathUrlMaps.ToList());
         Assert.Empty(db.IgnoreRules.ToList());
@@ -55,6 +56,16 @@ public sealed class RadarDbContextTests
                 },
                 Scoring = new Scoring { Sha = "abc", Score = 0.5, Category = "feature", ScoredAt = DateTime.UtcNow },
                 Review = new Review { Sha = "abc", Status = ReviewStatus.Seen },
+                ReviewHistory =
+                {
+                    new ReviewHistory
+                    {
+                        Sha = "abc",
+                        Status = ReviewStatus.Seen,
+                        ChangedAt = DateTime.UtcNow,
+                        Source = ReviewHistorySources.User,
+                    },
+                },
                 Drafts =
                 {
                     new Draft { Sha = "abc", Channel = "twitter", Body = "hi", GeneratedAt = DateTime.UtcNow },
@@ -77,6 +88,7 @@ public sealed class RadarDbContextTests
             Assert.Empty(db.CommitFiles.ToList());
             Assert.Empty(db.Scorings.ToList());
             Assert.Empty(db.Reviews.ToList());
+            Assert.Empty(db.ReviewHistories.ToList());
             Assert.Empty(db.Drafts.ToList());
         }
     }

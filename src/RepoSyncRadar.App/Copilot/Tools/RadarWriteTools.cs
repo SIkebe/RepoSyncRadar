@@ -304,13 +304,13 @@ public sealed class RadarWriteTools
     private AIFunction CreateScoreCommit()
     {
         return AIFunctionFactory.Create(
-            ([Description("Side-effecting: writes a Scoring row to radar.db, including score, category, audience, short summary, reason, and detailed Japanese analysis.")] ScoreCommitArgs args,
+            ([Description("Side-effecting: writes a Scoring row to radar.db, including score, category, audience, short summary, reason, and detailed Japanese analysis. Keep GitHub Organization and Enterprise in English; do not translate either concept as 組織.")] ScoreCommitArgs args,
              CancellationToken cancellationToken)
                 => ScoreCommitAsync(args, cancellationToken),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_score_commit",
-                Description = "Stores or updates the LLM-produced score, category, audience tags, summary, reason, and detailed analysis for a commit. Side-effecting.",
+                Description = "Stores or updates the LLM-produced score, category, audience tags, summary, reason, and detailed analysis for a commit. Keep GitHub Organization and Enterprise in English; do not translate either concept as 組織. Side-effecting.",
             });
     }
 

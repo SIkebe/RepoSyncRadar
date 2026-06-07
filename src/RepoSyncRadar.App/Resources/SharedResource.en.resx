@@ -18,6 +18,39 @@
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage failed</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage failed. Check the error details.</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Starting triage...</value></data>
+  <data name="TriagePreflight.Button" xml:space="preserve"><value>Estimate</value></data>
+  <data name="TriagePreflight.CandidatePullRequests" xml:space="preserve"><value>Candidate PRs</value></data>
+  <data name="TriagePreflight.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="TriagePreflight.CreatedAfter" xml:space="preserve"><value>Created after</value></data>
+  <data name="TriagePreflight.Description" xml:space="preserve"><value>Review the likely GitHub and local triage workload before starting Copilot scoring.</value></data>
+  <data name="TriagePreflight.EstimatedScoringTargets" xml:space="preserve"><value>Likely scoring targets</value></data>
+  <data name="TriagePreflight.Estimating" xml:space="preserve"><value>Estimating...</value></data>
+  <data name="TriagePreflight.ExternalEstimate" xml:space="preserve"><value>GitHub estimate</value></data>
+  <data name="TriagePreflight.ExternalFailed" xml:space="preserve"><value>GitHub estimate unavailable: {0}</value></data>
+  <data name="TriagePreflight.ExternalSkipped" xml:space="preserve"><value>Sign in to estimate candidate PRs and new commits. Local counts are shown below.</value></data>
+  <data name="TriagePreflight.Failed" xml:space="preserve"><value>Preflight failed</value></data>
+  <data name="TriagePreflight.GitHubSettings" xml:space="preserve"><value>GitHub query</value></data>
+  <data name="TriagePreflight.IgnoreRules" xml:space="preserve"><value>Ignore rules</value></data>
+  <data name="TriagePreflight.IgnoreRulesActive" xml:space="preserve"><value>{0} configured</value></data>
+  <data name="TriagePreflight.IgnoreRulesEmpty" xml:space="preserve"><value>None configured</value></data>
+  <data name="TriagePreflight.LastTriage" xml:space="preserve"><value>Last triage in this session</value></data>
+  <data name="TriagePreflight.LastTriageEmpty" xml:space="preserve"><value>No triage has completed in this app session.</value></data>
+  <data name="TriagePreflight.LocalState" xml:space="preserve"><value>Local state</value></data>
+  <data name="TriagePreflight.MaxPullRequests" xml:space="preserve"><value>Max PRs</value></data>
+  <data name="TriagePreflight.NewUnseenCommits" xml:space="preserve"><value>New untracked commits</value></data>
+  <data name="TriagePreflight.NotSet" xml:space="preserve"><value>Not set</value></data>
+  <data name="TriagePreflight.Repository" xml:space="preserve"><value>Repository</value></data>
+  <data name="TriagePreflight.ReviewCounts" xml:space="preserve"><value>Review counts</value></data>
+  <data name="TriagePreflight.ReviewStatus.Adopted" xml:space="preserve"><value>Adopted {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Archived" xml:space="preserve"><value>Archived {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Later" xml:space="preserve"><value>Later {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Rejected" xml:space="preserve"><value>Rejected {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Unseen" xml:space="preserve"><value>Unseen {0}</value></data>
+  <data name="TriagePreflight.Run" xml:space="preserve"><value>Run Triage</value></data>
+  <data name="TriagePreflight.SignInRequiredToRun" xml:space="preserve"><value>Sign in before running Triage.</value></data>
+  <data name="TriagePreflight.Title" xml:space="preserve"><value>Morning Triage preflight</value></data>
+  <data name="TriagePreflight.TitleFilter" xml:space="preserve"><value>Title filter</value></data>
+  <data name="TriagePreflight.UnscoredUnreviewed" xml:space="preserve"><value>Unscored unseen in DB</value></data>
   <data name="AppHeader.Update.CheckButton" xml:space="preserve"><value>Check for updates</value></data>
   <data name="AppHeader.Update.CheckFailed" xml:space="preserve"><value>Update check failed.</value></data>
   <data name="AppHeader.Update.CheckFailedWithMessage" xml:space="preserve"><value>Update check failed: {0}</value></data>
@@ -96,6 +129,27 @@
   <data name="CommitDetail.Starting" xml:space="preserve"><value>Starting...</value></data>
   <data name="CommitDetail.Summary" xml:space="preserve"><value>Summary</value></data>
   <data name="CommitDetail.Unscored" xml:space="preserve"><value>Unscored (triage has not run)</value></data>
+  <data name="CommitDetail.History.Title" xml:space="preserve"><value>History</value></data>
+  <data name="CommitDetail.History.Empty" xml:space="preserve"><value>No history metadata is available for this commit yet.</value></data>
+  <data name="CommitDetail.History.LegacyNote" xml:space="preserve"><value>This review decision is reconstructed from the latest state saved before history tracking was added. Detailed status history will be recorded for future decisions.</value></data>
+  <data name="CommitDetail.History.Fetched.Title" xml:space="preserve"><value>Commit fetched</value></data>
+  <data name="CommitDetail.History.Fetched.Description" xml:space="preserve"><value>Ingested from Repo sync PR #{0} into the local database.</value></data>
+  <data name="CommitDetail.History.Scored.Title" xml:space="preserve"><value>Copilot score saved</value></data>
+  <data name="CommitDetail.History.Scored.Description" xml:space="preserve"><value>Score {0}, category {1}, model {2}</value></data>
+  <data name="CommitDetail.History.UnknownModel" xml:space="preserve"><value>unknown</value></data>
+  <data name="CommitDetail.History.PromptHash" xml:space="preserve"><value>Prompt hash: {0}</value></data>
+  <data name="CommitDetail.History.Review.Title" xml:space="preserve"><value>Review decision: {0}</value></data>
+  <data name="CommitDetail.History.Review.LegacyTitle" xml:space="preserve"><value>Review decision (latest state): {0}</value></data>
+  <data name="CommitDetail.History.Review.Description" xml:space="preserve"><value>Source: {0}</value></data>
+  <data name="CommitDetail.History.Review.DescriptionWithReason" xml:space="preserve"><value>Source: {0}. Reason: {1}</value></data>
+  <data name="CommitDetail.History.Source.User" xml:space="preserve"><value>user action</value></data>
+  <data name="CommitDetail.History.Source.AutoIgnore" xml:space="preserve"><value>ignore rule</value></data>
+  <data name="CommitDetail.History.Source.BulkIgnore" xml:space="preserve"><value>bulk ignore</value></data>
+  <data name="CommitDetail.History.Draft.Title" xml:space="preserve"><value>{0} draft generated</value></data>
+  <data name="CommitDetail.History.Draft.Description" xml:space="preserve"><value>Saved the sharing draft displayed for {0}.</value></data>
+  <data name="CommitDetail.History.IgnoreRule.Title" xml:space="preserve"><value>Ignore rule matched</value></data>
+  <data name="CommitDetail.History.IgnoreRule.Description" xml:space="preserve"><value>{0} matched this commit's files.</value></data>
+  <data name="CommitDetail.History.IgnoreRule.DescriptionWithReason" xml:space="preserve"><value>{0} matched this commit's files. Reason: {1}</value></data>
   <data name="CommitDetail.Why" xml:space="preserve"><value>Why</value></data>
   <data name="Common.CacheRead" xml:space="preserve"><value>Cache read</value></data>
   <data name="Common.CacheWrite" xml:space="preserve"><value>Cache write</value></data>
@@ -235,7 +289,7 @@
   <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits and Premium Request cost are shown from SDK usage events and session metrics. If the SDK does not report AI Credits, they remain unreported. Prompt text is not stored.</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>Session metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
   <data name="Settings.DefaultTheme" xml:space="preserve"><value>Default Theme</value></data>
-  <data name="Settings.Description" xml:space="preserve"><value>Review display language, default theme, app settings, licenses, and ignore rules.</value></data>
+  <data name="Settings.Description" xml:space="preserve"><value>Review display language, app settings, automation, and licenses in focused sections.</value></data>
   <data name="Settings.DisplayLanguage" xml:space="preserve"><value>Display Language</value></data>
   <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>Switching display language...</value></data>
   <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>Display language switched to {0}.</value></data>
@@ -246,6 +300,11 @@
   <data name="Settings.IgnoreList.Empty" xml:space="preserve"><value>No ignore rules have been configured yet.</value></data>
   <data name="Settings.IgnoreList.LoadFailed" xml:space="preserve"><value>Failed to load ignore rules</value></data>
   <data name="Settings.IgnoreList.Refresh" xml:space="preserve"><value>Refresh ignore list</value></data>
+  <data name="Settings.Section.AppSettings" xml:space="preserve"><value>App Settings</value></data>
+  <data name="Settings.Section.Automation" xml:space="preserve"><value>Automation</value></data>
+  <data name="Settings.Section.General" xml:space="preserve"><value>General</value></data>
+  <data name="Settings.Section.LegalAbout" xml:space="preserve"><value>Third-Party Licenses</value></data>
+  <data name="Settings.Section.Navigation" xml:space="preserve"><value>Settings sections</value></data>
   <data name="Settings.Theme.Dark" xml:space="preserve"><value>Dark</value></data>
   <data name="Settings.Theme.Light" xml:space="preserve"><value>Light</value></data>
   <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>Failed to load theme settings</value></data>

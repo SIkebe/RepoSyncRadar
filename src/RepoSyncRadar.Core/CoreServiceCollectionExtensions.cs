@@ -41,6 +41,7 @@ public static class CoreServiceCollectionExtensions
         services.TryAddSingleton<IRadarRepository, RadarRepository>();
         services.TryAddSingleton<IDocsGitHubClient, DocsGitHubClient>();
         services.TryAddSingleton<ICommitIngestionService, CommitIngestionService>();
+        services.TryAddSingleton<ITriagePreflightSummaryBuilder, TriagePreflightSummaryBuilder>();
         services.TryAddSingleton<IPathToUrlResolver, NullPathToUrlResolver>();
         services.TryAddSingleton<IProcessRunner, SystemProcessRunner>();
         services.TryAddSingleton<IPreviewPortAllocator, TcpPreviewPortAllocator>();

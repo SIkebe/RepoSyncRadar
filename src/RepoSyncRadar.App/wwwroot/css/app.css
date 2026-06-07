@@ -254,6 +254,75 @@ html, body {
     white-space: nowrap;
 }
 
+.triage-preflight-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--radar-border-subtle);
+}
+
+.triage-preflight-header,
+.triage-preflight-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.triage-preflight-header h2,
+.triage-preflight-section h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.triage-preflight-header p,
+.triage-preflight-section p {
+    margin: 0.15rem 0 0;
+}
+
+.triage-preflight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 0.65rem;
+}
+
+.triage-preflight-section {
+    border: 1px solid var(--radar-border-subtle);
+    border-radius: 6px;
+    background: var(--radar-panel-alt-bg);
+    padding: 0.65rem;
+}
+
+.triage-preflight-section dl {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.45rem 0 0;
+}
+
+.triage-preflight-section dl > div {
+    display: grid;
+    grid-template-columns: minmax(7rem, auto) 1fr;
+    gap: 0.5rem;
+    align-items: baseline;
+}
+
+.triage-preflight-section dt {
+    color: var(--radar-muted-fg);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.triage-preflight-section dd {
+    margin: 0;
+    color: var(--radar-fg);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
 .radar-sidebar {
     display: flex;
     flex-direction: column;
@@ -875,6 +944,66 @@ html, body {
     white-space: pre-wrap;
 }
 
+.radar-commit-detail .commit-history {
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    background: #fff;
+    margin-bottom: 0.75rem;
+}
+
+.radar-commit-detail .commit-history summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.55rem 0.75rem;
+    color: #24292f;
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.radar-commit-detail .history-count {
+    color: #57606a;
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.radar-commit-detail .history-timeline {
+    margin: 0;
+    padding: 0 0.75rem 0.7rem 1.85rem;
+}
+
+.radar-commit-detail .history-entry {
+    padding: 0.38rem 0 0.38rem 0.15rem;
+}
+
+.radar-commit-detail .history-entry time {
+    display: block;
+    color: #57606a;
+    font-size: 0.72rem;
+    line-height: 1.25;
+}
+
+.radar-commit-detail .history-entry strong {
+    color: #24292f;
+    font-size: 0.84rem;
+}
+
+.radar-commit-detail .history-entry p,
+.radar-commit-detail .history-empty,
+.radar-commit-detail .history-note {
+    margin: 0.12rem 0 0;
+    color: #57606a;
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.radar-commit-detail .history-empty,
+.radar-commit-detail .history-note {
+    padding: 0 0.75rem 0.7rem;
+}
+
 .radar-commit-detail .files {
     list-style: none;
     margin: 0;
@@ -1210,6 +1339,46 @@ html, body {
     font-size: 0.82rem;
     margin: 0.15rem 0 0;
     overflow-wrap: anywhere;
+}
+
+.settings-section-nav {
+    align-items: center;
+    border-bottom: 1px solid #d8dee4;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding-bottom: 0.5rem;
+}
+
+.settings-section-nav-button {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: #57606a;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 0.35rem 0.7rem;
+}
+
+.settings-section-nav-button:hover {
+    background: #f6f8fa;
+    border-color: #d0d7de;
+    color: #0969da;
+}
+
+.settings-section-nav-button.active {
+    background: #0969da;
+    border-color: #0969da;
+    color: #fff;
+}
+
+.settings-section-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
 }
 
 .settings-muted[data-testid="settings-local-appsettings-path"] {
@@ -2163,6 +2332,7 @@ html, body {
 .radar-theme-dark .mud-paper,
 .radar-theme-dark .action-panel,
 .radar-theme-dark .radar-commit-detail .scoring,
+.radar-theme-dark .radar-commit-detail .commit-history,
 .radar-theme-dark .ignore-rule-row,
 .radar-theme-dark .third-party-notice-row,
 .radar-theme-dark .drafts-channel header {
@@ -2173,8 +2343,10 @@ html, body {
 .radar-theme-dark .radar-sidebar-pane,
 .radar-theme-dark .radar-commit-detail .commit-header,
 .radar-theme-dark .radar-commit-detail .scoring-note,
+.radar-theme-dark .radar-commit-detail .commit-history,
 .radar-theme-dark .action-panel,
 .radar-theme-dark .app-settings-panel,
+.radar-theme-dark .settings-section-nav,
 .radar-theme-dark .ignore-rule-list,
 .radar-theme-dark .ignore-rule-row + .ignore-rule-row,
 .radar-theme-dark .third-party-notice-list,
@@ -2197,6 +2369,8 @@ html, body {
 .radar-theme-dark .mud-typography,
 .radar-theme-dark .radar-commit-detail .commit-header .message,
 .radar-theme-dark .radar-commit-detail .scoring-note dd,
+.radar-theme-dark .radar-commit-detail .commit-history summary,
+.radar-theme-dark .radar-commit-detail .history-entry strong,
 .radar-theme-dark .radar-commit-detail .files-heading-label,
 .radar-theme-dark .action-panel-header h3,
 .radar-theme-dark .app-settings-header h2,
@@ -2222,6 +2396,11 @@ html, body {
 .radar-theme-dark .radar-commit-detail .file-row .stats,
 .radar-theme-dark .radar-commit-detail .preview-status,
 .radar-theme-dark .radar-commit-detail .files-heading-count,
+.radar-theme-dark .radar-commit-detail .history-count,
+.radar-theme-dark .radar-commit-detail .history-entry time,
+.radar-theme-dark .radar-commit-detail .history-entry p,
+.radar-theme-dark .radar-commit-detail .history-empty,
+.radar-theme-dark .radar-commit-detail .history-note,
 .radar-theme-dark .empty,
 .radar-theme-dark .loading,
 .radar-theme-dark .action-panel-header p,
@@ -2278,6 +2457,7 @@ html, body {
 .radar-theme-dark .toolbar-button,
 .radar-theme-dark .review-button,
 .radar-theme-dark .review-reason-chip,
+.radar-theme-dark .settings-section-nav-button,
 .radar-theme-dark .settings-theme-options,
 .radar-theme-dark .settings-theme-option,
 .radar-theme-dark .settings-usage-grid div,
@@ -2306,6 +2486,12 @@ html, body {
     background: var(--radar-panel-alt-bg) !important;
     border-color: var(--radar-border) !important;
     color: var(--radar-fg) !important;
+}
+
+.radar-theme-dark .settings-section-nav-button:hover {
+    background: var(--radar-hover-bg) !important;
+    border-color: var(--radar-active-border) !important;
+    color: var(--radar-active-border) !important;
 }
 
 .radar-theme-dark .radar-commit-detail .scoring,
@@ -2337,7 +2523,8 @@ html, body {
 }
 
 .radar-theme-dark .radar-commit-detail .score-tile,
-.radar-theme-dark .review-suggestion-chip {
+.radar-theme-dark .review-suggestion-chip,
+.radar-theme-dark .settings-section-nav-button.active {
     background: var(--radar-active-bg) !important;
     border-color: var(--radar-active-border) !important;
     color: var(--radar-chip-fg) !important;
@@ -2412,6 +2599,7 @@ html, body {
 .radar-theme-dark .review-button:focus-visible,
 .radar-theme-dark .review-reason-chip:focus-visible,
 .radar-theme-dark .review-suggestion-chip:focus-visible,
+.radar-theme-dark .settings-section-nav-button:focus-visible,
 .radar-theme-dark .settings-theme-option:focus-visible,
 .radar-theme-dark .radar-commit-detail .file-row .open-in-webview:focus-visible,
 .radar-theme-dark .preview-cancel:focus-visible {

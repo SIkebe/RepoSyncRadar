@@ -278,6 +278,13 @@ public sealed class RadarToolsTests
         public Task SetReviewAsync(string sha, ReviewStatus status, string? reason, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
+        public Task<CommitHistorySnapshot?> GetCommitHistoryAsync(string sha, CancellationToken cancellationToken = default)
+        {
+            var commit = _commits.FirstOrDefault(c => c.Sha == sha);
+            return Task.FromResult<CommitHistorySnapshot?>(
+                commit is null ? null : new CommitHistorySnapshot(commit, [], commit.Drafts, []));
+        }
+
         public Task<int> DeleteUnseenCommitsAsync(IEnumerable<string> shas, CancellationToken cancellationToken = default)
             => Task.FromResult(0);
 
@@ -317,6 +324,9 @@ public sealed class RadarToolsTests
     private sealed class StubDocsGitHubClient : IDocsGitHubClient
     {
         public string Diff { get; set; } = string.Empty;
+
+        public Task<DocsGitHubTriageEstimate> EstimateTriageAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(new DocsGitHubTriageEstimate(0, 0));
 
         public Task<IReadOnlyList<Commit>> FetchUnseenCommitsAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<Commit>>(Array.Empty<Commit>());

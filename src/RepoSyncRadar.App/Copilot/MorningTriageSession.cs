@@ -64,6 +64,7 @@ public sealed partial class MorningTriageSession
 
             Style:
             - 出力はすべて日本語。
+            - GitHub の product scope としての `Organization` / `Enterprise` は英語のまま書き、どちらも `組織` と訳さない。
             - 段落を長くしない。
             - 同じ内容を `SummaryJa` / `WhyJa` / `DetailsJa` で繰り返さない。
             - 「新しい」「重要」だけで済ませず、何が誰にどう効くかを書く。
@@ -83,6 +84,7 @@ public sealed partial class MorningTriageSession
     private readonly ICommitIngestionService _ingestion;
     private readonly ICopilotSessionFactory _sessionFactory;
     private readonly TriageScoringProgressTracker _scoringProgress;
+    private readonly ITriagePreflightSummaryBuilder? _preflightBuilder;
     private readonly IRadarRepository? _repository;
     private readonly IReviewBroadcaster? _reviewBroadcaster;
     private readonly ILogger<MorningTriageSession> _logger;
@@ -120,7 +122,8 @@ public sealed partial class MorningTriageSession
         TriageScoringProgressTracker scoringProgress,
         IRadarRepository? repository,
         IReviewBroadcaster? reviewBroadcaster,
-        ILogger<MorningTriageSession> logger)
+        ILogger<MorningTriageSession> logger,
+        ITriagePreflightSummaryBuilder? preflightBuilder = null)
     {
         ArgumentNullException.ThrowIfNull(ingestion);
         ArgumentNullException.ThrowIfNull(sessionFactory);
@@ -130,9 +133,22 @@ public sealed partial class MorningTriageSession
         _ingestion = ingestion;
         _sessionFactory = sessionFactory;
         _scoringProgress = scoringProgress;
+        _preflightBuilder = preflightBuilder;
         _repository = repository;
         _reviewBroadcaster = reviewBroadcaster;
         _logger = logger;
+    }
+
+    public async Task<TriagePreflightSummary> BuildPreflightAsync(
+        bool includeGitHubEstimate,
+        CancellationToken cancellationToken = default)
+    {
+        if (_preflightBuilder is null)
+        {
+            throw new InvalidOperationException("Morning Triage preflight is not configured.");
+        }
+
+        return await _preflightBuilder.BuildAsync(includeGitHubEstimate, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Runs the full Morning Triage workflow. Returns the ingestion stats for status display.</summary>
@@ -269,7 +285,7 @@ public sealed partial class MorningTriageSession
             new CommitQueryFilter
             {
                 Status = ReviewStatus.Unseen,
-                Limit = 50,
+                Limit = TriagePreflightSummaryBuilder.ScoringTargetLimit,
                 UnscoredOnly = true,
             },
             cancellationToken).ConfigureAwait(false);
@@ -372,6 +388,7 @@ public sealed partial class MorningTriageSession
             - `WhyJa`: 1 文、80 文字以内。
             - `DetailsJa`: `変更内容` / `根拠` / `影響` / `確認観点` をこの順序で含める。
             - 根拠に書けるのは差分またはレンダリング済み本文で確認した事実だけ。
+            - GitHub の product scope としての `Organization` / `Enterprise` は英語のまま書き、どちらも `組織` と訳さない。
             """;
     }
 

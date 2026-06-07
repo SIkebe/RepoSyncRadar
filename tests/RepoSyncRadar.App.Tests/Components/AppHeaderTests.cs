@@ -342,6 +342,163 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Preflight_Button_Shows_ReadOnly_Summary()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .BuildMorningTriagePreflightAsync(true, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(MakePreflightSummary(TriagePreflightGitHubEstimateStatus.Succeeded)));
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-triage-preflight\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("5", cut.Find("[data-testid=\"app-header-triage-preflight-candidate-prs\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("7", cut.Find("[data-testid=\"app-header-triage-preflight-new-commits\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("3 / 50", NormalizeText(cut.Find("[data-testid=\"app-header-triage-preflight-scoring-targets\"]").TextContent), StringComparison.Ordinal);
+            Assert.False(cut.Find("[data-testid=\"app-header-triage-preflight-run\"]").HasAttribute("disabled"));
+        });
+        agent.Received(1).BuildMorningTriagePreflightAsync(true, Arg.Any<CancellationToken>());
+        agent.DidNotReceive().RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Preflight_When_SignedOut_Shows_Local_Counts_Without_GitHub_Estimate()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.NotSignedIn));
+
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .BuildMorningTriagePreflightAsync(false, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(MakePreflightSummary(TriagePreflightGitHubEstimateStatus.Skipped)));
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-triage-preflight\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotNull(cut.Find("[data-testid=\"app-header-triage-preflight-external-skipped\"]"));
+            Assert.Contains("2", cut.Find("[data-testid=\"app-header-triage-preflight-unscored\"]").TextContent, StringComparison.Ordinal);
+            Assert.True(cut.Find("[data-testid=\"app-header-triage-preflight-run\"]").HasAttribute("disabled"));
+            Assert.True(cut.Find("[data-testid=\"app-header-sync\"]").HasAttribute("disabled"));
+        });
+        agent.Received(1).BuildMorningTriagePreflightAsync(false, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Preflight_Refreshes_Auth_State_Before_GitHub_Estimate()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromResult(GitHubAuthState.SignedIn),
+                Task.FromResult(GitHubAuthState.NotSignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .BuildMorningTriagePreflightAsync(false, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(MakePreflightSummary(TriagePreflightGitHubEstimateStatus.Skipped)));
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        Assert.False(cut.Find("[data-testid=\"app-header-triage-preflight\"]").HasAttribute("disabled"));
+        cut.Find("[data-testid=\"app-header-triage-preflight\"]").Click();
+
+        cut.WaitForAssertion(() =>
+            Assert.NotNull(cut.Find("[data-testid=\"app-header-triage-preflight-external-skipped\"]")));
+        agent.Received(1).BuildMorningTriagePreflightAsync(false, Arg.Any<CancellationToken>());
+        agent.DidNotReceive().BuildMorningTriagePreflightAsync(true, Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Preflight_GitHub_Failure_Still_Allows_Triage_Run()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var sp = BuildServices(session, out var agent, out var broadcaster);
+        agent
+            .BuildMorningTriagePreflightAsync(true, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(MakePreflightSummary(TriagePreflightGitHubEstimateStatus.Failed)));
+        agent
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IngestionReport(Total: 1, Inserted: 1, Skipped: 0)));
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-triage-preflight\"]").Click();
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("rate limit", cut.Find("[data-testid=\"app-header-triage-preflight-external-failed\"]").TextContent, StringComparison.Ordinal);
+            Assert.False(cut.Find("[data-testid=\"app-header-triage-preflight-run\"]").HasAttribute("disabled"));
+        });
+
+        cut.Find("[data-testid=\"app-header-triage-preflight-run\"]").Click();
+
+        agent.Received(1).RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>());
+        broadcaster.Received(1).Publish();
+    }
+
+    [Fact]
+    public void Preflight_Close_Dismisses_Summary_Without_Running_Triage()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .BuildMorningTriagePreflightAsync(true, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(MakePreflightSummary(TriagePreflightGitHubEstimateStatus.Succeeded)));
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-triage-preflight\"]").Click();
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"app-header-triage-preflight-panel\"]")));
+        cut.Find("[data-testid=\"app-header-triage-preflight-close\"]").Click();
+
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-triage-preflight-panel\"]"));
+        agent.DidNotReceive().RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void Triage_Progress_Is_Rendered_While_Agent_Is_Running()
     {
         var session = Substitute.For<IGitHubAuthSession>();
@@ -643,6 +800,53 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Settings_Opens_General_And_Defers_Section_Content()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+
+        var sp = BuildServices(session, out _, out _, repo);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-section-nav-general\"]").GetAttribute("aria-current"));
+            Assert.NotNull(cut.Find("[data-testid=\"settings-display-language-section\"]"));
+            Assert.NotNull(cut.Find("[data-testid=\"settings-default-theme-section\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-local-appsettings\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-check-updates\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-third-party-notices\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-third-party-license-text\"]"));
+        });
+
+        SelectSettingsSection(cut, "settings-section-nav-app-settings");
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-local-appsettings\"]")));
+
+        SelectSettingsSection(cut, "settings-section-nav-automation");
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-check-updates\"]")));
+
+        SelectSettingsSection(cut, "settings-section-nav-legal-about");
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-section-nav-legal-about\"]").GetAttribute("aria-current"));
+            Assert.NotNull(cut.Find("[data-testid=\"settings-third-party-notices\"]"));
+            Assert.NotEmpty(cut.FindAll("[data-testid=\"settings-third-party-license-text\"]"));
+        });
+    }
+
+    [Fact]
     public void Settings_Button_Loads_And_Renders_Ignore_Rules()
     {
         var session = Substitute.For<IGitHubAuthSession>();
@@ -675,15 +879,11 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
 
         cut.WaitForAssertion(() =>
         {
             Assert.NotNull(cut.Find("[data-testid=\"settings-panel\"]"));
-            Assert.NotNull(cut.Find("[data-testid=\"settings-third-party-notices\"]"));
-            Assert.True(
-                cut.Markup.IndexOf("data-testid=\"settings-ignore-rules\"", StringComparison.Ordinal) <
-                cut.Markup.IndexOf("data-testid=\"settings-third-party-notices\"", StringComparison.Ordinal),
-                "Ignore rules should appear before third-party notices in Settings.");
             Assert.DoesNotContain("無視リストを更新", cut.Find(".app-settings-header").TextContent, StringComparison.Ordinal);
             Assert.Equal(
                 "無視リストを更新",
@@ -730,6 +930,7 @@ public sealed class AppHeaderTests
         Assert.Contains("0.1230", cut.Find("[data-testid=\"app-header-copilot-usage\"]").TextContent);
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
         Assert.Contains("AI Credits0.1230 credits", summary, StringComparison.Ordinal);
@@ -819,6 +1020,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
 
         var summary = cut.Find("[data-testid=\"settings-copilot-usage-summary\"]").TextContent;
         Assert.Contains("AI Credits0.2500 credits", summary, StringComparison.Ordinal);
@@ -871,6 +1073,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.Equal(2, cut.FindAll("[data-testid=\"settings-ignore-rule\"]").Count));
 
         cut.FindAll("[data-testid=\"settings-delete-ignore-rule\"]")[0].Click();
@@ -934,6 +1137,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"settings-ignore-rule\"]").Count));
         cut.FindAll("[data-testid=\"settings-ignore-rule-select\"]")[0].Change(true);
         cut.FindAll("[data-testid=\"settings-ignore-rule-select\"]")[2].Change(true);
@@ -982,6 +1186,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
 
         cut.WaitForAssertion(() =>
         {
@@ -1100,6 +1305,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-check-updates\"]")));
         cut.Find("[data-testid=\"settings-check-updates\"]").Click();
 
@@ -1129,6 +1335,7 @@ public sealed class AppHeaderTests
             p => p.AddCascadingValue<IServiceProvider>(sp));
 
         cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
         cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-check-updates\"]")));
         cut.Find("[data-testid=\"settings-check-updates\"]").Click();
 
@@ -1230,6 +1437,9 @@ public sealed class AppHeaderTests
             },
         };
 
+    private static void SelectSettingsSection(IRenderedComponent<AppHeader> cut, string sectionTestId)
+        => cut.Find($"[data-testid=\"{sectionTestId}\"]").Click();
+
     private static ServiceProvider BuildServices(
         IGitHubAuthSession session,
         out ICopilotAgent agent,
@@ -1295,6 +1505,35 @@ public sealed class AppHeaderTests
         }
 
         return services.BuildServiceProvider();
+    }
+
+    private static TriagePreflightSummary MakePreflightSummary(TriagePreflightGitHubEstimateStatus status)
+    {
+        var hasGitHubEstimate = status == TriagePreflightGitHubEstimateStatus.Succeeded;
+        return new TriagePreflightSummary(
+            new TriagePreflightGitHubSettings(
+                "github",
+                "docs",
+                "Repo sync",
+                5,
+                new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero)),
+            status,
+            hasGitHubEstimate ? 5 : null,
+            hasGitHubEstimate ? 7 : null,
+            status == TriagePreflightGitHubEstimateStatus.Failed ? "rate limit" : null,
+            new Dictionary<ReviewStatus, int>
+            {
+                [ReviewStatus.Unseen] = 4,
+                [ReviewStatus.Seen] = 0,
+                [ReviewStatus.Adopted] = 1,
+                [ReviewStatus.Rejected] = 2,
+                [ReviewStatus.Archived] = 0,
+                [ReviewStatus.Later] = 1,
+            },
+            UnscoredUnreviewedCommitCount: 2,
+            EstimatedScoringTargetCount: 3,
+            PerRunScoringLimit: TriagePreflightSummaryBuilder.ScoringTargetLimit,
+            IgnoreRuleCount: 1);
     }
 
     private sealed class FakeAppUpdateService : IAppUpdateService

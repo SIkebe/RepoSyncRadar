@@ -10,6 +10,11 @@ namespace RepoSyncRadar.Core.Services;
 /// </remarks>
 public interface ICopilotAgent
 {
+    /// <summary>Builds a read-only estimate for the next morning triage run.</summary>
+    Task<TriagePreflightSummary> BuildMorningTriagePreflightAsync(
+        bool includeGitHubEstimate,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Runs the morning triage session — fetch, score, summarise.</summary>
     Task<IngestionReport> RunMorningTriageAsync(CancellationToken cancellationToken = default);
 

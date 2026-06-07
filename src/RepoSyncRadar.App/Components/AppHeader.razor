@@ -103,10 +103,17 @@
         }
         @if (!_settingsOpen)
         {
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       OnClick="OnPreflightAsync"
+                       Disabled="@(_busy || _preflightBusy)"
+                       data-testid="app-header-triage-preflight">
+                @(_preflightBusy ? L["TriagePreflight.Estimating"] : L["TriagePreflight.Button"])
+            </MudButton>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        OnClick="OnTriageAsync"
-                       Disabled="@(_busy || _state != GitHubAuthState.SignedIn)"
+                       Disabled="@(_busy || _preflightBusy || _state != GitHubAuthState.SignedIn)"
                        data-testid="app-header-sync">
                 @(_busy ? L["AppHeader.Triaging"] : L["Common.Triage"])
             </MudButton>
@@ -175,6 +182,98 @@
         </section>
     }
 
+    @if (!_settingsOpen && _preflightOpen)
+    {
+        <section class="triage-preflight-panel" data-testid="app-header-triage-preflight-panel">
+            <header class="triage-preflight-header">
+                <div>
+                    <h2>@L["TriagePreflight.Title"]</h2>
+                    <p>@L["TriagePreflight.Description"]</p>
+                </div>
+                <button type="button"
+                        class="toolbar-button compact secondary"
+                        data-testid="app-header-triage-preflight-close"
+                        @onclick="CloseTriagePreflight">@L["TriagePreflight.Close"]</button>
+            </header>
+
+            @if (_preflightBusy)
+            {
+                <p class="settings-muted" data-testid="app-header-triage-preflight-loading">@L["Common.Loading"]</p>
+            }
+            else if (!string.IsNullOrWhiteSpace(_preflightError))
+            {
+                <p class="settings-error" data-testid="app-header-triage-preflight-error">@_preflightError</p>
+            }
+            else if (_preflightSummary is { } preflight)
+            {
+                <div class="triage-preflight-grid" data-testid="app-header-triage-preflight-summary">
+                    <div class="triage-preflight-section" data-testid="app-header-triage-preflight-github-settings">
+                        <h3>@L["TriagePreflight.GitHubSettings"]</h3>
+                        <dl>
+                            <div><dt>@L["TriagePreflight.Repository"]</dt><dd>@preflight.GitHubSettings.Owner/@preflight.GitHubSettings.Repo</dd></div>
+                            <div><dt>@L["TriagePreflight.TitleFilter"]</dt><dd>@preflight.GitHubSettings.PullRequestTitleFilter</dd></div>
+                            <div><dt>@L["TriagePreflight.MaxPullRequests"]</dt><dd>@FormatCount(preflight.GitHubSettings.MaxPullRequests)</dd></div>
+                            <div><dt>@L["TriagePreflight.CreatedAfter"]</dt><dd>@FormatCreatedAfter(preflight.GitHubSettings.PullRequestCreatedAtOrAfter)</dd></div>
+                        </dl>
+                    </div>
+
+                    <div class="triage-preflight-section" data-testid="app-header-triage-preflight-external">
+                        <h3>@L["TriagePreflight.ExternalEstimate"]</h3>
+                        @if (preflight.GitHubEstimateStatus == TriagePreflightGitHubEstimateStatus.Succeeded)
+                        {
+                            <dl>
+                                <div><dt>@L["TriagePreflight.CandidatePullRequests"]</dt><dd data-testid="app-header-triage-preflight-candidate-prs">@FormatCount(preflight.CandidatePullRequestCount.GetValueOrDefault())</dd></div>
+                                <div><dt>@L["TriagePreflight.NewUnseenCommits"]</dt><dd data-testid="app-header-triage-preflight-new-commits">@FormatCount(preflight.NewUnseenCommitCount.GetValueOrDefault())</dd></div>
+                            </dl>
+                        }
+                        else if (preflight.GitHubEstimateStatus == TriagePreflightGitHubEstimateStatus.Skipped)
+                        {
+                            <p class="settings-muted" data-testid="app-header-triage-preflight-external-skipped">@L["TriagePreflight.ExternalSkipped"]</p>
+                        }
+                        else
+                        {
+                            <p class="settings-error" data-testid="app-header-triage-preflight-external-failed">@L["TriagePreflight.ExternalFailed", preflight.GitHubEstimateUnavailableReason ?? L["Common.Unreported"]]</p>
+                        }
+                    </div>
+
+                    <div class="triage-preflight-section" data-testid="app-header-triage-preflight-local">
+                        <h3>@L["TriagePreflight.LocalState"]</h3>
+                        <dl>
+                            <div><dt>@L["TriagePreflight.EstimatedScoringTargets"]</dt><dd data-testid="app-header-triage-preflight-scoring-targets">@L["Common.ProgressItemCount", preflight.EstimatedScoringTargetCount, preflight.PerRunScoringLimit]</dd></div>
+                            <div><dt>@L["TriagePreflight.UnscoredUnreviewed"]</dt><dd data-testid="app-header-triage-preflight-unscored">@FormatCount(preflight.UnscoredUnreviewedCommitCount)</dd></div>
+                            <div><dt>@L["TriagePreflight.IgnoreRules"]</dt><dd data-testid="app-header-triage-preflight-ignore-rules">@FormatIgnoreRuleCount(preflight)</dd></div>
+                            <div><dt>@L["TriagePreflight.ReviewCounts"]</dt><dd data-testid="app-header-triage-preflight-review-counts">@FormatReviewCounts(preflight)</dd></div>
+                        </dl>
+                    </div>
+
+                    <div class="triage-preflight-section" data-testid="app-header-triage-preflight-last-report">
+                        <h3>@L["TriagePreflight.LastTriage"]</h3>
+                        @if (_lastReport is { } lastReport)
+                        {
+                            <p>@L["AppHeader.LastTriage", lastReport.Total, lastReport.Inserted, lastReport.Skipped]</p>
+                        }
+                        else
+                        {
+                            <p class="settings-muted">@L["TriagePreflight.LastTriageEmpty"]</p>
+                        }
+                    </div>
+                </div>
+
+                <div class="triage-preflight-actions">
+                    <button type="button"
+                            class="toolbar-button primary"
+                            data-testid="app-header-triage-preflight-run"
+                            disabled="@(_busy || _preflightBusy || _state != GitHubAuthState.SignedIn)"
+                            @onclick="RunTriageFromPreflightAsync">@L["TriagePreflight.Run"]</button>
+                    <button type="button"
+                            class="toolbar-button secondary"
+                           data-testid="app-header-triage-preflight-dismiss"
+                           @onclick="CloseTriagePreflight">@L["TriagePreflight.Close"]</button>
+               </div>
+           }
+       </section>
+    }
+
     @if (_settingsOpen)
     {
         <section class="app-settings-panel" data-testid="settings-panel">
@@ -185,197 +284,233 @@
                 </div>
             </header>
 
-            <section class="settings-section" data-testid="settings-display-language-section">
-                <h3>@L["Settings.DisplayLanguage"]</h3>
-                <div class="settings-theme-options" data-testid="settings-display-language" role="group" aria-label="@DisplayLanguageLabel">
-                    @foreach (var culture in AppDisplayCulture.SupportedCultures)
-                    {
-                        <button type="button"
-                                class="@BuildDisplayCultureOptionClass(culture.CultureName)"
-                                data-testid="settings-display-language-@culture.CultureName"
-                                aria-pressed="@BuildDisplayCultureOptionPressed(culture.CultureName)"
-                                disabled="@_settingsDisplayCultureSaving"
-                                @onclick="() => SaveDisplayCultureAsync(culture.CultureName)">@culture.NativeLabel</button>
-                    }
-                </div>
-                @if (!string.IsNullOrEmpty(_settingsDisplayCultureStatus))
-                {
-                    <p class="settings-muted" data-testid="settings-display-language-status">@_settingsDisplayCultureStatus</p>
-                }
-                @if (!string.IsNullOrEmpty(_settingsDisplayCultureError))
-                {
-                    <p class="settings-error" data-testid="settings-display-language-error">@_settingsDisplayCultureError</p>
-                }
-            </section>
+            <nav class="settings-section-nav"
+                 data-testid="settings-section-nav"
+                 aria-label="@L["Settings.Section.Navigation"]">
+                <button type="button"
+                        class="@BuildSettingsSectionButtonClass(SettingsSection.General)"
+                        data-testid="settings-section-nav-general"
+                        aria-current="@BuildSettingsSectionAriaCurrent(SettingsSection.General)"
+                        @onclick="() => SelectSettingsSection(SettingsSection.General)">@L["Settings.Section.General"]</button>
+                <button type="button"
+                        class="@BuildSettingsSectionButtonClass(SettingsSection.AppSettings)"
+                        data-testid="settings-section-nav-app-settings"
+                        aria-current="@BuildSettingsSectionAriaCurrent(SettingsSection.AppSettings)"
+                        @onclick="() => SelectSettingsSection(SettingsSection.AppSettings)">@L["Settings.Section.AppSettings"]</button>
+                <button type="button"
+                        class="@BuildSettingsSectionButtonClass(SettingsSection.Automation)"
+                        data-testid="settings-section-nav-automation"
+                        aria-current="@BuildSettingsSectionAriaCurrent(SettingsSection.Automation)"
+                        @onclick="() => SelectSettingsSection(SettingsSection.Automation)">@L["Settings.Section.Automation"]</button>
+                <button type="button"
+                        class="@BuildSettingsSectionButtonClass(SettingsSection.LegalAbout)"
+                        data-testid="settings-section-nav-legal-about"
+                        aria-current="@BuildSettingsSectionAriaCurrent(SettingsSection.LegalAbout)"
+                        @onclick="() => SelectSettingsSection(SettingsSection.LegalAbout)">@L["Settings.Section.LegalAbout"]</button>
+            </nav>
 
-            <section class="settings-section" data-testid="settings-default-theme-section">
-                <h3>@L["Settings.DefaultTheme"]</h3>
-                <div class="settings-theme-options" data-testid="settings-default-theme" role="group" aria-label="@DefaultThemeLabel">
-                    <button type="button"
-                            class="@BuildThemeOptionClass(DocsThemeMode.Dark)"
-                            data-testid="settings-default-theme-dark"
-                            aria-pressed="@BuildThemeOptionPressed(DocsThemeMode.Dark)"
-                            disabled="@_settingsThemeSaving"
-                            @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Dark)">@L["Settings.Theme.Dark"]</button>
-                    <button type="button"
-                            class="@BuildThemeOptionClass(DocsThemeMode.Light)"
-                            data-testid="settings-default-theme-light"
-                            aria-pressed="@BuildThemeOptionPressed(DocsThemeMode.Light)"
-                            disabled="@_settingsThemeSaving"
-                            @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Light)">@L["Settings.Theme.Light"]</button>
-                </div>
-                @if (!string.IsNullOrEmpty(_settingsThemeStatus))
+            <div class="settings-section-content" data-testid="settings-section-content">
+                @if (_activeSettingsSection == SettingsSection.General)
                 {
-                    <p class="settings-muted" data-testid="settings-default-theme-status">@_settingsThemeStatus</p>
-                }
-                @if (!string.IsNullOrEmpty(_settingsThemeError))
-                {
-                    <p class="settings-error" data-testid="settings-default-theme-error">@_settingsThemeError</p>
-                }
-            </section>
-
-            <LocalAppSettingsEditor />
-
-            <section class="settings-section" data-testid="settings-update-check">
-                <header class="settings-subheader">
-                    <div>
-                        <h3>@L["AppHeader.Update.Title"]</h3>
-                        <p class="settings-muted">@L["AppHeader.Update.Description"]</p>
-                    </div>
-                    <button type="button"
-                            class="toolbar-button compact secondary"
-                            data-testid="settings-check-updates"
-                            disabled="@_settingsUpdateBusy"
-                            @onclick="CheckForUpdatesNowAsync">@(_settingsUpdateBusy ? L["AppHeader.Update.CheckingButton"] : L["AppHeader.Update.CheckButton"])</button>
-                </header>
-                @if (_settingsUpdateProgress is { } updateProgress)
-                {
-                    <p class="settings-muted" data-testid="settings-update-progress">@L["AppHeader.Update.DownloadingPercent", updateProgress]</p>
-                }
-                @if (!string.IsNullOrWhiteSpace(_settingsUpdateStatus))
-                {
-                    <p class="settings-muted" data-testid="settings-update-status">@_settingsUpdateStatus</p>
-                }
-                @if (!string.IsNullOrWhiteSpace(_settingsUpdateError))
-                {
-                    <p class="settings-error" data-testid="settings-update-error">@_settingsUpdateError</p>
-                }
-            </section>
-
-            <section class="settings-section" data-testid="settings-copilot-usage">
-                <h3>@L["Settings.CopilotUsage"]</h3>
-                @if (!HasCopilotUsage(_copilotUsage))
-                {
-                    <p class="settings-muted" data-testid="settings-copilot-usage-empty">@L["Settings.CopilotUsage.Empty"]</p>
-                }
-                else
-                {
-                    <div class="settings-usage-grid" data-testid="settings-copilot-usage-summary">
-                        <div><span>@L["CopilotUsage.Label.AiCredits"]</span><strong>@FormatSnapshotAiCreditsWithUnit(_copilotUsage)</strong></div>
-                        <div><span>@L["CopilotUsage.Label.PremiumRequestCost"]</span><strong>@FormatNullablePremiumRequestCost(_copilotUsage.Cost)</strong></div>
-                        <div><span>@L["CopilotUsage.Label.PremiumRequests"]</span><strong>@FormatPremiumRequests(_copilotUsage)</strong></div>
-                        <div><span>@L["Common.Total"]</span><strong>@FormatTokensWithUnit(_copilotUsage.TotalTokens)</strong></div>
-                        <div><span>@L["Common.Input"]</span><strong>@FormatTokensWithUnit(_copilotUsage.InputTokens)</strong></div>
-                        <div><span>@L["Common.Output"]</span><strong>@FormatTokensWithUnit(_copilotUsage.OutputTokens)</strong></div>
-                        <div><span>@L["Common.Reasoning"]</span><strong>@FormatTokensWithUnit(_copilotUsage.ReasoningTokens)</strong></div>
-                        <div><span>@L["Common.CacheRead"]</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheReadTokens)</strong></div>
-                        <div><span>@L["Common.CacheWrite"]</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheWriteTokens)</strong></div>
-                    </div>
-                    @if (_copilotUsage.LastTurn is { } lastTurn)
-                    {
-                        <p class="settings-muted" data-testid="settings-copilot-usage-last">
-                            @L["Common.Last"]: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? L["CopilotUsage.ModelUnknown"]) / @FormatTurnAiCreditsWithUnit(lastTurn) / @FormatTokensWithUnit(lastTurn.TotalTokens())
-                        </p>
-                    }
-                    @if (_copilotUsage.SessionMetrics.FirstOrDefault() is { } sessionMetrics)
-                    {
-                        <p class="settings-muted" data-testid="settings-copilot-usage-session-metrics">
-                            @L["Settings.CopilotUsage.SessionMetrics", sessionMetrics.CurrentModel ?? L["CopilotUsage.ModelUnknown"], FormatNumber(sessionMetrics.TotalUserRequests), FormatTokensWithUnit(sessionMetrics.LastCallInputTokens), FormatTokensWithUnit(sessionMetrics.LastCallOutputTokens)]
-                        </p>
-                    }
-                    @if (_copilotUsage.TotalNanoAiu is { } totalNanoAiu)
-                    {
-                        <p class="settings-muted" data-testid="settings-copilot-usage-aiu">@FormatBillingSource(_copilotUsage.BillingSource) / @FormatNumber(totalNanoAiu) nano AIU</p>
-                    }
-                    <button type="button"
-                            class="toolbar-button compact secondary"
-                            data-testid="settings-copilot-usage-reset"
-                            @onclick="ResetCopilotUsage">@L["Common.Reset"]</button>
-                }
-                <p class="settings-muted" data-testid="settings-copilot-usage-privacy">@L["Settings.CopilotUsage.Privacy"]</p>
-            </section>
-            <section class="settings-section" data-testid="settings-ignore-rules">
-                <header class="settings-subheader">
-                    <h3>@L["Settings.IgnoreList"]</h3>
-                    <button type="button"
-                            class="toolbar-button compact secondary"
-                            data-testid="settings-refresh-ignore-rules"
-                            disabled="@_settingsLoading"
-                            @onclick="LoadIgnoreRulesAsync">@L["Settings.IgnoreList.Refresh"]</button>
-                </header>
-                @if (_settingsLoading)
-                {
-                    <p class="settings-muted" data-testid="settings-ignore-rules-loading">@L["Common.Loading"]</p>
-                }
-                else if (!string.IsNullOrEmpty(_settingsError))
-                {
-                    <p class="settings-error" data-testid="settings-ignore-rules-error">@_settingsError</p>
-                }
-                else if (_ignoreRules.Count == 0)
-                {
-                    <p class="settings-muted" data-testid="settings-ignore-rules-empty">@L["Settings.IgnoreList.Empty"]</p>
-                }
-                else
-                {
-                    <div class="ignore-rule-toolbar" data-testid="settings-ignore-rules-toolbar">
-                        <button type="button"
-                                class="toolbar-button compact secondary"
-                                data-testid="settings-ignore-rules-select-all"
-                                disabled="@_settingsDeleteBusy"
-                                @onclick="ToggleAllIgnoreRulesAsync">@BuildIgnoreRuleSelectAllLabel()</button>
-                        <span class="settings-muted" data-testid="settings-ignore-rules-selected-count">@L["Common.SelectedCount", _selectedIgnoreRulePatterns.Count]</span>
-                        <button type="button"
-                                class="toolbar-button compact danger"
-                                data-testid="settings-delete-selected-ignore-rules"
-                                disabled="@IsDeleteSelectedIgnoreRulesDisabled()"
-                                @onclick="DeleteSelectedIgnoreRulesAsync">@L["Common.DeleteSelected"]</button>
-                    </div>
-                    @if (!string.IsNullOrWhiteSpace(_settingsDeleteStatus))
-                    {
-                        <p class="settings-muted" data-testid="settings-ignore-rules-delete-status">@_settingsDeleteStatus</p>
-                    }
-                    <div class="ignore-rule-list" data-testid="settings-ignore-rules-list">
-                        @foreach (var rule in _ignoreRules)
+                    <section class="settings-section" data-testid="settings-display-language-section">
+                        <h3>@L["Settings.DisplayLanguage"]</h3>
+                        <div class="settings-theme-options" data-testid="settings-display-language" role="group" aria-label="@DisplayLanguageLabel">
+                            @foreach (var culture in AppDisplayCulture.SupportedCultures)
+                            {
+                                <button type="button"
+                                        class="@BuildDisplayCultureOptionClass(culture.CultureName)"
+                                        data-testid="settings-display-language-@culture.CultureName"
+                                        aria-pressed="@BuildDisplayCultureOptionPressed(culture.CultureName)"
+                                        disabled="@_settingsDisplayCultureSaving"
+                                        @onclick="() => SaveDisplayCultureAsync(culture.CultureName)">@culture.NativeLabel</button>
+                            }
+                        </div>
+                        @if (!string.IsNullOrEmpty(_settingsDisplayCultureStatus))
                         {
-                            <article class="ignore-rule-row" data-testid="settings-ignore-rule">
-                                <label class="ignore-rule-pattern-select">
-                                    <input type="checkbox"
-                                           data-testid="settings-ignore-rule-select"
-                                           checked="@IsIgnoreRuleSelected(rule.Pattern)"
-                                           disabled="@_settingsDeleteBusy"
-                                           @onchange="() => ToggleIgnoreRuleSelection(rule.Pattern)" />
-                                    <code data-testid="settings-ignore-rule-pattern">@rule.Pattern</code>
-                                </label>
-                                <div class="ignore-rule-meta">
-                                    @if (!string.IsNullOrWhiteSpace(rule.Reason))
-                                    {
-                                        <span data-testid="settings-ignore-rule-reason">@rule.Reason</span>
-                                    }
-                                    <time datetime="@rule.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
-                                          data-testid="settings-ignore-rule-created">@FormatCreatedAt(rule.CreatedAt)</time>
-                                    <button type="button"
-                                            class="toolbar-button compact danger"
-                                            data-testid="settings-delete-ignore-rule"
-                                            disabled="@_settingsDeleteBusy"
-                                            @onclick="() => DeleteIgnoreRulesAsync([rule.Pattern])">@L["Common.Delete"]</button>
-                                </div>
-                            </article>
+                            <p class="settings-muted" data-testid="settings-display-language-status">@_settingsDisplayCultureStatus</p>
                         }
-                    </div>
-                }
-            </section>
+                        @if (!string.IsNullOrEmpty(_settingsDisplayCultureError))
+                        {
+                            <p class="settings-error" data-testid="settings-display-language-error">@_settingsDisplayCultureError</p>
+                        }
+                    </section>
 
-            <ThirdPartyNoticesPanel />
+                    <section class="settings-section" data-testid="settings-default-theme-section">
+                        <h3>@L["Settings.DefaultTheme"]</h3>
+                        <div class="settings-theme-options" data-testid="settings-default-theme" role="group" aria-label="@DefaultThemeLabel">
+                            <button type="button"
+                                    class="@BuildThemeOptionClass(DocsThemeMode.Dark)"
+                                    data-testid="settings-default-theme-dark"
+                                    aria-pressed="@BuildThemeOptionPressed(DocsThemeMode.Dark)"
+                                    disabled="@_settingsThemeSaving"
+                                    @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Dark)">@L["Settings.Theme.Dark"]</button>
+                            <button type="button"
+                                    class="@BuildThemeOptionClass(DocsThemeMode.Light)"
+                                    data-testid="settings-default-theme-light"
+                                    aria-pressed="@BuildThemeOptionPressed(DocsThemeMode.Light)"
+                                    disabled="@_settingsThemeSaving"
+                                    @onclick="() => SaveDefaultDocsThemeAsync(DocsThemeMode.Light)">@L["Settings.Theme.Light"]</button>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_settingsThemeStatus))
+                        {
+                            <p class="settings-muted" data-testid="settings-default-theme-status">@_settingsThemeStatus</p>
+                        }
+                        @if (!string.IsNullOrEmpty(_settingsThemeError))
+                        {
+                            <p class="settings-error" data-testid="settings-default-theme-error">@_settingsThemeError</p>
+                        }
+                    </section>
+                }
+                else if (_activeSettingsSection == SettingsSection.AppSettings)
+                {
+                    <LocalAppSettingsEditor />
+                }
+                else if (_activeSettingsSection == SettingsSection.Automation)
+                {
+                    <section class="settings-section" data-testid="settings-update-check">
+                        <header class="settings-subheader">
+                            <div>
+                                <h3>@L["AppHeader.Update.Title"]</h3>
+                                <p class="settings-muted">@L["AppHeader.Update.Description"]</p>
+                            </div>
+                            <button type="button"
+                                    class="toolbar-button compact secondary"
+                                    data-testid="settings-check-updates"
+                                    disabled="@_settingsUpdateBusy"
+                                    @onclick="CheckForUpdatesNowAsync">@(_settingsUpdateBusy ? L["AppHeader.Update.CheckingButton"] : L["AppHeader.Update.CheckButton"])</button>
+                        </header>
+                        @if (_settingsUpdateProgress is { } updateProgress)
+                        {
+                            <p class="settings-muted" data-testid="settings-update-progress">@L["AppHeader.Update.DownloadingPercent", updateProgress]</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_settingsUpdateStatus))
+                        {
+                            <p class="settings-muted" data-testid="settings-update-status">@_settingsUpdateStatus</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_settingsUpdateError))
+                        {
+                            <p class="settings-error" data-testid="settings-update-error">@_settingsUpdateError</p>
+                        }
+                    </section>
+
+                    <section class="settings-section" data-testid="settings-copilot-usage">
+                        <h3>@L["Settings.CopilotUsage"]</h3>
+                        @if (!HasCopilotUsage(_copilotUsage))
+                        {
+                            <p class="settings-muted" data-testid="settings-copilot-usage-empty">@L["Settings.CopilotUsage.Empty"]</p>
+                        }
+                        else
+                        {
+                            <div class="settings-usage-grid" data-testid="settings-copilot-usage-summary">
+                                <div><span>@L["CopilotUsage.Label.AiCredits"]</span><strong>@FormatSnapshotAiCreditsWithUnit(_copilotUsage)</strong></div>
+                                <div><span>@L["CopilotUsage.Label.PremiumRequestCost"]</span><strong>@FormatNullablePremiumRequestCost(_copilotUsage.Cost)</strong></div>
+                                <div><span>@L["CopilotUsage.Label.PremiumRequests"]</span><strong>@FormatPremiumRequests(_copilotUsage)</strong></div>
+                                <div><span>@L["Common.Total"]</span><strong>@FormatTokensWithUnit(_copilotUsage.TotalTokens)</strong></div>
+                                <div><span>@L["Common.Input"]</span><strong>@FormatTokensWithUnit(_copilotUsage.InputTokens)</strong></div>
+                                <div><span>@L["Common.Output"]</span><strong>@FormatTokensWithUnit(_copilotUsage.OutputTokens)</strong></div>
+                                <div><span>@L["Common.Reasoning"]</span><strong>@FormatTokensWithUnit(_copilotUsage.ReasoningTokens)</strong></div>
+                                <div><span>@L["Common.CacheRead"]</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheReadTokens)</strong></div>
+                                <div><span>@L["Common.CacheWrite"]</span><strong>@FormatTokensWithUnit(_copilotUsage.CacheWriteTokens)</strong></div>
+                            </div>
+                            @if (_copilotUsage.LastTurn is { } lastTurn)
+                            {
+                                <p class="settings-muted" data-testid="settings-copilot-usage-last">
+                                    @L["Common.Last"]: @FormatCreatedAt(lastTurn.RecordedAt.LocalDateTime) / @lastTurn.Purpose / @(lastTurn.Model ?? L["CopilotUsage.ModelUnknown"]) / @FormatTurnAiCreditsWithUnit(lastTurn) / @FormatTokensWithUnit(lastTurn.TotalTokens())
+                                </p>
+                            }
+                            @if (_copilotUsage.SessionMetrics.FirstOrDefault() is { } sessionMetrics)
+                            {
+                                <p class="settings-muted" data-testid="settings-copilot-usage-session-metrics">
+                                    @L["Settings.CopilotUsage.SessionMetrics", sessionMetrics.CurrentModel ?? L["CopilotUsage.ModelUnknown"], FormatNumber(sessionMetrics.TotalUserRequests), FormatTokensWithUnit(sessionMetrics.LastCallInputTokens), FormatTokensWithUnit(sessionMetrics.LastCallOutputTokens)]
+                                </p>
+                            }
+                            @if (_copilotUsage.TotalNanoAiu is { } totalNanoAiu)
+                            {
+                                <p class="settings-muted" data-testid="settings-copilot-usage-aiu">@FormatBillingSource(_copilotUsage.BillingSource) / @FormatNumber(totalNanoAiu) nano AIU</p>
+                            }
+                            <button type="button"
+                                    class="toolbar-button compact secondary"
+                                    data-testid="settings-copilot-usage-reset"
+                                    @onclick="ResetCopilotUsage">@L["Common.Reset"]</button>
+                        }
+                        <p class="settings-muted" data-testid="settings-copilot-usage-privacy">@L["Settings.CopilotUsage.Privacy"]</p>
+                    </section>
+                    <section class="settings-section" data-testid="settings-ignore-rules">
+                        <header class="settings-subheader">
+                            <h3>@L["Settings.IgnoreList"]</h3>
+                            <button type="button"
+                                    class="toolbar-button compact secondary"
+                                    data-testid="settings-refresh-ignore-rules"
+                                    disabled="@_settingsLoading"
+                                    @onclick="LoadIgnoreRulesAsync">@L["Settings.IgnoreList.Refresh"]</button>
+                        </header>
+                        @if (_settingsLoading)
+                        {
+                            <p class="settings-muted" data-testid="settings-ignore-rules-loading">@L["Common.Loading"]</p>
+                        }
+                        else if (!string.IsNullOrEmpty(_settingsError))
+                        {
+                            <p class="settings-error" data-testid="settings-ignore-rules-error">@_settingsError</p>
+                        }
+                        else if (_ignoreRules.Count == 0)
+                        {
+                            <p class="settings-muted" data-testid="settings-ignore-rules-empty">@L["Settings.IgnoreList.Empty"]</p>
+                        }
+                        else
+                        {
+                            <div class="ignore-rule-toolbar" data-testid="settings-ignore-rules-toolbar">
+                                <button type="button"
+                                        class="toolbar-button compact secondary"
+                                        data-testid="settings-ignore-rules-select-all"
+                                        disabled="@_settingsDeleteBusy"
+                                        @onclick="ToggleAllIgnoreRulesAsync">@BuildIgnoreRuleSelectAllLabel()</button>
+                                <span class="settings-muted" data-testid="settings-ignore-rules-selected-count">@L["Common.SelectedCount", _selectedIgnoreRulePatterns.Count]</span>
+                                <button type="button"
+                                        class="toolbar-button compact danger"
+                                        data-testid="settings-delete-selected-ignore-rules"
+                                        disabled="@IsDeleteSelectedIgnoreRulesDisabled()"
+                                        @onclick="DeleteSelectedIgnoreRulesAsync">@L["Common.DeleteSelected"]</button>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(_settingsDeleteStatus))
+                            {
+                                <p class="settings-muted" data-testid="settings-ignore-rules-delete-status">@_settingsDeleteStatus</p>
+                            }
+                            <div class="ignore-rule-list" data-testid="settings-ignore-rules-list">
+                                @foreach (var rule in _ignoreRules)
+                                {
+                                    <article class="ignore-rule-row" data-testid="settings-ignore-rule">
+                                        <label class="ignore-rule-pattern-select">
+                                            <input type="checkbox"
+                                                   data-testid="settings-ignore-rule-select"
+                                                   checked="@IsIgnoreRuleSelected(rule.Pattern)"
+                                                   disabled="@_settingsDeleteBusy"
+                                                   @onchange="() => ToggleIgnoreRuleSelection(rule.Pattern)" />
+                                            <code data-testid="settings-ignore-rule-pattern">@rule.Pattern</code>
+                                        </label>
+                                        <div class="ignore-rule-meta">
+                                            @if (!string.IsNullOrWhiteSpace(rule.Reason))
+                                            {
+                                                <span data-testid="settings-ignore-rule-reason">@rule.Reason</span>
+                                            }
+                                            <time datetime="@rule.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
+                                                  data-testid="settings-ignore-rule-created">@FormatCreatedAt(rule.CreatedAt)</time>
+                                            <button type="button"
+                                                    class="toolbar-button compact danger"
+                                                    data-testid="settings-delete-ignore-rule"
+                                                    disabled="@_settingsDeleteBusy"
+                                                    @onclick="() => DeleteIgnoreRulesAsync([rule.Pattern])">@L["Common.Delete"]</button>
+                                        </div>
+                                    </article>
+                                }
+                            </div>
+                        }
+                    </section>
+                }
+                else if (_activeSettingsSection == SettingsSection.LegalAbout)
+                {
+                    <ThirdPartyNoticesPanel />
+                }
+            </div>
         </section>
     }
 </MudPaper>
@@ -400,6 +535,11 @@
 
     private GitHubAuthState _state = GitHubAuthState.NotSignedIn;
     private bool _busy;
+    private bool _preflightOpen;
+    private bool _preflightBusy;
+    private TriagePreflightSummary? _preflightSummary;
+    private string? _preflightError;
+    private CancellationTokenSource? _preflightCts;
     private IngestionReport? _lastReport;
     private string? _lastError;
     private string? _triageStatus;
@@ -435,6 +575,7 @@
     private string? _appUpdateRestartError;
     private string? _dismissedDownloadedUpdateVersion;
     private int _observedAuthStateVersion;
+    private SettingsSection _activeSettingsSection = SettingsSection.General;
 
     private string _appVersion = "0.0.0";
 
@@ -478,6 +619,7 @@
             _settingsOpen = SettingsOpen;
             if (_settingsOpen)
             {
+                _activeSettingsSection = SettingsSection.General;
                 await LoadSettingsPanelAsync();
             }
             else
@@ -549,6 +691,15 @@
 
     private async Task OnTriageAsync()
     {
+        CloseTriagePreflight();
+        await RefreshStateAsync();
+        if (_state != GitHubAuthState.SignedIn)
+        {
+            _lastError = L["TriagePreflight.SignInRequiredToRun"];
+            StateHasChanged();
+            return;
+        }
+
         _busy = true;
         _lastError = null;
         _lastReport = null;
@@ -766,9 +917,80 @@
 
     private Task RequestQueueAsync(ReviewStatus? status)
         => QueueRequested.InvokeAsync(status);
-
     private Task RequestCommitAsync(string sha)
         => CommitRequested.InvokeAsync(sha);
+
+    private async Task OnPreflightAsync()
+    {
+        if (_preflightBusy)
+        {
+            return;
+        }
+
+        await RefreshStateAsync();
+        _preflightCts?.Cancel();
+        _preflightCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _preflightCts = cts;
+        _preflightOpen = true;
+        _preflightBusy = true;
+        _preflightSummary = null;
+        _preflightError = null;
+        StateHasChanged();
+
+        try
+        {
+            var agent = Services.GetRequiredService<ICopilotAgent>();
+            var includeGitHubEstimate = _state == GitHubAuthState.SignedIn;
+            var summary = await agent.BuildMorningTriagePreflightAsync(includeGitHubEstimate, cts.Token);
+            if (ReferenceEquals(_preflightCts, cts))
+            {
+                _preflightSummary = summary;
+            }
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(_preflightCts, cts))
+            {
+                _preflightError = $"{L["TriagePreflight.Failed"]}: {ex.Message}";
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_preflightCts, cts))
+            {
+                _preflightBusy = false;
+                _preflightCts.Dispose();
+                _preflightCts = null;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task RunTriageFromPreflightAsync()
+    {
+        if (_state != GitHubAuthState.SignedIn || _busy || _preflightBusy)
+        {
+            return;
+        }
+
+        CloseTriagePreflight();
+        await OnTriageAsync();
+    }
+
+    private void CloseTriagePreflight()
+    {
+        _preflightCts?.Cancel();
+        _preflightCts?.Dispose();
+        _preflightCts = null;
+        _preflightBusy = false;
+        _preflightOpen = false;
+        _preflightSummary = null;
+        _preflightError = null;
+    }
 
     private async Task LoadSettingsPanelAsync()
     {
@@ -1436,6 +1658,33 @@
     private static string FormatCreatedAt(DateTime createdAt)
         => createdAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm", System.Globalization.CultureInfo.CurrentCulture);
 
+    private string FormatCreatedAfter(DateTimeOffset? createdAfter)
+        => createdAfter is { } value
+            ? value.ToLocalTime().ToString("yyyy/MM/dd HH:mm zzz", System.Globalization.CultureInfo.CurrentCulture)
+            : L["TriagePreflight.NotSet"];
+
+    private string FormatIgnoreRuleCount(TriagePreflightSummary summary)
+        => summary.HasIgnoreRules
+            ? L["TriagePreflight.IgnoreRulesActive", summary.IgnoreRuleCount]
+            : L["TriagePreflight.IgnoreRulesEmpty"];
+
+    private string FormatReviewCounts(TriagePreflightSummary summary)
+    {
+        var counts = summary.ReviewCounts;
+        return string.Join(
+            L["Common.ListSeparator"],
+            [
+                L["TriagePreflight.ReviewStatus.Unseen", GetReviewCount(counts, ReviewStatus.Unseen)],
+                L["TriagePreflight.ReviewStatus.Adopted", GetReviewCount(counts, ReviewStatus.Adopted)],
+                L["TriagePreflight.ReviewStatus.Later", GetReviewCount(counts, ReviewStatus.Later)],
+                L["TriagePreflight.ReviewStatus.Rejected", GetReviewCount(counts, ReviewStatus.Rejected)],
+                L["TriagePreflight.ReviewStatus.Archived", GetReviewCount(counts, ReviewStatus.Archived)],
+            ]);
+    }
+
+    private static int GetReviewCount(IReadOnlyDictionary<ReviewStatus, int> counts, ReviewStatus status)
+        => counts.TryGetValue(status, out var count) ? count : 0;
+
     private static string FormatTokens(double tokens)
         => FormatNumber(Math.Round(tokens));
 
@@ -1569,6 +1818,17 @@
     private string BuildDisplayCultureOptionPressed(string cultureName)
         => string.Equals(_displayCulture, AppDisplayCulture.NormalizeCultureName(cultureName), StringComparison.OrdinalIgnoreCase) ? "true" : "false";
 
+    private void SelectSettingsSection(SettingsSection section)
+        => _activeSettingsSection = section;
+
+    private string BuildSettingsSectionButtonClass(SettingsSection section)
+        => _activeSettingsSection == section
+            ? "settings-section-nav-button active"
+            : "settings-section-nav-button";
+
+    private string? BuildSettingsSectionAriaCurrent(SettingsSection section)
+        => _activeSettingsSection == section ? "true" : null;
+
     private static string GetDisplayCultureLabel(string cultureName)
         => AppDisplayCulture.SupportedCultures.FirstOrDefault(
                 culture => string.Equals(culture.CultureName, cultureName, StringComparison.OrdinalIgnoreCase))
@@ -1641,6 +1901,15 @@
             _updateService.ActivityChanged -= OnAppUpdateActivityChanged;
         }
 
+        CloseTriagePreflight();
         StopTriageTimer();
+    }
+
+    private enum SettingsSection
+    {
+        General,
+        AppSettings,
+        Automation,
+        LegalAbout,
     }
 }

@@ -20,6 +20,31 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class MorningTriageSessionTests
 {
     [Fact]
+    public async Task BuildPreflight_Does_Not_Create_Copilot_Session()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var ingestion = Substitute.For<ICommitIngestionService>();
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        var builder = Substitute.For<ITriagePreflightSummaryBuilder>();
+        builder.BuildAsync(true, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(MakePreflightSummary()));
+        var triage = new MorningTriageSession(
+            ingestion,
+            factory,
+            new TriageScoringProgressTracker(),
+            repository: null,
+            reviewBroadcaster: null,
+            NullLogger<MorningTriageSession>.Instance,
+            preflightBuilder: builder);
+
+        var summary = await triage.BuildPreflightAsync(includeGitHubEstimate: true, ct);
+
+        Assert.Equal(TriagePreflightGitHubEstimateStatus.Succeeded, summary.GitHubEstimateStatus);
+        await builder.Received(1).BuildAsync(true, Arg.Any<CancellationToken>());
+        await factory.DidNotReceive().CreateSessionAsync(Arg.Any<SessionPurpose>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Run_Ingests_Then_Starts_Session()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -106,6 +131,7 @@ public sealed class MorningTriageSessionTests
         Assert.Contains("最大 90 文字程度", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("0.44 以下", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("自動で見送り候補", capturedPrompt, StringComparison.Ordinal);
+        AssertContainsGitHubScopeTerminologyRule(capturedPrompt);
         Assert.DoesNotContain("Skim", capturedPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("`Seen`", capturedPrompt, StringComparison.Ordinal);
     }
@@ -198,6 +224,7 @@ public sealed class MorningTriageSessionTests
             Assert.Contains("radar_score_commit", prompt, StringComparison.Ordinal);
             Assert.Contains("0.44 以下", prompt, StringComparison.Ordinal);
             Assert.Contains("自動で見送り候補", prompt, StringComparison.Ordinal);
+            AssertContainsGitHubScopeTerminologyRule(prompt);
         });
     }
 
@@ -276,6 +303,27 @@ public sealed class MorningTriageSessionTests
             ],
         };
     }
+
+    private static TriagePreflightSummary MakePreflightSummary()
+        => new(
+            new TriagePreflightGitHubSettings("github", "docs", "Repo sync", 5, null),
+            TriagePreflightGitHubEstimateStatus.Succeeded,
+            CandidatePullRequestCount: 2,
+            NewUnseenCommitCount: 3,
+            GitHubEstimateUnavailableReason: null,
+            new Dictionary<ReviewStatus, int>
+            {
+                [ReviewStatus.Unseen] = 1,
+                [ReviewStatus.Adopted] = 0,
+                [ReviewStatus.Rejected] = 0,
+                [ReviewStatus.Archived] = 0,
+                [ReviewStatus.Later] = 0,
+                [ReviewStatus.Seen] = 0,
+            },
+            UnscoredUnreviewedCommitCount: 1,
+            EstimatedScoringTargetCount: 4,
+            PerRunScoringLimit: TriagePreflightSummaryBuilder.ScoringTargetLimit,
+            IgnoreRuleCount: 0);
 
     [Fact]
     public async Task Run_Reports_Realtime_Scoring_Count_From_Tool_Progress()
@@ -452,5 +500,12 @@ public sealed class MorningTriageSessionTests
         public List<string> Messages { get; } = [];
 
         public void Report(string value) => Messages.Add(value);
+    }
+
+    private static void AssertContainsGitHubScopeTerminologyRule(string prompt)
+    {
+        Assert.Contains("Organization", prompt, StringComparison.Ordinal);
+        Assert.Contains("Enterprise", prompt, StringComparison.Ordinal);
+        Assert.Contains("`組織` と訳さない", prompt, StringComparison.Ordinal);
     }
 }

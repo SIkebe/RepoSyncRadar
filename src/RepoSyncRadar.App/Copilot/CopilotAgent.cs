@@ -19,6 +19,13 @@ public sealed class CopilotAgent : ICopilotAgent
         _adoption = adoption;
     }
 
+    public Task<TriagePreflightSummary> BuildMorningTriagePreflightAsync(
+        bool includeGitHubEstimate,
+        CancellationToken cancellationToken = default)
+    {
+        return _triage.BuildPreflightAsync(includeGitHubEstimate, cancellationToken);
+    }
+
     public async Task<IngestionReport> RunMorningTriageAsync(CancellationToken cancellationToken = default)
     {
         return await _triage.RunAsync(cancellationToken).ConfigureAwait(false);

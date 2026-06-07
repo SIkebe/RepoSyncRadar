@@ -18,6 +18,39 @@
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage 失敗</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage は失敗しました。詳細はエラーを確認してください。</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Triage を開始しています…</value></data>
+  <data name="TriagePreflight.Button" xml:space="preserve"><value>見積もり</value></data>
+  <data name="TriagePreflight.CandidatePullRequests" xml:space="preserve"><value>候補 PR</value></data>
+  <data name="TriagePreflight.Close" xml:space="preserve"><value>閉じる</value></data>
+  <data name="TriagePreflight.CreatedAfter" xml:space="preserve"><value>作成日時の下限</value></data>
+  <data name="TriagePreflight.Description" xml:space="preserve"><value>Copilot 採点を始める前に、GitHub とローカル DB の Triage 対象を確認します。</value></data>
+  <data name="TriagePreflight.EstimatedScoringTargets" xml:space="preserve"><value>採点見込み</value></data>
+  <data name="TriagePreflight.Estimating" xml:space="preserve"><value>見積もり中…</value></data>
+  <data name="TriagePreflight.ExternalEstimate" xml:space="preserve"><value>GitHub 見積もり</value></data>
+  <data name="TriagePreflight.ExternalFailed" xml:space="preserve"><value>GitHub 見積もりを取得できません: {0}</value></data>
+  <data name="TriagePreflight.ExternalSkipped" xml:space="preserve"><value>候補 PR と新規コミットの見積もりにはサインインが必要です。ローカル件数は下に表示しています。</value></data>
+  <data name="TriagePreflight.Failed" xml:space="preserve"><value>事前見積もり失敗</value></data>
+  <data name="TriagePreflight.GitHubSettings" xml:space="preserve"><value>GitHub クエリ</value></data>
+  <data name="TriagePreflight.IgnoreRules" xml:space="preserve"><value>Ignore ルール</value></data>
+  <data name="TriagePreflight.IgnoreRulesActive" xml:space="preserve"><value>{0} 件設定済み</value></data>
+  <data name="TriagePreflight.IgnoreRulesEmpty" xml:space="preserve"><value>未設定</value></data>
+  <data name="TriagePreflight.LastTriage" xml:space="preserve"><value>このセッションの直近 Triage</value></data>
+  <data name="TriagePreflight.LastTriageEmpty" xml:space="preserve"><value>このアプリセッションではまだ Triage が完了していません。</value></data>
+  <data name="TriagePreflight.LocalState" xml:space="preserve"><value>ローカル状態</value></data>
+  <data name="TriagePreflight.MaxPullRequests" xml:space="preserve"><value>最大 PR 数</value></data>
+  <data name="TriagePreflight.NewUnseenCommits" xml:space="preserve"><value>新規未取り込みコミット</value></data>
+  <data name="TriagePreflight.NotSet" xml:space="preserve"><value>未設定</value></data>
+  <data name="TriagePreflight.Repository" xml:space="preserve"><value>リポジトリ</value></data>
+  <data name="TriagePreflight.ReviewCounts" xml:space="preserve"><value>レビュー状態</value></data>
+  <data name="TriagePreflight.ReviewStatus.Adopted" xml:space="preserve"><value>採用 {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Archived" xml:space="preserve"><value>アーカイブ {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Later" xml:space="preserve"><value>後で {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Rejected" xml:space="preserve"><value>見送り {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Unseen" xml:space="preserve"><value>未確認 {0}</value></data>
+  <data name="TriagePreflight.Run" xml:space="preserve"><value>Triage を実行</value></data>
+  <data name="TriagePreflight.SignInRequiredToRun" xml:space="preserve"><value>Triage を実行するにはサインインしてください。</value></data>
+  <data name="TriagePreflight.Title" xml:space="preserve"><value>Morning Triage 事前見積もり</value></data>
+  <data name="TriagePreflight.TitleFilter" xml:space="preserve"><value>タイトル条件</value></data>
+  <data name="TriagePreflight.UnscoredUnreviewed" xml:space="preserve"><value>DB 内の未スコア未確認</value></data>
   <data name="AppHeader.Update.CheckButton" xml:space="preserve"><value>アップデートを確認</value></data>
   <data name="AppHeader.Update.CheckFailed" xml:space="preserve"><value>アップデート確認に失敗しました。</value></data>
   <data name="AppHeader.Update.CheckFailedWithMessage" xml:space="preserve"><value>アップデート確認に失敗しました: {0}</value></data>
@@ -96,6 +129,27 @@
   <data name="CommitDetail.Starting" xml:space="preserve"><value>起動中…</value></data>
   <data name="CommitDetail.Summary" xml:space="preserve"><value>要約</value></data>
   <data name="CommitDetail.Unscored" xml:space="preserve"><value>未スコアリング (Triage 未実行)</value></data>
+  <data name="CommitDetail.History.Title" xml:space="preserve"><value>履歴</value></data>
+  <data name="CommitDetail.History.Empty" xml:space="preserve"><value>このコミットの履歴メタデータはまだありません。</value></data>
+  <data name="CommitDetail.History.LegacyNote" xml:space="preserve"><value>このレビュー判断は履歴機能追加前の最新状態から復元しています。詳細な変更履歴は今後の判断から記録されます。</value></data>
+  <data name="CommitDetail.History.Fetched.Title" xml:space="preserve"><value>コミットを取得</value></data>
+  <data name="CommitDetail.History.Fetched.Description" xml:space="preserve"><value>Repo sync PR #{0} からローカル DB に取り込みました。</value></data>
+  <data name="CommitDetail.History.Scored.Title" xml:space="preserve"><value>Copilot スコアを保存</value></data>
+  <data name="CommitDetail.History.Scored.Description" xml:space="preserve"><value>スコア {0}、カテゴリ {1}、モデル {2}</value></data>
+  <data name="CommitDetail.History.UnknownModel" xml:space="preserve"><value>不明</value></data>
+  <data name="CommitDetail.History.PromptHash" xml:space="preserve"><value>Prompt hash: {0}</value></data>
+  <data name="CommitDetail.History.Review.Title" xml:space="preserve"><value>レビュー判断: {0}</value></data>
+  <data name="CommitDetail.History.Review.LegacyTitle" xml:space="preserve"><value>レビュー判断 (最新状態): {0}</value></data>
+  <data name="CommitDetail.History.Review.Description" xml:space="preserve"><value>記録元: {0}</value></data>
+  <data name="CommitDetail.History.Review.DescriptionWithReason" xml:space="preserve"><value>記録元: {0}。理由: {1}</value></data>
+  <data name="CommitDetail.History.Source.User" xml:space="preserve"><value>ユーザー操作</value></data>
+  <data name="CommitDetail.History.Source.AutoIgnore" xml:space="preserve"><value>ignore ルール</value></data>
+  <data name="CommitDetail.History.Source.BulkIgnore" xml:space="preserve"><value>一括 ignore</value></data>
+  <data name="CommitDetail.History.Draft.Title" xml:space="preserve"><value>{0} 文案を生成</value></data>
+  <data name="CommitDetail.History.Draft.Description" xml:space="preserve"><value>{0} に表示する共有文案を保存しました。</value></data>
+  <data name="CommitDetail.History.IgnoreRule.Title" xml:space="preserve"><value>ignore ルールが一致</value></data>
+  <data name="CommitDetail.History.IgnoreRule.Description" xml:space="preserve"><value>{0} がこのコミットのファイルに一致しました。</value></data>
+  <data name="CommitDetail.History.IgnoreRule.DescriptionWithReason" xml:space="preserve"><value>{0} がこのコミットのファイルに一致しました。理由: {1}</value></data>
   <data name="CommitDetail.Why" xml:space="preserve"><value>理由</value></data>
   <data name="Common.CacheRead" xml:space="preserve"><value>キャッシュ読込</value></data>
   <data name="Common.CacheWrite" xml:space="preserve"><value>キャッシュ書込</value></data>
@@ -235,7 +289,7 @@
   <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits と Premium Request cost は SDK の usage event / session metrics から表示します。SDK が AI Credits を返さない場合は未報告のままにします。プロンプト本文は保存しません。</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>セッション metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
   <data name="Settings.DefaultTheme" xml:space="preserve"><value>既定テーマ</value></data>
-  <data name="Settings.Description" xml:space="preserve"><value>表示言語、既定テーマ、アプリ設定、ライセンス、無視リストを確認できます。</value></data>
+  <data name="Settings.Description" xml:space="preserve"><value>目的別のセクションから表示言語、アプリ設定、自動化、ライセンスを確認できます。</value></data>
   <data name="Settings.DisplayLanguage" xml:space="preserve"><value>表示言語</value></data>
   <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>表示言語を切り替えています…</value></data>
   <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>表示言語を {0} に切り替えました。</value></data>
@@ -246,6 +300,11 @@
   <data name="Settings.IgnoreList.Empty" xml:space="preserve"><value>無視リストはまだ設定されていません。</value></data>
   <data name="Settings.IgnoreList.LoadFailed" xml:space="preserve"><value>無視リストの読み込みに失敗しました</value></data>
   <data name="Settings.IgnoreList.Refresh" xml:space="preserve"><value>無視リストを更新</value></data>
+  <data name="Settings.Section.AppSettings" xml:space="preserve"><value>アプリ設定</value></data>
+  <data name="Settings.Section.Automation" xml:space="preserve"><value>自動化</value></data>
+  <data name="Settings.Section.General" xml:space="preserve"><value>一般</value></data>
+  <data name="Settings.Section.LegalAbout" xml:space="preserve"><value>サードパーティ ライセンス</value></data>
+  <data name="Settings.Section.Navigation" xml:space="preserve"><value>設定セクション</value></data>
   <data name="Settings.Theme.Dark" xml:space="preserve"><value>ダーク</value></data>
   <data name="Settings.Theme.Light" xml:space="preserve"><value>ライト</value></data>
   <data name="Settings.Theme.LoadFailed" xml:space="preserve"><value>テーマ設定の読み込みに失敗しました</value></data>
