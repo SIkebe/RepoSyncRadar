@@ -317,6 +317,15 @@ public sealed class RadarToolsTests
         public Task<int> DeleteIgnoreRulesAsync(IEnumerable<string> patterns, CancellationToken cancellationToken = default)
             => Task.FromResult(0);
 
+        public Task<bool> AddBoostRuleAsync(string pattern, double delta, string? reason, CancellationToken cancellationToken = default)
+            => Task.FromResult(true);
+
+        public Task<IReadOnlyList<BoostRule>> GetBoostRulesAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<BoostRule>>(Array.Empty<BoostRule>());
+
+        public Task<int> DeleteBoostRulesAsync(IEnumerable<string> patterns, CancellationToken cancellationToken = default)
+            => Task.FromResult(0);
+
         public Task<int> BulkRejectByPathPrefixAsync(string pathPrefix, string reason, CancellationToken cancellationToken = default)
             => Task.FromResult(0);
     }

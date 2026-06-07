@@ -288,8 +288,25 @@
   <data name="Settings.CopilotUsage.Empty" xml:space="preserve"><value>まだ Copilot SDK の使用量は記録されていません。</value></data>
   <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits と Premium Request cost は SDK の usage event / session metrics から表示します。SDK が AI Credits を返さない場合は未報告のままにします。プロンプト本文は保存しません。</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>セッション metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
+  <data name="Settings.BoostRules" xml:space="preserve"><value>重要度ブーストルール</value></data>
+  <data name="Settings.BoostRules.Add" xml:space="preserve"><value>ブーストルールを追加</value></data>
+  <data name="Settings.BoostRules.Added" xml:space="preserve"><value>{0} をブーストルールに追加しました</value></data>
+  <data name="Settings.BoostRules.AddFailed" xml:space="preserve"><value>ブーストルールの追加に失敗しました</value></data>
+  <data name="Settings.BoostRules.DeleteFailed" xml:space="preserve"><value>ブーストルールの削除に失敗しました</value></data>
+  <data name="Settings.BoostRules.Deleted" xml:space="preserve"><value>{0} 件のブーストルールを削除しました</value></data>
+  <data name="Settings.BoostRules.Delta" xml:space="preserve"><value>Delta</value></data>
+  <data name="Settings.BoostRules.Description" xml:space="preserve"><value>パスパターンに一致する変更のスコアを上げ下げします。Delta は -5.0 から +5.0 までです。</value></data>
+  <data name="Settings.BoostRules.Empty" xml:space="preserve"><value>ブーストルールはまだ設定されていません。</value></data>
+  <data name="Settings.BoostRules.LoadFailed" xml:space="preserve"><value>ブーストルールの読み込みに失敗しました</value></data>
+  <data name="Settings.BoostRules.Pattern" xml:space="preserve"><value>パターン</value></data>
+  <data name="Settings.BoostRules.Reason" xml:space="preserve"><value>理由</value></data>
+  <data name="Settings.BoostRules.Refresh" xml:space="preserve"><value>ブーストルールを更新</value></data>
+  <data name="Settings.BoostRules.Validation.DeltaInvalid" xml:space="preserve"><value>Delta には数値を入力してください。</value></data>
+  <data name="Settings.BoostRules.Validation.DeltaRange" xml:space="preserve"><value>Delta は {0} から {1} の範囲で入力してください。</value></data>
+  <data name="Settings.BoostRules.Validation.Duplicate" xml:space="preserve"><value>{0} のブーストルールはすでに存在します。</value></data>
+  <data name="Settings.BoostRules.Validation.PatternRequired" xml:space="preserve"><value>パターンを入力してください。</value></data>
   <data name="Settings.DefaultTheme" xml:space="preserve"><value>既定テーマ</value></data>
-  <data name="Settings.Description" xml:space="preserve"><value>目的別のセクションから表示言語、アプリ設定、自動化、ライセンスを確認できます。</value></data>
+  <data name="Settings.Description" xml:space="preserve"><value>目的別のセクションから表示言語、アプリ設定、自動化、ルール、ライセンスを確認できます。</value></data>
   <data name="Settings.DisplayLanguage" xml:space="preserve"><value>表示言語</value></data>
   <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>表示言語を切り替えています…</value></data>
   <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>表示言語を {0} に切り替えました。</value></data>

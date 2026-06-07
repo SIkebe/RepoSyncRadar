@@ -454,6 +454,82 @@ public sealed class RadarRepository : IRadarRepository
         return rules.Count;
     }
 
+    public async Task<bool> AddBoostRuleAsync(
+        string pattern,
+        double delta,
+        string? reason,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
+        if (!BoostRuleLimits.IsValidDelta(delta))
+        {
+            throw new ArgumentOutOfRangeException(nameof(delta), delta, $"Delta must be between {BoostRuleLimits.DeltaMin} and {BoostRuleLimits.DeltaMax}.");
+        }
+
+        using var db = _contextFactory.CreateDbContext();
+        var exists = await db.BoostRules
+            .AsNoTracking()
+            .AnyAsync(r => r.Pattern == pattern, cancellationToken)
+            .ConfigureAwait(false);
+        if (exists)
+        {
+            return false;
+        }
+
+        db.BoostRules.Add(new BoostRule
+        {
+            Pattern = pattern,
+            Delta = delta,
+            Reason = reason,
+            CreatedAt = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<BoostRule>> GetBoostRulesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var db = _contextFactory.CreateDbContext();
+        return await db.BoostRules
+            .AsNoTracking()
+            .OrderByDescending(rule => rule.CreatedAt)
+            .ThenBy(rule => rule.Pattern)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<int> DeleteBoostRulesAsync(
+        IEnumerable<string> patterns,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(patterns);
+
+        var candidates = patterns
+            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Select(static pattern => pattern.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            return 0;
+        }
+
+        using var db = _contextFactory.CreateDbContext();
+        var rules = await db.BoostRules
+            .Where(rule => candidates.Contains(rule.Pattern))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (rules.Count == 0)
+        {
+            return 0;
+        }
+
+        db.BoostRules.RemoveRange(rules);
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return rules.Count;
+    }
+
     public async Task<int> BulkRejectByPathPrefixAsync(
         string pathPrefix,
         string reason,

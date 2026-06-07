@@ -116,6 +116,33 @@ public interface IRadarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Adds a new <see cref="BoostRule"/>. If the same pattern already exists the call is
+    /// a no-op (returns false). Used by Settings for manually managed scoring preferences.
+    /// </summary>
+    /// <returns><c>true</c> when a new row is inserted; <c>false</c> when the pattern already exists.</returns>
+    Task<bool> AddBoostRuleAsync(
+        string pattern,
+        double delta,
+        string? reason,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the currently configured boost rules, newest first, so Settings can show
+    /// scoring preferences that Copilot maintenance sessions may update through write tools.
+    /// </summary>
+    Task<IReadOnlyList<BoostRule>> GetBoostRulesAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes boost rules whose primary key matches one of <paramref name="patterns"/>.
+    /// Existing scores are left unchanged; this only affects future scoring preferences.
+    /// </summary>
+    /// <returns>The number of boost rules actually deleted.</returns>
+    Task<int> DeleteBoostRulesAsync(
+        IEnumerable<string> patterns,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Marks every matching commit as the auto-triaged <see cref="ReviewStatus.Rejected"/> state
     /// when at least one <see cref="CommitFile.Path"/> begins with
     /// <paramref name="pathPrefix"/> and that is currently <see cref="ReviewStatus.Unseen"/>.

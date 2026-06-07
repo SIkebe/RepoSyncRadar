@@ -18,8 +18,6 @@ namespace RepoSyncRadar.App.Copilot.Tools;
 /// </summary>
 public sealed class RadarWriteTools
 {
-    private const double _boostDeltaMax = 5.0;
-    private const double _boostDeltaMin = -5.0;
     internal const double AutoRejectScoreThreshold = 0.44;
     internal const string AutoRejectedLowScoreReason = "auto-low-score";
 
@@ -262,9 +260,9 @@ public sealed class RadarWriteTools
         {
             return new WriteResult("pattern is required.");
         }
-        if (double.IsNaN(args.Delta) || args.Delta > _boostDeltaMax || args.Delta < _boostDeltaMin)
+        if (!BoostRuleLimits.IsValidDelta(args.Delta))
         {
-            return new WriteResult($"delta must be between {_boostDeltaMin} and {_boostDeltaMax}.");
+            return new WriteResult($"delta must be between {BoostRuleLimits.DeltaMin} and {BoostRuleLimits.DeltaMax}.");
         }
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
@@ -276,6 +274,7 @@ public sealed class RadarWriteTools
                 Pattern = args.Pattern,
                 Delta = args.Delta,
                 Reason = args.Reason,
+                CreatedAt = DateTime.UtcNow,
             });
         }
         else

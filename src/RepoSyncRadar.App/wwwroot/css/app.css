@@ -1664,6 +1664,32 @@ html, body {
     gap: 0.45rem;
 }
 
+.settings-rule-add-form {
+    align-items: flex-end;
+    display: grid;
+    gap: 0.55rem;
+    grid-template-columns: minmax(12rem, 2fr) minmax(6rem, 0.7fr) minmax(10rem, 1.4fr) auto;
+}
+
+.settings-rule-add-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.settings-rule-add-form span {
+    color: #57606a;
+    font-size: 0.78rem;
+}
+
+.settings-rule-add-form input {
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    font: inherit;
+    min-width: 0;
+    padding: 0.35rem 0.45rem;
+}
+
 .ignore-rule-row {
     align-items: center;
     background: #fff;
@@ -2349,6 +2375,10 @@ html, body {
     color: var(--radar-fg) !important;
 }
 
+.radar-theme-dark .settings-rule-add-form span {
+    color: var(--radar-muted-fg) !important;
+}
+
 .radar-theme-dark .sidebar-item:hover,
 .radar-theme-dark .commit-row:hover,
 .radar-theme-dark .toolbar-button.secondary:hover:not(:disabled),
@@ -2382,6 +2412,7 @@ html, body {
 .radar-theme-dark .local-settings-field input,
 .radar-theme-dark .local-settings-field textarea,
 .radar-theme-dark .local-settings-field select,
+.radar-theme-dark .settings-rule-add-form input,
 .radar-theme-dark .ignore-rule-row code,
 .radar-theme-dark .third-party-version,
 .radar-theme-dark .third-party-license,

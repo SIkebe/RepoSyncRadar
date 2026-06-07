@@ -685,6 +685,8 @@ public sealed class AppHeaderTests
             ]));
 
         var sp = BuildServices(session, out _, out _, repo);
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([]));
         using var ctx = new Bunit.BunitContext();
         var cut = ctx.Render<AppHeader>(
             p => p.AddCascadingValue<IServiceProvider>(sp));
@@ -706,6 +708,228 @@ public sealed class AppHeaderTests
             Assert.Contains("ignore-directory", cut.Find("[data-testid=\"settings-ignore-rule-reason\"]").TextContent);
         });
         repo.Received(1).GetIgnoreRulesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Settings_Shows_Empty_State_When_No_Boost_Rules_Exist()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([]));
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+
+        var sp = BuildServices(session, out _, out _, repo);
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([]));
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(
+                "ブーストルールはまだ設定されていません",
+                cut.Find("[data-testid=\"settings-boost-rules-empty\"]").TextContent,
+                StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Settings_Adds_Boost_Rule_And_Reloads_List()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var rules = new List<BoostRule>();
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyList<BoostRule>>(rules.ToArray()));
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+        repo.AddBoostRuleAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                rules.Add(new BoostRule
+                {
+                    Pattern = call.ArgAt<string>(0),
+                    Delta = call.ArgAt<double>(1),
+                    Reason = call.ArgAt<string?>(2),
+                    CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+                });
+                return Task.FromResult(true);
+            });
+
+        var sp = BuildServices(session, out _, out _, repo);
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyList<BoostRule>>(rules.ToArray()));
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-boost-rules-empty\"]")));
+        cut.Find("[data-testid=\"settings-boost-rule-pattern-input\"]").Input("content/copilot/**");
+        cut.Find("[data-testid=\"settings-boost-rule-delta-input\"]").Input("2.5");
+        cut.Find("[data-testid=\"settings-boost-rule-reason-input\"]").Input("important");
+
+        cut.Find("[data-testid=\"settings-add-boost-rule\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("content/copilot/**", cut.Find("[data-testid=\"settings-boost-rule-pattern\"]").TextContent);
+            Assert.Equal("+2.5", cut.Find("[data-testid=\"settings-boost-rule-delta\"]").TextContent);
+            Assert.Contains("important", cut.Find("[data-testid=\"settings-boost-rule-reason\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("content/copilot/** をブーストルールに追加", cut.Find("[data-testid=\"settings-boost-rules-status\"]").TextContent, StringComparison.Ordinal);
+        });
+        repo.Received(1).AddBoostRuleAsync(
+            "content/copilot/**",
+            2.5,
+            "important",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public void Settings_Validates_Boost_Rule_Add_Form()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([]));
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+        repo.AddBoostRuleAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+
+        var sp = BuildServices(session, out _, out _, repo);
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([]));
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        cut.WaitForAssertion(() => Assert.NotNull(cut.Find("[data-testid=\"settings-add-boost-rule\"]")));
+
+        cut.Find("[data-testid=\"settings-add-boost-rule\"]").Click();
+        Assert.Contains("パターンを入力", cut.Find("[data-testid=\"settings-boost-rules-error\"]").TextContent, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=\"settings-boost-rule-pattern-input\"]").Input("content/copilot/**");
+        cut.Find("[data-testid=\"settings-boost-rule-delta-input\"]").Input("not-a-number");
+        cut.Find("[data-testid=\"settings-add-boost-rule\"]").Click();
+        Assert.Contains("数値を入力", cut.Find("[data-testid=\"settings-boost-rules-error\"]").TextContent, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=\"settings-boost-rule-delta-input\"]").Input("5.5");
+        cut.Find("[data-testid=\"settings-add-boost-rule\"]").Click();
+        Assert.Contains("範囲", cut.Find("[data-testid=\"settings-boost-rules-error\"]").TextContent, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=\"settings-boost-rule-delta-input\"]").Input("1");
+        cut.Find("[data-testid=\"settings-add-boost-rule\"]").Click();
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("すでに存在", cut.Find("[data-testid=\"settings-boost-rules-error\"]").TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Settings_Delete_Selected_Boost_Rules_Removes_Multiple_Rows()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var rules = new List<BoostRule>
+        {
+            new()
+            {
+                Pattern = "content/copilot/**",
+                Delta = 2,
+                Reason = "important",
+                CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+            },
+            new()
+            {
+                Pattern = "data/release-notes/**",
+                Delta = -1,
+                Reason = "noisy",
+                CreatedAt = new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Utc),
+            },
+            new()
+            {
+                Pattern = "content/actions/**",
+                Delta = 1,
+                Reason = "keep",
+                CreatedAt = new DateTime(2026, 5, 12, 9, 0, 0, DateTimeKind.Utc),
+            },
+        };
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyList<BoostRule>>(rules.ToArray()));
+        repo.GetIgnoreRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<IgnoreRule>>([]));
+        repo.DeleteBoostRulesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var patterns = call.Arg<IEnumerable<string>>().ToHashSet(StringComparer.Ordinal);
+                return rules.RemoveAll(rule => patterns.Contains(rule.Pattern));
+            });
+
+        var sp = BuildServices(session, out _, out _, repo);
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyList<BoostRule>>(rules.ToArray()));
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Render(parameters => parameters.Add(header => header.SettingsOpen, true));
+        cut.WaitForAssertion(() => Assert.Equal(3, cut.FindAll("[data-testid=\"settings-boost-rule\"]").Count));
+        cut.FindAll("[data-testid=\"settings-boost-rule-select\"]")[0].Change(true);
+        cut.FindAll("[data-testid=\"settings-boost-rule-select\"]")[2].Change(true);
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("2 件選択中", cut.Find("[data-testid=\"settings-boost-rules-selected-count\"]").TextContent, StringComparison.Ordinal);
+            Assert.False(cut.Find("[data-testid=\"settings-delete-selected-boost-rules\"]").HasAttribute("disabled"));
+        });
+
+        cut.Find("[data-testid=\"settings-delete-selected-boost-rules\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var pattern = Assert.Single(cut.FindAll("[data-testid=\"settings-boost-rule-pattern\"]"));
+            Assert.Equal("data/release-notes/**", pattern.TextContent);
+            Assert.Contains("2 件のブーストルールを削除", cut.Find("[data-testid=\"settings-boost-rules-delete-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("0 件選択中", cut.Find("[data-testid=\"settings-boost-rules-selected-count\"]").TextContent, StringComparison.Ordinal);
+        });
+        var expectedPatterns = new[]
+        {
+            "content/copilot/**",
+            "content/actions/**",
+        };
+        repo.Received(1).DeleteBoostRulesAsync(
+            Arg.Is<IEnumerable<string>>(patterns => patterns.SequenceEqual(expectedPatterns)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1251,13 +1475,16 @@ public sealed class AppHeaderTests
             resolvedSettingsStore.SaveDisplayCultureAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(Task.CompletedTask);
         }
+        repo ??= Substitute.For<IRadarRepository>();
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([]));
         var services = new ServiceCollection()
             .AddLogging()
             .AddLocalization(options => options.ResourcesPath = "Resources")
             .AddSingleton(session)
             .AddSingleton(agent)
             .AddSingleton(broadcaster)
-            .AddSingleton(repo ?? Substitute.For<IRadarRepository>())
+            .AddSingleton(repo)
             .AddSingleton(resolvedSettingsStore)
             .AddSingleton(localSettingsStore)
             .AddSingleton(usageTracker ?? new CopilotUsageTracker())

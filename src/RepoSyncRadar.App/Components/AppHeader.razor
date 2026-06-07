@@ -374,6 +374,115 @@
                         }
                         <p class="settings-muted" data-testid="settings-copilot-usage-privacy">@L["Settings.CopilotUsage.Privacy"]</p>
                     </section>
+                    <section class="settings-section" data-testid="settings-boost-rules">
+                        <header class="settings-subheader">
+                            <div>
+                                <h3>@L["Settings.BoostRules"]</h3>
+                                <p class="settings-muted">@L["Settings.BoostRules.Description"]</p>
+                            </div>
+                            <button type="button"
+                                    class="toolbar-button compact secondary"
+                                    data-testid="settings-refresh-boost-rules"
+                                    disabled="@_settingsBoostLoading"
+                                    @onclick="LoadBoostRulesAsync">@L["Settings.BoostRules.Refresh"]</button>
+                        </header>
+                        <div class="settings-rule-add-form" data-testid="settings-boost-rule-add-form">
+                            <label>
+                                <span>@L["Settings.BoostRules.Pattern"]</span>
+                                <input type="text"
+                                       data-testid="settings-boost-rule-pattern-input"
+                                       value="@_boostRulePattern"
+                                       disabled="@_settingsBoostSaving"
+                                       @oninput="OnBoostRulePatternInput" />
+                            </label>
+                            <label>
+                                <span>@L["Settings.BoostRules.Delta"]</span>
+                                <input type="text"
+                                       data-testid="settings-boost-rule-delta-input"
+                                       value="@_boostRuleDelta"
+                                       disabled="@_settingsBoostSaving"
+                                       @oninput="OnBoostRuleDeltaInput" />
+                            </label>
+                            <label>
+                                <span>@L["Settings.BoostRules.Reason"]</span>
+                                <input type="text"
+                                       data-testid="settings-boost-rule-reason-input"
+                                       value="@_boostRuleReason"
+                                       disabled="@_settingsBoostSaving"
+                                       @oninput="OnBoostRuleReasonInput" />
+                            </label>
+                            <button type="button"
+                                    class="toolbar-button compact"
+                                    data-testid="settings-add-boost-rule"
+                                    disabled="@_settingsBoostSaving"
+                                    @onclick="AddBoostRuleAsync">@L["Settings.BoostRules.Add"]</button>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(_settingsBoostStatus))
+                        {
+                            <p class="settings-muted" data-testid="settings-boost-rules-status">@_settingsBoostStatus</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_settingsBoostError))
+                        {
+                            <p class="settings-error" data-testid="settings-boost-rules-error">@_settingsBoostError</p>
+                        }
+                        @if (_settingsBoostLoading)
+                        {
+                            <p class="settings-muted" data-testid="settings-boost-rules-loading">@L["Common.Loading"]</p>
+                        }
+                        else if (_boostRules.Count == 0)
+                        {
+                            <p class="settings-muted" data-testid="settings-boost-rules-empty">@L["Settings.BoostRules.Empty"]</p>
+                        }
+                        else
+                        {
+                            <div class="ignore-rule-toolbar" data-testid="settings-boost-rules-toolbar">
+                                <button type="button"
+                                        class="toolbar-button compact secondary"
+                                        data-testid="settings-boost-rules-select-all"
+                                        disabled="@_settingsBoostDeleteBusy"
+                                        @onclick="ToggleAllBoostRulesAsync">@BuildBoostRuleSelectAllLabel()</button>
+                                <span class="settings-muted" data-testid="settings-boost-rules-selected-count">@L["Common.SelectedCount", _selectedBoostRulePatterns.Count]</span>
+                                <button type="button"
+                                        class="toolbar-button compact danger"
+                                        data-testid="settings-delete-selected-boost-rules"
+                                        disabled="@IsDeleteSelectedBoostRulesDisabled()"
+                                        @onclick="DeleteSelectedBoostRulesAsync">@L["Common.DeleteSelected"]</button>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(_settingsBoostDeleteStatus))
+                            {
+                                <p class="settings-muted" data-testid="settings-boost-rules-delete-status">@_settingsBoostDeleteStatus</p>
+                            }
+                            <div class="ignore-rule-list" data-testid="settings-boost-rules-list">
+                                @foreach (var rule in _boostRules)
+                                {
+                                    <article class="ignore-rule-row boost-rule-row" data-testid="settings-boost-rule">
+                                        <label class="ignore-rule-pattern-select">
+                                            <input type="checkbox"
+                                                   data-testid="settings-boost-rule-select"
+                                                   checked="@IsBoostRuleSelected(rule.Pattern)"
+                                                   disabled="@_settingsBoostDeleteBusy"
+                                                   @onchange="() => ToggleBoostRuleSelection(rule.Pattern)" />
+                                            <code data-testid="settings-boost-rule-pattern">@rule.Pattern</code>
+                                        </label>
+                                        <div class="ignore-rule-meta">
+                                            <strong data-testid="settings-boost-rule-delta">@FormatBoostDelta(rule.Delta)</strong>
+                                            @if (!string.IsNullOrWhiteSpace(rule.Reason))
+                                            {
+                                                <span data-testid="settings-boost-rule-reason">@rule.Reason</span>
+                                            }
+                                            <time datetime="@rule.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture)"
+                                                  data-testid="settings-boost-rule-created">@FormatCreatedAt(rule.CreatedAt)</time>
+                                            <button type="button"
+                                                    class="toolbar-button compact danger"
+                                                    data-testid="settings-delete-boost-rule"
+                                                    disabled="@_settingsBoostDeleteBusy"
+                                                    @onclick="() => DeleteBoostRulesAsync([rule.Pattern])">@L["Common.Delete"]</button>
+                                        </div>
+                                    </article>
+                                }
+                            </div>
+                        }
+                    </section>
                     <section class="settings-section" data-testid="settings-ignore-rules">
                         <header class="settings-subheader">
                             <h3>@L["Settings.IgnoreList"]</h3>
@@ -497,6 +606,17 @@
     private string? _settingsDisplayCultureStatus;
     private IReadOnlyList<IgnoreRule> _ignoreRules = [];
     private readonly HashSet<string> _selectedIgnoreRulePatterns = new(StringComparer.Ordinal);
+    private IReadOnlyList<BoostRule> _boostRules = [];
+    private readonly HashSet<string> _selectedBoostRulePatterns = new(StringComparer.Ordinal);
+    private string _boostRulePattern = string.Empty;
+    private string _boostRuleDelta = string.Empty;
+    private string _boostRuleReason = string.Empty;
+    private bool _settingsBoostLoading;
+    private bool _settingsBoostSaving;
+    private bool _settingsBoostDeleteBusy;
+    private string? _settingsBoostError;
+    private string? _settingsBoostStatus;
+    private string? _settingsBoostDeleteStatus;
     private bool _settingsDeleteBusy;
     private string? _settingsDeleteStatus;
     private bool _settingsUpdateBusy;
@@ -559,7 +679,11 @@
             else
             {
                 _selectedIgnoreRulePatterns.Clear();
+                _selectedBoostRulePatterns.Clear();
                 _settingsDeleteStatus = null;
+                _settingsBoostStatus = null;
+                _settingsBoostDeleteStatus = null;
+                _settingsBoostError = null;
             }
         }
 
@@ -744,6 +868,7 @@
     private async Task LoadSettingsPanelAsync()
     {
         await LoadUserSettingsAsync();
+        await LoadBoostRulesAsync();
         await LoadIgnoreRulesAsync();
     }
 
@@ -952,6 +1077,223 @@
 
     private static string BuildDownloadedUpdateDismissKey(AppUpdateActivity activity)
         => activity.AvailableVersion ?? activity.Message ?? activity.Status.ToString();
+
+    private async Task LoadBoostRulesAsync()
+    {
+        _settingsBoostLoading = true;
+        _settingsBoostError = null;
+        _settingsBoostDeleteStatus = null;
+        StateHasChanged();
+        try
+        {
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            _boostRules = await repo.GetBoostRulesAsync(CancellationToken.None);
+            RemoveSelectionsNotInBoostRules();
+        }
+        catch (Exception ex)
+        {
+            _boostRules = [];
+            _selectedBoostRulePatterns.Clear();
+            _settingsBoostError = $"{L["Settings.BoostRules.LoadFailed"]}: {ex.Message}";
+        }
+        finally
+        {
+            _settingsBoostLoading = false;
+        }
+    }
+
+    private void OnBoostRulePatternInput(ChangeEventArgs e)
+    {
+        _boostRulePattern = e.Value?.ToString() ?? string.Empty;
+        ClearBoostRuleAddMessages();
+    }
+
+    private void OnBoostRuleDeltaInput(ChangeEventArgs e)
+    {
+        _boostRuleDelta = e.Value?.ToString() ?? string.Empty;
+        ClearBoostRuleAddMessages();
+    }
+
+    private void OnBoostRuleReasonInput(ChangeEventArgs e)
+    {
+        _boostRuleReason = e.Value?.ToString() ?? string.Empty;
+        ClearBoostRuleAddMessages();
+    }
+
+    private void ClearBoostRuleAddMessages()
+    {
+        _settingsBoostError = null;
+        _settingsBoostStatus = null;
+    }
+
+    private async Task AddBoostRuleAsync()
+    {
+        if (_settingsBoostSaving)
+        {
+            return;
+        }
+
+        var pattern = _boostRulePattern.Trim();
+        if (pattern.Length == 0)
+        {
+            _settingsBoostError = L["Settings.BoostRules.Validation.PatternRequired"];
+            _settingsBoostStatus = null;
+            return;
+        }
+
+        if (!TryParseBoostDelta(_boostRuleDelta, out var delta))
+        {
+            _settingsBoostError = L["Settings.BoostRules.Validation.DeltaInvalid"];
+            _settingsBoostStatus = null;
+            return;
+        }
+
+        if (!BoostRuleLimits.IsValidDelta(delta))
+        {
+            _settingsBoostError = L["Settings.BoostRules.Validation.DeltaRange", BoostRuleLimits.DeltaMin, BoostRuleLimits.DeltaMax];
+            _settingsBoostStatus = null;
+            return;
+        }
+
+        _settingsBoostSaving = true;
+        _settingsBoostError = null;
+        _settingsBoostStatus = null;
+        _settingsBoostDeleteStatus = null;
+        StateHasChanged();
+        try
+        {
+            var reason = string.IsNullOrWhiteSpace(_boostRuleReason) ? null : _boostRuleReason.Trim();
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            var added = await repo.AddBoostRuleAsync(pattern, delta, reason, CancellationToken.None);
+            if (!added)
+            {
+                _settingsBoostError = L["Settings.BoostRules.Validation.Duplicate", pattern];
+                return;
+            }
+
+            _boostRules = await repo.GetBoostRulesAsync(CancellationToken.None);
+            RemoveSelectionsNotInBoostRules();
+            _boostRulePattern = string.Empty;
+            _boostRuleDelta = string.Empty;
+            _boostRuleReason = string.Empty;
+            _settingsBoostStatus = L["Settings.BoostRules.Added", pattern];
+        }
+        catch (Exception ex)
+        {
+            _settingsBoostError = $"{L["Settings.BoostRules.AddFailed"]}: {ex.Message}";
+        }
+        finally
+        {
+            _settingsBoostSaving = false;
+        }
+    }
+
+    private static bool TryParseBoostDelta(string value, out double delta)
+        => double.TryParse(
+            value.Trim(),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.CurrentCulture,
+            out delta)
+        || double.TryParse(
+            value.Trim(),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out delta);
+
+    private Task ToggleAllBoostRulesAsync()
+    {
+        if (_settingsBoostDeleteBusy || _boostRules.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (_selectedBoostRulePatterns.Count == _boostRules.Count)
+        {
+            _selectedBoostRulePatterns.Clear();
+        }
+        else
+        {
+            _selectedBoostRulePatterns.Clear();
+            foreach (var rule in _boostRules)
+            {
+                _selectedBoostRulePatterns.Add(rule.Pattern);
+            }
+        }
+
+        _settingsBoostDeleteStatus = null;
+        return Task.CompletedTask;
+    }
+
+    private void ToggleBoostRuleSelection(string pattern)
+    {
+        if (_settingsBoostDeleteBusy)
+        {
+            return;
+        }
+
+        if (!_selectedBoostRulePatterns.Add(pattern))
+        {
+            _selectedBoostRulePatterns.Remove(pattern);
+        }
+        _settingsBoostDeleteStatus = null;
+    }
+
+    private async Task DeleteSelectedBoostRulesAsync()
+    {
+        if (IsDeleteSelectedBoostRulesDisabled())
+        {
+            return;
+        }
+
+        await DeleteBoostRulesAsync(_selectedBoostRulePatterns.ToArray());
+    }
+
+    private async Task DeleteBoostRulesAsync(IReadOnlyList<string> patterns)
+    {
+        if (_settingsBoostDeleteBusy || patterns.Count == 0)
+        {
+            return;
+        }
+
+        _settingsBoostDeleteBusy = true;
+        _settingsBoostError = null;
+        _settingsBoostStatus = null;
+        _settingsBoostDeleteStatus = null;
+        StateHasChanged();
+        try
+        {
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            var deleted = await repo.DeleteBoostRulesAsync(patterns, CancellationToken.None);
+            _boostRules = await repo.GetBoostRulesAsync(CancellationToken.None);
+            RemoveSelectionsNotInBoostRules();
+            _settingsBoostDeleteStatus = L["Settings.BoostRules.Deleted", deleted];
+        }
+        catch (Exception ex)
+        {
+            _settingsBoostError = $"{L["Settings.BoostRules.DeleteFailed"]}: {ex.Message}";
+        }
+        finally
+        {
+            _settingsBoostDeleteBusy = false;
+        }
+    }
+
+    private void RemoveSelectionsNotInBoostRules()
+    {
+        var currentPatterns = _boostRules.Select(static rule => rule.Pattern).ToHashSet(StringComparer.Ordinal);
+        _selectedBoostRulePatterns.RemoveWhere(pattern => !currentPatterns.Contains(pattern));
+    }
+
+    private bool IsBoostRuleSelected(string pattern)
+        => _selectedBoostRulePatterns.Contains(pattern);
+
+    private bool IsDeleteSelectedBoostRulesDisabled()
+        => _settingsBoostDeleteBusy || _selectedBoostRulePatterns.Count == 0;
+
+    private string BuildBoostRuleSelectAllLabel()
+        => _boostRules.Count > 0 && _selectedBoostRulePatterns.Count == _boostRules.Count
+            ? L["Common.ClearAll"]
+            : L["Common.SelectAll"];
 
     private async Task LoadIgnoreRulesAsync()
     {
@@ -1430,9 +1772,12 @@
                 L["TriagePreflight.ReviewStatus.Archived", GetReviewCount(counts, ReviewStatus.Archived)],
             ]);
     }
-
     private static int GetReviewCount(IReadOnlyDictionary<ReviewStatus, int> counts, ReviewStatus status)
         => counts.TryGetValue(status, out var count) ? count : 0;
+        => counts.TryGetValue(status, out var count) ? count : 0;
+    private static string FormatBoostDelta(double delta)
+        => delta.ToString("+#,0.###;-#,0.###;0", System.Globalization.CultureInfo.CurrentCulture);
+        => delta.ToString("+#,0.###;-#,0.###;0", System.Globalization.CultureInfo.CurrentCulture);
 
     private static string FormatTokens(double tokens)
         => FormatNumber(Math.Round(tokens));
