@@ -51,7 +51,6 @@ jobs:
           global-json-file: global.json
 
       - name: Cache NuGet packages
-        id: nuget-cache
         if: ${{ matrix.language == 'csharp' }}
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -75,25 +74,7 @@ jobs:
 
       - name: Restore
         if: ${{ matrix.language == 'csharp' }}
-        env:
-          NUGET_CACHE_HIT: ${{ steps.nuget-cache.outputs.cache-hit }}
-        run: |
-          $elapsed = Measure-Command { dotnet restore RepoSyncRadar.sln }
-          $seconds = [Math]::Round($elapsed.TotalSeconds, 2)
-          $cacheSize = Get-ChildItem "$HOME\.nuget\packages" -Recurse -File -ErrorAction SilentlyContinue |
-            Measure-Object -Property Length -Sum
-          $cacheMiB = [Math]::Round(($cacheSize.Sum ?? 0) / 1MB, 2)
-          Write-Host "MEASUREMENT kind=nuget-restore cache_hit=$env:NUGET_CACHE_HIT seconds=$seconds cache_mib=$cacheMiB"
-
-          @"
-          ### NuGet restore measurement
-
-          | Metric | Value |
-          | --- | --- |
-          | Cache hit | $env:NUGET_CACHE_HIT |
-          | Restore seconds | $seconds |
-          | NuGet cache size MiB | $cacheMiB |
-          "@ >> $env:GITHUB_STEP_SUMMARY
+        run: dotnet restore RepoSyncRadar.sln
 
       - name: Build
         if: ${{ matrix.language == 'csharp' }}
