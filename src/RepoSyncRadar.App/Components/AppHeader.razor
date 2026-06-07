@@ -386,66 +386,6 @@
                                     disabled="@_settingsBoostLoading"
                                     @onclick="LoadBoostRulesAsync">@L["Settings.BoostRules.Refresh"]</button>
                         </header>
-                        <div class="settings-rule-registration" data-testid="settings-boost-rule-registration">
-                            <div class="settings-rule-quick-picks" data-testid="settings-boost-rule-pattern-suggestions">
-                                <span class="settings-rule-helper-label">@L["Settings.BoostRules.PatternSuggestions"]</span>
-                                @foreach (var suggestion in BoostRulePatternSuggestions)
-                                {
-                                    <button type="button"
-                                            class="review-suggestion-chip settings-rule-suggestion-chip"
-                                            data-testid="settings-boost-rule-pattern-suggestion"
-                                            disabled="@_settingsBoostSaving"
-                                            @onclick="() => SelectBoostRulePatternSuggestion(suggestion)">
-                                        <span class="review-suggestion-pattern">@suggestion</span>
-                                    </button>
-                                }
-                            </div>
-                            <div class="settings-rule-add-form" data-testid="settings-boost-rule-add-form">
-                                <label class="settings-rule-pattern-field">
-                                    <span>@L["Settings.BoostRules.Pattern"]</span>
-                                    <input type="text"
-                                           data-testid="settings-boost-rule-pattern-input"
-                                           placeholder="@L["Settings.BoostRules.PatternPlaceholder"]"
-                                           value="@_boostRulePattern"
-                                           disabled="@_settingsBoostSaving"
-                                           @oninput="OnBoostRulePatternInput" />
-                                </label>
-                                <label class="settings-rule-delta-field">
-                                    <span>@L["Settings.BoostRules.Delta"]</span>
-                                    <input type="text"
-                                           data-testid="settings-boost-rule-delta-input"
-                                           placeholder="+1"
-                                           value="@_boostRuleDelta"
-                                           disabled="@_settingsBoostSaving"
-                                           @oninput="OnBoostRuleDeltaInput" />
-                                </label>
-                                <label class="settings-rule-reason-field">
-                                    <span>@L["Settings.BoostRules.Reason"]</span>
-                                    <input type="text"
-                                           data-testid="settings-boost-rule-reason-input"
-                                           placeholder="@L["Settings.BoostRules.ReasonPlaceholder"]"
-                                           value="@_boostRuleReason"
-                                           disabled="@_settingsBoostSaving"
-                                           @oninput="OnBoostRuleReasonInput" />
-                                </label>
-                                <button type="button"
-                                        class="toolbar-button compact"
-                                        data-testid="settings-add-boost-rule"
-                                        disabled="@_settingsBoostSaving"
-                                        @onclick="AddBoostRuleAsync">@L["Settings.BoostRules.Add"]</button>
-                            </div>
-                            <div class="settings-rule-quick-picks" data-testid="settings-boost-rule-delta-presets">
-                                <span class="settings-rule-helper-label">@L["Settings.BoostRules.DeltaPresets"]</span>
-                                @foreach (var preset in BoostRuleDeltaPresets)
-                                {
-                                    <button type="button"
-                                            class="toolbar-button compact secondary settings-rule-delta-preset"
-                                            data-testid="settings-boost-rule-delta-preset"
-                                            disabled="@_settingsBoostSaving"
-                                            @onclick="() => SelectBoostRuleDeltaPreset(preset)">@FormatBoostDelta(preset)</button>
-                                }
-                            </div>
-                        </div>
                         @if (!string.IsNullOrWhiteSpace(_settingsBoostStatus))
                         {
                             <p class="settings-muted" data-testid="settings-boost-rules-status">@_settingsBoostStatus</p>
@@ -605,18 +545,6 @@
 
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
-    private const string DefaultBoostRuleDeltaText = "1";
-    private static readonly string[] BoostRulePatternSuggestions =
-    [
-        "content/copilot/**",
-        "content/copilot/reference/**",
-        "content/copilot/reference/ai-models/**",
-        "content/copilot/reference/copilot-billing/**",
-        "data/reusables/copilot/**",
-        "data/tables/copilot/**",
-    ];
-    private static readonly double[] BoostRuleDeltaPresets = [1, 2, 3, 0.5, -1];
-
     private GitHubAuthState _state = GitHubAuthState.NotSignedIn;
     private bool _busy;
     private bool _preflightOpen;
@@ -648,11 +576,7 @@
     private readonly HashSet<string> _selectedIgnoreRulePatterns = new(StringComparer.Ordinal);
     private IReadOnlyList<BoostRule> _boostRules = [];
     private readonly HashSet<string> _selectedBoostRulePatterns = new(StringComparer.Ordinal);
-    private string _boostRulePattern = string.Empty;
-    private string _boostRuleDelta = DefaultBoostRuleDeltaText;
-    private string _boostRuleReason = string.Empty;
     private bool _settingsBoostLoading;
-    private bool _settingsBoostSaving;
     private bool _settingsBoostDeleteBusy;
     private string? _settingsBoostError;
     private string? _settingsBoostStatus;
@@ -1141,116 +1065,6 @@
             _settingsBoostLoading = false;
         }
     }
-
-    private void OnBoostRulePatternInput(ChangeEventArgs e)
-    {
-        _boostRulePattern = e.Value?.ToString() ?? string.Empty;
-        ClearBoostRuleAddMessages();
-    }
-
-    private void OnBoostRuleDeltaInput(ChangeEventArgs e)
-    {
-        _boostRuleDelta = e.Value?.ToString() ?? string.Empty;
-        ClearBoostRuleAddMessages();
-    }
-
-    private void OnBoostRuleReasonInput(ChangeEventArgs e)
-    {
-        _boostRuleReason = e.Value?.ToString() ?? string.Empty;
-        ClearBoostRuleAddMessages();
-    }
-
-    private void SelectBoostRulePatternSuggestion(string pattern)
-    {
-        _boostRulePattern = pattern;
-        ClearBoostRuleAddMessages();
-    }
-
-    private void SelectBoostRuleDeltaPreset(double delta)
-    {
-        _boostRuleDelta = delta.ToString("0.###", System.Globalization.CultureInfo.CurrentCulture);
-        ClearBoostRuleAddMessages();
-    }
-
-    private void ClearBoostRuleAddMessages()
-    {
-        _settingsBoostError = null;
-        _settingsBoostStatus = null;
-    }
-
-    private async Task AddBoostRuleAsync()
-    {
-        if (_settingsBoostSaving)
-        {
-            return;
-        }
-
-        var pattern = _boostRulePattern.Trim();
-        if (pattern.Length == 0)
-        {
-            _settingsBoostError = L["Settings.BoostRules.Validation.PatternRequired"];
-            _settingsBoostStatus = null;
-            return;
-        }
-
-        if (!TryParseBoostDelta(_boostRuleDelta, out var delta))
-        {
-            _settingsBoostError = L["Settings.BoostRules.Validation.DeltaInvalid"];
-            _settingsBoostStatus = null;
-            return;
-        }
-
-        if (!BoostRuleLimits.IsValidDelta(delta))
-        {
-            _settingsBoostError = L["Settings.BoostRules.Validation.DeltaRange", BoostRuleLimits.DeltaMin, BoostRuleLimits.DeltaMax];
-            _settingsBoostStatus = null;
-            return;
-        }
-
-        _settingsBoostSaving = true;
-        _settingsBoostError = null;
-        _settingsBoostStatus = null;
-        _settingsBoostDeleteStatus = null;
-        StateHasChanged();
-        try
-        {
-            var reason = string.IsNullOrWhiteSpace(_boostRuleReason) ? null : _boostRuleReason.Trim();
-            var repo = Services.GetRequiredService<IRadarRepository>();
-            var added = await repo.AddBoostRuleAsync(pattern, delta, reason, CancellationToken.None);
-            if (!added)
-            {
-                _settingsBoostError = L["Settings.BoostRules.Validation.Duplicate", pattern];
-                return;
-            }
-
-            _boostRules = await repo.GetBoostRulesAsync(CancellationToken.None);
-            RemoveSelectionsNotInBoostRules();
-            _boostRulePattern = string.Empty;
-            _boostRuleDelta = DefaultBoostRuleDeltaText;
-            _boostRuleReason = string.Empty;
-            _settingsBoostStatus = L["Settings.BoostRules.Added", pattern];
-        }
-        catch (Exception ex)
-        {
-            _settingsBoostError = $"{L["Settings.BoostRules.AddFailed"]}: {ex.Message}";
-        }
-        finally
-        {
-            _settingsBoostSaving = false;
-        }
-    }
-
-    private static bool TryParseBoostDelta(string value, out double delta)
-        => double.TryParse(
-            value.Trim(),
-            System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.CurrentCulture,
-            out delta)
-        || double.TryParse(
-            value.Trim(),
-            System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture,
-            out delta);
 
     private Task ToggleAllBoostRulesAsync()
     {

@@ -1,4 +1,5 @@
 @using Microsoft.Extensions.DependencyInjection
+@using System.Globalization
 @using RepoSyncRadar.Core.Data
 @using RepoSyncRadar.Core.Models
 
@@ -128,6 +129,102 @@
             </div>
         </div>
     </details>
+
+    <details class="review-ignore-panel review-boost-panel" data-testid="review-boost-details">
+        <summary>
+            <span class="review-ignore-summary-main">
+                <span class="review-ignore-chevron" aria-hidden="true">›</span>
+                <span>@L["ReviewActions.BoostSimilarDirectories"]</span>
+            </span>
+            <span class="review-ignore-summary-meta">
+                @if (_suggestedBoostPatterns.Count > 0)
+                {
+                    <span class="review-ignore-summary-count" data-testid="review-boost-summary-count">@L["ReviewActions.SuggestionCount", _suggestedBoostPatterns.Count]</span>
+                }
+            </span>
+        </summary>
+        <div class="review-ignore-content review-boost-content">
+            @if (_suggestedBoostPatterns.Count > 0)
+            {
+                <div class="review-ignore-suggestions" data-testid="review-boost-suggestions">
+                    <span class="review-suggestions-label">@L["ReviewActions.Suggestions"]</span>
+                    <div class="review-suggestion-list">
+                        @foreach (var pattern in _suggestedBoostPatterns)
+                        {
+                            <button type="button"
+                                    class="@BuildBoostSuggestionChipClass(pattern)"
+                                    data-testid="review-boost-suggestion"
+                                    data-pattern="@pattern.Pattern"
+                                    data-boosted="@pattern.IsAlreadyRegistered.ToString().ToLowerInvariant()"
+                                    disabled="@(_busy || pattern.IsAlreadyRegistered)"
+                                    @onclick="() => SelectBoostPattern(pattern.Pattern)">
+                                <span class="review-suggestion-pattern">@pattern.Pattern</span>
+                                <span class="review-suggestion-meta">@L["ReviewActions.MatchCount", pattern.MatchCount]</span>
+                                @if (pattern.State is not BoostPatternState.Available)
+                                {
+                                    <span class="review-suggestion-state" data-testid="review-boost-suggestion-state">@BuildBoostSuggestionStateLabel(pattern)</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+            <label class="review-field-label" for="review-boost-pattern">@L["ReviewActions.BoostPathPattern"]</label>
+            <div class="review-input-action">
+                <input id="review-boost-pattern"
+                       type="text"
+                       data-testid="review-boost-pattern"
+                       placeholder="@L["ReviewActions.BoostPathPatternPlaceholder"]"
+                       value="@_boostPattern"
+                       disabled="@_busy"
+                       @oninput="OnBoostPatternChanged" />
+            </div>
+            <div class="review-boost-options">
+                <label class="review-boost-field" for="review-boost-delta">
+                    <span>@L["ReviewActions.BoostDelta"]</span>
+                    <input id="review-boost-delta"
+                           type="text"
+                           data-testid="review-boost-delta"
+                           value="@_boostDelta"
+                           disabled="@_busy"
+                           @oninput="OnBoostDeltaChanged" />
+                </label>
+                <div class="review-boost-presets" data-testid="review-boost-delta-presets">
+                    @foreach (var preset in BoostRuleDeltaPresets)
+                    {
+                        <button type="button"
+                                class="toolbar-button compact secondary"
+                                data-testid="review-boost-delta-preset"
+                                disabled="@_busy"
+                                @onclick="() => SelectBoostDeltaPreset(preset)">@FormatBoostDelta(preset)</button>
+                    }
+                </div>
+                <label class="review-boost-field review-boost-reason" for="review-boost-reason">
+                    <span>@L["ReviewActions.BoostReason"]</span>
+                    <input id="review-boost-reason"
+                           type="text"
+                           data-testid="review-boost-reason"
+                           placeholder="@L["ReviewActions.BoostReasonPlaceholder"]"
+                           value="@_boostReason"
+                           disabled="@_busy"
+                           @oninput="OnBoostReasonChanged" />
+                </label>
+                <button type="button"
+                        data-testid="review-boost"
+                        class="review-button boost"
+                        disabled="@(_busy || string.IsNullOrWhiteSpace(_boostPattern))"
+                        @onclick="BoostDirectoryAsync">@L["ReviewActions.AddToBoostRules"]</button>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_boostError))
+            {
+                <p class="review-action-error" data-testid="review-boost-error">@_boostError</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_boostStatus))
+            {
+                <p class="review-action-status" data-testid="review-boost-status">@_boostStatus</p>
+            }
+        </div>
+    </details>
 </div>
 
 @code {
@@ -147,6 +244,8 @@
     [Parameter] public EventCallback<ReviewStatus> Reviewed { get; set; }
 
     private const int MaxSuggestedIgnorePatterns = 6;
+    private const string DefaultBoostRuleDeltaText = "1";
+    private static readonly double[] BoostRuleDeltaPresets = [1, 2, 3, 0.5, -1];
     private static readonly IReadOnlyList<RejectReasonPreset> RejectReasonPresets =
     [
         new("ReviewActions.Reason.OutOfScope"),
@@ -161,6 +260,13 @@
     private string _ignorePattern = string.Empty;
     private List<IgnorePatternSuggestion> _suggestedIgnorePatterns = [];
     private IReadOnlyList<string> _existingIgnorePatterns = [];
+    private string _boostPattern = string.Empty;
+    private string _boostDelta = DefaultBoostRuleDeltaText;
+    private string _boostReason = string.Empty;
+    private string? _boostError;
+    private string? _boostStatus;
+    private List<BoostPatternSuggestion> _suggestedBoostPatterns = [];
+    private IReadOnlyList<string> _existingBoostPatterns = [];
     private bool _busy;
     private bool HasArchivedReason => CurrentStatus == ReviewStatus.Archived && !string.IsNullOrWhiteSpace(CurrentReviewReason);
     private string ArchivedReason => CurrentReviewReason?.Trim() ?? string.Empty;
@@ -168,11 +274,13 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadExistingIgnorePatternsAsync();
+        await LoadExistingBoostPatternsAsync();
     }
 
     protected override void OnParametersSet()
     {
         _suggestedIgnorePatterns = BuildIgnorePatternSuggestions(FilePaths, _existingIgnorePatterns);
+        _suggestedBoostPatterns = BuildBoostPatternSuggestions(FilePaths, _existingBoostPatterns);
     }
 
     private async Task LoadExistingIgnorePatternsAsync()
@@ -203,6 +311,24 @@
     private void OnIgnorePatternChanged(ChangeEventArgs e)
         => _ignorePattern = e.Value as string ?? string.Empty;
 
+    private void OnBoostPatternChanged(ChangeEventArgs e)
+    {
+        _boostPattern = e.Value as string ?? string.Empty;
+        ClearBoostMessages();
+    }
+
+    private void OnBoostDeltaChanged(ChangeEventArgs e)
+    {
+        _boostDelta = e.Value as string ?? string.Empty;
+        ClearBoostMessages();
+    }
+
+    private void OnBoostReasonChanged(ChangeEventArgs e)
+    {
+        _boostReason = e.Value as string ?? string.Empty;
+        ClearBoostMessages();
+    }
+
     private void SelectRejectReason(string reason)
         => _rejectReason = reason;
 
@@ -216,6 +342,24 @@
         _ignorePattern = suggestion.Pattern;
     }
 
+    private void SelectBoostPattern(string pattern)
+    {
+        _boostPattern = pattern;
+        ClearBoostMessages();
+    }
+
+    private void SelectBoostDeltaPreset(double delta)
+    {
+        _boostDelta = delta.ToString("0.###", CultureInfo.CurrentCulture);
+        ClearBoostMessages();
+    }
+
+    private void ClearBoostMessages()
+    {
+        _boostError = null;
+        _boostStatus = null;
+    }
+
     private string BuildRejectReasonPresetClass(string reason)
         => string.Equals(_rejectReason, reason, StringComparison.Ordinal)
             ? "review-reason-chip active"
@@ -226,11 +370,24 @@
             ? "review-suggestion-chip already-ignored"
             : "review-suggestion-chip";
 
+    private static string BuildBoostSuggestionChipClass(BoostPatternSuggestion suggestion)
+        => suggestion.IsAlreadyRegistered
+            ? "review-suggestion-chip already-ignored"
+            : "review-suggestion-chip";
+
     private string BuildSuggestionStateLabel(IgnorePatternState state)
         => state switch
         {
             IgnorePatternState.Registered => L["ReviewActions.Suggestion.Registered"],
             IgnorePatternState.Covered => L["ReviewActions.Suggestion.Covered"],
+            _ => string.Empty,
+        };
+
+    private string BuildBoostSuggestionStateLabel(BoostPatternSuggestion suggestion)
+        => suggestion.State switch
+        {
+            BoostPatternState.Registered => L["ReviewActions.Suggestion.Registered"],
+            BoostPatternState.BroaderRule => L["ReviewActions.Suggestion.BroaderBoostRule"],
             _ => string.Empty,
         };
 
@@ -288,6 +445,58 @@
         }
     }
 
+    private async Task BoostDirectoryAsync()
+    {
+        var pattern = _boostPattern.Trim();
+        if (pattern.Length == 0 || _busy)
+        {
+            return;
+        }
+
+        if (!TryParseBoostDelta(_boostDelta, out var delta))
+        {
+            _boostError = L["Settings.BoostRules.Validation.DeltaInvalid"];
+            _boostStatus = null;
+            return;
+        }
+
+        if (!BoostRuleLimits.IsValidDelta(delta))
+        {
+            _boostError = L["Settings.BoostRules.Validation.DeltaRange", BoostRuleLimits.DeltaMin, BoostRuleLimits.DeltaMax];
+            _boostStatus = null;
+            return;
+        }
+
+        _busy = true;
+        _boostError = null;
+        _boostStatus = null;
+        try
+        {
+            var reason = string.IsNullOrWhiteSpace(_boostReason) ? null : _boostReason.Trim();
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            var added = await repo.AddBoostRuleAsync(pattern, delta, reason, CancellationToken.None);
+            if (!added)
+            {
+                _boostError = L["Settings.BoostRules.Validation.Duplicate", pattern];
+                return;
+            }
+
+            await LoadExistingBoostPatternsAsync();
+            _boostPattern = string.Empty;
+            _boostDelta = DefaultBoostRuleDeltaText;
+            _boostReason = string.Empty;
+            _boostStatus = L["ReviewActions.BoostRuleAdded", pattern];
+        }
+        catch (Exception ex)
+        {
+            _boostError = $"{L["Settings.BoostRules.AddFailed"]}: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
     private static List<IgnorePatternSuggestion> BuildIgnorePatternSuggestions(
         IReadOnlyList<string> filePaths,
         IReadOnlyList<string> existingIgnorePatterns)
@@ -311,6 +520,36 @@
                 GetIgnorePatternState(pattern, existingIgnorePatterns)))
             .Where(static suggestion => suggestion.MatchCount > 0)
             .OrderBy(static suggestion => suggestion.IsAlreadyIgnored)
+            .ThenByDescending(static suggestion => suggestion.MatchCount)
+            .ThenByDescending(static suggestion => CountPathSegments(suggestion.Pattern))
+            .ThenBy(static suggestion => suggestion.Pattern, StringComparer.Ordinal)
+            .Take(MaxSuggestedIgnorePatterns)
+            .ToList();
+    }
+
+    private static List<BoostPatternSuggestion> BuildBoostPatternSuggestions(
+        IReadOnlyList<string> filePaths,
+        IReadOnlyList<string> existingBoostPatterns)
+    {
+        var normalizedPaths = filePaths
+            .Select(NormalizePath)
+            .Where(static path => !string.IsNullOrEmpty(path))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var suggestions = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var normalized in normalizedPaths)
+        {
+            AddSuggestionsForPath(suggestions, normalized);
+        }
+
+        return suggestions
+            .Select(pattern => new BoostPatternSuggestion(
+                pattern,
+                CountMatchingPaths(pattern, normalizedPaths),
+                GetBoostPatternState(pattern, existingBoostPatterns)))
+            .Where(static suggestion => suggestion.MatchCount > 0)
+            .OrderBy(static suggestion => suggestion.IsAlreadyRegistered)
             .ThenByDescending(static suggestion => suggestion.MatchCount)
             .ThenByDescending(static suggestion => CountPathSegments(suggestion.Pattern))
             .ThenBy(static suggestion => suggestion.Pattern, StringComparer.Ordinal)
@@ -389,6 +628,78 @@
         return IgnorePatternState.Available;
     }
 
+    private static BoostPatternState GetBoostPatternState(
+        string candidatePattern,
+        IReadOnlyList<string> existingBoostPatterns)
+    {
+        var normalizedCandidate = NormalizePattern(candidatePattern);
+        if (existingBoostPatterns.Contains(normalizedCandidate, StringComparer.Ordinal))
+        {
+            return BoostPatternState.Registered;
+        }
+
+        var candidatePrefix = GetRulePrefix(normalizedCandidate);
+        if (string.IsNullOrEmpty(candidatePrefix))
+        {
+            return BoostPatternState.Available;
+        }
+
+        foreach (var existingPattern in existingBoostPatterns)
+        {
+            var existingPrefix = GetRulePrefix(existingPattern);
+            if (string.IsNullOrEmpty(existingPrefix))
+            {
+                continue;
+            }
+
+            if (candidatePrefix.StartsWith(existingPrefix + "/", StringComparison.Ordinal))
+            {
+                return BoostPatternState.BroaderRule;
+            }
+        }
+
+        return BoostPatternState.Available;
+    }
+
+    private async Task LoadExistingBoostPatternsAsync()
+    {
+        try
+        {
+            var repo = Services.GetRequiredService<IRadarRepository>();
+            var rulesTask = repo.GetBoostRulesAsync(CancellationToken.None);
+            IReadOnlyList<BoostRule> rules = rulesTask is null
+                ? Array.Empty<BoostRule>()
+                : await rulesTask;
+            _existingBoostPatterns = rules
+                .Select(static rule => NormalizePattern(rule.Pattern))
+                .Where(static pattern => !string.IsNullOrEmpty(pattern))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            _suggestedBoostPatterns = BuildBoostPatternSuggestions(FilePaths, _existingBoostPatterns);
+        }
+        catch
+        {
+            _existingBoostPatterns = [];
+        }
+    }
+
+    private static bool TryParseBoostDelta(string value, out double delta)
+        => double.TryParse(
+            value.Trim(),
+            NumberStyles.Float,
+            CultureInfo.CurrentCulture,
+            out delta)
+        || double.TryParse(
+            value.Trim(),
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out delta);
+
+    private static string FormatBoostDelta(double delta)
+        => delta > 0
+            ? string.Create(CultureInfo.CurrentCulture, $"+{delta:0.###}")
+            : delta.ToString("0.###", CultureInfo.CurrentCulture);
+
     private static string GetRulePrefix(string pattern)
         => NormalizePattern(pattern).TrimEnd('*', '/');
 
@@ -407,9 +718,21 @@
         Covered,
     }
 
+    private enum BoostPatternState
+    {
+        Available,
+        Registered,
+        BroaderRule,
+    }
+
     private sealed record IgnorePatternSuggestion(string Pattern, int MatchCount, IgnorePatternState IgnoreState)
     {
         public bool IsAlreadyIgnored => IgnoreState is not IgnorePatternState.Available;
+    }
+
+    private sealed record BoostPatternSuggestion(string Pattern, int MatchCount, BoostPatternState State)
+    {
+        public bool IsAlreadyRegistered => State is BoostPatternState.Registered;
     }
 
     private sealed record RejectReasonPreset(string ResourceKey);

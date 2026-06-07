@@ -157,6 +157,8 @@ public sealed class ReviewActionsTests : IDisposable
         Assert.Contains("Path pattern", cut.Find("[data-testid=\"review-ignore-details\"]").TextContent);
         Assert.Equal("e.g. aspnet/security/**", cut.Find("[data-testid=\"review-ignore-pattern\"]").GetAttribute("placeholder"));
         Assert.Contains("Add to ignore list", cut.Find("[data-testid=\"review-ignore\"]").TextContent);
+        Assert.Contains("Boost similar directories", cut.Find("[data-testid=\"review-boost-details\"]").TextContent);
+        Assert.Contains("Add to boost rules", cut.Find("[data-testid=\"review-boost\"]").TextContent);
     }
 
     [Fact]
@@ -311,8 +313,6 @@ public sealed class ReviewActionsTests : IDisposable
             Assert.Contains("登録済み", registered.TextContent, StringComparison.Ordinal);
         });
 
-        cut.Find("[data-pattern=\"content/copilot/concepts/**\"]").Click();
-
         Assert.Equal(string.Empty, cut.Find("[data-testid=\"review-ignore-pattern\"]").GetAttribute("value"));
     }
 
@@ -345,6 +345,165 @@ public sealed class ReviewActionsTests : IDisposable
         repo.Received(1).AddIgnoreRuleAsync("content/copilot/concepts/**", "ignore-directory", Arg.Any<CancellationToken>());
         repo.Received(1).BulkRejectByPathPrefixAsync("content/copilot/concepts", "auto-ignored", Arg.Any<CancellationToken>());
         broadcaster.Received(1).Publish();
+    }
+
+    [Fact]
+    public void Suggests_Boost_Patterns_From_Selected_Files()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, [
+                "content/copilot/concepts/billing.md",
+                "data/reusables/actions/cache.md",
+            ]));
+
+        var suggestions = cut.FindAll("[data-testid=\"review-boost-suggestion\"]")
+            .Select(static button => button.GetAttribute("data-pattern"))
+            .ToArray();
+
+        Assert.Contains("content/copilot/concepts/**", suggestions);
+        Assert.Contains("content/copilot/**", suggestions);
+        Assert.Contains("data/reusables/actions/**", suggestions);
+        Assert.Contains("data/reusables/**", suggestions);
+    }
+
+    [Fact]
+    public void Boost_Suggestions_Disable_Exact_Duplicate_But_Allow_Narrower_Rule()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<BoostRule>>([
+                new BoostRule
+                {
+                    Pattern = "content/copilot/**",
+                    Delta = 1,
+                    CreatedAt = new DateTime(2026, 5, 16, 0, 0, 0, DateTimeKind.Utc),
+                },
+            ]));
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
+
+        cut.WaitForAssertion(() =>
+        {
+            var exact = cut.FindAll("[data-testid=\"review-boost-suggestion\"]")
+                .Single(button => button.GetAttribute("data-pattern") == "content/copilot/**");
+            var narrower = cut.FindAll("[data-testid=\"review-boost-suggestion\"]")
+                .Single(button => button.GetAttribute("data-pattern") == "content/copilot/concepts/**");
+
+            Assert.Equal("true", exact.GetAttribute("data-boosted"));
+            Assert.True(exact.HasAttribute("disabled"));
+            Assert.Contains("登録済み", exact.TextContent, StringComparison.Ordinal);
+            Assert.Equal("false", narrower.GetAttribute("data-boosted"));
+            Assert.False(narrower.HasAttribute("disabled"));
+            Assert.Contains("広いルールあり", narrower.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Boost_Suggestion_Fills_Form_And_Can_Be_Submitted()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var rules = new List<BoostRule>();
+        repo.GetBoostRulesAsync(Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult<IReadOnlyList<BoostRule>>(rules.ToArray()));
+        repo.AddBoostRuleAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                rules.Add(new BoostRule
+                {
+                    Pattern = call.ArgAt<string>(0),
+                    Delta = call.ArgAt<double>(1),
+                    Reason = call.ArgAt<string?>(2),
+                    CreatedAt = new DateTime(2026, 5, 16, 0, 0, 0, DateTimeKind.Utc),
+                });
+                return Task.FromResult(true);
+            });
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(
+                cut.FindAll("[data-testid=\"review-boost-suggestion\"]"),
+                button => button.GetAttribute("data-pattern") == "content/copilot/concepts/**");
+        });
+        cut.FindAll("[data-testid=\"review-boost-suggestion\"]")
+            .Single(button => button.GetAttribute("data-pattern") == "content/copilot/concepts/**")
+            .Click();
+        cut.FindAll("[data-testid=\"review-boost-delta-preset\"]")[1].Click();
+        cut.Find("[data-testid=\"review-boost-reason\"]").Input("important docs");
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("content/copilot/concepts/**", cut.Find("[data-testid=\"review-boost-pattern\"]").GetAttribute("value"));
+            Assert.Equal("2", cut.Find("[data-testid=\"review-boost-delta\"]").GetAttribute("value"));
+        });
+
+        cut.Find("[data-testid=\"review-boost\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(
+                "content/copilot/concepts/** を今後のブースト対象に追加",
+                cut.Find("[data-testid=\"review-boost-status\"]").TextContent,
+                StringComparison.Ordinal);
+            Assert.Equal(string.Empty, cut.Find("[data-testid=\"review-boost-pattern\"]").GetAttribute("value"));
+            var added = cut.FindAll("[data-testid=\"review-boost-suggestion\"]")
+                .Single(button => button.GetAttribute("data-pattern") == "content/copilot/concepts/**");
+            Assert.Equal("true", added.GetAttribute("data-boosted"));
+        });
+        repo.Received(1).AddBoostRuleAsync("content/copilot/concepts/**", 2, "important docs", Arg.Any<CancellationToken>());
+        broadcaster.DidNotReceive().Publish();
+    }
+
+    [Fact]
+    public void Boost_Form_Validates_Delta_And_Duplicate()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        repo.AddBoostRuleAsync(Arg.Any<string>(), Arg.Any<double>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
+
+        cut.Find("[data-testid=\"review-boost-pattern\"]").Input("content/copilot/**");
+        cut.Find("[data-testid=\"review-boost-delta\"]").Input("not-a-number");
+        cut.Find("[data-testid=\"review-boost\"]").Click();
+        Assert.Contains("数値を入力", cut.Find("[data-testid=\"review-boost-error\"]").TextContent, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=\"review-boost-delta\"]").Input("5.5");
+        cut.Find("[data-testid=\"review-boost\"]").Click();
+        Assert.Contains("範囲", cut.Find("[data-testid=\"review-boost-error\"]").TextContent, StringComparison.Ordinal);
+
+        cut.Find("[data-testid=\"review-boost-delta\"]").Input("1");
+        cut.Find("[data-testid=\"review-boost\"]").Click();
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("すでに存在", cut.Find("[data-testid=\"review-boost-error\"]").TextContent, StringComparison.Ordinal);
+        });
     }
 
     [Fact]

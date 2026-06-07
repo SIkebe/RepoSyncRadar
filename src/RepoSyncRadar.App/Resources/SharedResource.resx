@@ -260,11 +260,19 @@
   <data name="Common.Triage" xml:space="preserve"><value>Triage</value></data>
   <data name="CopilotUsage.ModelUnknown" xml:space="preserve"><value>model unknown</value></data>
   <data name="ReviewActions.AddToIgnoreList" xml:space="preserve"><value>無視リストへ追加</value></data>
+  <data name="ReviewActions.AddToBoostRules" xml:space="preserve"><value>ブーストルールへ追加</value></data>
   <data name="ReviewActions.Archive" xml:space="preserve"><value>アーカイブする</value></data>
   <data name="ReviewActions.ArchivedReason" xml:space="preserve"><value>アーカイブ済みの理由</value></data>
   <data name="ReviewActions.ArchiveReason" xml:space="preserve"><value>アーカイブする理由</value></data>
   <data name="ReviewActions.ArchiveReasonPlaceholder" xml:space="preserve"><value>例: 既存情報のみ / 対象外</value></data>
   <data name="ReviewActions.Description" xml:space="preserve"><value>選択中の通知をどのキューへ移すかを決めます。</value></data>
+  <data name="ReviewActions.BoostDelta" xml:space="preserve"><value>Delta</value></data>
+  <data name="ReviewActions.BoostPathPattern" xml:space="preserve"><value>ブーストするパスパターン</value></data>
+  <data name="ReviewActions.BoostPathPatternPlaceholder" xml:space="preserve"><value>例: content/copilot/**</value></data>
+  <data name="ReviewActions.BoostReason" xml:space="preserve"><value>理由</value></data>
+  <data name="ReviewActions.BoostReasonPlaceholder" xml:space="preserve"><value>例: Copilot docs は見逃したくない</value></data>
+  <data name="ReviewActions.BoostRuleAdded" xml:space="preserve"><value>{0} を今後のブースト対象に追加しました</value></data>
+  <data name="ReviewActions.BoostSimilarDirectories" xml:space="preserve"><value>類似ディレクトリを今後ブースト</value></data>
   <data name="ReviewActions.IgnoreSimilarDirectories" xml:space="preserve"><value>類似ディレクトリをまとめて自動見送り</value></data>
   <data name="ReviewActions.Later" xml:space="preserve"><value>保留する</value></data>
   <data name="ReviewActions.MatchCount" xml:space="preserve"><value>{0} 件</value></data>
@@ -279,6 +287,7 @@
   <data name="ReviewActions.Reason.OutOfScope" xml:space="preserve"><value>対象外</value></data>
   <data name="ReviewActions.Required" xml:space="preserve"><value>必須</value></data>
   <data name="ReviewActions.Suggestion.Covered" xml:space="preserve"><value>カバー済み</value></data>
+  <data name="ReviewActions.Suggestion.BroaderBoostRule" xml:space="preserve"><value>広いルールあり</value></data>
   <data name="ReviewActions.Suggestion.Registered" xml:space="preserve"><value>登録済み</value></data>
   <data name="ReviewActions.SuggestionCount" xml:space="preserve"><value>候補 {0} 件</value></data>
   <data name="ReviewActions.Suggestions" xml:space="preserve"><value>候補</value></data>
@@ -296,7 +305,7 @@
   <data name="Settings.BoostRules.Deleted" xml:space="preserve"><value>{0} 件のブーストルールを削除しました</value></data>
   <data name="Settings.BoostRules.Delta" xml:space="preserve"><value>Delta</value></data>
   <data name="Settings.BoostRules.DeltaPresets" xml:space="preserve"><value>よく使う Delta</value></data>
-  <data name="Settings.BoostRules.Description" xml:space="preserve"><value>パスパターンに一致する変更のスコアを上げ下げします。Delta は -5.0 から +5.0 までです。</value></data>
+  <data name="Settings.BoostRules.Description" xml:space="preserve"><value>登録済みのブーストルールを確認・削除します。新しいルールは個別コミットのレビュー判断から追加します。Delta は -5.0 から +5.0 までです。</value></data>
   <data name="Settings.BoostRules.Empty" xml:space="preserve"><value>ブーストルールはまだ設定されていません。</value></data>
   <data name="Settings.BoostRules.LoadFailed" xml:space="preserve"><value>ブーストルールの読み込みに失敗しました</value></data>
   <data name="Settings.BoostRules.Pattern" xml:space="preserve"><value>パターン</value></data>

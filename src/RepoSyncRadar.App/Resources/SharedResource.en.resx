@@ -260,11 +260,19 @@
   <data name="Common.Triage" xml:space="preserve"><value>Triage</value></data>
   <data name="CopilotUsage.ModelUnknown" xml:space="preserve"><value>model unknown</value></data>
   <data name="ReviewActions.AddToIgnoreList" xml:space="preserve"><value>Add to ignore list</value></data>
+  <data name="ReviewActions.AddToBoostRules" xml:space="preserve"><value>Add to boost rules</value></data>
   <data name="ReviewActions.Archive" xml:space="preserve"><value>Archive</value></data>
   <data name="ReviewActions.ArchivedReason" xml:space="preserve"><value>Archived reason</value></data>
   <data name="ReviewActions.ArchiveReason" xml:space="preserve"><value>Reason for archiving</value></data>
   <data name="ReviewActions.ArchiveReasonPlaceholder" xml:space="preserve"><value>e.g. existing information only / out of scope</value></data>
   <data name="ReviewActions.Description" xml:space="preserve"><value>Choose which queue this notification should move to.</value></data>
+  <data name="ReviewActions.BoostDelta" xml:space="preserve"><value>Delta</value></data>
+  <data name="ReviewActions.BoostPathPattern" xml:space="preserve"><value>Path pattern to boost</value></data>
+  <data name="ReviewActions.BoostPathPatternPlaceholder" xml:space="preserve"><value>e.g. content/copilot/**</value></data>
+  <data name="ReviewActions.BoostReason" xml:space="preserve"><value>Reason</value></data>
+  <data name="ReviewActions.BoostReasonPlaceholder" xml:space="preserve"><value>e.g. Copilot docs should stay visible</value></data>
+  <data name="ReviewActions.BoostRuleAdded" xml:space="preserve"><value>Added {0} to future boost targets</value></data>
+  <data name="ReviewActions.BoostSimilarDirectories" xml:space="preserve"><value>Boost similar directories in future triage</value></data>
   <data name="ReviewActions.IgnoreSimilarDirectories" xml:space="preserve"><value>Automatically skip similar directories</value></data>
   <data name="ReviewActions.Later" xml:space="preserve"><value>Defer</value></data>
   <data name="ReviewActions.MatchCount" xml:space="preserve"><value>{0} match(es)</value></data>
@@ -279,6 +287,7 @@
   <data name="ReviewActions.Reason.OutOfScope" xml:space="preserve"><value>Out of scope</value></data>
   <data name="ReviewActions.Required" xml:space="preserve"><value>required</value></data>
   <data name="ReviewActions.Suggestion.Covered" xml:space="preserve"><value>Covered</value></data>
+  <data name="ReviewActions.Suggestion.BroaderBoostRule" xml:space="preserve"><value>Broader rule exists</value></data>
   <data name="ReviewActions.Suggestion.Registered" xml:space="preserve"><value>Registered</value></data>
   <data name="ReviewActions.SuggestionCount" xml:space="preserve"><value>{0} suggestion(s)</value></data>
   <data name="ReviewActions.Suggestions" xml:space="preserve"><value>Suggestions</value></data>
@@ -296,7 +305,7 @@
   <data name="Settings.BoostRules.Deleted" xml:space="preserve"><value>Deleted {0} boost rule(s)</value></data>
   <data name="Settings.BoostRules.Delta" xml:space="preserve"><value>Delta</value></data>
   <data name="Settings.BoostRules.DeltaPresets" xml:space="preserve"><value>Common deltas</value></data>
-  <data name="Settings.BoostRules.Description" xml:space="preserve"><value>Raise or lower scores for changes matching a path pattern. Delta must be between -5.0 and +5.0.</value></data>
+  <data name="Settings.BoostRules.Description" xml:space="preserve"><value>Review and delete registered boost rules. Add new rules from the selected commit's review decision panel. Delta must be between -5.0 and +5.0.</value></data>
   <data name="Settings.BoostRules.Empty" xml:space="preserve"><value>No boost rules have been configured yet.</value></data>
   <data name="Settings.BoostRules.LoadFailed" xml:space="preserve"><value>Failed to load boost rules</value></data>
   <data name="Settings.BoostRules.Pattern" xml:space="preserve"><value>Pattern</value></data>
