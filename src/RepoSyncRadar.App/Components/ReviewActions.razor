@@ -525,7 +525,7 @@
             .ThenByDescending(static suggestion => suggestion.MatchCount)
             .ThenByDescending(static suggestion => CountPathSegments(suggestion.Pattern))
             .ThenBy(static suggestion => suggestion.Pattern, StringComparer.Ordinal)
-            .Take(MaxSuggestedBoostPatterns)
+            .Take(MaxSuggestedIgnorePatterns)
             .ToList();
     }
 
@@ -555,7 +555,7 @@
             .ThenByDescending(static suggestion => suggestion.MatchCount)
             .ThenByDescending(static suggestion => CountPathSegments(suggestion.Pattern))
             .ThenBy(static suggestion => suggestion.Pattern, StringComparer.Ordinal)
-            .Take(MaxSuggestedIgnorePatterns)
+            .Take(MaxSuggestedBoostPatterns)
             .ToList();
     }
 
