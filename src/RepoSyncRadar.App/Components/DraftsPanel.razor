@@ -332,36 +332,45 @@
             return;
         }
 
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var drafts = await db.Drafts
-            .Where(d => d.Sha == Sha && d.Channel == state.Channel)
-            .OrderByDescending(d => d.GeneratedAt)
-            .ThenByDescending(d => d.Id)
-            .ToListAsync();
-        var nowUtc = DateTime.UtcNow;
-        var current = drafts.FirstOrDefault();
-        if (current is null)
+        try
         {
-            current = new Draft
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var drafts = await db.Drafts
+                .Where(d => d.Sha == Sha && d.Channel == state.Channel)
+                .OrderByDescending(d => d.GeneratedAt)
+                .ThenByDescending(d => d.Id)
+                .ToListAsync();
+            var nowUtc = DateTime.UtcNow;
+            var current = drafts.FirstOrDefault();
+            if (current is null)
             {
-                Sha = Sha,
-                Channel = state.Channel,
-                Posted = false,
-                GeneratedAt = nowUtc,
-            };
-            db.Drafts.Add(current);
-        }
-        else
-        {
-            current.GeneratedAt = nowUtc;
-            if (drafts.Count > 1)
-            {
-                db.Drafts.RemoveRange(drafts.Skip(1));
+                current = new Draft
+                {
+                    Sha = Sha,
+                    Channel = state.Channel,
+                    Posted = false,
+                    GeneratedAt = nowUtc,
+                };
+                db.Drafts.Add(current);
             }
+            else
+            {
+                current.GeneratedAt = nowUtc;
+                if (drafts.Count > 1)
+                {
+                    db.Drafts.RemoveRange(drafts.Skip(1));
+                }
+            }
+
+            current.Body = state.EditedBody;
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _status = $"{L["Drafts.SaveFailed"]}: {BuildFriendlyErrorMessage(ex)}";
+            return;
         }
 
-        current.Body = state.EditedBody;
-        await db.SaveChangesAsync();
         state.SavedBody = state.EditedBody;
         state.HasDraft = true;
         _confirmRegenerate = false;

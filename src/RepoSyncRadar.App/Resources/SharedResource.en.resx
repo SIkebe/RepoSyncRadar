@@ -157,6 +157,7 @@
   <data name="Drafts.Revert" xml:space="preserve"><value>Revert</value></data>
   <data name="Drafts.Reverted" xml:space="preserve"><value>Reverted {0} to the saved text.</value></data>
   <data name="Drafts.SaveBlockedEmpty" xml:space="preserve"><value>{0} is empty and cannot be saved.</value></data>
+  <data name="Drafts.SaveFailed" xml:space="preserve"><value>Save failed</value></data>
   <data name="Drafts.Saved" xml:space="preserve"><value>Saved {0}.</value></data>
   <data name="Drafts.Title" xml:space="preserve"><value>Diff Explanation and Drafts</value></data>
   <data name="Drafts.TwitterCount" xml:space="preserve"><value>X count: {0}</value></data>

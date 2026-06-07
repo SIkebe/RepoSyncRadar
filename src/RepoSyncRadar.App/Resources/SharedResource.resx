@@ -157,6 +157,7 @@
   <data name="Drafts.Revert" xml:space="preserve"><value>元に戻す</value></data>
   <data name="Drafts.Reverted" xml:space="preserve"><value>{0} の編集を保存済みの本文に戻しました。</value></data>
   <data name="Drafts.SaveBlockedEmpty" xml:space="preserve"><value>{0} は空のため保存できません。</value></data>
+  <data name="Drafts.SaveFailed" xml:space="preserve"><value>保存に失敗しました</value></data>
   <data name="Drafts.Saved" xml:space="preserve"><value>{0} を保存しました。</value></data>
   <data name="Drafts.Title" xml:space="preserve"><value>差分解説と共有文案</value></data>
   <data name="Drafts.TwitterCount" xml:space="preserve"><value>X 文字数: {0}</value></data>

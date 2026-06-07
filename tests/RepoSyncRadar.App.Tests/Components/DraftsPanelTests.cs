@@ -178,6 +178,51 @@ public sealed class DraftsPanelTests
     }
 
     [Fact]
+    public async Task Save_Shows_Friendly_Status_When_Database_Save_Fails()
+    {
+        var ct = Xunit.TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertCommitAsync("sha1", ct);
+        await using (var seed = harness.CreateDb())
+        {
+            seed.Drafts.Add(new Draft { Sha = "sha1", Channel = "twitter", Body = "old tweet", GeneratedAt = DateTime.UtcNow });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        using var ctx = new Bunit.BunitContext();
+        var clipboard = Substitute.For<IClipboard>();
+        var agent = Substitute.For<ICopilotAgent>();
+        ctx.Services
+            .AddSingleton<IDbContextFactory<RadarDbContext>>(new FailingAfterFirstContextFactory(harness.DbFactory))
+            .AddSingleton(clipboard)
+            .AddSingleton(agent)
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources");
+
+        var sp = ctx.Services.BuildServiceProvider();
+        var cut = ctx.Render<DraftsPanel>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "sha1"));
+
+        cut.WaitForAssertion(() => Assert.Equal("old tweet", TextAreaValue(cut, "twitter")));
+        cut.Find("[data-testid=\"drafts-body-twitter\"]").Input("edited tweet");
+        cut.Find("[data-testid=\"drafts-save-twitter\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[data-testid=\"drafts-status\"]").TextContent;
+            Assert.Contains("保存に失敗しました", status, StringComparison.Ordinal);
+            Assert.Contains("database locked", status, StringComparison.Ordinal);
+            Assert.Equal("edited tweet", TextAreaValue(cut, "twitter"));
+            Assert.Contains("未保存", cut.Find("[data-testid=\"drafts-dirty-twitter\"]").TextContent, StringComparison.Ordinal);
+        });
+
+        await using var verify = harness.CreateDb();
+        var draft = await verify.Drafts.AsNoTracking().SingleAsync(d => d.Sha == "sha1" && d.Channel == "twitter", ct);
+        Assert.Equal("old tweet", draft.Body);
+    }
+
+    [Fact]
     public async Task Revert_Restores_Saved_Draft_Text()
     {
         var ct = Xunit.TestContext.Current.CancellationToken;
@@ -528,4 +573,20 @@ public sealed class DraftsPanelTests
 
     private static string TextAreaValue(IRenderedComponent<DraftsPanel> cut, string channel)
         => Assert.IsAssignableFrom<IHtmlTextAreaElement>(cut.Find($"[data-testid=\"drafts-body-{channel}\"]")).Value;
+
+    private sealed class FailingAfterFirstContextFactory(IDbContextFactory<RadarDbContext> inner) : IDbContextFactory<RadarDbContext>
+    {
+        private int _createCount;
+
+        public RadarDbContext CreateDbContext()
+        {
+            _createCount++;
+            if (_createCount > 1)
+            {
+                throw new InvalidOperationException("database locked");
+            }
+
+            return inner.CreateDbContext();
+        }
+    }
 }
