@@ -182,6 +182,9 @@ public sealed class BoostRule
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>
+/// Validation bounds for score deltas used by boost rules.
+/// </summary>
 public static class BoostRuleLimits
 {
     public const double DeltaMin = -5.0;
