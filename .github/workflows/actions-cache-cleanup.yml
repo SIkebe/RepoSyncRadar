@@ -1,0 +1,37 @@
+name: Actions Cache Cleanup
+
+on:
+  pull_request:
+    types:
+      - closed
+
+permissions:
+  actions: write
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  cleanup-pr-caches:
+    name: Cleanup PR caches
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete pull request cache entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CACHE_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          $cacheIds = @(gh cache list --ref $env:CACHE_REF --limit 100 --json id --jq '.[].id')
+          if ($cacheIds.Count -eq 0) {
+            Write-Host "No cache entries found for $env:CACHE_REF."
+            exit 0
+          }
+
+          Write-Host "Deleting $($cacheIds.Count) cache entr$(if ($cacheIds.Count -eq 1) { 'y' } else { 'ies' }) for $env:CACHE_REF."
+          foreach ($cacheId in $cacheIds) {
+            gh cache delete $cacheId
+          }
