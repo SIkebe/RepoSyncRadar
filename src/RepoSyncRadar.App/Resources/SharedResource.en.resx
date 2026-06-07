@@ -102,7 +102,7 @@
   <data name="CommitDetail.CleanupInProgress" xml:space="preserve"><value>Cleaning up cache...</value></data>
   <data name="CommitDetail.CleanupRemoved" xml:space="preserve"><value>Removed {0} cached items</value></data>
   <data name="CommitDetail.ComparisonOpened" xml:space="preserve"><value>Opened {0} for parent / PR HEAD comparison</value></data>
-  <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>Detailed analysis</value></data>
+  <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>Evidence, impact, and checks</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>Select a commit.</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>Files</value></data>
   <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>Preparing local preview for {0}...</value></data>
@@ -125,6 +125,16 @@
   <data name="CommitDetail.PreviewDisabled" xml:space="preserve"><value>Preview is disabled (DocsRepository is not configured)</value></data>
   <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>Preview startup</value></data>
   <data name="CommitDetail.Score" xml:space="preserve"><value>Score</value></data>
+  <data name="CommitDetail.ScoreBand.Immediate" xml:space="preserve"><value>Review now</value></data>
+  <data name="CommitDetail.ScoreBand.Immediate.Description" xml:space="preserve"><value>0.85-1.00: new APIs, breaking changes, security, or other changes needing immediate review/share.</value></data>
+  <data name="CommitDetail.ScoreBand.Important" xml:space="preserve"><value>Important</value></data>
+  <data name="CommitDetail.ScoreBand.Important.Description" xml:space="preserve"><value>0.70-0.84: feature additions, public previews, or setup/operations/integration impact.</value></data>
+  <data name="CommitDetail.ScoreBand.LowSignal" xml:space="preserve"><value>Low signal</value></data>
+  <data name="CommitDetail.ScoreBand.LowSignal.Description" xml:space="preserve"><value>0.00-0.44: typos, link fixes, internal cleanup, or other changes usually safe to skip.</value></data>
+  <data name="CommitDetail.ScoreBand.Useful" xml:space="preserve"><value>Useful, not urgent</value></data>
+  <data name="CommitDetail.ScoreBand.Useful.Description" xml:space="preserve"><value>0.45-0.69: useful docs additions or clarifications that usually do not need urgent sharing.</value></data>
+  <data name="CommitDetail.ScoreRationale" xml:space="preserve"><value>Scoring rationale</value></data>
+  <data name="CommitDetail.ScoreRationaleMissing" xml:space="preserve"><value>No rationale was saved for this score. Future Triage runs include the score band, evidence, and impact in the rationale.</value></data>
   <data name="CommitDetail.Showing" xml:space="preserve"><value>Showing</value></data>
   <data name="CommitDetail.Starting" xml:space="preserve"><value>Starting...</value></data>
   <data name="CommitDetail.Summary" xml:space="preserve"><value>Summary</value></data>
@@ -260,11 +270,20 @@
   <data name="Common.Triage" xml:space="preserve"><value>Triage</value></data>
   <data name="CopilotUsage.ModelUnknown" xml:space="preserve"><value>model unknown</value></data>
   <data name="ReviewActions.AddToIgnoreList" xml:space="preserve"><value>Add to ignore list</value></data>
+  <data name="ReviewActions.AddToBoostRules" xml:space="preserve"><value>Add to boost rules</value></data>
   <data name="ReviewActions.Archive" xml:space="preserve"><value>Archive</value></data>
   <data name="ReviewActions.ArchivedReason" xml:space="preserve"><value>Archived reason</value></data>
   <data name="ReviewActions.ArchiveReason" xml:space="preserve"><value>Reason for archiving</value></data>
   <data name="ReviewActions.ArchiveReasonPlaceholder" xml:space="preserve"><value>e.g. existing information only / out of scope</value></data>
   <data name="ReviewActions.Description" xml:space="preserve"><value>Choose which queue this notification should move to.</value></data>
+  <data name="ReviewActions.BoostDelta" xml:space="preserve"><value>Score adjustment</value></data>
+  <data name="ReviewActions.BoostPathPattern" xml:space="preserve"><value>Path pattern to boost</value></data>
+  <data name="ReviewActions.BoostPathPatternPlaceholder" xml:space="preserve"><value>e.g. content/copilot/**</value></data>
+  <data name="ReviewActions.BoostReason" xml:space="preserve"><value>Reason</value></data>
+  <data name="ReviewActions.BoostReasonPlaceholder" xml:space="preserve"><value>e.g. Copilot docs should stay visible</value></data>
+  <data name="ReviewActions.BoostRuleAdded" xml:space="preserve"><value>Added {0} to future boost targets</value></data>
+  <data name="ReviewActions.BoostScoreAdjustmentHelp" xml:space="preserve"><value>Added to future Triage scores. +1 is a light boost, +3 is a strong boost, and -1 lowers priority slightly.</value></data>
+  <data name="ReviewActions.BoostSimilarDirectories" xml:space="preserve"><value>Boost similar directories in future triage</value></data>
   <data name="ReviewActions.IgnoreSimilarDirectories" xml:space="preserve"><value>Automatically skip similar directories</value></data>
   <data name="ReviewActions.Later" xml:space="preserve"><value>Defer</value></data>
   <data name="ReviewActions.MatchCount" xml:space="preserve"><value>{0} match(es)</value></data>
@@ -279,6 +298,7 @@
   <data name="ReviewActions.Reason.OutOfScope" xml:space="preserve"><value>Out of scope</value></data>
   <data name="ReviewActions.Required" xml:space="preserve"><value>required</value></data>
   <data name="ReviewActions.Suggestion.Covered" xml:space="preserve"><value>Covered</value></data>
+  <data name="ReviewActions.Suggestion.BroaderBoostRule" xml:space="preserve"><value>Broader rule exists</value></data>
   <data name="ReviewActions.Suggestion.Registered" xml:space="preserve"><value>Registered</value></data>
   <data name="ReviewActions.SuggestionCount" xml:space="preserve"><value>{0} suggestion(s)</value></data>
   <data name="ReviewActions.Suggestions" xml:space="preserve"><value>Suggestions</value></data>
@@ -288,8 +308,29 @@
   <data name="Settings.CopilotUsage.Empty" xml:space="preserve"><value>No Copilot SDK usage has been recorded yet.</value></data>
   <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits and Premium Request cost are shown from SDK usage events and session metrics. If the SDK does not report AI Credits, they remain unreported. Prompt text is not stored.</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>Session metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
+  <data name="Settings.BoostRules" xml:space="preserve"><value>Importance Boost Rules</value></data>
+  <data name="Settings.BoostRules.Add" xml:space="preserve"><value>Add boost rule</value></data>
+  <data name="Settings.BoostRules.Added" xml:space="preserve"><value>Added {0} to boost rules</value></data>
+  <data name="Settings.BoostRules.AddFailed" xml:space="preserve"><value>Failed to add boost rule</value></data>
+  <data name="Settings.BoostRules.DeleteFailed" xml:space="preserve"><value>Failed to delete boost rules</value></data>
+  <data name="Settings.BoostRules.Deleted" xml:space="preserve"><value>Deleted {0} boost rule(s)</value></data>
+  <data name="Settings.BoostRules.Delta" xml:space="preserve"><value>Score adjustment</value></data>
+  <data name="Settings.BoostRules.DeltaPresets" xml:space="preserve"><value>Common score adjustments</value></data>
+  <data name="Settings.BoostRules.Description" xml:space="preserve"><value>Review and delete registered boost rules. Add new rules from the selected commit's review decision panel. Score adjustment is added to future Triage scores and must be between -5.0 and +5.0.</value></data>
+  <data name="Settings.BoostRules.Empty" xml:space="preserve"><value>No boost rules have been configured yet.</value></data>
+  <data name="Settings.BoostRules.LoadFailed" xml:space="preserve"><value>Failed to load boost rules</value></data>
+  <data name="Settings.BoostRules.Pattern" xml:space="preserve"><value>Pattern</value></data>
+  <data name="Settings.BoostRules.PatternPlaceholder" xml:space="preserve"><value>Example: content/copilot/**</value></data>
+  <data name="Settings.BoostRules.PatternSuggestions" xml:space="preserve"><value>Common patterns</value></data>
+  <data name="Settings.BoostRules.Reason" xml:space="preserve"><value>Reason</value></data>
+  <data name="Settings.BoostRules.ReasonPlaceholder" xml:space="preserve"><value>Example: Copilot docs</value></data>
+  <data name="Settings.BoostRules.Refresh" xml:space="preserve"><value>Refresh boost rules</value></data>
+  <data name="Settings.BoostRules.Validation.DeltaInvalid" xml:space="preserve"><value>Enter a numeric score adjustment.</value></data>
+  <data name="Settings.BoostRules.Validation.DeltaRange" xml:space="preserve"><value>Score adjustment must be between {0} and {1}.</value></data>
+  <data name="Settings.BoostRules.Validation.Duplicate" xml:space="preserve"><value>A boost rule already exists for {0}.</value></data>
+  <data name="Settings.BoostRules.Validation.PatternRequired" xml:space="preserve"><value>Enter a pattern.</value></data>
   <data name="Settings.DefaultTheme" xml:space="preserve"><value>Default Theme</value></data>
-  <data name="Settings.Description" xml:space="preserve"><value>Review display language, app settings, automation, and licenses in focused sections.</value></data>
+  <data name="Settings.Description" xml:space="preserve"><value>Review display language, app settings, automation, rules, and licenses in focused sections.</value></data>
   <data name="Settings.DisplayLanguage" xml:space="preserve"><value>Display Language</value></data>
   <data name="Settings.DisplayLanguage.Applying" xml:space="preserve"><value>Switching display language...</value></data>
   <data name="Settings.DisplayLanguage.Saved" xml:space="preserve"><value>Display language switched to {0}.</value></data>

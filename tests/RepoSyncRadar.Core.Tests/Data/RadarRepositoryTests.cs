@@ -705,6 +705,126 @@ public sealed class RadarRepositoryTests
         Assert.Single(snapshot.IgnoreRules);
     }
 
+    [Fact]
+    public async Task AddBoostRuleAsync_Persists_New_Rule_With_CreatedAt()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+        var before = DateTime.UtcNow.AddSeconds(-1);
+
+        var added = await repository.AddBoostRuleAsync("content/copilot/**", 2.5, "important", ct);
+
+        Assert.True(added);
+        using var verify = fixture.CreateContext();
+        var rule = await verify.BoostRules.SingleAsync(ct);
+        Assert.Equal("content/copilot/**", rule.Pattern);
+        Assert.Equal(2.5, rule.Delta);
+        Assert.Equal("important", rule.Reason);
+        Assert.True(rule.CreatedAt >= before);
+        Assert.True(rule.CreatedAt <= DateTime.UtcNow.AddSeconds(1));
+    }
+
+    [Fact]
+    public async Task AddBoostRuleAsync_Returns_False_For_Duplicate_Pattern()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        var first = await repository.AddBoostRuleAsync("content/copilot/**", 2.5, "important", ct);
+        var second = await repository.AddBoostRuleAsync("content/copilot/**", -1.0, "changed", ct);
+
+        Assert.True(first);
+        Assert.False(second);
+        using var verify = fixture.CreateContext();
+        var rule = await verify.BoostRules.SingleAsync(ct);
+        Assert.Equal(2.5, rule.Delta);
+        Assert.Equal("important", rule.Reason);
+    }
+
+    [Fact]
+    public async Task GetBoostRulesAsync_Returns_Rules_Newest_First()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        using (var seed = fixture.CreateContext())
+        {
+            seed.BoostRules.AddRange(
+                new BoostRule
+                {
+                    Pattern = "data/release-notes/**",
+                    Delta = -1.25,
+                    Reason = "noisy",
+                    CreatedAt = new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Utc),
+                },
+                new BoostRule
+                {
+                    Pattern = "content/copilot/**",
+                    Delta = 3,
+                    Reason = "important",
+                    CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+                },
+                new BoostRule
+                {
+                    Pattern = "content/actions/**",
+                    Delta = 1,
+                    Reason = "same-time tie",
+                    CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+                });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var rules = await repository.GetBoostRulesAsync(ct);
+
+        Assert.Equal(["content/actions/**", "content/copilot/**", "data/release-notes/**"], rules.Select(rule => rule.Pattern).ToArray());
+        Assert.Equal(1, rules[0].Delta);
+        Assert.Equal("same-time tie", rules[0].Reason);
+    }
+
+    [Fact]
+    public async Task DeleteBoostRulesAsync_Removes_Selected_Patterns()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        using (var seed = fixture.CreateContext())
+        {
+            seed.BoostRules.AddRange(
+                new BoostRule
+                {
+                    Pattern = "data/release-notes/**",
+                    Delta = -1,
+                    CreatedAt = new DateTime(2026, 5, 13, 9, 0, 0, DateTimeKind.Utc),
+                },
+                new BoostRule
+                {
+                    Pattern = "content/copilot/**",
+                    Delta = 3,
+                    CreatedAt = new DateTime(2026, 5, 14, 9, 0, 0, DateTimeKind.Utc),
+                },
+                new BoostRule
+                {
+                    Pattern = "content/actions/**",
+                    Delta = 1,
+                    CreatedAt = new DateTime(2026, 5, 15, 9, 0, 0, DateTimeKind.Utc),
+                });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var deleted = await repository.DeleteBoostRulesAsync(
+            [" content/copilot/** ", "data/release-notes/**", "missing/**", "content/copilot/**"],
+            ct);
+
+        Assert.Equal(2, deleted);
+        var rules = await repository.GetBoostRulesAsync(ct);
+        var rule = Assert.Single(rules);
+        Assert.Equal("content/actions/**", rule.Pattern);
+    }
+
     private static Commit MakeCommit(
         string sha,
         int prNumber,

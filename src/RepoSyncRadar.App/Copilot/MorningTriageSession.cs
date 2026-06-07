@@ -54,11 +54,11 @@ public sealed partial class MorningTriageSession
 
             Output requirements for `radar_score_commit`:
             - `SummaryJa`: 1 文、60 文字以内。「何が変わったか」を具体的に書く。
-            - `WhyJa`: 1 文、80 文字以内。「なぜ見るべきか / 見送れるか」を判断向けに書く。
+            - `WhyJa`: 1 文、100 文字以内。スコア帯 (例: 0.70-0.84)・根拠・読者影響・レビュー緊急度を結び付けて、「なぜその点数か」を判断向けに書く。
             - `DetailsJa`: 次のラベルをこの順序で含める。各ラベルは 1 行、最大 90 文字程度。
               - `変更内容`: 変更の実体。ファイル名だけでなく、機能/API/設定/読者影響を書く。
-              - `根拠`: 差分またはレンダリング済み本文で確認した事実。URL やパスは必要最小限で含める。
-              - `影響`: 影響を受ける読者と、レビュー/共有/対応が必要な理由。
+              - `根拠`: 差分またはレンダリング済み本文で確認した、加点/減点に効いた事実。URL やパスは必要最小限で含める。
+              - `影響`: 影響を受ける読者と、そのスコア帯にした理由。
               - `確認観点`: ユーザーが次に見るべき具体的な確認点。未確認推測はここだけに書く。
 
             Style:
@@ -66,7 +66,7 @@ public sealed partial class MorningTriageSession
             - GitHub の product scope としての `Organization` / `Enterprise` は英語のまま書き、どちらも `組織` と訳さない。
             - 段落を長くしない。
             - 同じ内容を `SummaryJa` / `WhyJa` / `DetailsJa` で繰り返さない。
-            - 「新しい」「重要」だけで済ませず、何が誰にどう効くかを書く。
+            - 「新しい」「重要」だけで済ませず、何が誰にどう効き、なぜそのスコア帯なのかを書く。
             - 不明な場合は断定せず、`確認観点` に回す。
 
             Processing order:
@@ -316,7 +316,7 @@ public sealed partial class MorningTriageSession
 
             出力要件:
             - `SummaryJa`: 1 文、60 文字以内。
-            - `WhyJa`: 1 文、80 文字以内。
+            - `WhyJa`: 1 文、100 文字以内。スコア帯・根拠・読者影響・レビュー緊急度を結び付けて、なぜその点数かを書く。
             - `DetailsJa`: `変更内容` / `根拠` / `影響` / `確認観点` をこの順序で含める。
             - 根拠に書けるのは差分またはレンダリング済み本文で確認した事実だけ。
             - GitHub の product scope としての `Organization` / `Enterprise` は英語のまま書き、どちらも `組織` と訳さない。

@@ -36,6 +36,13 @@ public sealed class ScoringDisplayE2ETests
             SeededAppHostFixture.SeededScore.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
             scoreText,
             StringComparison.Ordinal);
+        Assert.Equal(
+            "重要",
+            (await page.Locator("[data-testid='commit-detail-score-band']").InnerTextAsync()).Trim());
+        Assert.Contains(
+            "0.70-0.84",
+            (await page.Locator("[data-testid='commit-detail-score-band-description']").InnerTextAsync()).Trim(),
+            StringComparison.Ordinal);
 
         // Category, summary, why, and detailed analysis must render verbatim.
         Assert.Equal(

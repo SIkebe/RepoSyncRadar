@@ -128,6 +128,8 @@ public sealed class MorningTriageSessionTests
         Assert.Contains("確認観点", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("SummaryJa", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("WhyJa", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("なぜその点数か", capturedPrompt, StringComparison.Ordinal);
+        Assert.Contains("スコア帯", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("最大 90 文字程度", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("0.44 以下", capturedPrompt, StringComparison.Ordinal);
         Assert.Contains("自動で見送り候補", capturedPrompt, StringComparison.Ordinal);

@@ -301,6 +301,44 @@ public sealed class WriteToolsTests
     }
 
     [Fact]
+    public async Task BoostRule_Upserts_And_Preserves_CreatedAt()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        var tools = harness.CreateTools();
+
+        var first = await tools.BoostRuleAsync(new BoostRuleArgs("content/**", Delta: 2.5, Reason: "important"), ct);
+        await using (var db = harness.CreateDb())
+        {
+            var inserted = await db.BoostRules.SingleAsync(ct);
+            Assert.Null(first.Error);
+            Assert.Equal(2.5, inserted.Delta);
+            Assert.Equal("important", inserted.Reason);
+        }
+
+        DateTime createdAt;
+        await using (var db = harness.CreateDb())
+        {
+            createdAt = await db.BoostRules
+                .Where(rule => rule.Pattern == "content/**")
+                .Select(rule => rule.CreatedAt)
+                .SingleAsync(ct);
+        }
+
+        var second = await tools.BoostRuleAsync(new BoostRuleArgs("content/**", Delta: -1.25, Reason: "lower"), ct);
+
+        Assert.Null(second.Error);
+        await using (var db = harness.CreateDb())
+        {
+            var updated = await db.BoostRules.SingleAsync(ct);
+            Assert.Equal("content/**", updated.Pattern);
+            Assert.Equal(-1.25, updated.Delta);
+            Assert.Equal("lower", updated.Reason);
+            Assert.Equal(createdAt, updated.CreatedAt);
+        }
+    }
+
+    [Fact]
     public void CreateAll_Registers_Five_Write_Tools_Without_SkipPermission()
     {
         var harness = WriteHarness.CreateLazy();

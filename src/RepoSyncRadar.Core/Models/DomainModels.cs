@@ -178,6 +178,20 @@ public sealed class BoostRule
     public double Delta { get; set; }
 
     public string? Reason { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Validation bounds for score deltas used by boost rules.
+/// </summary>
+public static class BoostRuleLimits
+{
+    public const double DeltaMin = -5.0;
+    public const double DeltaMax = 5.0;
+
+    public static bool IsValidDelta(double delta)
+        => !double.IsNaN(delta) && delta >= DeltaMin && delta <= DeltaMax;
 }
 
 /// <summary>
