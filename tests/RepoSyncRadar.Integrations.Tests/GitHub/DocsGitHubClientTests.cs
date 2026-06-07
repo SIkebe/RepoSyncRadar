@@ -61,6 +61,40 @@ public class DocsGitHubClientTests
     }
 
     [Fact]
+    public async Task EstimateTriageAsync_Counts_Matching_Prs_And_New_Commits_Without_File_Enrichment()
+    {
+        var (client, github, repo, _) = CreateClient();
+        var ct = TestContext.Current.CancellationToken;
+        repo.GetKnownShasAsync(Arg.Any<CancellationToken>())
+            .Returns((IReadOnlySet<string>)new HashSet<string>(StringComparer.Ordinal) { "sha-known" });
+        github.PullRequest.GetAllForRepository(
+            _owner, _repo, Arg.Any<PullRequestRequest>(), Arg.Any<ApiOptions>())
+            .Returns((IReadOnlyList<PullRequest>)new[]
+            {
+                MakePullRequest(1001, "Repo sync 2026-05-10"),
+                MakePullRequest(1002, "Update README"),
+                MakePullRequest(1003, "Repo sync 2026-05-11"),
+            });
+        github.PullRequest.Commits(_owner, _repo, 1001)
+            .Returns((IReadOnlyList<PullRequestCommit>)new[]
+            {
+                MakePullRequestCommit("sha-known", "old", "octocat"),
+                MakePullRequestCommit("sha-new-1", "fresh", "octocat"),
+            });
+        github.PullRequest.Commits(_owner, _repo, 1003)
+            .Returns((IReadOnlyList<PullRequestCommit>)new[]
+            {
+                MakePullRequestCommit("sha-new-2", "fresh", "octocat"),
+            });
+
+        var estimate = await client.EstimateTriageAsync(ct);
+
+        Assert.Equal(2, estimate.CandidatePullRequestCount);
+        Assert.Equal(2, estimate.NewUnseenCommitCount);
+        await github.Repository.Commit.DidNotReceive().Get(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    [Fact]
     public async Task FetchUnseenCommitsAsync_Excludes_Known_Shas()
     {
         var (client, github, repo, _) = CreateClient();

@@ -63,19 +63,23 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
         _logger = logger;
     }
 
+    public async Task<DocsGitHubTriageEstimate> EstimateTriageAsync(CancellationToken cancellationToken = default)
+    {
+        var candidates = await FetchTriageCandidatesAsync(cancellationToken).ConfigureAwait(false);
+        return new DocsGitHubTriageEstimate(candidates.CandidatePullRequestCount, candidates.UnseenCommits.Count);
+    }
+
     public async Task<IReadOnlyList<DomainCommit>> FetchUnseenCommitsAsync(CancellationToken cancellationToken = default)
+    {
+        var candidates = await FetchTriageCandidatesAsync(cancellationToken).ConfigureAwait(false);
+        return candidates.UnseenCommits;
+    }
+
+    private async Task<TriageCandidateFetchResult> FetchTriageCandidatesAsync(CancellationToken cancellationToken)
     {
         await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
 
-        var pullRequestRequest = new PullRequestRequest
-        {
-            State = ItemStateFilter.All,
-            SortProperty = _options.PullRequestCreatedAtOrAfter is null
-                ? PullRequestSort.Updated
-                : PullRequestSort.Created,
-            SortDirection = SortDirection.Descending,
-        };
-        var matchingPrs = await FetchMatchingPullRequestsAsync(pullRequestRequest, cancellationToken).ConfigureAwait(false);
+        var matchingPrs = await FetchMatchingPullRequestsAsync(BuildTriagePullRequestRequest(), cancellationToken).ConfigureAwait(false);
 
         cancellationToken.ThrowIfCancellationRequested();
         var knownShas = await _repository.GetKnownShasAsync(cancellationToken).ConfigureAwait(false);
@@ -97,7 +101,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
             }
         }
 
-        return commits;
+        return new TriageCandidateFetchResult(matchingPrs.Count, commits);
     }
 
     public async Task<IReadOnlyList<DomainCommitFile>> GetCommitFilesAsync(string sha, CancellationToken cancellationToken = default)
@@ -213,6 +217,16 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
         return matchingPrs;
     }
 
+    private PullRequestRequest BuildTriagePullRequestRequest()
+        => new()
+        {
+            State = ItemStateFilter.All,
+            SortProperty = _options.PullRequestCreatedAtOrAfter is null
+                ? PullRequestSort.Updated
+                : PullRequestSort.Created,
+            SortDirection = SortDirection.Descending,
+        };
+
     private bool IsTriageCandidate(PullRequest pr)
     {
         if (pr.Title is null
@@ -262,6 +276,10 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
             FetchedAt = fetchedAt,
         };
     }
+
+    private sealed record TriageCandidateFetchResult(
+        int CandidatePullRequestCount,
+        IReadOnlyList<DomainCommit> UnseenCommits);
 
     /// <summary>
     /// Refreshes <see cref="IGitHubClient.Connection"/> credentials with a freshly resolved

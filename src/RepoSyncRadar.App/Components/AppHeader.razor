@@ -100,10 +100,17 @@
         }
         @if (!_settingsOpen)
         {
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Primary"
+                       OnClick="OnPreflightAsync"
+                       Disabled="@(_busy || _preflightBusy)"
+                       data-testid="app-header-triage-preflight">
+                @(_preflightBusy ? L["TriagePreflight.Estimating"] : L["TriagePreflight.Button"])
+            </MudButton>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        OnClick="OnTriageAsync"
-                       Disabled="@(_busy || _state != GitHubAuthState.SignedIn)"
+                       Disabled="@(_busy || _preflightBusy || _state != GitHubAuthState.SignedIn)"
                        data-testid="app-header-sync">
                 @(_busy ? L["AppHeader.Triaging"] : L["Common.Triage"])
             </MudButton>
@@ -113,6 +120,98 @@
               style="font-size:0.8em; opacity:0.7; font-variant-numeric:tabular-nums;">v@_appVersion</span>
     </div>
     </header>
+
+    @if (!_settingsOpen && _preflightOpen)
+    {
+        <section class="triage-preflight-panel" data-testid="app-header-triage-preflight-panel">
+            <header class="triage-preflight-header">
+                <div>
+                    <h2>@L["TriagePreflight.Title"]</h2>
+                    <p>@L["TriagePreflight.Description"]</p>
+                </div>
+                <button type="button"
+                        class="toolbar-button compact secondary"
+                        data-testid="app-header-triage-preflight-close"
+                        @onclick="CloseTriagePreflight">@L["TriagePreflight.Close"]</button>
+            </header>
+
+            @if (_preflightBusy)
+            {
+                <p class="settings-muted" data-testid="app-header-triage-preflight-loading">@L["Common.Loading"]</p>
+            }
+            else if (!string.IsNullOrWhiteSpace(_preflightError))
+            {
+                <p class="settings-error" data-testid="app-header-triage-preflight-error">@_preflightError</p>
+            }
+            else if (_preflightSummary is { } preflight)
+            {
+                <div class="triage-preflight-grid" data-testid="app-header-triage-preflight-summary">
+                    <div class="triage-preflight-section" data-testid="app-header-triage-preflight-github-settings">
+                        <h3>@L["TriagePreflight.GitHubSettings"]</h3>
+                        <dl>
+                            <div><dt>@L["TriagePreflight.Repository"]</dt><dd>@preflight.GitHubSettings.Owner/@preflight.GitHubSettings.Repo</dd></div>
+                            <div><dt>@L["TriagePreflight.TitleFilter"]</dt><dd>@preflight.GitHubSettings.PullRequestTitleFilter</dd></div>
+                            <div><dt>@L["TriagePreflight.MaxPullRequests"]</dt><dd>@FormatCount(preflight.GitHubSettings.MaxPullRequests)</dd></div>
+                            <div><dt>@L["TriagePreflight.CreatedAfter"]</dt><dd>@FormatCreatedAfter(preflight.GitHubSettings.PullRequestCreatedAtOrAfter)</dd></div>
+                        </dl>
+                    </div>
+
+                    <div class="triage-preflight-section" data-testid="app-header-triage-preflight-external">
+                        <h3>@L["TriagePreflight.ExternalEstimate"]</h3>
+                        @if (preflight.GitHubEstimateStatus == TriagePreflightGitHubEstimateStatus.Succeeded)
+                        {
+                            <dl>
+                                <div><dt>@L["TriagePreflight.CandidatePullRequests"]</dt><dd data-testid="app-header-triage-preflight-candidate-prs">@FormatCount(preflight.CandidatePullRequestCount.GetValueOrDefault())</dd></div>
+                                <div><dt>@L["TriagePreflight.NewUnseenCommits"]</dt><dd data-testid="app-header-triage-preflight-new-commits">@FormatCount(preflight.NewUnseenCommitCount.GetValueOrDefault())</dd></div>
+                            </dl>
+                        }
+                        else if (preflight.GitHubEstimateStatus == TriagePreflightGitHubEstimateStatus.Skipped)
+                        {
+                            <p class="settings-muted" data-testid="app-header-triage-preflight-external-skipped">@L["TriagePreflight.ExternalSkipped"]</p>
+                        }
+                        else
+                        {
+                            <p class="settings-error" data-testid="app-header-triage-preflight-external-failed">@L["TriagePreflight.ExternalFailed", preflight.GitHubEstimateUnavailableReason ?? L["Common.Unreported"]]</p>
+                        }
+                    </div>
+
+                    <div class="triage-preflight-section" data-testid="app-header-triage-preflight-local">
+                        <h3>@L["TriagePreflight.LocalState"]</h3>
+                        <dl>
+                            <div><dt>@L["TriagePreflight.EstimatedScoringTargets"]</dt><dd data-testid="app-header-triage-preflight-scoring-targets">@L["Common.ProgressItemCount", preflight.EstimatedScoringTargetCount, preflight.PerRunScoringLimit]</dd></div>
+                            <div><dt>@L["TriagePreflight.UnscoredUnreviewed"]</dt><dd data-testid="app-header-triage-preflight-unscored">@FormatCount(preflight.UnscoredUnreviewedCommitCount)</dd></div>
+                            <div><dt>@L["TriagePreflight.IgnoreRules"]</dt><dd data-testid="app-header-triage-preflight-ignore-rules">@FormatIgnoreRuleCount(preflight)</dd></div>
+                            <div><dt>@L["TriagePreflight.ReviewCounts"]</dt><dd data-testid="app-header-triage-preflight-review-counts">@FormatReviewCounts(preflight)</dd></div>
+                        </dl>
+                    </div>
+
+                    <div class="triage-preflight-section" data-testid="app-header-triage-preflight-last-report">
+                        <h3>@L["TriagePreflight.LastTriage"]</h3>
+                        @if (_lastReport is { } lastReport)
+                        {
+                            <p>@L["AppHeader.LastTriage", lastReport.Total, lastReport.Inserted, lastReport.Skipped]</p>
+                        }
+                        else
+                        {
+                            <p class="settings-muted">@L["TriagePreflight.LastTriageEmpty"]</p>
+                        }
+                    </div>
+                </div>
+
+                <div class="triage-preflight-actions">
+                    <button type="button"
+                            class="toolbar-button primary"
+                            data-testid="app-header-triage-preflight-run"
+                            disabled="@(_busy || _preflightBusy || _state != GitHubAuthState.SignedIn)"
+                            @onclick="RunTriageFromPreflightAsync">@L["TriagePreflight.Run"]</button>
+                    <button type="button"
+                            class="toolbar-button secondary"
+                            data-testid="app-header-triage-preflight-dismiss"
+                            @onclick="CloseTriagePreflight">@L["TriagePreflight.Close"]</button>
+                </div>
+            }
+        </section>
+    }
 
     @if (_settingsOpen)
     {
@@ -371,6 +470,11 @@
 
     private GitHubAuthState _state = GitHubAuthState.NotSignedIn;
     private bool _busy;
+    private bool _preflightOpen;
+    private bool _preflightBusy;
+    private TriagePreflightSummary? _preflightSummary;
+    private string? _preflightError;
+    private CancellationTokenSource? _preflightCts;
     private IngestionReport? _lastReport;
     private string? _lastError;
     private string? _triageStatus;
@@ -521,6 +625,15 @@
 
     private async Task OnTriageAsync()
     {
+        CloseTriagePreflight();
+        await RefreshStateAsync();
+        if (_state != GitHubAuthState.SignedIn)
+        {
+            _lastError = L["TriagePreflight.SignInRequiredToRun"];
+            StateHasChanged();
+            return;
+        }
+
         _busy = true;
         _lastError = null;
         _lastReport = null;
@@ -554,6 +667,78 @@
             _busy = false;
             StopTriageTimer();
         }
+    }
+
+    private async Task OnPreflightAsync()
+    {
+        if (_preflightBusy)
+        {
+            return;
+        }
+
+        await RefreshStateAsync();
+        _preflightCts?.Cancel();
+        _preflightCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _preflightCts = cts;
+        _preflightOpen = true;
+        _preflightBusy = true;
+        _preflightSummary = null;
+        _preflightError = null;
+        StateHasChanged();
+
+        try
+        {
+            var agent = Services.GetRequiredService<ICopilotAgent>();
+            var includeGitHubEstimate = _state == GitHubAuthState.SignedIn;
+            var summary = await agent.BuildMorningTriagePreflightAsync(includeGitHubEstimate, cts.Token);
+            if (ReferenceEquals(_preflightCts, cts))
+            {
+                _preflightSummary = summary;
+            }
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            if (ReferenceEquals(_preflightCts, cts))
+            {
+                _preflightError = $"{L["TriagePreflight.Failed"]}: {ex.Message}";
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_preflightCts, cts))
+            {
+                _preflightBusy = false;
+                _preflightCts.Dispose();
+                _preflightCts = null;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async Task RunTriageFromPreflightAsync()
+    {
+        if (_state != GitHubAuthState.SignedIn || _busy || _preflightBusy)
+        {
+            return;
+        }
+
+        CloseTriagePreflight();
+        await OnTriageAsync();
+    }
+
+    private void CloseTriagePreflight()
+    {
+        _preflightCts?.Cancel();
+        _preflightCts?.Dispose();
+        _preflightCts = null;
+        _preflightBusy = false;
+        _preflightOpen = false;
+        _preflightSummary = null;
+        _preflightError = null;
     }
 
     private async Task LoadSettingsPanelAsync()
@@ -1222,6 +1407,33 @@
     private static string FormatCreatedAt(DateTime createdAt)
         => createdAt.ToLocalTime().ToString("yyyy/MM/dd HH:mm", System.Globalization.CultureInfo.CurrentCulture);
 
+    private string FormatCreatedAfter(DateTimeOffset? createdAfter)
+        => createdAfter is { } value
+            ? value.ToLocalTime().ToString("yyyy/MM/dd HH:mm zzz", System.Globalization.CultureInfo.CurrentCulture)
+            : L["TriagePreflight.NotSet"];
+
+    private string FormatIgnoreRuleCount(TriagePreflightSummary summary)
+        => summary.HasIgnoreRules
+            ? L["TriagePreflight.IgnoreRulesActive", summary.IgnoreRuleCount]
+            : L["TriagePreflight.IgnoreRulesEmpty"];
+
+    private string FormatReviewCounts(TriagePreflightSummary summary)
+    {
+        var counts = summary.ReviewCounts;
+        return string.Join(
+            L["Common.ListSeparator"],
+            [
+                L["TriagePreflight.ReviewStatus.Unseen", GetReviewCount(counts, ReviewStatus.Unseen)],
+                L["TriagePreflight.ReviewStatus.Adopted", GetReviewCount(counts, ReviewStatus.Adopted)],
+                L["TriagePreflight.ReviewStatus.Later", GetReviewCount(counts, ReviewStatus.Later)],
+                L["TriagePreflight.ReviewStatus.Rejected", GetReviewCount(counts, ReviewStatus.Rejected)],
+                L["TriagePreflight.ReviewStatus.Archived", GetReviewCount(counts, ReviewStatus.Archived)],
+            ]);
+    }
+
+    private static int GetReviewCount(IReadOnlyDictionary<ReviewStatus, int> counts, ReviewStatus status)
+        => counts.TryGetValue(status, out var count) ? count : 0;
+
     private static string FormatTokens(double tokens)
         => FormatNumber(Math.Round(tokens));
 
@@ -1335,6 +1547,7 @@
             _updateService.ActivityChanged -= OnAppUpdateActivityChanged;
         }
 
+        CloseTriagePreflight();
         StopTriageTimer();
     }
 

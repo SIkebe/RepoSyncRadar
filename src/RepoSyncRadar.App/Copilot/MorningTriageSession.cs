@@ -82,6 +82,7 @@ public sealed partial class MorningTriageSession
     private readonly ICommitIngestionService _ingestion;
     private readonly ICopilotSessionFactory _sessionFactory;
     private readonly TriageScoringProgressTracker _scoringProgress;
+    private readonly ITriagePreflightSummaryBuilder? _preflightBuilder;
     private readonly IRadarRepository? _repository;
     private readonly IReviewBroadcaster? _reviewBroadcaster;
     private readonly ILogger<MorningTriageSession> _logger;
@@ -119,7 +120,8 @@ public sealed partial class MorningTriageSession
         TriageScoringProgressTracker scoringProgress,
         IRadarRepository? repository,
         IReviewBroadcaster? reviewBroadcaster,
-        ILogger<MorningTriageSession> logger)
+        ILogger<MorningTriageSession> logger,
+        ITriagePreflightSummaryBuilder? preflightBuilder = null)
     {
         ArgumentNullException.ThrowIfNull(ingestion);
         ArgumentNullException.ThrowIfNull(sessionFactory);
@@ -129,9 +131,22 @@ public sealed partial class MorningTriageSession
         _ingestion = ingestion;
         _sessionFactory = sessionFactory;
         _scoringProgress = scoringProgress;
+        _preflightBuilder = preflightBuilder;
         _repository = repository;
         _reviewBroadcaster = reviewBroadcaster;
         _logger = logger;
+    }
+
+    public async Task<TriagePreflightSummary> BuildPreflightAsync(
+        bool includeGitHubEstimate,
+        CancellationToken cancellationToken = default)
+    {
+        if (_preflightBuilder is null)
+        {
+            throw new InvalidOperationException("Morning Triage preflight is not configured.");
+        }
+
+        return await _preflightBuilder.BuildAsync(includeGitHubEstimate, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Runs the full Morning Triage workflow. Returns the ingestion stats for status display.</summary>
@@ -207,7 +222,7 @@ public sealed partial class MorningTriageSession
             new CommitQueryFilter
             {
                 Status = ReviewStatus.Unseen,
-                Limit = 50,
+                Limit = TriagePreflightSummaryBuilder.ScoringTargetLimit,
                 UnscoredOnly = true,
             },
             cancellationToken).ConfigureAwait(false);
