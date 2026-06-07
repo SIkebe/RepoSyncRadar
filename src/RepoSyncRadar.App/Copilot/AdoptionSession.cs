@@ -8,7 +8,6 @@ using Microsoft.Extensions.Localization;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
 using RepoSyncRadar.Core.Services;
-using RepoSyncRadar.Core.Services.Preview;
 
 namespace RepoSyncRadar.App.Copilot;
 
@@ -98,7 +97,7 @@ public sealed partial class AdoptionSession
 
         var rawDiff = await _github.GetUnifiedDiffAsync(sha, cancellationToken).ConfigureAwait(false) ?? string.Empty;
         var diff = TruncateDiff(rawDiff);
-        var officialDocUrls = await LoadOfficialDocUrlsAsync(db, commit, cancellationToken).ConfigureAwait(false);
+        var officialDocUrls = await OfficialDocsUrlResolver.LoadAsync(db, commit, cancellationToken).ConfigureAwait(false);
 
         var prompt = BuildPrompt(commit, fewShot.Select(x => (x.Sha, x.Message)), diff, officialDocUrls);
         LogPromptBuilt(_logger, sha, prompt.Length);
@@ -269,7 +268,7 @@ public sealed partial class AdoptionSession
         sb.AppendLine("## 公式ドキュメント URL");
         var urls = officialDocUrls is { Count: > 0 }
             ? officialDocUrls
-            : BuildFallbackOfficialDocUrls(commit);
+            : OfficialDocsUrlResolver.BuildFallbackUrls(commit);
         foreach (var url in urls)
         {
             sb.Append(CultureInfo.InvariantCulture, $"- {url}").AppendLine();
@@ -323,97 +322,6 @@ public sealed partial class AdoptionSession
             return draft;
         }
         return draft.TrimEnd() + Environment.NewLine + url;
-    }
-
-    private static async Task<IReadOnlyList<string>> LoadOfficialDocUrlsAsync(
-        RadarDbContext db,
-        Commit commit,
-        CancellationToken cancellationToken)
-    {
-        var paths = commit.Files
-            .Select(static file => file.Path)
-            .Where(static path => !string.IsNullOrWhiteSpace(path))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        if (paths.Length == 0)
-        {
-            return [];
-        }
-
-        var mapped = await db.PathUrlMaps
-            .AsNoTracking()
-            .Where(map => paths.Contains(map.Path))
-            .OrderByDescending(map => map.Language == "ja")
-            .ThenByDescending(map => map.Version == "fpt")
-            .ThenBy(map => map.Path)
-            .Select(map => map.Url)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        var urls = mapped
-            .Concat(BuildFallbackOfficialDocUrls(commit))
-            .Select(ToAbsoluteDocsUrl)
-            .Where(static url => !string.IsNullOrWhiteSpace(url))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(5)
-            .ToArray();
-        return urls;
-    }
-
-    private static string[] BuildFallbackOfficialDocUrls(Commit commit)
-        => commit.Files
-            .Select(static file => TryBuildFallbackOfficialDocUrl(file.Path))
-            .Where(static url => !string.IsNullOrWhiteSpace(url))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(5)
-            .ToArray();
-
-    private static string TryBuildFallbackOfficialDocUrl(string path)
-    {
-        var route = PreviewPathMapper.Map(path, "en");
-        return route is null ? string.Empty : "https://docs.github.com" + route;
-    }
-
-    private static string ToAbsoluteDocsUrl(string url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-        {
-            return string.Empty;
-        }
-
-        var trimmed = url.Trim();
-        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var absolute))
-        {
-            return string.Equals(absolute.Host, "docs.github.com", StringComparison.OrdinalIgnoreCase)
-                ? NormalizeDocsUri(absolute)
-                : string.Empty;
-        }
-        if (trimmed.StartsWith('/'))
-        {
-            return Uri.TryCreate(new Uri("https://docs.github.com"), trimmed, out var relative)
-                ? NormalizeDocsUri(relative)
-                : string.Empty;
-        }
-        return string.Empty;
-    }
-
-    private static string NormalizeDocsUri(Uri uri)
-    {
-        var path = uri.AbsolutePath;
-        if (path.EndsWith("/index", StringComparison.OrdinalIgnoreCase))
-        {
-            path = path[..^"/index".Length];
-            if (path.Length == 0)
-            {
-                path = "/";
-            }
-        }
-
-        var builder = new UriBuilder(uri)
-        {
-            Path = path,
-        };
-        return builder.Uri.AbsoluteUri;
     }
 
     private static async Task<DraftBundle> ParseOrRepairBundleAsync(
