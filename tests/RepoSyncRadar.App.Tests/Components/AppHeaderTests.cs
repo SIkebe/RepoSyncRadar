@@ -305,6 +305,43 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Triage_GenericFailure_Renders_Digest_With_Last_Reported_Stage()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var sp = BuildServices(session, out var agent, out var broadcaster);
+        agent
+            .RunMorningTriageWithResultAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                call.Arg<IProgress<string>?>()?.Report("Copilot セッションを準備しています…");
+                return Task.FromException<TriageRunResult>(new InvalidOperationException("network down"));
+            });
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains("failed", cut.Find("[data-testid=\"triage-digest-title\"]").TextContent, StringComparison.Ordinal);
+            Assert.Contains("network down", cut.Find("[data-testid=\"triage-digest-summary\"]").TextContent, StringComparison.Ordinal);
+            var stage = cut.Find("[data-testid=\"triage-digest-stage\"]").TextContent;
+            Assert.Contains("Copilot セッションを準備", stage, StringComparison.Ordinal);
+            Assert.DoesNotContain("失敗", stage, StringComparison.Ordinal);
+        });
+        broadcaster.DidNotReceive().Publish();
+    }
+
+    [Fact]
     public void Triage_Progress_Is_Rendered_While_Agent_Is_Running()
     {
         var session = Substitute.For<IGitHubAuthSession>();

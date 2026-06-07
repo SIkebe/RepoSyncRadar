@@ -556,15 +556,21 @@
         _triageStartedAt = DateTimeOffset.UtcNow;
         _triageElapsed = TimeSpan.Zero;
         _triageStatus = L["AppHeader.TriageStarting"];
+        string? lastOperationalStage = _triageStatus;
         StartTriageTimer();
         StateHasChanged();
         try
         {
             var agent = Services.GetRequiredService<ICopilotAgent>();
-            var progress = new Progress<string>(message =>
+            IProgress<string> uiProgress = new Progress<string>(message =>
             {
                 _triageStatus = message;
                 _ = InvokeAsync(StateHasChanged);
+            });
+            var progress = new TriageStatusProgress(message =>
+            {
+                lastOperationalStage = message;
+                uiProgress.Report(message);
             });
             var usageBefore = _usageTracker?.GetSnapshot() ?? EmptyCopilotUsage;
             var result = await RunTriageAgentAsync(agent, progress, CancellationToken.None);
@@ -588,7 +594,7 @@
         {
             _lastError = $"{L["AppHeader.TriageFailed"]}: {ex.Message}";
             _triageStatus = L["AppHeader.TriageFailedStatus"];
-            _triageDigest = BuildFailureDigest(_lastReport, [], copilotSessionStarted: false, _triageStatus, ex.Message);
+            _triageDigest = BuildFailureDigest(_lastReport, [], copilotSessionStarted: false, lastOperationalStage, ex.Message);
         }
         finally
         {
@@ -1609,6 +1615,19 @@
         double InputTokens,
         double OutputTokens,
         double ReasoningTokens);
+
+    private sealed class TriageStatusProgress : IProgress<string>
+    {
+        private readonly Action<string> _report;
+
+        public TriageStatusProgress(Action<string> report)
+        {
+            _report = report;
+        }
+
+        public void Report(string value)
+            => _report(value);
+    }
 
     public void Dispose()
     {
