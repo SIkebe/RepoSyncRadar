@@ -318,6 +318,9 @@ public sealed class RadarToolsTests
     {
         public string Diff { get; set; } = string.Empty;
 
+        public Task<DocsGitHubTriageEstimate> EstimateTriageAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult(new DocsGitHubTriageEstimate(0, 0));
+
         public Task<IReadOnlyList<Commit>> FetchUnseenCommitsAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<Commit>>(Array.Empty<Commit>());
 

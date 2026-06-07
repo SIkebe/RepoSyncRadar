@@ -18,6 +18,39 @@
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage 失敗</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage は失敗しました。詳細はエラーを確認してください。</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Triage を開始しています…</value></data>
+  <data name="TriagePreflight.Button" xml:space="preserve"><value>見積もり</value></data>
+  <data name="TriagePreflight.CandidatePullRequests" xml:space="preserve"><value>候補 PR</value></data>
+  <data name="TriagePreflight.Close" xml:space="preserve"><value>閉じる</value></data>
+  <data name="TriagePreflight.CreatedAfter" xml:space="preserve"><value>作成日時の下限</value></data>
+  <data name="TriagePreflight.Description" xml:space="preserve"><value>Copilot 採点を始める前に、GitHub とローカル DB の Triage 対象を確認します。</value></data>
+  <data name="TriagePreflight.EstimatedScoringTargets" xml:space="preserve"><value>採点見込み</value></data>
+  <data name="TriagePreflight.Estimating" xml:space="preserve"><value>見積もり中…</value></data>
+  <data name="TriagePreflight.ExternalEstimate" xml:space="preserve"><value>GitHub 見積もり</value></data>
+  <data name="TriagePreflight.ExternalFailed" xml:space="preserve"><value>GitHub 見積もりを取得できません: {0}</value></data>
+  <data name="TriagePreflight.ExternalSkipped" xml:space="preserve"><value>候補 PR と新規コミットの見積もりにはサインインが必要です。ローカル件数は下に表示しています。</value></data>
+  <data name="TriagePreflight.Failed" xml:space="preserve"><value>事前見積もり失敗</value></data>
+  <data name="TriagePreflight.GitHubSettings" xml:space="preserve"><value>GitHub クエリ</value></data>
+  <data name="TriagePreflight.IgnoreRules" xml:space="preserve"><value>Ignore ルール</value></data>
+  <data name="TriagePreflight.IgnoreRulesActive" xml:space="preserve"><value>{0} 件設定済み</value></data>
+  <data name="TriagePreflight.IgnoreRulesEmpty" xml:space="preserve"><value>未設定</value></data>
+  <data name="TriagePreflight.LastTriage" xml:space="preserve"><value>このセッションの直近 Triage</value></data>
+  <data name="TriagePreflight.LastTriageEmpty" xml:space="preserve"><value>このアプリセッションではまだ Triage が完了していません。</value></data>
+  <data name="TriagePreflight.LocalState" xml:space="preserve"><value>ローカル状態</value></data>
+  <data name="TriagePreflight.MaxPullRequests" xml:space="preserve"><value>最大 PR 数</value></data>
+  <data name="TriagePreflight.NewUnseenCommits" xml:space="preserve"><value>新規未取り込みコミット</value></data>
+  <data name="TriagePreflight.NotSet" xml:space="preserve"><value>未設定</value></data>
+  <data name="TriagePreflight.Repository" xml:space="preserve"><value>リポジトリ</value></data>
+  <data name="TriagePreflight.ReviewCounts" xml:space="preserve"><value>レビュー状態</value></data>
+  <data name="TriagePreflight.ReviewStatus.Adopted" xml:space="preserve"><value>採用 {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Archived" xml:space="preserve"><value>アーカイブ {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Later" xml:space="preserve"><value>後で {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Rejected" xml:space="preserve"><value>見送り {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Unseen" xml:space="preserve"><value>未確認 {0}</value></data>
+  <data name="TriagePreflight.Run" xml:space="preserve"><value>Triage を実行</value></data>
+  <data name="TriagePreflight.SignInRequiredToRun" xml:space="preserve"><value>Triage を実行するにはサインインしてください。</value></data>
+  <data name="TriagePreflight.Title" xml:space="preserve"><value>Morning Triage 事前見積もり</value></data>
+  <data name="TriagePreflight.TitleFilter" xml:space="preserve"><value>タイトル条件</value></data>
+  <data name="TriagePreflight.UnscoredUnreviewed" xml:space="preserve"><value>DB 内の未スコア未確認</value></data>
   <data name="AppHeader.Update.CheckButton" xml:space="preserve"><value>アップデートを確認</value></data>
   <data name="AppHeader.Update.CheckFailed" xml:space="preserve"><value>アップデート確認に失敗しました。</value></data>
   <data name="AppHeader.Update.CheckFailedWithMessage" xml:space="preserve"><value>アップデート確認に失敗しました: {0}</value></data>

@@ -12,6 +12,12 @@ namespace RepoSyncRadar.Core.Services;
 public interface IDocsGitHubClient
 {
     /// <summary>
+    /// Estimates the Repo sync PRs and new commits that the next triage ingestion would consider.
+    /// This method is read-only: it does not fetch per-commit file metadata or write to the local DB.
+    /// </summary>
+    Task<DocsGitHubTriageEstimate> EstimateTriageAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Lists the most recent <c>Repo sync</c> PRs that have not yet been mirrored to the local store.
     /// The returned <see cref="Commit"/>s have an empty <see cref="Commit.Files"/> list; callers that
     /// need per-file metadata must call <see cref="GetCommitFilesAsync"/> explicitly.
@@ -34,3 +40,5 @@ public interface IDocsGitHubClient
     /// </summary>
     Task<string> GetFileContentAsync(string path, string gitRef, CancellationToken cancellationToken = default);
 }
+
+public sealed record DocsGitHubTriageEstimate(int CandidatePullRequestCount, int NewUnseenCommitCount);

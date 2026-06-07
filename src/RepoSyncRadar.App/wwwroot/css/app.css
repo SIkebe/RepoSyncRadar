@@ -171,6 +171,75 @@ html, body {
     overflow-wrap: anywhere;
 }
 
+.triage-preflight-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--radar-border-subtle);
+}
+
+.triage-preflight-header,
+.triage-preflight-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.triage-preflight-header h2,
+.triage-preflight-section h3 {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.triage-preflight-header p,
+.triage-preflight-section p {
+    margin: 0.15rem 0 0;
+}
+
+.triage-preflight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 0.65rem;
+}
+
+.triage-preflight-section {
+    border: 1px solid var(--radar-border-subtle);
+    border-radius: 6px;
+    background: var(--radar-panel-alt-bg);
+    padding: 0.65rem;
+}
+
+.triage-preflight-section dl {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0.45rem 0 0;
+}
+
+.triage-preflight-section dl > div {
+    display: grid;
+    grid-template-columns: minmax(7rem, auto) 1fr;
+    gap: 0.5rem;
+    align-items: baseline;
+}
+
+.triage-preflight-section dt {
+    color: var(--radar-muted-fg);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.triage-preflight-section dd {
+    margin: 0;
+    color: var(--radar-fg);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
 .radar-sidebar {
     display: flex;
     flex-direction: column;

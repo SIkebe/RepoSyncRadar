@@ -18,6 +18,39 @@
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage failed</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage failed. Check the error details.</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Starting triage...</value></data>
+  <data name="TriagePreflight.Button" xml:space="preserve"><value>Estimate</value></data>
+  <data name="TriagePreflight.CandidatePullRequests" xml:space="preserve"><value>Candidate PRs</value></data>
+  <data name="TriagePreflight.Close" xml:space="preserve"><value>Close</value></data>
+  <data name="TriagePreflight.CreatedAfter" xml:space="preserve"><value>Created after</value></data>
+  <data name="TriagePreflight.Description" xml:space="preserve"><value>Review the likely GitHub and local triage workload before starting Copilot scoring.</value></data>
+  <data name="TriagePreflight.EstimatedScoringTargets" xml:space="preserve"><value>Likely scoring targets</value></data>
+  <data name="TriagePreflight.Estimating" xml:space="preserve"><value>Estimating...</value></data>
+  <data name="TriagePreflight.ExternalEstimate" xml:space="preserve"><value>GitHub estimate</value></data>
+  <data name="TriagePreflight.ExternalFailed" xml:space="preserve"><value>GitHub estimate unavailable: {0}</value></data>
+  <data name="TriagePreflight.ExternalSkipped" xml:space="preserve"><value>Sign in to estimate candidate PRs and new commits. Local counts are shown below.</value></data>
+  <data name="TriagePreflight.Failed" xml:space="preserve"><value>Preflight failed</value></data>
+  <data name="TriagePreflight.GitHubSettings" xml:space="preserve"><value>GitHub query</value></data>
+  <data name="TriagePreflight.IgnoreRules" xml:space="preserve"><value>Ignore rules</value></data>
+  <data name="TriagePreflight.IgnoreRulesActive" xml:space="preserve"><value>{0} configured</value></data>
+  <data name="TriagePreflight.IgnoreRulesEmpty" xml:space="preserve"><value>None configured</value></data>
+  <data name="TriagePreflight.LastTriage" xml:space="preserve"><value>Last triage in this session</value></data>
+  <data name="TriagePreflight.LastTriageEmpty" xml:space="preserve"><value>No triage has completed in this app session.</value></data>
+  <data name="TriagePreflight.LocalState" xml:space="preserve"><value>Local state</value></data>
+  <data name="TriagePreflight.MaxPullRequests" xml:space="preserve"><value>Max PRs</value></data>
+  <data name="TriagePreflight.NewUnseenCommits" xml:space="preserve"><value>New untracked commits</value></data>
+  <data name="TriagePreflight.NotSet" xml:space="preserve"><value>Not set</value></data>
+  <data name="TriagePreflight.Repository" xml:space="preserve"><value>Repository</value></data>
+  <data name="TriagePreflight.ReviewCounts" xml:space="preserve"><value>Review counts</value></data>
+  <data name="TriagePreflight.ReviewStatus.Adopted" xml:space="preserve"><value>Adopted {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Archived" xml:space="preserve"><value>Archived {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Later" xml:space="preserve"><value>Later {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Rejected" xml:space="preserve"><value>Rejected {0}</value></data>
+  <data name="TriagePreflight.ReviewStatus.Unseen" xml:space="preserve"><value>Unseen {0}</value></data>
+  <data name="TriagePreflight.Run" xml:space="preserve"><value>Run Triage</value></data>
+  <data name="TriagePreflight.SignInRequiredToRun" xml:space="preserve"><value>Sign in before running Triage.</value></data>
+  <data name="TriagePreflight.Title" xml:space="preserve"><value>Morning Triage preflight</value></data>
+  <data name="TriagePreflight.TitleFilter" xml:space="preserve"><value>Title filter</value></data>
+  <data name="TriagePreflight.UnscoredUnreviewed" xml:space="preserve"><value>Unscored unseen in DB</value></data>
   <data name="AppHeader.Update.CheckButton" xml:space="preserve"><value>Check for updates</value></data>
   <data name="AppHeader.Update.CheckFailed" xml:space="preserve"><value>Update check failed.</value></data>
   <data name="AppHeader.Update.CheckFailedWithMessage" xml:space="preserve"><value>Update check failed: {0}</value></data>
