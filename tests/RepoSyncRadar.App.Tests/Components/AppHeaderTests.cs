@@ -476,7 +476,7 @@ public sealed class AppHeaderTests
 
         cut.WaitForAssertion(() =>
         {
-            Assert.Equal("page", cut.Find("[data-testid=\"settings-section-nav-general\"]").GetAttribute("aria-current"));
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-section-nav-general\"]").GetAttribute("aria-current"));
             Assert.NotNull(cut.Find("[data-testid=\"settings-display-language-section\"]"));
             Assert.NotNull(cut.Find("[data-testid=\"settings-default-theme-section\"]"));
             Assert.Empty(cut.FindAll("[data-testid=\"settings-local-appsettings\"]"));
@@ -494,7 +494,7 @@ public sealed class AppHeaderTests
         SelectSettingsSection(cut, "settings-section-nav-legal-about");
         cut.WaitForAssertion(() =>
         {
-            Assert.Equal("page", cut.Find("[data-testid=\"settings-section-nav-legal-about\"]").GetAttribute("aria-current"));
+            Assert.Equal("true", cut.Find("[data-testid=\"settings-section-nav-legal-about\"]").GetAttribute("aria-current"));
             Assert.NotNull(cut.Find("[data-testid=\"settings-third-party-notices\"]"));
             Assert.NotEmpty(cut.FindAll("[data-testid=\"settings-third-party-license-text\"]"));
         });

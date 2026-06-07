@@ -1310,7 +1310,7 @@
             : "settings-section-nav-button";
 
     private string? BuildSettingsSectionAriaCurrent(SettingsSection section)
-        => _activeSettingsSection == section ? "page" : null;
+        => _activeSettingsSection == section ? "true" : null;
 
     private static string GetDisplayCultureLabel(string cultureName)
         => AppDisplayCulture.SupportedCultures.FirstOrDefault(
