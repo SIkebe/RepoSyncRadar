@@ -2378,6 +2378,7 @@ html, body {
 .radar-theme-dark .review-button:focus-visible,
 .radar-theme-dark .review-reason-chip:focus-visible,
 .radar-theme-dark .review-suggestion-chip:focus-visible,
+.radar-theme-dark .settings-section-nav-button:focus-visible,
 .radar-theme-dark .settings-theme-option:focus-visible,
 .radar-theme-dark .radar-commit-detail .file-row .open-in-webview:focus-visible,
 .radar-theme-dark .preview-cancel:focus-visible {
