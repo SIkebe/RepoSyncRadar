@@ -51,6 +51,14 @@ public interface IRadarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns the selected commit and the supporting rows needed to render its decision history.
+    /// This keeps the list query lightweight while loading draft and review-history details on demand.
+    /// </summary>
+    Task<CommitHistorySnapshot?> GetCommitHistoryAsync(
+        string sha,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Deletes the selected commits from the local store only when they are still considered
     /// <see cref="ReviewStatus.Unseen"/>. Removing the commit also cascades local scoring,
     /// review, file, and draft rows so a later triage run can ingest and score it again.

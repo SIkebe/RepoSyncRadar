@@ -158,6 +158,10 @@ public sealed class RadarRepositoryTests
         var review = await verify.Reviews.SingleAsync(r => r.Sha == ignored.Sha, ct);
         Assert.Equal(ReviewStatus.Rejected, review.Status);
         Assert.Equal("auto-ignored", review.Reason);
+        var history = await verify.ReviewHistories.SingleAsync(h => h.Sha == ignored.Sha, ct);
+        Assert.Equal(ReviewStatus.Rejected, history.Status);
+        Assert.Equal("auto-ignored", history.Reason);
+        Assert.Equal(ReviewHistorySources.AutoIgnore, history.Source);
         Assert.False(await verify.Reviews.AnyAsync(r => r.Sha == visible.Sha, ct));
     }
 
@@ -221,6 +225,52 @@ public sealed class RadarRepositoryTests
         var review = verify.Reviews.Single(r => r.Sha == "sha-a");
         Assert.Equal(ReviewStatus.Archived, review.Status);
         Assert.Equal("off-topic", review.Reason);
+    }
+
+    [Fact]
+    public async Task SetReviewAsync_Appends_History_When_Decision_Changes()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        await repository.UpsertCommitsAsync(
+            new[] { MakeCommit("sha-a", prNumber: 1) },
+            ct);
+
+        await repository.SetReviewAsync("sha-a", ReviewStatus.Adopted, null, ct);
+        await repository.SetReviewAsync("sha-a", ReviewStatus.Archived, "off-topic", ct);
+
+        using var verify = fixture.CreateContext();
+        var history = verify.ReviewHistories
+            .Where(h => h.Sha == "sha-a")
+            .OrderBy(h => h.Id)
+            .ToArray();
+
+        Assert.Equal(2, history.Length);
+        Assert.Equal(ReviewStatus.Adopted, history[0].Status);
+        Assert.Equal(ReviewStatus.Archived, history[1].Status);
+        Assert.Equal("off-topic", history[1].Reason);
+        Assert.Equal(ReviewHistorySources.User, history[1].Source);
+    }
+
+    [Fact]
+    public async Task SetReviewAsync_Does_Not_Duplicate_Unchanged_History()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        await repository.UpsertCommitsAsync(
+            new[] { MakeCommit("sha-a", prNumber: 1) },
+            ct);
+
+        await repository.SetReviewAsync("sha-a", ReviewStatus.Later, null, ct);
+        await repository.SetReviewAsync("sha-a", ReviewStatus.Later, null, ct);
+
+        using var verify = fixture.CreateContext();
+        var history = Assert.Single(verify.ReviewHistories.Where(h => h.Sha == "sha-a"));
+        Assert.Equal(ReviewStatus.Later, history.Status);
     }
 
     [Fact]
@@ -563,6 +613,96 @@ public sealed class RadarRepositoryTests
         var rules = await repository.GetIgnoreRulesAsync(ct);
         var rule = Assert.Single(rules);
         Assert.Equal("content/actions/**", rule.Pattern);
+    }
+
+    [Fact]
+    public async Task BulkRejectByPathPrefixAsync_Appends_History_For_Changed_Commits()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        var matching = MakeCommit("sha-match", prNumber: 1);
+        matching.Files.Add(new CommitFile
+        {
+            Sha = matching.Sha,
+            Path = "content/copilot/concepts/billing.md",
+            Status = "modified",
+            Additions = 1,
+            Deletions = 0,
+        });
+        var other = MakeCommit("sha-other", prNumber: 1);
+        other.Files.Add(new CommitFile
+        {
+            Sha = other.Sha,
+            Path = "content/actions/reference.md",
+            Status = "modified",
+            Additions = 1,
+            Deletions = 0,
+        });
+        await repository.UpsertCommitsAsync([matching, other], ct);
+
+        var changed = await repository.BulkRejectByPathPrefixAsync(
+            "content/copilot/concepts/",
+            "auto-ignored",
+            ct);
+
+        Assert.Equal(1, changed);
+        using var verify = fixture.CreateContext();
+        var history = Assert.Single(verify.ReviewHistories.Where(h => h.Sha == matching.Sha));
+        Assert.Equal(ReviewStatus.Rejected, history.Status);
+        Assert.Equal("auto-ignored", history.Reason);
+        Assert.Equal(ReviewHistorySources.BulkIgnore, history.Source);
+        Assert.Empty(verify.ReviewHistories.Where(h => h.Sha == other.Sha));
+    }
+
+    [Fact]
+    public async Task GetCommitHistoryAsync_Loads_Selected_History_Data()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        var fetchedAt = new DateTime(2026, 5, 13, 12, 0, 0, DateTimeKind.Utc);
+        await repository.UpsertCommitsAsync(
+            new[] { MakeCommit("sha-history", prNumber: 1, fetchedAt: fetchedAt) },
+            ct);
+        await repository.SetReviewAsync("sha-history", ReviewStatus.Archived, "off-topic", ct);
+        using (var seed = fixture.CreateContext())
+        {
+            seed.Scorings.Add(new Scoring
+            {
+                Sha = "sha-history",
+                Score = 0.82,
+                Category = "feature-update",
+                AudienceJson = "[]",
+                SummaryJa = "summary",
+                WhyJa = "why",
+                Model = "gpt-5",
+                PromptHash = "abc123",
+                ScoredAt = fetchedAt.AddMinutes(5),
+            });
+            seed.Drafts.AddRange(
+                new Draft { Sha = "sha-history", Channel = "twitter", Body = "tw", GeneratedAt = fetchedAt.AddMinutes(10) },
+                new Draft { Sha = "sha-history", Channel = "teams", Body = "legacy", GeneratedAt = fetchedAt.AddMinutes(11) },
+                new Draft { Sha = "sha-history", Channel = "customer", Body = "cu", GeneratedAt = fetchedAt.AddMinutes(12) });
+            seed.IgnoreRules.Add(new IgnoreRule
+            {
+                Pattern = "content/copilot/**",
+                Reason = "ignore-directory",
+                CreatedAt = fetchedAt.AddMinutes(3),
+            });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var snapshot = await repository.GetCommitHistoryAsync("sha-history", ct);
+
+        Assert.NotNull(snapshot);
+        Assert.Equal("sha-history", snapshot!.Commit?.Sha);
+        Assert.NotNull(snapshot.Commit?.Scoring);
+        Assert.Single(snapshot.ReviewHistory);
+        Assert.Equal(["twitter", "customer"], snapshot.Drafts.Select(static draft => draft.Channel).ToArray());
+        Assert.Single(snapshot.IgnoreRules);
     }
 
     private static Commit MakeCommit(

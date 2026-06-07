@@ -10,6 +10,8 @@ namespace RepoSyncRadar.Core.Data;
 /// </summary>
 public sealed class RadarRepository : IRadarRepository
 {
+    private static readonly string[] DisplayedDraftChannels = ["explanation", "twitter", "customer"];
+
     private readonly IDbContextFactory<RadarDbContext> _contextFactory;
 
     public RadarRepository(IDbContextFactory<RadarDbContext> contextFactory)
@@ -107,12 +109,21 @@ public sealed class RadarRepository : IRadarRepository
             inserted.Add(commit.Sha);
             if (MatchesIgnoreRule(commit, ignoreRules))
             {
+                var reviewedAt = now;
                 db.Reviews.Add(new Review
                 {
                     Sha = commit.Sha,
                     Status = ReviewStatus.Rejected,
                     Reason = "auto-ignored",
-                    ReviewedAt = now,
+                    ReviewedAt = reviewedAt,
+                });
+                db.ReviewHistories.Add(new ReviewHistory
+                {
+                    Sha = commit.Sha,
+                    Status = ReviewStatus.Rejected,
+                    Reason = "auto-ignored",
+                    ChangedAt = reviewedAt,
+                    Source = ReviewHistorySources.AutoIgnore,
                 });
             }
         }
@@ -177,8 +188,61 @@ public sealed class RadarRepository : IRadarRepository
             review.Reason = reason;
             review.ReviewedAt = now;
         }
+        await AppendReviewHistoryIfChangedAsync(
+                db,
+                sha,
+                status,
+                reason,
+                now,
+                ReviewHistorySources.User,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CommitHistorySnapshot?> GetCommitHistoryAsync(
+        string sha,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(sha);
+
+        using var db = _contextFactory.CreateDbContext();
+        var commit = await db.Commits
+            .AsNoTracking()
+            .Include(c => c.Files)
+            .Include(c => c.Review)
+            .Include(c => c.Scoring)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(c => c.Sha == sha, cancellationToken)
+            .ConfigureAwait(false);
+        if (commit is null)
+        {
+            return null;
+        }
+
+        var history = await db.ReviewHistories
+            .AsNoTracking()
+            .Where(h => h.Sha == sha)
+            .OrderBy(h => h.ChangedAt)
+            .ThenBy(h => h.Id)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var drafts = await db.Drafts
+            .AsNoTracking()
+            .Where(d => d.Sha == sha && DisplayedDraftChannels.Contains(d.Channel))
+            .OrderBy(d => d.GeneratedAt)
+            .ThenBy(d => d.Channel)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var ignoreRules = await db.IgnoreRules
+            .AsNoTracking()
+            .OrderByDescending(rule => rule.CreatedAt)
+            .ThenBy(rule => rule.Pattern)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        return new CommitHistorySnapshot(commit, history, drafts, ignoreRules);
     }
 
     public async Task<int> DeleteUnseenCommitsAsync(
@@ -420,8 +484,11 @@ public sealed class RadarRepository : IRadarRepository
         var now = DateTime.UtcNow;
         foreach (var sha in matchingShas)
         {
+            var reasonChanged = true;
             if (existingReviews.TryGetValue(sha, out var review))
             {
+                reasonChanged = review.Status != ReviewStatus.Rejected
+                    || !string.Equals(review.Reason, reason, StringComparison.Ordinal);
                 review.Status = ReviewStatus.Rejected;
                 review.Reason = reason;
                 review.ReviewedAt = now;
@@ -436,10 +503,54 @@ public sealed class RadarRepository : IRadarRepository
                     ReviewedAt = now,
                 });
             }
+            if (reasonChanged)
+            {
+                await AppendReviewHistoryIfChangedAsync(
+                        db,
+                        sha,
+                        ReviewStatus.Rejected,
+                        reason,
+                        now,
+                        ReviewHistorySources.BulkIgnore,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return matchingShas.Count;
+    }
+
+    private static async Task AppendReviewHistoryIfChangedAsync(
+        RadarDbContext db,
+        string sha,
+        ReviewStatus status,
+        string? reason,
+        DateTime changedAt,
+        string source,
+        CancellationToken cancellationToken)
+    {
+        var latest = await db.ReviewHistories
+            .Where(h => h.Sha == sha)
+            .OrderByDescending(h => h.ChangedAt)
+            .ThenByDescending(h => h.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (latest is not null
+            && latest.Status == status
+            && string.Equals(latest.Reason, reason, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        db.ReviewHistories.Add(new ReviewHistory
+        {
+            Sha = sha,
+            Status = status,
+            Reason = reason,
+            ChangedAt = changedAt,
+            Source = source,
+        });
     }
 
     /// <summary>Escapes the LIKE wildcards (<c>%</c> and <c>_</c>) inside a literal path prefix.</summary>

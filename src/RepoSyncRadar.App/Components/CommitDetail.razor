@@ -1,6 +1,8 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
+@using System.Globalization
 @using System.Threading
+@using RepoSyncRadar.Core.Data
 @using RepoSyncRadar.Core.Models
 @using RepoSyncRadar.Core.Options
 @using RepoSyncRadar.Core.Services
@@ -101,6 +103,35 @@
         {
             <p class="unscored" data-testid="commit-detail-unscored">@L["CommitDetail.Unscored"]</p>
         }
+        <details class="commit-history" data-testid="commit-detail-history" open>
+            <summary>
+                <span>@L["CommitDetail.History.Title"]</span>
+                <span class="history-count" data-testid="commit-detail-history-count">@L["Common.ItemCount", _historyEntries.Count]</span>
+            </summary>
+            @if (_historyEntries.Count == 0)
+            {
+                <p class="history-empty" data-testid="commit-detail-history-empty">@L["CommitDetail.History.Empty"]</p>
+            }
+            else
+            {
+                <ol class="history-timeline" data-testid="commit-detail-history-list">
+                    @foreach (var entry in _historyEntries)
+                    {
+                        <li class="history-entry" data-testid="commit-detail-history-entry" data-kind="@entry.Kind">
+                            <time datetime="@entry.Timestamp.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)">@FormatTimestamp(entry.Timestamp)</time>
+                            <div>
+                                <strong>@entry.Title</strong>
+                                <p>@entry.Description</p>
+                            </div>
+                        </li>
+                    }
+                </ol>
+                @if (_historyIsLegacyReviewOnly)
+                {
+                    <p class="history-note" data-testid="commit-detail-history-legacy-note">@L["CommitDetail.History.LegacyNote"]</p>
+                }
+            }
+        </details>
         <div class="files-toolbar" data-testid="commit-detail-preview-toolbar">
             <div class="files-heading">
                 <span class="files-heading-label">@L["CommitDetail.Files"]</span>
@@ -257,6 +288,9 @@
     private long _previewOperationSerial;
     private PreviewOperation? _previewOperation;
     private CancellationTokenSource? _predictivePrewarmCts;
+    private string? _historyForSha;
+    private IReadOnlyList<CommitHistoryTimelineEntry> _historyEntries = [];
+    private bool _historyIsLegacyReviewOnly;
 
     private bool IsPreviewOperationBusy => _previewCleanupBusy || IsPreviewBusyForCurrentCommit;
 
@@ -273,6 +307,16 @@
     {
         public Task? PollTask { get; set; }
     }
+
+    private sealed record CommitHistoryTimeline(
+        IReadOnlyList<CommitHistoryTimelineEntry> Entries,
+        bool IsLegacyReviewOnly);
+
+    private sealed record CommitHistoryTimelineEntry(
+        string Kind,
+        DateTime Timestamp,
+        string Title,
+        string Description);
 
     protected override void OnInitialized()
     {
@@ -360,6 +404,9 @@
             CancelCurrentPreviewOperation();
             ClearPreviewOperationState();
             _activePreviewPath = null;
+            _historyForSha = null;
+            _historyEntries = [];
+            _historyIsLegacyReviewOnly = false;
             CancelPredictivePrewarm();
             return;
         }
@@ -370,6 +417,11 @@
             _activePreviewPath = null;
             _activeVersion = null;
             StartPredictivePrewarm(Commit);
+        }
+
+        if (!string.Equals(_historyForSha, Commit.Sha, StringComparison.Ordinal))
+        {
+            await LoadHistoryAsync(Commit);
         }
 
         if (string.Equals(_resolvedForSha, Commit.Sha, StringComparison.Ordinal))
@@ -386,6 +438,177 @@
         }
         _resolvedForSha = Commit.Sha;
     }
+
+    private async Task LoadHistoryAsync(Commit commit)
+    {
+        var repo = Services.GetService<IRadarRepository>();
+        var snapshot = repo is null
+            ? new CommitHistorySnapshot(commit, [], commit.Drafts, [])
+            : await repo.GetCommitHistoryAsync(commit.Sha);
+
+        var timeline = BuildHistoryTimeline(snapshot ?? new CommitHistorySnapshot(commit, [], commit.Drafts, []));
+        _historyEntries = timeline.Entries;
+        _historyIsLegacyReviewOnly = timeline.IsLegacyReviewOnly;
+        _historyForSha = commit.Sha;
+    }
+
+    private CommitHistoryTimeline BuildHistoryTimeline(CommitHistorySnapshot snapshot)
+    {
+        if (snapshot.Commit is not { } commit)
+        {
+            return new CommitHistoryTimeline([], IsLegacyReviewOnly: false);
+        }
+
+        var entries = new List<CommitHistoryTimelineEntry>
+        {
+            new("fetched", commit.FetchedAt, L["CommitDetail.History.Fetched.Title"], L["CommitDetail.History.Fetched.Description", commit.PrNumber]),
+        };
+
+        if (commit.Scoring is { } scoring)
+        {
+            var description = L[
+                "CommitDetail.History.Scored.Description",
+                FormatScore(scoring.Score),
+                scoring.Category,
+                string.IsNullOrWhiteSpace(scoring.Model) ? L["CommitDetail.History.UnknownModel"].Value : scoring.Model].Value;
+            if (!string.IsNullOrWhiteSpace(scoring.PromptHash))
+            {
+                description = string.Concat(description, " ", L["CommitDetail.History.PromptHash", scoring.PromptHash].Value);
+            }
+            entries.Add(new CommitHistoryTimelineEntry(
+                "scored",
+                scoring.ScoredAt,
+                L["CommitDetail.History.Scored.Title"],
+                description));
+        }
+
+        var isLegacyReviewOnly = false;
+        if (snapshot.ReviewHistory.Count > 0)
+        {
+            foreach (var history in snapshot.ReviewHistory)
+            {
+                entries.Add(BuildReviewHistoryEntry(history, isLegacy: false));
+            }
+        }
+        else if (commit.Review is { ReviewedAt: { } reviewedAt } review)
+        {
+            isLegacyReviewOnly = true;
+            entries.Add(BuildReviewHistoryEntry(
+                new ReviewHistory
+                {
+                    Sha = commit.Sha,
+                    Status = review.Status,
+                    Reason = review.Reason,
+                    ChangedAt = reviewedAt,
+                    Source = ReviewHistorySources.User,
+                },
+                isLegacy: true));
+        }
+
+        foreach (var draft in snapshot.Drafts.Where(static draft => IsDisplayedDraftChannel(draft.Channel)))
+        {
+            entries.Add(new CommitHistoryTimelineEntry(
+                "draft",
+                draft.GeneratedAt,
+                L["CommitDetail.History.Draft.Title", BuildDraftChannelLabel(draft.Channel)],
+                L["CommitDetail.History.Draft.Description", BuildDraftChannelLabel(draft.Channel)]));
+        }
+
+        if (IsAutoIgnored(commit.Review, snapshot.ReviewHistory)
+            && FindMatchingIgnoreRule(commit.Files, snapshot.IgnoreRules) is { } rule)
+        {
+            entries.Add(new CommitHistoryTimelineEntry(
+                "ignore-rule",
+                rule.CreatedAt,
+                L["CommitDetail.History.IgnoreRule.Title"],
+                string.IsNullOrWhiteSpace(rule.Reason)
+                    ? L["CommitDetail.History.IgnoreRule.Description", rule.Pattern]
+                    : L["CommitDetail.History.IgnoreRule.DescriptionWithReason", rule.Pattern, rule.Reason]));
+        }
+
+        return new CommitHistoryTimeline(
+            entries.OrderBy(static entry => entry.Timestamp).ThenBy(static entry => entry.Kind).ToArray(),
+            isLegacyReviewOnly);
+    }
+
+    private CommitHistoryTimelineEntry BuildReviewHistoryEntry(ReviewHistory history, bool isLegacy)
+    {
+        var title = isLegacy
+            ? L["CommitDetail.History.Review.LegacyTitle", BuildReviewStatusLabel(history.Status)]
+            : L["CommitDetail.History.Review.Title", BuildReviewStatusLabel(history.Status)];
+        var source = BuildReviewSourceLabel(history.Source);
+        var description = string.IsNullOrWhiteSpace(history.Reason)
+            ? L["CommitDetail.History.Review.Description", source].Value
+            : L["CommitDetail.History.Review.DescriptionWithReason", source, history.Reason].Value;
+        return new CommitHistoryTimelineEntry("review", history.ChangedAt, title, description);
+    }
+
+    private string FormatTimestamp(DateTime timestamp)
+        => timestamp.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+
+    private string BuildReviewStatusLabel(ReviewStatus status)
+        => status switch
+        {
+            ReviewStatus.Unseen => L["Sidebar.Unseen.Label"],
+            ReviewStatus.Seen => L["Sidebar.Unseen.Label"],
+            ReviewStatus.Adopted => L["Sidebar.Watch.Label"],
+            ReviewStatus.Rejected => L["Sidebar.Rejected.Label"],
+            ReviewStatus.Archived => L["Sidebar.Archive.Label"],
+            ReviewStatus.Later => L["Sidebar.Later.Label"],
+            _ => status.ToString(),
+        };
+
+    private string BuildReviewSourceLabel(string source)
+        => source switch
+        {
+            ReviewHistorySources.AutoIgnore => L["CommitDetail.History.Source.AutoIgnore"],
+            ReviewHistorySources.BulkIgnore => L["CommitDetail.History.Source.BulkIgnore"],
+            _ => L["CommitDetail.History.Source.User"],
+        };
+
+    private string BuildDraftChannelLabel(string channel)
+        => channel.Trim().ToLowerInvariant() switch
+        {
+            "explanation" => L["Drafts.Channel.Explanation"],
+            "customer" => L["Drafts.Channel.Customer"],
+            "twitter" => "Twitter",
+            _ => channel,
+        };
+
+    private static bool IsDisplayedDraftChannel(string channel)
+        => channel.Trim().ToLowerInvariant() is "explanation" or "twitter" or "customer";
+
+    private static bool IsAutoIgnored(Review? review, IReadOnlyList<ReviewHistory> history)
+        => string.Equals(review?.Reason, "auto-ignored", StringComparison.Ordinal)
+            || history.Any(static h => string.Equals(h.Reason, "auto-ignored", StringComparison.Ordinal)
+                || string.Equals(h.Source, ReviewHistorySources.AutoIgnore, StringComparison.Ordinal)
+                || string.Equals(h.Source, ReviewHistorySources.BulkIgnore, StringComparison.Ordinal));
+
+    private static IgnoreRule? FindMatchingIgnoreRule(IReadOnlyList<CommitFile> files, IReadOnlyList<IgnoreRule> rules)
+    {
+        foreach (var rule in rules)
+        {
+            var prefix = NormalizeHistoryPath(rule.Pattern).TrimEnd('*', '/');
+            if (prefix.Length == 0)
+            {
+                continue;
+            }
+            if (files.Any(file =>
+            {
+                var path = NormalizeHistoryPath(file.Path);
+                return string.Equals(path, prefix, StringComparison.Ordinal)
+                    || path.StartsWith(prefix + "/", StringComparison.Ordinal);
+            }))
+            {
+                return rule;
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizeHistoryPath(string path)
+        => path.Replace('\\', '/').Trim().Trim('/');
 
     /// <summary>
     /// Picks the right URL for the "WebView2 で開く" button on a single file row.

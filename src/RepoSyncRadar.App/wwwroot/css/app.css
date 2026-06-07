@@ -861,6 +861,66 @@ html, body {
     white-space: pre-wrap;
 }
 
+.radar-commit-detail .commit-history {
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    background: #fff;
+    margin-bottom: 0.75rem;
+}
+
+.radar-commit-detail .commit-history summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.55rem 0.75rem;
+    color: #24292f;
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.radar-commit-detail .history-count {
+    color: #57606a;
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
+.radar-commit-detail .history-timeline {
+    margin: 0;
+    padding: 0 0.75rem 0.7rem 1.85rem;
+}
+
+.radar-commit-detail .history-entry {
+    padding: 0.38rem 0 0.38rem 0.15rem;
+}
+
+.radar-commit-detail .history-entry time {
+    display: block;
+    color: #57606a;
+    font-size: 0.72rem;
+    line-height: 1.25;
+}
+
+.radar-commit-detail .history-entry strong {
+    color: #24292f;
+    font-size: 0.84rem;
+}
+
+.radar-commit-detail .history-entry p,
+.radar-commit-detail .history-empty,
+.radar-commit-detail .history-note {
+    margin: 0.12rem 0 0;
+    color: #57606a;
+    font-size: 0.8rem;
+    line-height: 1.45;
+}
+
+.radar-commit-detail .history-empty,
+.radar-commit-detail .history-note {
+    padding: 0 0.75rem 0.7rem;
+}
+
 .radar-commit-detail .files {
     list-style: none;
     margin: 0;
@@ -2189,6 +2249,7 @@ html, body {
 .radar-theme-dark .mud-paper,
 .radar-theme-dark .action-panel,
 .radar-theme-dark .radar-commit-detail .scoring,
+.radar-theme-dark .radar-commit-detail .commit-history,
 .radar-theme-dark .ignore-rule-row,
 .radar-theme-dark .third-party-notice-row,
 .radar-theme-dark .drafts-channel header {
@@ -2199,6 +2260,7 @@ html, body {
 .radar-theme-dark .radar-sidebar-pane,
 .radar-theme-dark .radar-commit-detail .commit-header,
 .radar-theme-dark .radar-commit-detail .scoring-note,
+.radar-theme-dark .radar-commit-detail .commit-history,
 .radar-theme-dark .action-panel,
 .radar-theme-dark .app-settings-panel,
 .radar-theme-dark .settings-section-nav,
@@ -2224,6 +2286,8 @@ html, body {
 .radar-theme-dark .mud-typography,
 .radar-theme-dark .radar-commit-detail .commit-header .message,
 .radar-theme-dark .radar-commit-detail .scoring-note dd,
+.radar-theme-dark .radar-commit-detail .commit-history summary,
+.radar-theme-dark .radar-commit-detail .history-entry strong,
 .radar-theme-dark .radar-commit-detail .files-heading-label,
 .radar-theme-dark .action-panel-header h3,
 .radar-theme-dark .app-settings-header h2,
@@ -2249,6 +2313,11 @@ html, body {
 .radar-theme-dark .radar-commit-detail .file-row .stats,
 .radar-theme-dark .radar-commit-detail .preview-status,
 .radar-theme-dark .radar-commit-detail .files-heading-count,
+.radar-theme-dark .radar-commit-detail .history-count,
+.radar-theme-dark .radar-commit-detail .history-entry time,
+.radar-theme-dark .radar-commit-detail .history-entry p,
+.radar-theme-dark .radar-commit-detail .history-empty,
+.radar-theme-dark .radar-commit-detail .history-note,
 .radar-theme-dark .empty,
 .radar-theme-dark .loading,
 .radar-theme-dark .action-panel-header p,
