@@ -56,7 +56,7 @@ Installed builds can check Velopack update feeds and apply newer releases withou
 1. Start the app and confirm the header shows a signed-in GitHub user.
 2. Run **Triage** to fetch Repo sync PRs, ingest new commits, and let Copilot score likely operator-impacting changes.
 3. Review the **Unseen** queue, then mark commits as **Watch**, **Later**, **Rejected**, or **Archive**.
-4. Open changed docs URLs or use local preview for Markdown changes that need rendered before/after inspection.
+4. Open changed docs URLs or use local preview for Markdown changes where a rendered before/after comparison is useful.
 5. For focused commits, generate or copy sharing drafts, then make the final human decision outside the app.
 
 Local preview is opt-in. By default, startup does not clone or fetch `github/docs`; preview work begins only when a preview action needs it, unless `DocsRepository:PrewarmOnStartup` is set to `true`.
