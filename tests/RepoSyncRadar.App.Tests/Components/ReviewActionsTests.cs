@@ -142,6 +142,7 @@ public sealed class ReviewActionsTests : IDisposable
 
         var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
+            .AddCascadingValue("en")
             .Add(c => c.Sha, "abc")
             .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
 
@@ -161,6 +162,25 @@ public sealed class ReviewActionsTests : IDisposable
         Assert.Contains("Score adjustment", cut.Find("[data-testid=\"review-boost-details\"]").TextContent);
         Assert.Contains("Added to future Triage scores", cut.Find("[data-testid=\"review-boost-delta-help\"]").TextContent);
         Assert.Contains("Add to boost rules", cut.Find("[data-testid=\"review-boost\"]").TextContent);
+    }
+
+    [Fact]
+    public void Renders_Using_Cascaded_DisplayCulture_After_Process_Culture_Changes()
+    {
+        AppDisplayCulture.Apply("en");
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .AddCascadingValue(AppDisplayCulture.DefaultCultureName)
+            .Add(c => c.Sha, "abc"));
+
+        Assert.Contains("レビュー判断", cut.Find("[data-testid=\"review-actions\"]").TextContent);
+        Assert.Contains("確認済み", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
+        Assert.DoesNotContain("Review Decision", cut.Find("[data-testid=\"review-actions\"]").TextContent);
     }
 
     [Fact]
