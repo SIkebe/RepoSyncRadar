@@ -98,8 +98,11 @@ jobs:
           dotnet reportgenerator
           "-reports:tests/**/TestResults/artifacts/coverage/reposyncradar.cobertura.xml"
           "-targetdir:artifacts/coverage/merged"
-          "-reporttypes:Cobertura"
+          "-reporttypes:Cobertura;MarkdownSummaryGithub"
           "-verbosity:Warning"
+
+      - name: Add coverage summary
+        run: Get-Content artifacts/coverage/merged/SummaryGithub.md | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Upload code coverage
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -108,6 +111,9 @@ jobs:
           file: artifacts/coverage/merged/Cobertura.xml
           language: "C#"
           label: code-coverage/dotnet
+          # GitHub Code Quality is in public preview and may be unavailable for
+          # private repositories outside eligible plans; keep CI green while
+          # still surfacing upload errors in the workflow log.
           fail-on-error: false
 
       - name: Upload test result logs
