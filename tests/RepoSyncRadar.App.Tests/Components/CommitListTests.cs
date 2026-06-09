@@ -1,6 +1,7 @@
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using RepoSyncRadar.App;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
@@ -124,6 +125,27 @@ public class CommitListTests
     }
 
     [Fact]
+    public void CommitList_Uses_Cascaded_DisplayCulture_When_Process_Culture_Differs()
+    {
+        try
+        {
+            AppDisplayCulture.Apply("en");
+
+            using var cut = RenderListWith(
+                new List<Commit>(),
+                filter: new CommitQueryFilter { Status = ReviewStatus.Unseen },
+                displayCulture: AppDisplayCulture.DefaultCultureName);
+
+            Assert.Equal("未確認キューは空です。", cut.Find("[data-testid=\"commit-list-empty-title\"]").TextContent);
+            Assert.DoesNotContain("The unseen queue is empty.", cut.Find("[data-testid=\"commit-list-empty\"]").TextContent);
+        }
+        finally
+        {
+            AppDisplayCulture.Apply(AppDisplayCulture.DefaultCultureName);
+        }
+    }
+
+    [Fact]
     public void CommitList_Requeries_When_RefreshToken_Changes()
     {
         var repo = Substitute.For<IRadarRepository>();
@@ -210,6 +232,7 @@ public class CommitListTests
         List<Commit> commits,
         CommitQueryFilter? filter = null,
         string? selectedSha = null,
+        string displayCulture = AppDisplayCulture.DefaultCultureName,
         Action<Commit>? onCommitSelected = null,
         Action<CommitSelectionChange>? onSelectionChanged = null)
     {
@@ -227,6 +250,7 @@ public class CommitListTests
         return ctx.Render<CommitList>(
             parameters => parameters
                 .AddCascadingValue<IServiceProvider>(sp)
+                .AddCascadingValue(LocalizedComponentBase.DisplayCultureCascadeName, displayCulture)
                 .Add(c => c.Filter, filter)
                 .Add(c => c.SelectedSha, selectedSha)
                 .Add(c => c.OnCommitSelected, selected => onCommitSelected?.Invoke(selected))

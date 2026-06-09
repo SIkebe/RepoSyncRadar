@@ -6,8 +6,11 @@
 @using RepoSyncRadar.Core.Data
 @using RepoSyncRadar.Core.Models
 @using RepoSyncRadar.Core.Services
+@inherits LocalizedComponentBase
 
 @implements IDisposable
+
+@{ ApplyDisplayCultureForRender(); }
 
 <div id="drafts-panel" class="drafts-panel action-panel" data-testid="drafts-panel">
     <header class="action-panel-header">

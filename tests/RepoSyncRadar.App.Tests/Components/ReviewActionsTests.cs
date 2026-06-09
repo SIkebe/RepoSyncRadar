@@ -142,7 +142,7 @@ public sealed class ReviewActionsTests : IDisposable
 
         var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
-            .AddCascadingValue("en")
+            .AddCascadingValue(LocalizedComponentBase.DisplayCultureCascadeName, "en")
             .Add(c => c.Sha, "abc")
             .Add(c => c.FilePaths, ["content/copilot/concepts/billing.md"]));
 
@@ -175,7 +175,7 @@ public sealed class ReviewActionsTests : IDisposable
 
         var cut = ctx.Render<ReviewActions>(p => p
             .AddCascadingValue<IServiceProvider>(sp)
-            .AddCascadingValue(AppDisplayCulture.DefaultCultureName)
+            .AddCascadingValue(LocalizedComponentBase.DisplayCultureCascadeName, AppDisplayCulture.DefaultCultureName)
             .Add(c => c.Sha, "abc"));
 
         Assert.Contains("レビュー判断", cut.Find("[data-testid=\"review-actions\"]").TextContent);

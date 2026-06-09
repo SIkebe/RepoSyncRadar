@@ -3,6 +3,7 @@
 @using RepoSyncRadar.App.Auth
 @using RepoSyncRadar.Core.Data
 @using RepoSyncRadar.Core.Models
+@inherits LocalizedComponentBase
 @implements IDisposable
 
 @{ ApplyDisplayCultureForRender(); }
@@ -103,8 +104,6 @@
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
-    [CascadingParameter] public string DisplayCulture { get; set; } = AppDisplayCulture.DefaultCultureName;
-
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
@@ -124,9 +123,6 @@
     private string? _login;
     private bool _authBusy;
     private string? _authError;
-
-    private void ApplyDisplayCultureForRender()
-        => AppDisplayCulture.Apply(DisplayCulture);
 
     protected override async Task OnInitializedAsync()
     {

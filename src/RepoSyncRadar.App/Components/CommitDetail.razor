@@ -7,7 +7,10 @@
 @using RepoSyncRadar.Core.Options
 @using RepoSyncRadar.Core.Services
 @using RepoSyncRadar.Core.Services.Preview
+@inherits LocalizedComponentBase
 @implements IDisposable
+
+@{ ApplyDisplayCultureForRender(); }
 
 @*
     CommitDetail — Phase 1 commit inspector. Shows the file list with +/- stats and any

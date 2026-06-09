@@ -1,6 +1,9 @@
 @using Microsoft.Extensions.DependencyInjection
 @using RepoSyncRadar.Core.Data
 @using RepoSyncRadar.Core.Models
+@inherits LocalizedComponentBase
+
+@{ ApplyDisplayCultureForRender(); }
 
 @*
     CommitList — Phase 1 commit inbox view. Loads commits from IRadarRepository using the
