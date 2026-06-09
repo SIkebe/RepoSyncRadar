@@ -535,7 +535,8 @@
 @code {
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
-    [CascadingParameter] public string DisplayCulture { get; set; } = AppDisplayCulture.DefaultCultureName;
+    [CascadingParameter(Name = LocalizedComponentBase.DisplayCultureCascadeName)]
+    public string DisplayCulture { get; set; } = AppDisplayCulture.DefaultCultureName;
 
     [Parameter] public EventCallback<string> DisplayCultureChanged { get; set; }
 

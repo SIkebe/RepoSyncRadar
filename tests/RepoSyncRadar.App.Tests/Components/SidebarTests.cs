@@ -91,13 +91,13 @@ public class SidebarTests
 
         var japanese = ctx.Render<Sidebar>(parameters => parameters
             .AddCascadingValue<IServiceProvider>(sp)
-            .AddCascadingValue(AppDisplayCulture.DefaultCultureName));
+            .AddCascadingValue(LocalizedComponentBase.DisplayCultureCascadeName, AppDisplayCulture.DefaultCultureName));
 
         Assert.Equal("GitHub アカウント", japanese.Find("[data-testid=\"sidebar-auth\"]").GetAttribute("aria-label"));
 
         var english = ctx.Render<Sidebar>(parameters => parameters
             .AddCascadingValue<IServiceProvider>(sp)
-            .AddCascadingValue("en"));
+            .AddCascadingValue(LocalizedComponentBase.DisplayCultureCascadeName, "en"));
 
         Assert.Equal("GitHub account", english.Find("[data-testid=\"sidebar-auth\"]").GetAttribute("aria-label"));
     }

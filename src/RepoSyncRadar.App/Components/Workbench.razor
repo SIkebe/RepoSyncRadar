@@ -19,7 +19,7 @@
 <MudSnackbarProvider />
 
 <CascadingValue Value="Services" IsFixed="true">
-<CascadingValue Value="_displayCulture">
+<CascadingValue Name="@LocalizedComponentBase.DisplayCultureCascadeName" Value="_displayCulture">
     <div class="@BuildShellClass(_theme)" data-theme="@BuildThemeName(_theme)" data-testid="radar-shell">
         <aside class="radar-sidebar-pane">
             <MudText Typo="Typo.h6" Class="mb-2">@L["Workbench.Queues"]</MudText>

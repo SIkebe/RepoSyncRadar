@@ -1,7 +1,6 @@
 @using Microsoft.Extensions.DependencyInjection
 @using RepoSyncRadar.App.Settings
-
-@{ ApplyDisplayCultureForRender(); }
+@inherits LocalizedComponentBase
 
 <section class="settings-section local-appsettings-section" data-testid="settings-local-appsettings">
     <header class="settings-subheader">
@@ -223,8 +222,6 @@
 @code {
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
-    [CascadingParameter] public string DisplayCulture { get; set; } = AppDisplayCulture.DefaultCultureName;
-
     private IStringLocalizer<SharedResource>? _localizer;
     private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
 
@@ -237,9 +234,6 @@
     private string _allowedHostsText = string.Empty;
     private string _webViewAllowedHostsText = string.Empty;
     private string _oauthScopesText = string.Empty;
-
-    private void ApplyDisplayCultureForRender()
-        => AppDisplayCulture.Apply(DisplayCulture);
 
     protected override async Task OnInitializedAsync()
         => await LoadAsync();
