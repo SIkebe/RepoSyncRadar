@@ -184,6 +184,35 @@ public sealed class ReviewActionsTests : IDisposable
     }
 
     [Fact]
+    public void Reapplies_Cascaded_DisplayCulture_On_Internal_Rerender()
+    {
+        try
+        {
+            AppDisplayCulture.Apply("en");
+            var repo = Substitute.For<IRadarRepository>();
+            var broadcaster = Substitute.For<IReviewBroadcaster>();
+            var sp = BuildServices(repo, broadcaster);
+            using var ctx = new Bunit.BunitContext();
+
+            var cut = ctx.Render<ReviewActions>(p => p
+                .AddCascadingValue<IServiceProvider>(sp)
+                .AddCascadingValue(LocalizedComponentBase.DisplayCultureCascadeName, AppDisplayCulture.DefaultCultureName)
+                .Add(c => c.Sha, "abc"));
+            AppDisplayCulture.Apply("en");
+
+            cut.Find("[data-testid=\"review-reject-reason\"]").Input("確認済み");
+
+            Assert.Contains("レビュー判断", cut.Find("[data-testid=\"review-actions\"]").TextContent);
+            Assert.Contains("確認済み", cut.Find("[data-testid=\"review-reject-reason-options\"]").TextContent);
+            Assert.DoesNotContain("Review Decision", cut.Find("[data-testid=\"review-actions\"]").TextContent);
+        }
+        finally
+        {
+            AppDisplayCulture.Apply(AppDisplayCulture.DefaultCultureName);
+        }
+    }
+
+    [Fact]
     public void Ignore_Similar_Directories_Is_Collapsed_By_Default_With_Suggestion_Count()
     {
         var repo = Substitute.For<IRadarRepository>();

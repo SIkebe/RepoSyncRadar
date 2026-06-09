@@ -9,6 +9,19 @@ public abstract class LocalizedComponentBase : ComponentBase
     [CascadingParameter(Name = DisplayCultureCascadeName)]
     public string DisplayCulture { get; set; } = AppDisplayCulture.DefaultCultureName;
 
-    protected void ApplyDisplayCultureForRender()
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        parameters.SetParameterProperties(this);
+        ApplyDisplayCulture();
+        return base.SetParametersAsync(ParameterView.Empty);
+    }
+
+    protected override bool ShouldRender()
+    {
+        ApplyDisplayCulture();
+        return base.ShouldRender();
+    }
+
+    private void ApplyDisplayCulture()
         => AppDisplayCulture.Apply(DisplayCulture);
 }
