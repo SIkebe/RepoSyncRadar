@@ -1,7 +1,7 @@
 ---
 name: copilot-sdk-audit
-description: 'Upgrade RepoSyncRadar to a newer GitHub.Copilot.SDK version. USE FOR: Copilot SDK update/upgrade, beta upgrade, GitHub.Copilot.SDK beta.N に更新, bundled Copilot CLI refresh, SDK source/package diff review, API breaking-change対応, beta変更点をアプリに活かす, PR作成まで. Updates package/version notices, reads NuGet metadata plus SDK source/tests, applies safe app improvements, validates build/tests, and opens or updates a PR.'
-argument-hint: 'target SDK version, e.g. 1.0.0-beta.9; optional: PR作成 / 調査のみ / 特定領域 usage/auth/telemetry/tools'
+description: 'Upgrade RepoSyncRadar to a newer GitHub.Copilot.SDK version or audit a related .NET preview update in the same PR. USE FOR: Copilot SDK update/upgrade, beta upgrade, GitHub.Copilot.SDK beta.N に更新, bundled Copilot CLI refresh, .NET preview release-note audit, SDK source/package diff review, API breaking-change対応, beta/.NET preview変更点をアプリに活かす, PR作成まで. Reads user-provided official URLs plus linked area release notes, updates package/version notices, reads NuGet metadata plus SDK source/tests, applies safe app improvements, validates build/tests, and opens or updates a PR.'
+argument-hint: 'target SDK/.NET version or official URL, e.g. 1.0.0-beta.9 / .NET 11 Preview 5 blog; optional: PR作成 / 調査のみ / 特定領域 usage/auth/telemetry/tools'
 ---
 
 # Copilot SDK Update
@@ -15,12 +15,13 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 - 「`GitHub.Copilot.SDK` を `1.0.0-beta.N` にアップデートして」と言われたとき
 - 「Copilot SDK beta upgrade」「SDK update」「bundled Copilot CLI を更新」などの依頼
 - SDK upgrade 後に app integration、usage billing、auth、telemetry、lifecycle、tools/permissions、structured output を見直すとき
+- Copilot SDK audit の追加 context として .NET preview ブログや release notes が渡され、SDK / ASP.NET Core / EF Core / WPF / libraries / runtime / C# の変更を RepoSyncRadar に反映できるか確認するとき
 - beta 間の変更点を RepoSyncRadar に活かせるか調査し、良い小修正を入れるとき
 - Copilot SDK 更新 PR を作成・更新するとき
 
 ## 絶対ルール
 
-1. **ユーザー提供の公式 URL を最初に読む**。ブログ記事、release note、issue、PR、docs URL が渡されたら本文だけでなく、本文からリンクされる詳細 release notes / breaking changes / SDK docs も先に開き、関連項目をチェックリスト化してから package audit に進む。概要記事だけ読んだ扱いにしない。RepoSyncRadar の技術スタックに関係する .NET preview では、SDK だけでなく ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C# の area notes も確認する。
+1. **ユーザー提供の公式 URL を最初に読む**。ブログ記事、release note、issue、PR、docs URL が渡されたら本文だけでなく、本文からリンクされる詳細 release notes / breaking changes / SDK docs も先に開き、関連項目をチェックリスト化してから package audit に進む。概要記事だけ読んだ扱いにしない。RepoSyncRadar の技術スタックに関係する .NET preview では、SDK だけでなく ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C# の area notes も確認する。該当 area note が存在するか分からない場合は release-notes ディレクトリや公式 docs を探し、存在しないことも根拠として残す。
 2. **target version を明確にする**。ユーザー指定があればそれを使う。未指定なら NuGet prerelease を含めて候補を確認し、最新へ進めてよいか判断する。
 3. **app code と突き合わせる**。SDK の changelog 感想で終えず、`src/RepoSyncRadar.App/Copilot/`、`RepoSyncRadar.Core/Options/`、settings、UI/tests を見る。
 4. **public surface 優先**。内部実装だけにあるものは使える API として扱わない。experimental API は `GHCP001` 等の警告と変更リスクを明示する。
@@ -39,16 +40,17 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 
 ### 2. 現在版と target 版を確認する
 
-1. ユーザーが渡した公式 URL をすべて読む。概要ブログの場合は、記事内の release notes / breaking changes / SDK-specific notes へのリンクも辿る。
-2. 読んだ公式情報から「採用候補」「破壊的変更」「このリポジトリでは対象外」のチェックリストを作る。例: .NET preview なら SDK / ASP.NET Core / EF Core / WPF / libraries / runtime / C# release notes の各見出しを、`Directory.Build.props`、`.csproj`、release scripts、GitHub Actions、Blazor components、EF migrations、WPF host、docs と突き合わせる。
-3. `Directory.Packages.props` と project references から現在の `GitHub.Copilot.SDK` version を確認する。
-4. `dotnet package search GitHub.Copilot.SDK --exact-match --prerelease --format json` で target 版の存在を確認する。
-5. 変更前後の package metadata を読む。
+1. ユーザーが渡した公式 URL をすべて読む。概要ブログの場合は、記事内の release notes / breaking changes / SDK-specific notes へのリンクも辿る。リンク抽出で公式記事の全 area link を拾い、手で見た項目だけに限定しない。
+2. .NET preview が関係する場合は、次の area notes を明示的に確認する。存在しない/空の場合もその事実を記録する: SDK、ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C#。RepoSyncRadar では WPF + BlazorWebView + EF Core SQLite + WebView2 + release packaging の観点を必ず含める。
+3. 読んだ公式情報から「採用候補」「破壊的変更」「このリポジトリでは対象外」のチェックリストを作る。例: .NET preview なら各 area note の見出しを、`Directory.Build.props`、`.csproj`、release scripts、GitHub Actions、Blazor components、EF migrations、WPF host、docs と突き合わせる。
+4. `Directory.Packages.props` と project references から現在の `GitHub.Copilot.SDK` version を確認する。
+5. `dotnet package search GitHub.Copilot.SDK --exact-match --prerelease --format json` で target 版の存在を確認する。
+6. 変更前後の package metadata を読む。
    - `.nuspec`: version、repository URL/commit、dependencies
    - `build/GitHub.Copilot.SDK.props`: bundled `CopilotCliVersion`
    - `build/GitHub.Copilot.SDK.targets`: CLI download/copy/publish behavior
    - README / XML docs: public API surface
-6. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。
+7. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。
 
 PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-String` を使う。
 
