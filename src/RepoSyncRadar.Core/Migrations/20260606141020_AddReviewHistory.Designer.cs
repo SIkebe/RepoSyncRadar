@@ -18,11 +18,14 @@ namespace RepoSyncRadar.Core.Migrations
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "11.0.0-preview.4.26230.115");
+            modelBuilder.HasAnnotation("ProductVersion", "11.0.0-preview.5.26302.115");
 
             modelBuilder.Entity("RepoSyncRadar.Core.Models.BoostRule", b =>
                 {
                     b.Property<string>("Pattern")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<double>("Delta")
