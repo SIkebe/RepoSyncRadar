@@ -243,6 +243,69 @@ function Resolve-CopilotCliBinary {
     throw "Copilot CLI binary was not found at '$binaryPath'."
 }
 
+function Get-NuGetPackagesRoot {
+    if ([string]::IsNullOrWhiteSpace($env:NUGET_PACKAGES)) {
+        return (Join-Path $HOME '.nuget/packages')
+    }
+
+    return $env:NUGET_PACKAGES
+}
+
+function Resolve-IjwHostBinary {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Runtime
+    )
+
+    $assetsPath = Join-Path $RepoRoot 'src/RepoSyncRadar.App/obj/project.assets.json'
+    if (-not (Test-Path $assetsPath)) {
+        throw "Project assets file not found at '$assetsPath'. Run dotnet restore before resolving ijwhost.dll."
+    }
+
+    $assets = Get-Content $assetsPath -Raw | ConvertFrom-Json
+    $targetName = $assets.targets.PSObject.Properties.Name |
+        Where-Object { $_.EndsWith("/$Runtime", [System.StringComparison]::OrdinalIgnoreCase) } |
+        Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($targetName)) {
+        throw "Project assets file '$assetsPath' does not contain a target for runtime '$Runtime'."
+    }
+
+    $frameworkName = $assets.project.frameworks.PSObject.Properties.Name |
+        Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($frameworkName)) {
+        throw "Project assets file '$assetsPath' does not contain project framework metadata."
+    }
+
+    $packageName = "Microsoft.WindowsDesktop.App.Runtime.$Runtime"
+    $runtimeDependency = $assets.project.frameworks.$frameworkName.downloadDependencies |
+        Where-Object { [string]::Equals($_.name, $packageName, [System.StringComparison]::OrdinalIgnoreCase) } |
+        Select-Object -First 1
+    if ($null -eq $runtimeDependency) {
+        throw "Project assets file '$assetsPath' does not contain '$packageName'."
+    }
+
+    $runtimeVersion = [string]$runtimeDependency.version
+    $runtimeVersion = $runtimeVersion.Trim('[', ']')
+    $runtimeVersion = ($runtimeVersion -split ',')[0].Trim()
+    $ijwHostPath = [System.IO.Path]::Combine(
+        (Get-NuGetPackagesRoot),
+        $packageName.ToLowerInvariant(),
+        $runtimeVersion,
+        'runtimes',
+        $Runtime,
+        'lib',
+        ($frameworkName -split '-')[0],
+        'Ijwhost.dll')
+    if (-not (Test-Path $ijwHostPath)) {
+        throw "ijwhost.dll was not found at '$ijwHostPath'."
+    }
+
+    return $ijwHostPath
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $publishDir = [System.IO.Path]::Combine($repoRoot, $OutputRoot, 'publish', $Runtime)
 $releaseDir = [System.IO.Path]::Combine($repoRoot, $OutputRoot, 'velopack', $Runtime)
@@ -304,8 +367,6 @@ try {
         '-c', $Configuration,
         '-r', $Runtime,
         '--self-contained', $isSelfContainedPartialTrim.ToString().ToLowerInvariant(),
-        '-p:PublishSingleFile=true',
-        '-p:IncludeNativeLibrariesForSelfExtract=true',
         '-p:DebugType=embedded',
         "-p:CopilotCliBinaryPath=$copilotCliBinaryPath",
         "-p:RepoSyncRadarVersion=$Version",
@@ -314,7 +375,6 @@ try {
 
     if ($isSelfContainedPartialTrim) {
         $publishArgs += @(
-            '-p:EnableCompressionInSingleFile=true',
             '-p:PublishTrimmed=true',
             '-p:IsTrimmable=false',
             '-p:TrimMode=partial',
@@ -322,8 +382,19 @@ try {
             '-p:BuiltInComInteropSupport=true'
         )
     }
+    else {
+        $publishArgs += @(
+            '-p:PublishSingleFile=true',
+            '-p:IncludeNativeLibrariesForSelfExtract=true'
+        )
+    }
 
     Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList $publishArgs
+
+    if ($isSelfContainedPartialTrim) {
+        $ijwHostPath = Resolve-IjwHostBinary -RepoRoot $repoRoot -Runtime $Runtime
+        Copy-Item $ijwHostPath -Destination (Join-Path $publishDir 'ijwhost.dll') -Force
+    }
 
     $packArgs = @(
         'pack',
