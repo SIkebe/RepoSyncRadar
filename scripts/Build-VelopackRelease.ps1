@@ -382,13 +382,6 @@ try {
             '-p:BuiltInComInteropSupport=true'
         )
     }
-    else {
-        $publishArgs += @(
-            '-p:PublishSingleFile=true',
-            '-p:IncludeNativeLibrariesForSelfExtract=true'
-        )
-    }
-
     Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList $publishArgs
 
     if ($isSelfContainedPartialTrim) {
