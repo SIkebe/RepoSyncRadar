@@ -7,35 +7,16 @@ namespace RepoSyncRadar.App.Tests.Components;
 public sealed class PreviewNavigatorTests
 {
     [Fact]
-    public void Publish_Raises_Event_With_Uri()
-    {
-        var sut = new PreviewNavigator();
-        Uri? captured = null;
-        sut.Requested += (_, url) => captured = url;
-
-        sut.Publish(new Uri("http://localhost:4500/en/foo"));
-
-        Assert.Equal(new Uri("http://localhost:4500/en/foo"), captured);
-    }
-
-    [Fact]
     public void Publish_Raises_NavigationRequested_With_Uri_Case()
     {
         var sut = new PreviewNavigator();
-        PreviewNavigationRequest? captured = null;
         var expected = new Uri("http://localhost:4500/en/foo");
+        PreviewNavigationRequest? captured = null;
         sut.NavigationRequested += (_, request) => captured = request;
 
         sut.Publish(expected);
 
-        Assert.NotNull(captured);
-        var actual = captured.Value switch
-        {
-            Uri url => url,
-            PreviewComparisonRequest => throw new Xunit.Sdk.XunitException("Expected URI navigation request."),
-            null => throw new Xunit.Sdk.XunitException("Expected non-null navigation request."),
-        };
-        Assert.Equal(expected, actual);
+        Assert.Equal(expected, AssertUriRequest(captured));
     }
 
     [Fact]
@@ -44,23 +25,6 @@ public sealed class PreviewNavigatorTests
         var sut = new PreviewNavigator();
 
         Assert.Throws<ArgumentNullException>(() => sut.Publish(null!));
-    }
-
-    [Fact]
-    public void PublishComparison_Raises_Event_With_Request()
-    {
-        var sut = new PreviewNavigator();
-        PreviewComparisonRequest? captured = null;
-        sut.ComparisonRequested += (_, request) => captured = request;
-        var request = new PreviewComparisonRequest(
-            new Uri("http://localhost:4501/en/foo"),
-            new Uri("http://localhost:4500/en/foo"),
-            "変更前",
-            "PR HEAD");
-
-        sut.PublishComparison(request);
-
-        Assert.Same(request, captured);
     }
 
     [Fact]
@@ -77,14 +41,7 @@ public sealed class PreviewNavigatorTests
 
         sut.PublishComparison(request);
 
-        Assert.NotNull(captured);
-        var actual = captured.Value switch
-        {
-            Uri => throw new Xunit.Sdk.XunitException("Expected comparison navigation request."),
-            PreviewComparisonRequest comparisonRequest => comparisonRequest,
-            null => throw new Xunit.Sdk.XunitException("Expected non-null navigation request."),
-        };
-        Assert.Same(request, actual);
+        Assert.Same(request, AssertComparisonRequest(captured));
     }
 
     [Fact]
@@ -159,5 +116,27 @@ public sealed class PreviewNavigatorTests
         Assert.Null(sut.CurrentVersion);
         Assert.Null(sut.AffectedVersions);
         Assert.Equal(0, sut.SourceChangeCount);
+    }
+
+    private static Uri AssertUriRequest(PreviewNavigationRequest? request)
+    {
+        Assert.NotNull(request);
+        return request.Value switch
+        {
+            Uri url => url,
+            PreviewComparisonRequest => throw new Xunit.Sdk.XunitException("Expected URI navigation request."),
+            null => throw new Xunit.Sdk.XunitException("Expected non-null navigation request."),
+        };
+    }
+
+    private static PreviewComparisonRequest AssertComparisonRequest(PreviewNavigationRequest? request)
+    {
+        Assert.NotNull(request);
+        return request.Value switch
+        {
+            Uri => throw new Xunit.Sdk.XunitException("Expected comparison navigation request."),
+            PreviewComparisonRequest comparisonRequest => comparisonRequest,
+            null => throw new Xunit.Sdk.XunitException("Expected non-null navigation request."),
+        };
     }
 }

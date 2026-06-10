@@ -20,12 +20,6 @@ public interface IPreviewNavigator
     /// <summary>Raised whenever the host preview surface should navigate or compare content.</summary>
     event EventHandler<PreviewNavigationRequest>? NavigationRequested;
 
-    /// <summary>Raised whenever a new preview URL is ready for the host to display.</summary>
-    event EventHandler<Uri>? Requested;
-
-    /// <summary>Raised whenever two local preview URLs are ready for visual before/after comparison.</summary>
-    event EventHandler<PreviewComparisonRequest>? ComparisonRequested;
-
     /// <summary>
     /// Raised when the WPF host wants the currently-active preview component to
     /// re-render against a different docs version (§Step 19.9).
@@ -91,8 +85,6 @@ public union PreviewNavigationRequest(Uri, PreviewComparisonRequest);
 public sealed class PreviewNavigator : IPreviewNavigator
 {
     public event EventHandler<PreviewNavigationRequest>? NavigationRequested;
-    public event EventHandler<Uri>? Requested;
-    public event EventHandler<PreviewComparisonRequest>? ComparisonRequested;
     public event EventHandler<DocsVersion>? VersionChangeRequested;
     public event EventHandler<PreviewFileNavigationDirection>? FileNavigationRequested;
 
@@ -100,7 +92,6 @@ public sealed class PreviewNavigator : IPreviewNavigator
     {
         ArgumentNullException.ThrowIfNull(url);
         NavigationRequested?.Invoke(this, url);
-        Requested?.Invoke(this, url);
     }
 
     public void PublishComparison(PreviewComparisonRequest request)
@@ -109,7 +100,6 @@ public sealed class PreviewNavigator : IPreviewNavigator
         ArgumentNullException.ThrowIfNull(request.BeforeUrl);
         ArgumentNullException.ThrowIfNull(request.AfterUrl);
         NavigationRequested?.Invoke(this, request);
-        ComparisonRequested?.Invoke(this, request);
     }
 
     public void RequestVersionChange(DocsVersion version)
