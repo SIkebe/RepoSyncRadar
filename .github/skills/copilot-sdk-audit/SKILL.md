@@ -60,6 +60,8 @@ PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-S
 
 更新後に `dotnet restore RepoSyncRadar.sln` を実行し、target package を NuGet cache に落とす。
 
+EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、手編集だけで済ませない。必ず `dotnet-ef` を使い、必要なら一時 migration を `dotnet ef migrations add ...` で生成して差分を確認し、`dotnet ef migrations remove` で戻す。`remove` が直前の一時 migration を正しく消すには、その一時 migration がコンパイル対象に入っている必要があるため、`--no-build` のまま remove しない。preview SDK の analyzer が一時 migration を警告にする場合だけ、中間 build に限って `-p:TreatWarningsAsErrors=false` を使い、最終 build は通常の `-warnaserror` に戻す。
+
 ### 4. SDK source/tests の差分を読む
 
 前後 version の repository commit がある場合は commit 間 diff を確認する。
@@ -148,6 +150,13 @@ PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-S
 ```powershell
 dotnet build RepoSyncRadar.sln -warnaserror
 dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual
+```
+
+EF Core / migration 生成物を触った場合は、上記に加えて必ず次を実行する。`has-pending-model-changes` が差分ありを返したら、既存 migration designer / snapshot の target model 欠落を疑い、`dotnet-ef` で生成した probe migration の `Up` と designer を読んでから直す。
+
+```powershell
+dotnet ef migrations list --project src\RepoSyncRadar.Core\RepoSyncRadar.Core.csproj --startup-project src\RepoSyncRadar.Core\RepoSyncRadar.Core.csproj --context RadarDbContext --no-build
+dotnet ef migrations has-pending-model-changes --project src\RepoSyncRadar.Core\RepoSyncRadar.Core.csproj --startup-project src\RepoSyncRadar.Core\RepoSyncRadar.Core.csproj --context RadarDbContext --no-build
 ```
 
 必要に応じて先に focused test を実行する。失敗したら、今回の SDK update に関係する範囲だけ直す。
