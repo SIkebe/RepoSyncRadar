@@ -48,6 +48,7 @@ Use these repository instructions as the starting point. When code or validated 
 - `Microsoft.NET.Sdk.Razor` does not implicitly include `System.IO` or `System.Net.Http`; add explicit `using` directives when using `File`, `Path`, `Directory`, `IOException`, `HttpClient`, or `HttpResponseMessage`.
 - Do not add `System.Security.Cryptography.ProtectedData` as a package; it is already available in the target framework. Use `[SupportedOSPlatform("windows")]` where DPAPI requires it.
 - Avoid `using var _ = ...`; `_` is a real variable in that context and can conflict with later discard assignments.
+- C# 15 union types are enabled with `LangVersion=preview`. Use them only for small closed internal payload choices where exhaustive pattern matching removes duplicated event/result handling. Until the runtime ships `UnionAttribute` / `IUnion`, keep the App-local polyfill in `src/RepoSyncRadar.App/CompilerServices/UnionPolyfill.cs` and remove it when the target framework provides those types.
 - Before finishing C# edits, check language-server diagnostics or run a focused build so IDE naming rules such as IDE1006 are caught before handoff.
 
 ## Copilot SDK And Auth

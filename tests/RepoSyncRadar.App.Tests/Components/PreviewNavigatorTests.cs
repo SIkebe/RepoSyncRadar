@@ -19,6 +19,26 @@ public sealed class PreviewNavigatorTests
     }
 
     [Fact]
+    public void Publish_Raises_NavigationRequested_With_Uri_Case()
+    {
+        var sut = new PreviewNavigator();
+        PreviewNavigationRequest? captured = null;
+        var expected = new Uri("http://localhost:4500/en/foo");
+        sut.NavigationRequested += (_, request) => captured = request;
+
+        sut.Publish(expected);
+
+        Assert.NotNull(captured);
+        var actual = captured.Value switch
+        {
+            Uri url => url,
+            PreviewComparisonRequest => throw new Xunit.Sdk.XunitException("Expected URI navigation request."),
+            null => throw new Xunit.Sdk.XunitException("Expected non-null navigation request."),
+        };
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
     public void Publish_With_Null_Throws()
     {
         var sut = new PreviewNavigator();
@@ -41,6 +61,30 @@ public sealed class PreviewNavigatorTests
         sut.PublishComparison(request);
 
         Assert.Same(request, captured);
+    }
+
+    [Fact]
+    public void PublishComparison_Raises_NavigationRequested_With_Comparison_Case()
+    {
+        var sut = new PreviewNavigator();
+        PreviewNavigationRequest? captured = null;
+        var request = new PreviewComparisonRequest(
+            new Uri("http://localhost:4501/en/foo"),
+            new Uri("http://localhost:4500/en/foo"),
+            "変更前",
+            "PR HEAD");
+        sut.NavigationRequested += (_, navigationRequest) => captured = navigationRequest;
+
+        sut.PublishComparison(request);
+
+        Assert.NotNull(captured);
+        var actual = captured.Value switch
+        {
+            Uri => throw new Xunit.Sdk.XunitException("Expected comparison navigation request."),
+            PreviewComparisonRequest comparisonRequest => comparisonRequest,
+            null => throw new Xunit.Sdk.XunitException("Expected non-null navigation request."),
+        };
+        Assert.Same(request, actual);
     }
 
     [Fact]
