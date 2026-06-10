@@ -20,13 +20,14 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 
 ## 絶対ルール
 
-1. **公式根拠を先に読む**。README、nuspec、generated props/targets、XML docs、SDK source、SDK tests のいずれかで確認するまで API が存在すると断定しない。
+1. **ユーザー提供の公式 URL を最初に読む**。ブログ記事、release note、issue、PR、docs URL が渡されたら本文だけでなく、本文からリンクされる詳細 release notes / breaking changes / SDK docs も先に開き、関連項目をチェックリスト化してから package audit に進む。概要記事だけ読んだ扱いにしない。
 2. **target version を明確にする**。ユーザー指定があればそれを使う。未指定なら NuGet prerelease を含めて候補を確認し、最新へ進めてよいか判断する。
 3. **app code と突き合わせる**。SDK の changelog 感想で終えず、`src/RepoSyncRadar.App/Copilot/`、`RepoSyncRadar.Core/Options/`、settings、UI/tests を見る。
 4. **public surface 優先**。内部実装だけにあるものは使える API として扱わない。experimental API は `GHCP001` 等の警告と変更リスクを明示する。
 5. **機密情報を出さない**。トークン、prompt/response content、telemetry content は既定で記録・表示しない。`CaptureContent` を有効化する提案は必ずリスク付きで扱う。
 6. **既存の未コミット変更を壊さない**。dirty worktree を前提に、関係ない変更は戻さない。
 7. **実装は小さく根本に当てる**。package bump、version notice、SDK 契約との不一致、設定の未配線、安全な beta 新機能活用に絞る。
+8. **見送りも根拠を残す**。公式 release notes の項目を採用しない場合は、該当コード検索結果と「なぜこのアプリでは不要か」を PR 本文または完了報告に書く。
 
 ## 手順
 
@@ -38,14 +39,16 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 
 ### 2. 現在版と target 版を確認する
 
-1. `Directory.Packages.props` と project references から現在の `GitHub.Copilot.SDK` version を確認する。
-2. `dotnet package search GitHub.Copilot.SDK --exact-match --prerelease --format json` で target 版の存在を確認する。
-3. 変更前後の package metadata を読む。
+1. ユーザーが渡した公式 URL をすべて読む。概要ブログの場合は、記事内の release notes / breaking changes / SDK-specific notes へのリンクも辿る。
+2. 読んだ公式情報から「採用候補」「破壊的変更」「このリポジトリでは対象外」のチェックリストを作る。例: .NET SDK preview なら SDK release notes の各見出しを、`Directory.Build.props`、`.csproj`、release scripts、GitHub Actions、docs と突き合わせる。
+3. `Directory.Packages.props` と project references から現在の `GitHub.Copilot.SDK` version を確認する。
+4. `dotnet package search GitHub.Copilot.SDK --exact-match --prerelease --format json` で target 版の存在を確認する。
+5. 変更前後の package metadata を読む。
    - `.nuspec`: version、repository URL/commit、dependencies
    - `build/GitHub.Copilot.SDK.props`: bundled `CopilotCliVersion`
    - `build/GitHub.Copilot.SDK.targets`: CLI download/copy/publish behavior
    - README / XML docs: public API surface
-4. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。
+6. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。
 
 PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-String` を使う。
 
