@@ -20,7 +20,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 
 ## 絶対ルール
 
-1. **ユーザー提供の公式 URL を最初に読む**。ブログ記事、release note、issue、PR、docs URL が渡されたら本文だけでなく、本文からリンクされる詳細 release notes / breaking changes / SDK docs も先に開き、関連項目をチェックリスト化してから package audit に進む。概要記事だけ読んだ扱いにしない。
+1. **ユーザー提供の公式 URL を最初に読む**。ブログ記事、release note、issue、PR、docs URL が渡されたら本文だけでなく、本文からリンクされる詳細 release notes / breaking changes / SDK docs も先に開き、関連項目をチェックリスト化してから package audit に進む。概要記事だけ読んだ扱いにしない。RepoSyncRadar の技術スタックに関係する .NET preview では、SDK だけでなく ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C# の area notes も確認する。
 2. **target version を明確にする**。ユーザー指定があればそれを使う。未指定なら NuGet prerelease を含めて候補を確認し、最新へ進めてよいか判断する。
 3. **app code と突き合わせる**。SDK の changelog 感想で終えず、`src/RepoSyncRadar.App/Copilot/`、`RepoSyncRadar.Core/Options/`、settings、UI/tests を見る。
 4. **public surface 優先**。内部実装だけにあるものは使える API として扱わない。experimental API は `GHCP001` 等の警告と変更リスクを明示する。
@@ -40,7 +40,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 ### 2. 現在版と target 版を確認する
 
 1. ユーザーが渡した公式 URL をすべて読む。概要ブログの場合は、記事内の release notes / breaking changes / SDK-specific notes へのリンクも辿る。
-2. 読んだ公式情報から「採用候補」「破壊的変更」「このリポジトリでは対象外」のチェックリストを作る。例: .NET SDK preview なら SDK release notes の各見出しを、`Directory.Build.props`、`.csproj`、release scripts、GitHub Actions、docs と突き合わせる。
+2. 読んだ公式情報から「採用候補」「破壊的変更」「このリポジトリでは対象外」のチェックリストを作る。例: .NET preview なら SDK / ASP.NET Core / EF Core / WPF / libraries / runtime / C# release notes の各見出しを、`Directory.Build.props`、`.csproj`、release scripts、GitHub Actions、Blazor components、EF migrations、WPF host、docs と突き合わせる。
 3. `Directory.Packages.props` と project references から現在の `GitHub.Copilot.SDK` version を確認する。
 4. `dotnet package search GitHub.Copilot.SDK --exact-match --prerelease --format json` で target 版の存在を確認する。
 5. 変更前後の package metadata を読む。

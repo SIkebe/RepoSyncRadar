@@ -69,8 +69,8 @@ public static class CoreServiceCollectionExtensions
         services.AddOptions<DocsApiOptions>()
             .BindConfiguration(DocsApiOptions.SectionName)
             .ValidateDataAnnotations()
+            .Validate<DocsApiOptionsValidator>()
             .ValidateOnStart();
-        services.AddSingleton<IValidateOptions<DocsApiOptions>, DocsApiOptionsValidator>();
 
         services.AddOptions<CopilotOptions>()
             .BindConfiguration(CopilotOptions.SectionName)
