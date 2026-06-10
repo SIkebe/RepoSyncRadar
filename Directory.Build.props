@@ -9,6 +9,8 @@
     <!-- .NET 9.0.200+ では NuGet 監査の高重大度が既定でエラー扱いになる。
          直接依存のみゲートする(間接依存は上流の更新待ち)。 -->
     <NuGetAuditMode>direct</NuGetAuditMode>
+    <!-- .NET 11 Preview 5+: also gate on known vulnerabilities / EOL in the resolved .NET SDK. -->
+    <CheckSdkVulnerabilities>true</CheckSdkVulnerabilities>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <!-- Keep the analyzer baseline stable while adopting .NET 11 previews; preview SDKs can otherwise
          promote broad existing style suggestions to warnings-as-errors across unrelated code. -->
