@@ -58,6 +58,8 @@ public sealed class DraftsPanelTests
             Assert.Equal("TW", TextAreaValue(cut, "twitter"));
             Assert.Equal("CU", TextAreaValue(cut, "customer"));
             Assert.Equal("EX", TextAreaValue(cut, "explanation"));
+            Assert.Equal("3", cut.Find("[data-testid=\"drafts-body-twitter\"]").GetAttribute("rows"));
+            Assert.Equal("10", cut.Find("[data-testid=\"drafts-body-customer\"]").GetAttribute("rows"));
             Assert.Empty(cut.FindAll("[data-testid=\"drafts-section-teams\"]"));
             Assert.DoesNotContain("TM", cut.Markup, StringComparison.Ordinal);
         });
