@@ -356,8 +356,8 @@ $installRoot = Join-Path $env:LOCALAPPDATA 'SIkebe.RepoSyncRadar'
 Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 if ($CleanInstallRoot) {
     Invoke-VelopackUninstallBestEffort -InstallRoot $installRoot
+    Remove-StartMenuShortcutsBestEffort -InstallRoot $installRoot
     if (Test-Path $installRoot) {
-        Remove-StartMenuShortcutsBestEffort -InstallRoot $installRoot
         Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
     }
 }
