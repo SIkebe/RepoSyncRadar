@@ -1,4 +1,5 @@
 using GitHub.Copilot;
+using Microsoft.Extensions.Logging;
 
 namespace RepoSyncRadar.App.Copilot;
 
@@ -6,21 +7,25 @@ namespace RepoSyncRadar.App.Copilot;
 /// Production <see cref="ICopilotSession"/> that adapts the real Copilot SDK session.
 /// Owns the underlying <see cref="CopilotSession"/> handle and forwards lifecycle calls.
 /// </summary>
-internal sealed class SdkCopilotSession : ICopilotSession
+internal sealed partial class SdkCopilotSession : ICopilotSession
 {
     private readonly CopilotSession _session;
     private readonly SessionPurpose _purpose;
+    private readonly ILogger _logger;
     private readonly ICopilotUsageTracker? _usageTracker;
     private readonly IDisposable? _usageSubscription;
 
     public SdkCopilotSession(
         CopilotSession session,
         SessionPurpose purpose,
+        ILogger logger,
         ICopilotUsageTracker? usageTracker)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(logger);
         _session = session;
         _purpose = purpose;
+        _logger = logger;
         _usageTracker = usageTracker;
         if (usageTracker is not null)
         {
@@ -61,6 +66,7 @@ internal sealed class SdkCopilotSession : ICopilotSession
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            LogUsageMetricsRefreshFailed(_logger, ex, _session.SessionId);
         }
     }
 
@@ -72,4 +78,8 @@ internal sealed class SdkCopilotSession : ICopilotSession
         _usageSubscription?.Dispose();
         await _session.DisposeAsync().ConfigureAwait(false);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
+        Message = "Could not refresh Copilot SDK usage metrics for session {SessionId}.")]
+    private static partial void LogUsageMetricsRefreshFailed(ILogger logger, Exception ex, string sessionId);
 }

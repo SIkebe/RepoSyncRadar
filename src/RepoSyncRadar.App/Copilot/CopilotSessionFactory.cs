@@ -116,7 +116,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             session = await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
         }
 
-        return new SdkCopilotSession(session, purpose, _usageTracker);
+        return new SdkCopilotSession(session, purpose, _logger, _usageTracker);
     }
 
     internal static string? ResolveFallbackModel(string? configuredModel, IReadOnlyList<string> availableModelIds)
