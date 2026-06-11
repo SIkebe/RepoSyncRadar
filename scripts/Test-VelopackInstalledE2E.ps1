@@ -76,6 +76,78 @@ function Remove-DirectoryBestEffort {
     }
 }
 
+function Remove-UninstallRegistryEntryBestEffort {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$InstallRoot
+    )
+
+    $registryPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\SIkebe.RepoSyncRadar'
+    if (-not (Test-Path $registryPath)) {
+        return
+    }
+
+    try {
+        $installRootPrefix = Get-DirectoryPrefix -Path $InstallRoot
+        $entry = Get-ItemProperty -Path $registryPath -ErrorAction Stop
+        $paths = @(
+            $entry.InstallLocation,
+            $entry.DisplayIcon,
+            $entry.UninstallString,
+            $entry.QuietUninstallString
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+        $targetsInstallRoot = $false
+        foreach ($path in $paths) {
+            if ([string]$path -like "*$InstallRoot*") {
+                $targetsInstallRoot = $true
+                break
+            }
+
+            try {
+                $candidate = [string]$path
+                if ($candidate.StartsWith('"', [System.StringComparison]::Ordinal)) {
+                    $candidate = $candidate.Substring(1, $candidate.IndexOf('"', 1) - 1)
+                }
+
+                $candidateFullPath = [System.IO.Path]::GetFullPath($candidate)
+                if ($candidateFullPath.StartsWith($installRootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $targetsInstallRoot = $true
+                    break
+                }
+            }
+            catch {
+            }
+        }
+
+        if ($entry.DisplayName -eq 'RepoSyncRadar' -and $targetsInstallRoot) {
+            Remove-Item -Path $registryPath -Recurse -Force -ErrorAction Stop
+        }
+    }
+    catch {
+        Write-Warning "Could not remove stale RepoSyncRadar uninstall registry entry: $($_.Exception.Message)"
+    }
+}
+
+function Invoke-VelopackUninstallBestEffort {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$InstallRoot
+    )
+
+    $updateExe = Join-Path $InstallRoot 'Update.exe'
+    if (Test-Path $updateExe) {
+        try {
+            Invoke-ProcessCommand -FilePath $updateExe -ArgumentList @('--uninstall', '--silent')
+        }
+        catch {
+            Write-Warning "Could not uninstall RepoSyncRadar through Velopack: $($_.Exception.Message)"
+        }
+    }
+
+    Remove-UninstallRegistryEntryBestEffort -InstallRoot $InstallRoot
+}
+
 function Get-ShortcutTargetPath {
     param(
         [Parameter(Mandatory = $true)]
@@ -282,8 +354,12 @@ $setupExe = $setupCandidates[0]
 $installRoot = Join-Path $env:LOCALAPPDATA 'SIkebe.RepoSyncRadar'
 
 Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
-if ($CleanInstallRoot -and (Test-Path $installRoot)) {
-    Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
+if ($CleanInstallRoot) {
+    Invoke-VelopackUninstallBestEffort -InstallRoot $installRoot
+    if (Test-Path $installRoot) {
+        Remove-StartMenuShortcutsBestEffort -InstallRoot $installRoot
+        Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
+    }
 }
 $seededShortcutPaths = @()
 if ($CleanInstallRoot) {
@@ -331,8 +407,11 @@ finally {
         Remove-Item $seededShortcutFolder -Force -ErrorAction SilentlyContinue
     }
 
-    if ($CleanInstallRoot -and (Test-Path $installRoot)) {
+    if ($CleanInstallRoot) {
+        Invoke-VelopackUninstallBestEffort -InstallRoot $installRoot
         Remove-StartMenuShortcutsBestEffort -InstallRoot $installRoot
-        Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
+        if (Test-Path $installRoot) {
+            Remove-DirectoryBestEffort -Path $installRoot -ThrowOnFailure
+        }
     }
 }
