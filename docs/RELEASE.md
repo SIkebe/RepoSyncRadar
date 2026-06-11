@@ -5,12 +5,12 @@ RepoSyncRadar is distributed on Windows with Velopack. Release builds are self-c
 ## Release Model
 
 - Installer/update framework: Velopack.
-- App publish mode: self-contained, RID-specific, single-file app payload with WPF partial trimming enabled.
+- App publish mode: self-contained, RID-specific, multi-file app payload with WPF partial trimming enabled.
 - Runtime dependencies: Evergreen WebView2 Runtime.
 - Channels: use architecture-specific channels such as `win-x64-stable` and `win-arm64-stable`.
 - Signing: public artifacts must be signed before broad distribution. The provider is still undecided; see `docs/PUBLIC_RELEASE_READINESS.md`.
 
-The self-contained mode is not Native AOT, and it relies on the unsupported WPF partial-trim workaround tracked by [dotnet/wpf#3811](https://github.com/dotnet/wpf/issues/3811). It avoids a separate .NET Desktop Runtime install at the cost of larger packages and no shared runtime servicing for the bundled runtime. Validate the installed package with the full installed-app smoke before using the output broadly.
+The self-contained mode is not Native AOT, and it relies on the unsupported WPF partial-trim workaround tracked by [dotnet/wpf#3811](https://github.com/dotnet/wpf/issues/3811). It avoids a separate .NET Desktop Runtime install at the cost of larger packages and no shared runtime servicing for the bundled runtime. The payload is intentionally multi-file so WPF's `DirectWriteForwarder.dll` can load its `ijwhost.dll` dependency after install. Validate the installed package with the full installed-app smoke before using the output broadly.
 
 To compare against the older shared-runtime packaging path, pass `-PublishMode FrameworkDependent`:
 

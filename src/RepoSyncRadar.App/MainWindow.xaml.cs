@@ -209,8 +209,7 @@ public partial class MainWindow : Window
         _allowList = new UrlAllowList(webViewOptions.AllowedUrlHosts);
         _previewSession = services.GetRequiredService<PreviewSession>();
         _previewNavigator = services.GetRequiredService<IPreviewNavigator>();
-        _previewNavigator.Requested += OnPreviewRequested;
-        _previewNavigator.ComparisonRequested += OnPreviewComparisonRequested;
+        _previewNavigator.NavigationRequested += OnPreviewNavigationRequested;
         _workbenchLayoutCoordinator = services.GetRequiredService<IWorkbenchLayoutCoordinator>();
         _workbenchLayoutCoordinator.SettingsExpandedChanged += OnSettingsExpandedChanged;
         DocsView.NavigationStarting += OnDocsViewNavigationStarting;
@@ -221,8 +220,7 @@ public partial class MainWindow : Window
         PreviewView.PreviewMouseDown += OnDocsSurfacePreviewMouseDown;
         Closed += (_, _) =>
         {
-            _previewNavigator.Requested -= OnPreviewRequested;
-            _previewNavigator.ComparisonRequested -= OnPreviewComparisonRequested;
+            _previewNavigator.NavigationRequested -= OnPreviewNavigationRequested;
             _workbenchLayoutCoordinator.SettingsExpandedChanged -= OnSettingsExpandedChanged;
             DocsView.NavigationStarting -= OnDocsViewNavigationStarting;
             PreviewView.NavigationStarting -= OnPreviewViewNavigationStarting;
@@ -859,27 +857,30 @@ public partial class MainWindow : Window
     /// before this fires, so the resource filter will already allow
     /// <c>http://localhost:{port}/*</c> through.
     /// </summary>
-    private void OnPreviewRequested(object? sender, Uri url)
+    private void OnPreviewNavigationRequested(object? sender, PreviewNavigationRequest request)
     {
-        if (Dispatcher.CheckAccess())
+        void Navigate()
         {
-            NavigatePreviewRequest(url);
+            switch (request)
+            {
+                case Uri url:
+                    NavigatePreviewRequest(url);
+                    break;
+                case PreviewComparisonRequest comparisonRequest:
+                    NavigatePreviewComparisonRequest(comparisonRequest);
+                    break;
+                case null:
+                    throw new ArgumentException("Preview navigation request did not contain a value.", nameof(request));
+            }
         }
-        else
-        {
-            Dispatcher.BeginInvoke(DispatcherPriority.Normal, () => NavigatePreviewRequest(url));
-        }
-    }
 
-    private void OnPreviewComparisonRequested(object? sender, PreviewComparisonRequest request)
-    {
         if (Dispatcher.CheckAccess())
         {
-            NavigatePreviewComparisonRequest(request);
+            Navigate();
         }
         else
         {
-            Dispatcher.BeginInvoke(DispatcherPriority.Normal, () => NavigatePreviewComparisonRequest(request));
+            Dispatcher.BeginInvoke(DispatcherPriority.Normal, Navigate);
         }
     }
 

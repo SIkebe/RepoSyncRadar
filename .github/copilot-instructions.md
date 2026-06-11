@@ -16,7 +16,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 ## Build And Test
 
-- The pinned SDK is in `global.json`: .NET SDK `11.0.100-preview.4.26230.115` with `rollForward: latestFeature` and `allowPrerelease: true`.
+- The pinned SDK is in `global.json`: .NET SDK `11.0.100-preview.5.26302.115` with `rollForward: latestFeature` and `allowPrerelease: true`.
 - Restore/build from the repo root. Prefer PowerShell on Windows.
 - Validate ordinary changes with:
   - `dotnet build RepoSyncRadar.sln -warnaserror`
@@ -31,10 +31,10 @@ Use these repository instructions as the starting point. When code or validated 
 
 ## Coding Rules
 
-- Warnings are errors. `Directory.Build.props` enables nullable, analyzers, .NET 10 recommended analysis, and code style enforcement. Keep the analyzer baseline stable during .NET 11 previews unless the PR intentionally addresses the resulting style churn.
+- Warnings are errors. `Directory.Build.props` enables nullable, analyzers, .NET 10 recommended analysis, SDK vulnerability/EOL checks via `CheckSdkVulnerabilities`, and code style enforcement. Keep the analyzer baseline stable during .NET 11 previews unless the PR intentionally addresses the resulting style churn.
 - The app/package version is managed by `RepoSyncRadarVersion` in `Directory.Build.props`. The GitHub Actions release workflow reads that property and is intentionally manual-only (`workflow_dispatch`), so tag pushes or manually publishing an existing GitHub Release must not trigger another release build. Local one-off packaging may override it with `-p:RepoSyncRadarVersion=<semver>` through `scripts/Build-VelopackRelease.ps1`; do not set ad hoc `<Version>` values in individual projects.
 - Official release assets are installer/update-feed only: pass `-NoPortable -NoLegacyManifest` to `scripts/Build-VelopackRelease.ps1` so unvalidated portable bundles and legacy Squirrel `RELEASES-*` manifests are not published.
-- `scripts/Build-VelopackRelease.ps1` defaults to `-PublishMode SelfContainedPartialTrim`, which bundles .NET and asks Velopack to bootstrap only WebView2. It is not Native AOT; it uses the unsupported WPF partial-trim workaround from dotnet/wpf#3811 and needs installed-package smoke validation before broad use. Pass `-PublishMode FrameworkDependent` only for explicit shared-runtime comparison builds.
+- `scripts/Build-VelopackRelease.ps1` defaults to `-PublishMode SelfContainedPartialTrim`, which bundles .NET and asks Velopack to bootstrap only WebView2. It is not Native AOT; it uses the unsupported WPF partial-trim workaround from dotnet/wpf#3811 and needs installed-package smoke validation before broad use. Keep this mode multi-file and copy `ijwhost.dll` beside WPF's `DirectWriteForwarder.dll`; .NET 11 Preview 5 single-file payloads fail installed WebView E2E startup with `DirectWriteForwarder.dll` load errors. Pass `-PublishMode FrameworkDependent` only for explicit shared-runtime comparison builds.
 - Velopack packages should explicitly pass `--icon src/RepoSyncRadar.App/Assets/AppIcon.ico` and `--shortcuts StartMenuRoot`, and installed-package smoke must verify both `current\RepoSyncRadar.exe` and the Start Menu shortcut so Windows search can find the installed app.
 - GitHub Releases are treated as immutable once published. The Release workflow uploads Velopack assets without `--clobber`, uses draft releases for asset attachment, and can publish an existing asset-bearing draft only after validating the expected asset names. Correct bad published assets with a new `RepoSyncRadarVersion` and tag.
 - Write git commit messages in English.
@@ -48,6 +48,7 @@ Use these repository instructions as the starting point. When code or validated 
 - `Microsoft.NET.Sdk.Razor` does not implicitly include `System.IO` or `System.Net.Http`; add explicit `using` directives when using `File`, `Path`, `Directory`, `IOException`, `HttpClient`, or `HttpResponseMessage`.
 - Do not add `System.Security.Cryptography.ProtectedData` as a package; it is already available in the target framework. Use `[SupportedOSPlatform("windows")]` where DPAPI requires it.
 - Avoid `using var _ = ...`; `_` is a real variable in that context and can conflict with later discard assignments.
+- C# 15 union types are enabled with `LangVersion=preview`. Use them only for small closed internal payload choices where exhaustive pattern matching removes duplicated event/result handling. Until the runtime ships `UnionAttribute` / `IUnion`, keep the App-local polyfill in `src/RepoSyncRadar.App/CompilerServices/UnionPolyfill.cs` and remove it when the target framework provides those types.
 - Before finishing C# edits, check language-server diagnostics or run a focused build so IDE naming rules such as IDE1006 are caught before handoff.
 
 ## Copilot SDK And Auth

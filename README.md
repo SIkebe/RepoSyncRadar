@@ -80,7 +80,7 @@ For a full setup walkthrough, OAuth details, local-preview behavior, and release
 
 ## Develop from source
 
-Source builds require the preview .NET SDK pinned in [`global.json`](global.json): `11.0.100-preview.4.26230.115` with prerelease roll-forward enabled.
+Source builds require the preview .NET SDK pinned in [`global.json`](global.json): `11.0.100-preview.5.26302.115` with prerelease roll-forward enabled.
 
 ```powershell
 git clone <this-repo-url> C:\github\RepoSyncRadar

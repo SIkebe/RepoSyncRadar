@@ -17,11 +17,8 @@ namespace RepoSyncRadar.App.Components;
 /// </remarks>
 public interface IPreviewNavigator
 {
-    /// <summary>Raised whenever a new preview URL is ready for the host to display.</summary>
-    event EventHandler<Uri>? Requested;
-
-    /// <summary>Raised whenever two local preview URLs are ready for visual before/after comparison.</summary>
-    event EventHandler<PreviewComparisonRequest>? ComparisonRequested;
+    /// <summary>Raised whenever the host preview surface should navigate or compare content.</summary>
+    event EventHandler<PreviewNavigationRequest>? NavigationRequested;
 
     /// <summary>
     /// Raised when the WPF host wants the currently-active preview component to
@@ -82,18 +79,19 @@ public sealed record PreviewComparisonRequest(
     IReadOnlyList<DocsVersion>? AffectedVersions = null,
     int SourceChangeCount = 0);
 
+public union PreviewNavigationRequest(Uri, PreviewComparisonRequest);
+
 /// <inheritdoc cref="IPreviewNavigator" />
 public sealed class PreviewNavigator : IPreviewNavigator
 {
-    public event EventHandler<Uri>? Requested;
-    public event EventHandler<PreviewComparisonRequest>? ComparisonRequested;
+    public event EventHandler<PreviewNavigationRequest>? NavigationRequested;
     public event EventHandler<DocsVersion>? VersionChangeRequested;
     public event EventHandler<PreviewFileNavigationDirection>? FileNavigationRequested;
 
     public void Publish(Uri url)
     {
         ArgumentNullException.ThrowIfNull(url);
-        Requested?.Invoke(this, url);
+        NavigationRequested?.Invoke(this, url);
     }
 
     public void PublishComparison(PreviewComparisonRequest request)
@@ -101,7 +99,7 @@ public sealed class PreviewNavigator : IPreviewNavigator
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.BeforeUrl);
         ArgumentNullException.ThrowIfNull(request.AfterUrl);
-        ComparisonRequested?.Invoke(this, request);
+        NavigationRequested?.Invoke(this, request);
     }
 
     public void RequestVersionChange(DocsVersion version)

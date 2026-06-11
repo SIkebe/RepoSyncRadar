@@ -127,7 +127,7 @@ public class CommitDetailTests
             .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
         var navigator = new PreviewNavigator();
         Uri? captured = null;
-        navigator.Requested += (_, url) => captured = url;
+        navigator.NavigationRequested += (_, request) => captured = GetUriRequest(request);
 
         using var cut = RenderDetailWith(commit, resolver, navigator, new PreviewSession());
 
@@ -443,7 +443,7 @@ public class CommitDetailTests
 
         var navigator = new PreviewNavigator();
         Uri? captured = null;
-        navigator.Requested += (_, url) => captured = url;
+        navigator.NavigationRequested += (_, request) => captured = GetUriRequest(request);
         var session = new PreviewSession(); // inactive (no Activate call)
 
         using var cut = RenderDetailWith(commit, resolver, navigator, session);
@@ -468,7 +468,7 @@ public class CommitDetailTests
 
         var navigator = new PreviewNavigator();
         PreviewComparisonRequest? captured = null;
-        navigator.ComparisonRequested += (_, request) => captured = request;
+        navigator.NavigationRequested += (_, request) => captured = GetComparisonRequest(request);
         var session = new PreviewSession();
         var coordinator = Substitute.For<IPreviewCoordinator>();
         coordinator.PrepareMarkdownComparisonPreviewAsync(
@@ -525,7 +525,7 @@ public class CommitDetailTests
 
         var navigator = new PreviewNavigator();
         PreviewComparisonRequest? captured = null;
-        navigator.ComparisonRequested += (_, request) => captured = request;
+        navigator.NavigationRequested += (_, request) => captured = GetComparisonRequest(request);
         var session = new PreviewSession();
         var coordinator = Substitute.For<IPreviewCoordinator>();
         coordinator.PrepareMarkdownComparisonPreviewAsync(
@@ -644,7 +644,13 @@ public class CommitDetailTests
             });
         var navigator = new PreviewNavigator();
         var publishCount = 0;
-        navigator.ComparisonRequested += (_, _) => publishCount++;
+        navigator.NavigationRequested += (_, request) =>
+        {
+            if (GetComparisonRequest(request) is not null)
+            {
+                publishCount++;
+            }
+        };
 
         using var cut = RenderDetailWith(first, resolver, navigator, new PreviewSession(), coordinator);
         cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
@@ -695,7 +701,7 @@ public class CommitDetailTests
             });
         var navigator = new PreviewNavigator();
         PreviewComparisonRequest? captured = null;
-        navigator.ComparisonRequested += (_, request) => captured = request;
+        navigator.NavigationRequested += (_, request) => captured = GetComparisonRequest(request);
 
         using var cut = RenderDetailWith(first, resolver, navigator, new PreviewSession(), coordinator);
         cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
@@ -1090,7 +1096,7 @@ public class CommitDetailTests
 
         var navigator = new PreviewNavigator();
         Uri? captured = null;
-        navigator.Requested += (_, url) => captured = url;
+        navigator.NavigationRequested += (_, request) => captured = GetUriRequest(request);
         var session = new PreviewSession();
         session.Activate(4500);
 
@@ -1100,6 +1106,22 @@ public class CommitDetailTests
         Assert.NotNull(captured);
         Assert.Equal("http://localhost:4500/en/copilot/about-copilot", captured!.AbsoluteUri);
     }
+
+    private static Uri? GetUriRequest(PreviewNavigationRequest request)
+        => request switch
+        {
+            Uri url => url,
+            PreviewComparisonRequest => null,
+            null => null,
+        };
+
+    private static PreviewComparisonRequest? GetComparisonRequest(PreviewNavigationRequest request)
+        => request switch
+        {
+            Uri => null,
+            PreviewComparisonRequest comparisonRequest => comparisonRequest,
+            null => null,
+        };
 
     private static IRenderedComponent<CommitDetail> RenderDetailWith(
         Commit commit,
