@@ -29,6 +29,7 @@ public sealed partial class AdoptionSession
     internal const int FewShotLimit = 5;
     internal const int MaxRepairSourceChars = 20 * 1024;
     internal const string TruncatedMarker = "\n…[truncated by RepoSyncRadar — original diff exceeded 50KB]\n";
+    internal static readonly TimeSpan DraftSendTimeout = TimeSpan.FromMinutes(10);
 
     private static readonly JsonSerializerOptions _draftJsonOptions = new()
     {
@@ -106,7 +107,7 @@ public sealed partial class AdoptionSession
         DraftBundle bundle;
         await using (session.ConfigureAwait(false))
         {
-            var raw = await session.SendAsync(prompt, cancellationToken).ConfigureAwait(false);
+            var raw = await session.SendAsync(prompt, DraftSendTimeout, cancellationToken).ConfigureAwait(false);
             bundle = await ParseOrRepairBundleAsync(session, raw, cancellationToken).ConfigureAwait(false);
         }
         bundle = EnsureOfficialDocUrls(bundle, officialDocUrls);
@@ -338,7 +339,7 @@ public sealed partial class AdoptionSession
         }
         catch (InvalidOperationException ex) when (IsJsonParseFailure(ex))
         {
-            var repaired = await session.SendAsync(BuildRepairPrompt(raw), cancellationToken).ConfigureAwait(false);
+            var repaired = await session.SendAsync(BuildRepairPrompt(raw), DraftSendTimeout, cancellationToken).ConfigureAwait(false);
             try
             {
                 return ParseBundle(repaired);

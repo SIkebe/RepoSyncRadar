@@ -84,6 +84,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Morning Triage is triggered from `AppHeader` through `ICopilotAgent.RunMorningTriageAsync()`. Triage/Maintenance sessions register `RadarTools.CreateAll()` and `RadarWriteTools.CreateAll()`; write-like tools are permission-gated except `radar_score_commit`, which `RadarPermissionPolicy` pre-approves for scoring persistence. Final review decisions (`radar_save_review`) are user-owned and must not be auto-written by Morning Triage, but registered Ignore rules still auto-mark future matching commits as `Rejected` during ingestion.
 - `radar_score_commit` auto-marks still-unreviewed commits with score `0.44` or lower as `ReviewStatus.Rejected` with reason `auto-low-score`. Do not overwrite user-owned review states such as `Adopted`, `Later`, `Archived`, or existing `Rejected` rows.
 - Triage sends need the longer `MorningTriageSession.TriageSendTimeout` through `ICopilotSession.SendAsync(prompt, timeout, ct)`; the SDK default one-minute wait is too short.
+- Adoption draft/explanation generation and JSON repair sends need `AdoptionSession.DraftSendTimeout`; docs diffs plus URL fetches can exceed the SDK default one-minute wait and leave regenerated drafts empty.
 
 ## UI And Product Behavior
 
