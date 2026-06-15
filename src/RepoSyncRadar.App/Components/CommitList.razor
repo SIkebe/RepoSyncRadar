@@ -40,7 +40,8 @@
             {
                 <li class="@BuildRowClass(commit)"
                     data-testid="commit-row"
-                    data-sha="@commit.Sha">
+                    data-sha="@commit.Sha"
+                    @onclick="() => OnSelectAsync(commit)">
                     <input type="checkbox"
                            class="commit-row-select"
                            data-testid="commit-select"
@@ -53,6 +54,7 @@
                             class="commit-row-button"
                             data-testid="commit-row-select-button"
                             aria-current="@BuildRowAriaCurrent(commit)"
+                            @onclick:stopPropagation="true"
                             @onclick="() => OnSelectAsync(commit)">
                         <span class="sha">@ShortSha(commit.Sha)</span>
                         <span class="message" title="@commit.Message">@FirstLine(commit.Message)</span>
