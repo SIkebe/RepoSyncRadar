@@ -614,16 +614,16 @@ html, body {
 
 .commit-row {
     display: grid;
-    grid-template-columns: auto 8ch minmax(0, 1fr) auto auto;
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 0.5rem;
-    align-items: baseline;
+    align-items: center;
     padding: 0.4rem 0.6rem;
     border: 1px solid transparent;
     border-radius: 4px;
-    cursor: pointer;
 }
 
-.commit-row:hover {
+.commit-row:hover,
+.commit-row:focus-within {
     background: #f1f3f5;
 }
 
@@ -648,6 +648,27 @@ html, body {
     height: 1rem;
     margin: 0;
     width: 1rem;
+}
+
+.commit-row-button {
+    align-items: baseline;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    display: grid;
+    font: inherit;
+    gap: 0.5rem;
+    grid-template-columns: 8ch minmax(0, 1fr) auto auto;
+    min-width: 0;
+    padding: 0;
+    text-align: left;
+}
+
+.commit-row-button:focus-visible {
+    border-radius: 3px;
+    outline: 2px solid #0969da;
+    outline-offset: 2px;
 }
 
 .commit-row .sha {

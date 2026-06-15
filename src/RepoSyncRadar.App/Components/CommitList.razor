@@ -40,8 +40,7 @@
             {
                 <li class="@BuildRowClass(commit)"
                     data-testid="commit-row"
-                    data-sha="@commit.Sha"
-                    @onclick="() => OnSelectAsync(commit)">
+                    data-sha="@commit.Sha">
                     <input type="checkbox"
                            class="commit-row-select"
                            data-testid="commit-select"
@@ -50,14 +49,20 @@
                            checked="@IsSelected(commit.Sha)"
                            @onclick:stopPropagation="true"
                            @onchange="() => ToggleSelectionAsync(commit.Sha)" />
-                    <span class="sha">@ShortSha(commit.Sha)</span>
-                    <span class="message" title="@commit.Message">@FirstLine(commit.Message)</span>
-                    <span class="@BuildScoreClass(commit)"
-                          data-testid="commit-row-score"
-                          title="@BuildScoreTitle(commit)">@FormatScore(commit)</span>
-                    <time class="authored" datetime="@commit.AuthoredAt.ToString("O")">
-                        @commit.AuthoredAt.ToString("yyyy-MM-dd")
-                    </time>
+                    <button type="button"
+                            class="commit-row-button"
+                            data-testid="commit-row-select-button"
+                            aria-current="@BuildRowAriaCurrent(commit)"
+                            @onclick="() => OnSelectAsync(commit)">
+                        <span class="sha">@ShortSha(commit.Sha)</span>
+                        <span class="message" title="@commit.Message">@FirstLine(commit.Message)</span>
+                        <span class="@BuildScoreClass(commit)"
+                              data-testid="commit-row-score"
+                              title="@BuildScoreTitle(commit)">@FormatScore(commit)</span>
+                        <time class="authored" datetime="@commit.AuthoredAt.ToString("O")">
+                            @commit.AuthoredAt.ToString("yyyy-MM-dd")
+                        </time>
+                    </button>
                 </li>
             }
         </ul>
@@ -131,6 +136,9 @@
         }
         return string.Join(' ', classes);
     }
+
+    private string? BuildRowAriaCurrent(Commit commit)
+        => SelectedSha == commit.Sha ? "true" : null;
 
     private string BuildSelectAllLabel()
         => AreAllVisibleSelected() ? L["Common.ClearAll"] : L["Common.SelectAll"];
