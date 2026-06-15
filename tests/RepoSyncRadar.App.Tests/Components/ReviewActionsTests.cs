@@ -165,6 +165,36 @@ public sealed class ReviewActionsTests : IDisposable
     }
 
     [Fact]
+    public void Boost_Status_And_Error_Are_Announced()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc"));
+
+        cut.Find("[data-testid=\"review-boost-pattern\"]").Input("content/copilot/**");
+        cut.Find("[data-testid=\"review-boost-delta\"]").Input("invalid");
+        cut.Find("[data-testid=\"review-boost\"]").Click();
+
+        var error = cut.Find("[data-testid=\"review-boost-error\"]");
+        Assert.Equal("alert", error.GetAttribute("role"));
+
+        cut.Find("[data-testid=\"review-boost-delta\"]").Input("1");
+        repo.AddBoostRuleAsync("content/copilot/**", 1, null, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+        cut.Find("[data-testid=\"review-boost\"]").Click();
+
+        var status = cut.Find("[data-testid=\"review-boost-status\"]");
+        Assert.Equal("status", status.GetAttribute("role"));
+        Assert.Equal("polite", status.GetAttribute("aria-live"));
+        Assert.Equal("true", status.GetAttribute("aria-atomic"));
+    }
+
+    [Fact]
     public void Renders_Using_Cascaded_DisplayCulture_After_Process_Culture_Changes()
     {
         AppDisplayCulture.Apply("en");

@@ -5,6 +5,8 @@ html, body {
     font-family: "Segoe UI", "Yu Gothic UI", -apple-system, BlinkMacSystemFont, sans-serif;
     background: #fafafa;
     color: #1f1f1f;
+    --radar-focus-ring: #0969da;
+    --radar-focus-shadow: rgba(9, 105, 218, 0.2);
 }
 
 #app {
@@ -89,6 +91,34 @@ html, body {
     background: var(--radar-panel-bg) !important;
     border: 1px solid var(--radar-border-subtle);
     color: var(--radar-fg) !important;
+}
+
+.app-header-row,
+.app-header-content {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.app-header-row {
+    justify-content: space-between;
+}
+
+.app-header-secondary-text {
+    font-size: 0.85em;
+    opacity: 0.85;
+}
+
+.app-header-error-text {
+    color: #ef4444;
+    font-size: 0.85em;
+}
+
+.app-header-version {
+    font-size: 0.8em;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.7;
 }
 
 .progress-metric-list,
@@ -1246,6 +1276,35 @@ html, body {
     background: #0759b8;
 }
 
+.toolbar-button:focus-visible,
+.review-button:focus-visible,
+.bulk-review-button:focus-visible,
+.commit-search-clear:focus-visible,
+.commit-list-select-all:focus-visible,
+.sidebar-item:focus-visible,
+.drafts-jump-link:focus-visible,
+.review-reason-chip:focus-visible,
+.review-suggestion-chip:focus-visible,
+.settings-theme-option:focus-visible,
+.settings-section-nav-button:focus-visible,
+.preview-cancel:focus-visible,
+.radar-commit-detail .file-row .open-in-webview:focus-visible,
+.radar-commit-detail .commit-pr-external-link:focus-visible,
+.radar-commit-detail .commit-pr-link:focus-visible,
+.local-settings-field input:focus-visible,
+.local-settings-field textarea:focus-visible,
+.local-settings-field select:focus-visible,
+.local-settings-check input:focus-visible,
+.review-input-action input:focus-visible,
+.review-boost-field input:focus-visible,
+.commit-search-input:focus-visible,
+.commit-row-select:focus-visible,
+.radar-commit-detail .urls a:focus-visible {
+    outline: 2px solid var(--radar-focus-ring, #0969da);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--radar-focus-shadow, rgba(9, 105, 218, 0.2));
+}
+
 .toolbar-button:disabled,
 .review-button:disabled,
 .review-input-action input:disabled {
@@ -2313,6 +2372,103 @@ html, body {
 
 @keyframes preview-spinner-rotate {
     to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .preview-spinner {
+        animation: none;
+    }
+
+    .radar-sidebar-resizer::before,
+    .review-ignore-panel summary,
+    .review-ignore-chevron {
+        transition: none;
+    }
+}
+
+@media (forced-colors: active) {
+    html,
+    body {
+        --radar-focus-ring: Highlight;
+        --radar-focus-shadow: transparent;
+        background: Canvas;
+        color: CanvasText;
+    }
+
+    .radar-sidebar-pane,
+    .action-panel,
+    .batch-explanation-panel,
+    .radar-commit-detail .scoring,
+    .radar-commit-detail .commit-history,
+    .drafts-channel,
+    .local-settings-group,
+    .review-ignore-panel summary,
+    .preview-progress {
+        background: Canvas;
+        border-color: CanvasText;
+        color: CanvasText;
+        forced-color-adjust: auto;
+    }
+
+    .toolbar-button,
+    .review-button,
+    .bulk-review-button,
+    .commit-search-clear,
+    .commit-list-select-all,
+    .sidebar-item,
+    .drafts-jump-link,
+    .review-reason-chip,
+    .review-suggestion-chip,
+    .settings-theme-option,
+    .settings-section-nav-button,
+    .preview-cancel,
+    .radar-commit-detail .file-row .open-in-webview {
+        background: ButtonFace;
+        border-color: ButtonText;
+        color: ButtonText;
+    }
+
+    .toolbar-button:disabled,
+    .review-button:disabled,
+    .bulk-review-button:disabled,
+    .preview-cancel:disabled {
+        color: GrayText;
+        border-color: GrayText;
+    }
+
+    .commit-search-input,
+    .local-settings-field input,
+    .local-settings-field textarea,
+    .local-settings-field select,
+    .review-input-action input,
+    .review-boost-field input,
+    .drafts-channel .drafts-body {
+        background: Canvas;
+        border-color: ButtonText;
+        color: CanvasText;
+    }
+
+    .sidebar-item.active,
+    .commit-row.active,
+    .commit-row.selected,
+    .radar-commit-detail .file-row.preview-active,
+    .settings-theme-option.active,
+    .settings-section-nav-button.active {
+        border-color: Highlight;
+        outline: 2px solid Highlight;
+        outline-offset: 1px;
+    }
+
+    .settings-error,
+    .review-action-error,
+    .sidebar-auth-error,
+    .drafts-validation {
+        color: Mark;
+    }
+
+    a {
+        color: LinkText;
+    }
 }
 
 .preview-log-tail {

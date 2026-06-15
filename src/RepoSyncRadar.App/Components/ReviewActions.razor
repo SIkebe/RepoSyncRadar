@@ -219,11 +219,15 @@
             </div>
             @if (!string.IsNullOrWhiteSpace(_boostError))
             {
-                <p class="review-action-error" data-testid="review-boost-error">@_boostError</p>
+                <p class="review-action-error" data-testid="review-boost-error" role="alert">@_boostError</p>
             }
             @if (!string.IsNullOrWhiteSpace(_boostStatus))
             {
-                <p class="review-action-status" data-testid="review-boost-status">@_boostStatus</p>
+                <p class="review-action-status"
+                   data-testid="review-boost-status"
+                   role="status"
+                   aria-live="polite"
+                   aria-atomic="true">@_boostStatus</p>
             }
         </div>
     </details>

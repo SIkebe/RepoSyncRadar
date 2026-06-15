@@ -440,14 +440,35 @@ public sealed class DraftsPanelTests
         cut.WaitForAssertion(() =>
         {
             Assert.Contains("X 文字数: 29", cut.Find("[data-testid=\"drafts-count-twitter\"]").TextContent, StringComparison.Ordinal);
-            Assert.Contains("公式 URL", cut.Find("[data-testid=\"drafts-warning-twitter\"]").TextContent, StringComparison.Ordinal);
+            var twitterBody = cut.Find("[data-testid=\"drafts-body-twitter\"]");
+            var twitterWarning = cut.Find("[data-testid=\"drafts-warning-twitter\"]");
+            Assert.Equal("drafts-heading-twitter", twitterBody.GetAttribute("aria-labelledby"));
+            Assert.Equal("drafts-meta-twitter drafts-warnings-twitter", twitterBody.GetAttribute("aria-describedby"));
+            Assert.Equal("drafts-warnings-twitter", twitterBody.GetAttribute("aria-errormessage"));
+            Assert.Equal("true", twitterBody.GetAttribute("aria-invalid"));
+            Assert.Equal("alert", twitterWarning.GetAttribute("role"));
+            Assert.Equal("drafts-warnings-twitter", twitterWarning.ParentElement!.GetAttribute("id"));
+            Assert.Contains("公式 URL", twitterWarning.TextContent, StringComparison.Ordinal);
+
+            var customerBody = cut.Find("[data-testid=\"drafts-body-customer\"]");
+            Assert.Equal("drafts-heading-customer", customerBody.GetAttribute("aria-labelledby"));
+            Assert.Equal("drafts-meta-customer drafts-warnings-customer", customerBody.GetAttribute("aria-describedby"));
+            Assert.Equal("drafts-warnings-customer", customerBody.GetAttribute("aria-errormessage"));
+            Assert.Equal("true", customerBody.GetAttribute("aria-invalid"));
             Assert.Contains("公式 URL", cut.Find("[data-testid=\"drafts-warning-customer\"]").TextContent, StringComparison.Ordinal);
             Assert.Empty(cut.FindAll("[data-testid=\"drafts-warning-explanation\"]"));
         });
 
         cut.Find("[data-testid=\"drafts-body-explanation\"]").Input(string.Empty);
         cut.WaitForAssertion(() =>
-            Assert.Contains("本文が空", cut.Find("[data-testid=\"drafts-warning-explanation\"]").TextContent, StringComparison.Ordinal));
+        {
+            var explanationBody = cut.Find("[data-testid=\"drafts-body-explanation\"]");
+            Assert.Equal("drafts-heading-explanation", explanationBody.GetAttribute("aria-labelledby"));
+            Assert.Equal("drafts-meta-explanation drafts-warnings-explanation", explanationBody.GetAttribute("aria-describedby"));
+            Assert.Equal("drafts-warnings-explanation", explanationBody.GetAttribute("aria-errormessage"));
+            Assert.Equal("true", explanationBody.GetAttribute("aria-invalid"));
+            Assert.Contains("本文が空", cut.Find("[data-testid=\"drafts-warning-explanation\"]").TextContent, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
@@ -481,6 +502,10 @@ public sealed class DraftsPanelTests
 
         cut.WaitForAssertion(() =>
         {
+            var progress = cut.Find("[data-testid=\"drafts-progress\"]");
+            Assert.Equal("status", progress.GetAttribute("role"));
+            Assert.Equal("polite", progress.GetAttribute("aria-live"));
+            Assert.Equal("true", progress.GetAttribute("aria-atomic"));
             Assert.Contains("Copilot が差分解説と共有文案を作成中", cut.Find("[data-testid=\"drafts-progress-text\"]").TextContent, StringComparison.Ordinal);
             Assert.Contains("経過", cut.Find("[data-testid=\"drafts-progress-elapsed\"]").TextContent, StringComparison.Ordinal);
             Assert.Contains("完了すると", cut.Find("[data-testid=\"drafts-busy\"]").TextContent, StringComparison.Ordinal);
@@ -532,8 +557,12 @@ public sealed class DraftsPanelTests
 
         cut.WaitForAssertion(() =>
         {
+            var status = cut.Find("[data-testid=\"drafts-status\"]");
             Assert.True(capturedToken.IsCancellationRequested);
-            Assert.Contains("再生成を中止しました", cut.Find("[data-testid=\"drafts-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.Equal("status", status.GetAttribute("role"));
+            Assert.Equal("polite", status.GetAttribute("aria-live"));
+            Assert.Equal("true", status.GetAttribute("aria-atomic"));
+            Assert.Contains("再生成を中止しました", status.TextContent, StringComparison.Ordinal);
         });
     }
 

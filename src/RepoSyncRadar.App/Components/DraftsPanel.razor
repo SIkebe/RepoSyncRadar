@@ -42,7 +42,11 @@
     }
     else if (_busy)
     {
-        <div class="preview-progress drafts-progress" data-testid="drafts-progress">
+        <div class="preview-progress drafts-progress"
+             data-testid="drafts-progress"
+             role="status"
+             aria-live="polite"
+             aria-atomic="true">
             <div class="preview-progress-row">
                 <span class="preview-spinner" aria-hidden="true"></span>
                 <span class="preview-progress-text progress-phase" data-testid="drafts-progress-text">
@@ -65,9 +69,13 @@
     {
         @foreach (var state in _channels)
         {
+            var headingId = $"drafts-heading-{state.Channel}";
+            var metaId = $"drafts-meta-{state.Channel}";
+            var warningsId = $"drafts-warnings-{state.Channel}";
+            var warnings = GetWarnings(state).ToArray();
             <section class="@GetChannelClass(state)" data-testid="drafts-section-@state.Channel">
                 <header>
-                    <h4>@state.Label</h4>
+                    <h4 id="@headingId">@state.Label</h4>
                     <div class="drafts-channel-actions">
                         @if (state.HasDraft)
                         {
@@ -99,10 +107,13 @@
                     <textarea class="drafts-body"
                               data-testid="drafts-body-@state.Channel"
                               rows="@state.Rows"
-                              aria-label="@state.Label"
+                              aria-labelledby="@headingId"
+                              aria-describedby="@BuildDraftBodyDescription(metaId, warningsId, warnings)"
+                              aria-errormessage="@BuildDraftBodyErrorMessage(warningsId, warnings)"
+                              aria-invalid="@BuildDraftBodyInvalid(warnings)"
                               value="@state.EditedBody"
                               @oninput="e => OnBodyInput(state, e.Value?.ToString() ?? string.Empty)"></textarea>
-                    <div class="drafts-channel-meta">
+                    <div id="@metaId" class="drafts-channel-meta">
                         @if (state.Channel == TwitterChannel)
                         {
                             <span data-testid="drafts-count-twitter">@L["Drafts.TwitterCount", CountTwitterCharacters(state.EditedBody)]</span>
@@ -112,16 +123,25 @@
                             <span data-testid="drafts-dirty-@state.Channel">@L["Drafts.Unsaved"]</span>
                         }
                     </div>
-                    @foreach (var warning in GetWarnings(state))
+                    @if (warnings.Length > 0)
                     {
-                        <p class="drafts-validation" data-testid="drafts-warning-@state.Channel">@warning</p>
+                        <div id="@warningsId">
+                            @foreach (var warning in warnings)
+                            {
+                                <p class="drafts-validation" data-testid="drafts-warning-@state.Channel" role="alert">@warning</p>
+                            }
+                        </div>
                     }
                 }
             </section>
         }
         @if (!string.IsNullOrEmpty(_status))
         {
-            <p class="drafts-status" data-testid="drafts-status">@_status</p>
+            <p class="drafts-status"
+               data-testid="drafts-status"
+               role="status"
+               aria-live="polite"
+               aria-atomic="true">@_status</p>
         }
     }
 </div>
@@ -450,6 +470,15 @@
         => state.Channel == ExplanationChannel
             ? "drafts-channel drafts-channel-large"
             : "drafts-channel";
+
+    private static string BuildDraftBodyDescription(string metaId, string warningsId, IReadOnlyCollection<string> warnings)
+        => warnings.Count > 0 ? $"{metaId} {warningsId}" : metaId;
+
+    private static string? BuildDraftBodyErrorMessage(string warningsId, IReadOnlyCollection<string> warnings)
+        => warnings.Count > 0 ? warningsId : null;
+
+    private static string? BuildDraftBodyInvalid(IReadOnlyCollection<string> warnings)
+        => warnings.Count > 0 ? "true" : null;
 
     private async Task CopyAsync(DraftChannelState state)
     {

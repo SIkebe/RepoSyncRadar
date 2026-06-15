@@ -1341,6 +1341,12 @@ public partial class MainWindow : Window
 
     private void OnPreviewScrollMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
+        if (!IsWebMessageSourceAllowed(e.Source, _allowList, _previewSession))
+        {
+            LogBlockedWebMessageSource(_logger, e.Source);
+            return;
+        }
+
         string? message;
         try
         {
@@ -1440,6 +1446,23 @@ public partial class MainWindow : Window
         {
             NavigateWebViewHistory(PreviewView, direction);
         }
+    }
+
+    internal static bool IsWebMessageSourceAllowed(
+        string? source,
+        UrlAllowList allowList,
+        PreviewSession previewSession)
+    {
+        ArgumentNullException.ThrowIfNull(allowList);
+        ArgumentNullException.ThrowIfNull(previewSession);
+
+        if (string.IsNullOrWhiteSpace(source)
+            || !Uri.TryCreate(source, UriKind.Absolute, out var sourceUri))
+        {
+            return false;
+        }
+
+        return allowList.IsAllowed(sourceUri) || previewSession.IsAllowed(sourceUri);
     }
 
     private void NavigateWebViewHistory(
@@ -2746,4 +2769,10 @@ public partial class MainWindow : Window
         Level = LogLevel.Debug,
         Message = "Raw mouse input registration failed.")]
     private static partial void LogRawMouseInputRegistrationFailed(ILogger logger);
+
+    [LoggerMessage(
+        EventId = 10,
+        Level = LogLevel.Debug,
+        Message = "Blocked WebView2 message from disallowed source: {Source}")]
+    private static partial void LogBlockedWebMessageSource(ILogger logger, string source);
 }
