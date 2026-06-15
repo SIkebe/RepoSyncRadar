@@ -136,6 +136,22 @@ public sealed partial class AppCssContrastTests
         Assert.Contains("min-height: 9rem", webViewAllowedHostsBlock, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ReducedMotion_Disables_NonEssential_Animations_And_Transitions()
+    {
+        var css = ReadAppCss();
+
+        Assert.Matches(
+            @"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.preview-spinner\s*\{[^}]*animation:\s*none",
+            css);
+        Assert.Matches(
+            @"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.radar-sidebar-resizer::before",
+            css);
+        Assert.Matches(
+            @"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?transition:\s*none",
+            css);
+    }
+
     private static Dictionary<string, string> ReadDarkThemeVariables()
     {
         var darkThemeBlock = GetRuleBlock(ReadAppCss(), ".radar-shell.radar-theme-dark");

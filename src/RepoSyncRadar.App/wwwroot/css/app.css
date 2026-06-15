@@ -2343,6 +2343,18 @@ html, body {
     to { transform: rotate(360deg); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .preview-spinner {
+        animation: none;
+    }
+
+    .radar-sidebar-resizer::before,
+    .review-ignore-panel summary,
+    .review-ignore-chevron {
+        transition: none;
+    }
+}
+
 .preview-log-tail {
     margin: 0;
     padding: 0.5rem 0.75rem;
