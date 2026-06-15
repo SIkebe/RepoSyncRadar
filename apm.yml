@@ -1,0 +1,12 @@
+name: RepoSyncRadar
+version: 1.0.0
+description: Agent package manifest for RepoSyncRadar.
+author: SIkebe
+targets:
+  - copilot
+dependencies:
+  apm:
+  - GoogleChrome/modern-web-guidance/skills/modern-web-guidance#5733cdd9f89b0f19119e855532f8b8ac7997ecb6
+  mcp: []
+includes: auto
+scripts: {}

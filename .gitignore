@@ -67,3 +67,7 @@ local-secrets.json
 appsettings.Local.json
 copilot-traces.jsonl
 *.log
+
+
+# APM dependencies
+apm_modules/
