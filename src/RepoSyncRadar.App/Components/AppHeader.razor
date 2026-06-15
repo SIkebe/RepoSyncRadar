@@ -19,27 +19,30 @@
 <MudPaper Elevation="1"
           Class="app-header pa-3 mb-2"
           data-testid="app-header">
-    <header style="display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+    <header class="app-header-row">
         <div class="app-header-spacer" aria-hidden="true"></div>
 
-    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <div class="app-header-content">
         @if (!_settingsOpen)
         {
             @if (_lastReport is { } report)
             {
-                <span data-testid="app-header-last-sync" style="font-size:0.85em; opacity:0.8;">
+                <span class="app-header-secondary-text" data-testid="app-header-last-sync">
                     @L["AppHeader.LastTriage", report.Total, report.Inserted, report.Skipped]
                 </span>
             }
             @if (_lastError is not null)
             {
-                <span data-testid="app-header-error" style="color:#ef4444; font-size:0.85em;">@_lastError</span>
+                <span class="app-header-error-text" data-testid="app-header-error" role="alert">@_lastError</span>
             }
         }
         @if (ShouldShowHeaderUpdateActivity(_appUpdateActivity))
         {
             <span class="app-header-update-status"
                   data-testid="app-header-update-status"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
                   aria-label="@FormatHeaderUpdateActivity(_appUpdateActivity)">
                 <span data-testid="app-header-update-message">@FormatHeaderUpdateActivity(_appUpdateActivity)</span>
                 @if (_appUpdateActivity?.Status == AppUpdateActivityStatus.Downloaded)
@@ -59,7 +62,7 @@
         }
         @if (!string.IsNullOrWhiteSpace(_appUpdateRestartError))
         {
-            <span data-testid="app-header-update-error" style="color:#ef4444; font-size:0.85em;">@_appUpdateRestartError</span>
+            <span class="app-header-error-text" data-testid="app-header-update-error" role="alert">@_appUpdateRestartError</span>
         }
         @if (!_settingsOpen && _triageStatus is not null)
         {
@@ -67,6 +70,9 @@
             {
                 <span data-testid="app-header-triage-status"
                       class="progress-metric-list app-header-triage-progress"
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true"
                       aria-label="@triageProgress.AriaLabel">
                     <span class="progress-metric progress-metric-current" data-testid="app-header-triage-current">
                         <span class="progress-metric-label">@L["Common.Work"]</span>
@@ -87,14 +93,18 @@
             }
             else
             {
-                <span data-testid="app-header-triage-status" style="font-size:0.85em; opacity:0.85;">
+                <span data-testid="app-header-triage-status"
+                      class="app-header-secondary-text"
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true">
                     @FormatTriageStatus(_triageStatus)
                 </span>
             }
         }
         @if (!_settingsOpen && _copilotUsage.TurnCount > 0)
         {
-            <span data-testid="app-header-copilot-usage" style="font-size:0.85em; opacity:0.85;">
+            <span class="app-header-secondary-text" data-testid="app-header-copilot-usage">
                 Copilot @FormatAiCreditsOrTokens(_copilotUsage)
             </span>
         }
@@ -117,7 +127,7 @@
         }
         <span data-testid="app-header-version"
               title="@_appVersion"
-              style="font-size:0.8em; opacity:0.7; font-variant-numeric:tabular-nums;">v@_appVersion</span>
+              class="app-header-version">v@_appVersion</span>
     </div>
     </header>
 
@@ -137,11 +147,14 @@
 
             @if (_preflightBusy)
             {
-                <p class="settings-muted" data-testid="app-header-triage-preflight-loading">@L["Common.Loading"]</p>
+                <p class="settings-muted"
+                   data-testid="app-header-triage-preflight-loading"
+                   role="status"
+                   aria-live="polite">@L["Common.Loading"]</p>
             }
             else if (!string.IsNullOrWhiteSpace(_preflightError))
             {
-                <p class="settings-error" data-testid="app-header-triage-preflight-error">@_preflightError</p>
+                <p class="settings-error" data-testid="app-header-triage-preflight-error" role="alert">@_preflightError</p>
             }
             else if (_preflightSummary is { } preflight)
             {
@@ -171,7 +184,7 @@
                         }
                         else
                         {
-                            <p class="settings-error" data-testid="app-header-triage-preflight-external-failed">@L["TriagePreflight.ExternalFailed", preflight.GitHubEstimateUnavailableReason ?? L["Common.Unreported"]]</p>
+                            <p class="settings-error" data-testid="app-header-triage-preflight-external-failed" role="alert">@L["TriagePreflight.ExternalFailed", preflight.GitHubEstimateUnavailableReason ?? L["Common.Unreported"]]</p>
                         }
                     </div>
 

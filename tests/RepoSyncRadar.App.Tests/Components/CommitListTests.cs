@@ -48,6 +48,23 @@ public class CommitListTests
 
         var active = cut.Find("[data-sha=\"bbbbbbb2\"]");
         Assert.Contains("active", active.ClassList);
+        Assert.Equal("true", active.QuerySelector("[data-testid=\"commit-row-select-button\"]")?.GetAttribute("aria-current"));
+    }
+
+    [Fact]
+    public void CommitList_Row_Selection_Uses_Focusable_Button()
+    {
+        var commit = MakeCommit("aaaaaaa1", "first");
+        Commit? selectedCommit = null;
+
+        using var cut = RenderListWith([commit], onCommitSelected: selected => selectedCommit = selected);
+
+        var rowButton = cut.Find("[data-testid=\"commit-row-select-button\"]");
+        Assert.Equal("button", rowButton.TagName, ignoreCase: true);
+
+        rowButton.Click();
+
+        Assert.Same(commit, selectedCommit);
     }
 
     [Fact]

@@ -16,7 +16,11 @@
     <div class="sidebar-queue-list" data-testid="sidebar-queue-list">
         @if (_counts is null)
         {
-            <p class="loading" data-testid="sidebar-loading">@L["Common.Loading"]</p>
+            <p class="loading"
+               data-testid="sidebar-loading"
+               role="status"
+               aria-live="polite"
+               aria-atomic="true">@L["Common.Loading"]</p>
         }
         else
         {
@@ -53,7 +57,7 @@
             }
             @if (!string.IsNullOrWhiteSpace(_authError))
             {
-                <span class="sidebar-auth-error" data-testid="sidebar-auth-error">@_authError</span>
+                <span class="sidebar-auth-error" data-testid="sidebar-auth-error" role="alert">@_authError</span>
             }
             @if (_authState == GitHubAuthState.NotConfigured)
             {

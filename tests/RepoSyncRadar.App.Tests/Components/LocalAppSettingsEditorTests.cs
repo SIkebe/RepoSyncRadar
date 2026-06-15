@@ -123,7 +123,11 @@ public sealed class LocalAppSettingsEditorTests
             Assert.True(store.Saved.Updates.Enabled);
             Assert.Equal("https://github.com/example/RepoSyncRadar", store.Saved.Updates.FeedUrl);
             Assert.Equal("win-x64-preview", store.Saved.Updates.Channel);
-            Assert.Contains("保存", cut.Find("[data-testid=\"settings-local-appsettings-status\"]").TextContent, StringComparison.Ordinal);
+            var status = cut.Find("[data-testid=\"settings-local-appsettings-status\"]");
+            Assert.Equal("status", status.GetAttribute("role"));
+            Assert.Equal("polite", status.GetAttribute("aria-live"));
+            Assert.Equal("true", status.GetAttribute("aria-atomic"));
+            Assert.Contains("保存", status.TextContent, StringComparison.Ordinal);
         });
     }
 

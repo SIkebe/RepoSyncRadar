@@ -149,7 +149,11 @@
                         @onclick="CleanupPreviewCacheAsync">@L["CommitDetail.CleanupCache"]</button>
                 @if (_previewCleanupBusy)
                 {
-                    <div class="preview-progress preview-cleanup-progress" data-testid="commit-detail-preview-cleanup-progress">
+                    <div class="preview-progress preview-cleanup-progress"
+                         data-testid="commit-detail-preview-cleanup-progress"
+                         role="status"
+                         aria-live="polite"
+                         aria-atomic="true">
                         <div class="preview-progress-row">
                             <span class="preview-spinner" aria-hidden="true"></span>
                             <span class="preview-progress-text progress-phase" data-testid="commit-detail-preview-cleanup-progress-text">
@@ -173,7 +177,11 @@
                 }
                 else if (_previewStatusIsCleanup && !string.IsNullOrWhiteSpace(_previewStatus))
                 {
-                    <p class="preview-status preview-cleanup-status" data-testid="commit-detail-preview-cleanup-status">@_previewStatus</p>
+                    <p class="preview-status preview-cleanup-status"
+                       data-testid="commit-detail-preview-cleanup-status"
+                       role="status"
+                       aria-live="polite"
+                       aria-atomic="true">@_previewStatus</p>
                 }
             </div>
         </div>
@@ -210,7 +218,11 @@
                                     @onclick="() => OpenInWebViewAsync(file)">@BuildPreviewButtonLabel(file)</button>
                             @if (IsPreviewBusyFile(file))
                             {
-                                <div class="preview-progress preview-file-progress" data-testid="commit-detail-preview-progress">
+                                <div class="preview-progress preview-file-progress"
+                                     data-testid="commit-detail-preview-progress"
+                                     role="status"
+                                     aria-live="polite"
+                                     aria-atomic="true">
                                     <div class="preview-progress-row">
                                         <span class="preview-spinner" aria-hidden="true"></span>
                                         <span class="preview-progress-text progress-phase" data-testid="commit-detail-preview-progress-text">
@@ -234,7 +246,11 @@
                             }
                             else if (IsPreviewFeedbackFile(file))
                             {
-                                <p class="preview-status preview-file-status" data-testid="commit-detail-preview-status">@_previewStatus</p>
+                                <p class="preview-status preview-file-status"
+                                   data-testid="commit-detail-preview-status"
+                                   role="status"
+                                   aria-live="polite"
+                                   aria-atomic="true">@_previewStatus</p>
                             }
                         </div>
                     }

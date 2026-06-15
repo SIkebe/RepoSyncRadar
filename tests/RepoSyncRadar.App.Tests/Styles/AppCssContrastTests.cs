@@ -136,6 +136,44 @@ public sealed partial class AppCssContrastTests
         Assert.Contains("min-height: 9rem", webViewAllowedHostsBlock, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ReducedMotion_Disables_NonEssential_Animations_And_Transitions()
+    {
+        var css = ReadAppCss();
+
+        Assert.Matches(
+            @"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.preview-spinner\s*\{[^}]*animation:\s*none",
+            css);
+        Assert.Matches(
+            @"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.radar-sidebar-resizer::before",
+            css);
+        Assert.Matches(
+            @"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?transition:\s*none",
+            css);
+    }
+
+    [Fact]
+    public void AppOwnedControls_Define_FocusVisible_And_ForcedColors_States()
+    {
+        var css = ReadAppCss();
+        var focusBlock = GetRuleBlock(css, ".toolbar-button:focus-visible,");
+
+        Assert.Contains(".review-button:focus-visible", css, StringComparison.Ordinal);
+        Assert.Contains(".drafts-jump-link:focus-visible", css, StringComparison.Ordinal);
+        Assert.Contains("outline: 2px solid var(--radar-focus-ring", focusBlock, StringComparison.Ordinal);
+        Assert.Contains("box-shadow: 0 0 0 4px var(--radar-focus-shadow", focusBlock, StringComparison.Ordinal);
+
+        Assert.Matches(
+            @"@media\s*\(forced-colors:\s*active\)\s*\{[\s\S]*?--radar-focus-ring:\s*Highlight",
+            css);
+        Assert.Matches(
+            @"@media\s*\(forced-colors:\s*active\)\s*\{[\s\S]*?\.toolbar-button",
+            css);
+        Assert.Contains("background: Canvas", css, StringComparison.Ordinal);
+        Assert.Contains("color: CanvasText", css, StringComparison.Ordinal);
+        Assert.Contains("border-color: ButtonText", css, StringComparison.Ordinal);
+    }
+
     private static Dictionary<string, string> ReadDarkThemeVariables()
     {
         var darkThemeBlock = GetRuleBlock(ReadAppCss(), ".radar-shell.radar-theme-dark");

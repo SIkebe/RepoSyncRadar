@@ -338,7 +338,11 @@ public sealed class AppHeaderTests
 
         cut.WaitForAssertion(() =>
         {
-            var status = cut.Find("[data-testid=\"app-header-triage-status\"]").TextContent;
+            var statusElement = cut.Find("[data-testid=\"app-header-triage-status\"]");
+            var status = statusElement.TextContent;
+            Assert.Equal("status", statusElement.GetAttribute("role"));
+            Assert.Equal("polite", statusElement.GetAttribute("aria-live"));
+            Assert.Equal("true", statusElement.GetAttribute("aria-atomic"));
             Assert.DoesNotContain("未確認コミットをスコアリング中", status, StringComparison.Ordinal);
             Assert.Equal("作業 Copilot の判定結果を保存中", NormalizeText(cut.Find("[data-testid=\"app-header-triage-current\"]").TextContent));
             Assert.Equal("対象 5 件", NormalizeText(cut.Find("[data-testid=\"app-header-triage-target\"]").TextContent));

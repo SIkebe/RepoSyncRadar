@@ -1,0 +1,209 @@
+name: APM Dependency Update
+
+on:
+  schedule:
+    - cron: '20 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: apm-dependency-update
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  update:
+    name: Check APM dependency updates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install APM
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://aka.ms/apm-unix | sh
+
+          apm_bin="$(command -v apm || true)"
+          if [ -z "$apm_bin" ]; then
+            for candidate in "$HOME/.local/bin/apm" "$HOME/bin/apm" "$HOME/.apm/bin/apm"; do
+              if [ -x "$candidate" ]; then
+                apm_bin="$candidate"
+                break
+              fi
+            done
+          fi
+
+          if [ -z "$apm_bin" ]; then
+            echo "APM installer completed, but apm was not found on PATH." >&2
+            exit 1
+          fi
+
+          echo "APM_BIN=$apm_bin" >> "$GITHUB_ENV"
+          "$apm_bin" --version
+
+      - name: Verify locked APM state
+        run: |
+          & $env:APM_BIN install --frozen
+          & $env:APM_BIN audit --ci --no-fail-fast
+
+      - name: Resolve SHA-pinned APM updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+
+          $manifestPath = 'apm.yml'
+          $manifest = Get-Content -Raw -Path $manifestPath
+          $script:updated = $false
+          $script:matched = $false
+          $script:rows = New-Object System.Collections.Generic.List[string]
+          $script:rows.Add('| Package | Current | Latest | Compare |')
+          $script:rows.Add('| --- | --- | --- | --- |')
+
+          $pattern = '(?m)^(?<prefix>\s*-\s+)(?<owner>[A-Za-z0-9_.-]+)/(?<repo>[A-Za-z0-9_.-]+)(?<path>/[^#\s]+)?#(?<sha>[0-9a-fA-F]{40})(?<suffix>\s*)$'
+          $newManifest = [regex]::Replace($manifest, $pattern, {
+            param($match)
+
+            $script:matched = $true
+            $owner = $match.Groups['owner'].Value
+            $repo = $match.Groups['repo'].Value
+            $path = $match.Groups['path'].Value
+            $current = $match.Groups['sha'].Value.ToLowerInvariant()
+            $package = "$owner/$repo$path"
+
+            $defaultBranch = gh api "repos/$owner/$repo" --jq '.default_branch'
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($defaultBranch)) {
+              throw "Failed to resolve default branch for $owner/$repo."
+            }
+
+            $latest = gh api "repos/$owner/$repo/commits/$defaultBranch" --jq '.sha'
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($latest)) {
+              throw "Failed to resolve latest commit for $owner/$repo@$defaultBranch."
+            }
+
+            $latest = $latest.Trim().ToLowerInvariant()
+            if ($current -eq $latest) {
+              $script:rows.Add("| `$package` | `$($current.Substring(0, 8))` | `$($latest.Substring(0, 8))` | no change |")
+              return $match.Value
+            }
+
+            $script:updated = $true
+            $compareUrl = "https://github.com/$owner/$repo/compare/$current...$latest"
+            $script:rows.Add("| `$package` | `$($current.Substring(0, 8))` | `$($latest.Substring(0, 8))` | $compareUrl |")
+            return "$($match.Groups['prefix'].Value)$package#$latest$($match.Groups['suffix'].Value)"
+          })
+
+          if ($script:updated) {
+            Set-Content -Path $manifestPath -Value $newManifest -NoNewline
+          }
+
+          $summary = New-Object System.Collections.Generic.List[string]
+          $summary.Add('## APM dependency update')
+          $summary.Add('')
+          if (-not $script:matched) {
+            $summary.Add('No GitHub shorthand APM dependencies pinned to a full commit SHA were found in `apm.yml`.')
+          } elseif (-not $script:updated) {
+            $summary.Add('All SHA-pinned GitHub APM dependencies already point at their upstream default branch HEAD.')
+            $summary.Add('')
+            $summary.AddRange($script:rows)
+          } else {
+            $summary.Add('The following SHA-pinned GitHub APM dependencies were updated to their upstream default branch HEAD.')
+            $summary.Add('')
+            $summary.AddRange($script:rows)
+          }
+
+          Set-Content -Path artifacts/apm-update-summary.md -Value $summary
+          "APM_UPDATE_CHANGED=$($script:updated.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Get-Content artifacts/apm-update-summary.md | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Regenerate APM lockfile and deployed skills
+        if: ${{ env.APM_UPDATE_CHANGED == 'true' }}
+        run: |
+          & $env:APM_BIN install
+          & $env:APM_BIN audit --ci --no-fail-fast
+
+      - name: Create update pull request
+        if: ${{ env.APM_UPDATE_CHANGED == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE_BRANCH: automation/apm-dependency-update
+        run: |
+          $changes = git status --porcelain
+          if ([string]::IsNullOrWhiteSpace($changes)) {
+            Write-Host 'APM reported updates, but the working tree is clean.'
+            exit 0
+          }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B $env:UPDATE_BRANCH
+          git add apm.yml apm.lock.yaml .agents/skills
+          git commit -m 'Update APM managed skills'
+          git push --force-with-lease "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git" "HEAD:$env:UPDATE_BRANCH"
+
+          $bodyPath = 'artifacts/apm-update-pr-body.md'
+          $summary = Get-Content -Raw -Path artifacts/apm-update-summary.md
+          Set-Content -Path $bodyPath -Value @"
+          ## Summary
+
+          - Update APM-managed skill dependencies pinned in `apm.yml`.
+          - Regenerate `apm.lock.yaml` and deployed `.agents/skills/` content.
+          - Preserve full commit SHA pins so the generated diff is reviewable before merge.
+
+          $summary
+
+          ## Related Issues
+
+          N/A - no issue to close
+
+          ## Scope
+
+          - [ ] App UI / workflow
+          - [ ] Core services / data model
+          - [ ] Copilot SDK / agent behavior
+          - [ ] Preview / WebView2
+          - [ ] Documentation / release readiness
+          - [x] Tests / tooling
+          - [x] Other: APM-managed agent skill content
+
+          ## Validation
+
+          - [ ] `dotnet build RepoSyncRadar.sln -warnaserror` - N/A - APM skill content only
+          - [ ] `dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual` - N/A - APM skill content only
+          - [x] Focused tests: `apm install --frozen`; `apm audit --ci --no-fail-fast`; `apm install`; `apm audit --ci --no-fail-fast`
+          - [ ] Manual smoke / screenshots, if UI or WebView behavior changed; otherwise replace with `N/A - no UI/WebView changes`: N/A - no UI/WebView changes
+
+          ## Risk And Rollback
+
+          - User impact: Updates the guidance used by coding agents, not runtime application behavior.
+          - Operational risk: Medium. Skill text can change agent behavior; review `apm.lock.yaml` and the generated `.agents/skills/` diff before merging.
+          - Rollback plan: Revert this PR to restore the previous pinned commit and generated skill files.
+
+          ## Release Notes
+
+          - [ ] User-facing change
+          - [x] Internal-only change
+          - [ ] No release note needed
+
+          Release note draft:
+
+          N/A - internal agent guidance update only.
+          "@
+
+          $existingPr = gh pr list --head $env:UPDATE_BRANCH --base main --state open --json number --jq '.[0].number'
+          if ([string]::IsNullOrWhiteSpace($existingPr)) {
+            gh pr create --base main --head $env:UPDATE_BRANCH --title 'Update APM managed skills' --body-file $bodyPath
+          } else {
+            gh pr edit $existingPr --title 'Update APM managed skills' --body-file $bodyPath
+          }
