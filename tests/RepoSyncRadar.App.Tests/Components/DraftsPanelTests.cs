@@ -444,6 +444,7 @@ public sealed class DraftsPanelTests
             var twitterWarning = cut.Find("[data-testid=\"drafts-warning-twitter\"]");
             Assert.Equal("drafts-heading-twitter", twitterBody.GetAttribute("aria-labelledby"));
             Assert.Equal("drafts-meta-twitter drafts-warnings-twitter", twitterBody.GetAttribute("aria-describedby"));
+            Assert.Equal("drafts-warnings-twitter", twitterBody.GetAttribute("aria-errormessage"));
             Assert.Equal("true", twitterBody.GetAttribute("aria-invalid"));
             Assert.Equal("alert", twitterWarning.GetAttribute("role"));
             Assert.Equal("drafts-warnings-twitter", twitterWarning.ParentElement!.GetAttribute("id"));
@@ -452,6 +453,7 @@ public sealed class DraftsPanelTests
             var customerBody = cut.Find("[data-testid=\"drafts-body-customer\"]");
             Assert.Equal("drafts-heading-customer", customerBody.GetAttribute("aria-labelledby"));
             Assert.Equal("drafts-meta-customer drafts-warnings-customer", customerBody.GetAttribute("aria-describedby"));
+            Assert.Equal("drafts-warnings-customer", customerBody.GetAttribute("aria-errormessage"));
             Assert.Equal("true", customerBody.GetAttribute("aria-invalid"));
             Assert.Contains("公式 URL", cut.Find("[data-testid=\"drafts-warning-customer\"]").TextContent, StringComparison.Ordinal);
             Assert.Empty(cut.FindAll("[data-testid=\"drafts-warning-explanation\"]"));
@@ -463,6 +465,7 @@ public sealed class DraftsPanelTests
             var explanationBody = cut.Find("[data-testid=\"drafts-body-explanation\"]");
             Assert.Equal("drafts-heading-explanation", explanationBody.GetAttribute("aria-labelledby"));
             Assert.Equal("drafts-meta-explanation drafts-warnings-explanation", explanationBody.GetAttribute("aria-describedby"));
+            Assert.Equal("drafts-warnings-explanation", explanationBody.GetAttribute("aria-errormessage"));
             Assert.Equal("true", explanationBody.GetAttribute("aria-invalid"));
             Assert.Contains("本文が空", cut.Find("[data-testid=\"drafts-warning-explanation\"]").TextContent, StringComparison.Ordinal);
         });

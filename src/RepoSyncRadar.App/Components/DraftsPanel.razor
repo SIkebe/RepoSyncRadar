@@ -109,6 +109,7 @@
                               rows="@state.Rows"
                               aria-labelledby="@headingId"
                               aria-describedby="@BuildDraftBodyDescription(metaId, warningsId, warnings)"
+                              aria-errormessage="@BuildDraftBodyErrorMessage(warningsId, warnings)"
                               aria-invalid="@BuildDraftBodyInvalid(warnings)"
                               value="@state.EditedBody"
                               @oninput="e => OnBodyInput(state, e.Value?.ToString() ?? string.Empty)"></textarea>
@@ -472,6 +473,9 @@
 
     private static string BuildDraftBodyDescription(string metaId, string warningsId, IReadOnlyCollection<string> warnings)
         => warnings.Count > 0 ? $"{metaId} {warningsId}" : metaId;
+
+    private static string? BuildDraftBodyErrorMessage(string warningsId, IReadOnlyCollection<string> warnings)
+        => warnings.Count > 0 ? warningsId : null;
 
     private static string? BuildDraftBodyInvalid(IReadOnlyCollection<string> warnings)
         => warnings.Count > 0 ? "true" : null;
