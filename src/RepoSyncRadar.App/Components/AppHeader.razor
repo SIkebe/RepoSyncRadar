@@ -19,21 +19,21 @@
 <MudPaper Elevation="1"
           Class="app-header pa-3 mb-2"
           data-testid="app-header">
-    <header style="display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+    <header class="app-header-row">
         <div class="app-header-spacer" aria-hidden="true"></div>
 
-    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+    <div class="app-header-content">
         @if (!_settingsOpen)
         {
             @if (_lastReport is { } report)
             {
-                <span data-testid="app-header-last-sync" style="font-size:0.85em; opacity:0.8;">
+                <span class="app-header-secondary-text" data-testid="app-header-last-sync">
                     @L["AppHeader.LastTriage", report.Total, report.Inserted, report.Skipped]
                 </span>
             }
             @if (_lastError is not null)
             {
-                <span data-testid="app-header-error" role="alert" style="color:#ef4444; font-size:0.85em;">@_lastError</span>
+                <span class="app-header-error-text" data-testid="app-header-error" role="alert">@_lastError</span>
             }
         }
         @if (ShouldShowHeaderUpdateActivity(_appUpdateActivity))
@@ -62,7 +62,7 @@
         }
         @if (!string.IsNullOrWhiteSpace(_appUpdateRestartError))
         {
-            <span data-testid="app-header-update-error" role="alert" style="color:#ef4444; font-size:0.85em;">@_appUpdateRestartError</span>
+            <span class="app-header-error-text" data-testid="app-header-update-error" role="alert">@_appUpdateRestartError</span>
         }
         @if (!_settingsOpen && _triageStatus is not null)
         {
@@ -94,17 +94,17 @@
             else
             {
                 <span data-testid="app-header-triage-status"
+                      class="app-header-secondary-text"
                       role="status"
                       aria-live="polite"
-                      aria-atomic="true"
-                      style="font-size:0.85em; opacity:0.85;">
+                      aria-atomic="true">
                     @FormatTriageStatus(_triageStatus)
                 </span>
             }
         }
         @if (!_settingsOpen && _copilotUsage.TurnCount > 0)
         {
-            <span data-testid="app-header-copilot-usage" style="font-size:0.85em; opacity:0.85;">
+            <span class="app-header-secondary-text" data-testid="app-header-copilot-usage">
                 Copilot @FormatAiCreditsOrTokens(_copilotUsage)
             </span>
         }
@@ -127,7 +127,7 @@
         }
         <span data-testid="app-header-version"
               title="@_appVersion"
-              style="font-size:0.8em; opacity:0.7; font-variant-numeric:tabular-nums;">v@_appVersion</span>
+              class="app-header-version">v@_appVersion</span>
     </div>
     </header>
 

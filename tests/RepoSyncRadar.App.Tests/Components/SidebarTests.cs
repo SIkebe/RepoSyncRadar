@@ -246,6 +246,27 @@ public class SidebarTests
     }
 
     [Fact]
+    public void Sidebar_SignIn_Error_Is_Announced()
+    {
+        var repo = BuildEmptyCountsRepository();
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.NotSignedIn));
+        session.SignInAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("device flow failed")));
+        var sp = BuildServices(repo, session);
+        using var ctx = new BunitContext();
+
+        var cut = ctx.Render<Sidebar>(parameters => parameters.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"sidebar-auth-signin\"]").Click();
+
+        var error = cut.Find("[data-testid=\"sidebar-auth-error\"]");
+        Assert.Equal("alert", error.GetAttribute("role"));
+        Assert.Contains("device flow failed", error.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Sidebar_SignOut_Callback_Failure_Does_Not_Show_SignOut_Error()
     {
         var repo = BuildEmptyCountsRepository();

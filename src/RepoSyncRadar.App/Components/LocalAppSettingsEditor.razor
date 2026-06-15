@@ -27,7 +27,11 @@
 
     @if (_loading)
     {
-        <p class="settings-muted" data-testid="settings-local-appsettings-loading">@L["Common.Loading"]</p>
+        <p class="settings-muted"
+           data-testid="settings-local-appsettings-loading"
+           role="status"
+           aria-live="polite"
+           aria-atomic="true">@L["Common.Loading"]</p>
     }
     else if (_settings is { } settings)
     {
@@ -35,11 +39,15 @@
 
         @if (!string.IsNullOrWhiteSpace(_status))
         {
-            <p class="settings-muted" data-testid="settings-local-appsettings-status">@_status</p>
+            <p class="settings-muted"
+               data-testid="settings-local-appsettings-status"
+               role="status"
+               aria-live="polite"
+               aria-atomic="true">@_status</p>
         }
         @if (!string.IsNullOrWhiteSpace(_error))
         {
-            <p class="settings-error" data-testid="settings-local-appsettings-error">@_error</p>
+            <p class="settings-error" data-testid="settings-local-appsettings-error" role="alert">@_error</p>
         }
 
         <div class="local-settings-grid">
