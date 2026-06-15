@@ -3,6 +3,7 @@ using System.Windows.Input;
 using Microsoft.Web.WebView2.Core;
 using RepoSyncRadar.App;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.Core.Services;
 using RepoSyncRadar.Core.Services.Preview;
 using Xunit;
 
@@ -112,6 +113,43 @@ public sealed class MainWindowPreviewComparisonTests
     public void TryParseWebViewHistoryNavigationMessage_Rejects_Invalid_Messages(string? message)
     {
         Assert.False(MainWindow.TryParseWebViewHistoryNavigationMessage(message, out _));
+    }
+
+    [Theory]
+    [InlineData("https://docs.github.com/en/copilot/about-copilot", true)]
+    [InlineData("https://github.com/github/docs/pull/123", true)]
+    [InlineData("https://evil.example/rsr-preview-scroll", false)]
+    [InlineData("http://docs.github.com/en/copilot/about-copilot", false)]
+    [InlineData("about:blank", false)]
+    [InlineData("", false)]
+    public void IsWebMessageSourceAllowed_Uses_Configured_Https_Hosts(
+        string source,
+        bool expected)
+    {
+        var allowList = new UrlAllowList(["docs.github.com", "github.com"]);
+        var previewSession = new PreviewSession();
+
+        Assert.Equal(
+            expected,
+            MainWindow.IsWebMessageSourceAllowed(source, allowList, previewSession));
+    }
+
+    [Theory]
+    [InlineData("http://localhost:4500/markdown/after", true)]
+    [InlineData("http://127.0.0.1:4500/markdown/after", true)]
+    [InlineData("http://localhost:4501/markdown/after", false)]
+    [InlineData("http://example.com:4500/markdown/after", false)]
+    public void IsWebMessageSourceAllowed_Uses_Active_Local_Preview_Session(
+        string source,
+        bool expected)
+    {
+        var allowList = new UrlAllowList(["docs.github.com"]);
+        var previewSession = new PreviewSession();
+        previewSession.Activate(4500);
+
+        Assert.Equal(
+            expected,
+            MainWindow.IsWebMessageSourceAllowed(source, allowList, previewSession));
     }
 
     [Theory]
