@@ -83,7 +83,7 @@ public sealed class WpfPermissionPrompt : IPermissionPrompt
                 () => ShowUrlSettingsUpdateFailure(host, ex),
                 DispatcherPriority.Normal,
                 cancellationToken).Task.ConfigureAwait(false);
-            return false;
+            return true;
         }
     }
 
