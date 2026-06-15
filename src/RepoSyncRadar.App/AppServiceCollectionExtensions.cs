@@ -23,6 +23,7 @@ public static class AppServiceCollectionExtensions
     {
         services.AddLocalization(options => options.ResourcesPath = "Resources");
         services.TryAddSingleton<RepoSyncRadar.App.Copilot.UrlAllowList>();
+        services.TryAddSingleton<CopilotUrlPermissionSettingsUpdater>();
         services.TryAddSingleton<IPermissionPrompt, WpfPermissionPrompt>();
         services.TryAddSingleton<RadarPermissionPolicy>();
         services.TryAddSingleton<IAuditJsonlSink>(sp =>

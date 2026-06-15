@@ -10,6 +10,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// </summary>
 public sealed class UrlAllowList
 {
+    private readonly object _gate = new();
     private readonly HashSet<string> _hosts;
 
     public UrlAllowList(IOptions<CopilotOptions> options)
@@ -18,10 +19,20 @@ public sealed class UrlAllowList
         _hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var host in options.Value.AllowedUrlHosts)
         {
-            if (!string.IsNullOrWhiteSpace(host))
-            {
-                _hosts.Add(host.Trim());
-            }
+            AddHost(host);
+        }
+    }
+
+    public void AddHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            _hosts.Add(host.Trim());
         }
     }
 
@@ -42,6 +53,9 @@ public sealed class UrlAllowList
             return false;
         }
 
-        return _hosts.Contains(uri.Host);
+        lock (_gate)
+        {
+            return _hosts.Contains(uri.Host);
+        }
     }
 }

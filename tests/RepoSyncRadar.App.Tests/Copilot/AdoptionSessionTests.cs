@@ -30,7 +30,7 @@ public sealed class AdoptionSessionTests
 
         var session = Substitute.For<ICopilotSession>();
         session.SessionId.Returns("s1");
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -46,6 +46,36 @@ public sealed class AdoptionSessionTests
     }
 
     [Fact]
+    public async Task Generate_Uses_Long_Draft_Timeout()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("timeout", ReviewStatus.Adopted, cancellationToken: ct);
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync("timeout", Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff --git a/x b/x\n+hello\n"));
+
+        TimeSpan? capturedTimeout = null;
+        var session = Substitute.For<ICopilotSession>();
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                capturedTimeout = call.ArgAt<TimeSpan?>(1);
+                return Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}");
+            });
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        await sut.GenerateDraftsAsync("timeout", ct);
+
+        Assert.Equal(AdoptionSession.DraftSendTimeout, capturedTimeout);
+        Assert.True(capturedTimeout > TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
     public async Task Generate_Persists_Explanation_And_Two_Drafts()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -57,7 +87,7 @@ public sealed class AdoptionSessionTests
             .Returns(Task.FromResult("diff"));
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("{\"explanation\":\"diff explanation\",\"twitter\":\"a\",\"customer\":\"c\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -101,7 +131,7 @@ public sealed class AdoptionSessionTests
             .Returns(Task.FromResult("diff"));
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("Here is the JSON:\n{\"explanation\":\"wrapped-ex\",\"twitter\":\"wrapped-tw\",\"customer\":\"wrapped-cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -129,7 +159,7 @@ public sealed class AdoptionSessionTests
 
         var calls = new List<string>();
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(calls.Add), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Do<string>(calls.Add), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult("差分解説: repair-ex\nTwitter: repair-tw\n顧客向け: repair-cu"),
                 Task.FromResult("{\"explanation\":\"repair-ex\",\"twitter\":\"repair-tw\",\"customer\":\"repair-cu\"}"));
@@ -158,7 +188,7 @@ public sealed class AdoptionSessionTests
             .Returns(Task.FromResult("diff"));
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(
                 Task.FromResult("JSON ではなく通常文で返します。"),
                 Task.FromResult("""
@@ -219,7 +249,7 @@ public sealed class AdoptionSessionTests
 
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"\",\"customer\":\"\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -286,7 +316,7 @@ public sealed class AdoptionSessionTests
 
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"https://docs.github.com/en/copilot/about-copilot\",\"customer\":\"https://docs.github.com/en/copilot/about-copilot\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -375,7 +405,7 @@ public sealed class AdoptionSessionTests
             .Returns(Task.FromResult("diff"));
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -420,7 +450,7 @@ public sealed class AdoptionSessionTests
             .Returns(Task.FromResult("diff"));
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -470,7 +500,7 @@ public sealed class AdoptionSessionTests
 
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -501,7 +531,7 @@ public sealed class AdoptionSessionTests
 
         var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.GenerateDraftsAsync("not-yet", ct));
-        await session.DidNotReceive().SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await session.DidNotReceive().SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -540,7 +570,7 @@ public sealed class AdoptionSessionTests
 
         var capturedPrompts = new List<string>();
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(capturedPrompts.Add), Arg.Any<CancellationToken>())
+        session.SendAsync(Arg.Do<string>(capturedPrompts.Add), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -586,6 +616,6 @@ public sealed class AdoptionSessionTests
         var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sut.GenerateBatchExplanationAsync(["batch-adopted", "batch-later"], ct));
-        await session.DidNotReceive().SendAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await session.DidNotReceive().SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>());
     }
 }
