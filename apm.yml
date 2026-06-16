@@ -3,10 +3,11 @@ version: 1.0.0
 description: Agent package manifest for RepoSyncRadar.
 author: SIkebe
 targets:
-  - copilot
+- copilot
 dependencies:
   apm:
   - GoogleChrome/modern-web-guidance/skills/modern-web-guidance#5733cdd9f89b0f19119e855532f8b8ac7997ecb6
+  - github/awesome-copilot/skills/lsp-setup#990c16d6a51bbb649990364c91ba5c5d26866e6d
   mcp: []
 includes: auto
 scripts: {}

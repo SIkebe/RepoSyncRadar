@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-06-15T04:51:58.775014+00:00'
+generated_at: '2026-06-16T05:02:33.436337+00:00'
 apm_version: 0.20.0
 dependencies:
 - repo_url: GoogleChrome/modern-web-guidance
@@ -289,3 +289,18 @@ dependencies:
     .agents/skills/modern-web-guidance/guides/webmcp/agentic-javascript-tools.md: sha256:2ec01ee5f86b00ce69f487e13141258da8cc751d0917eeb43e94386ac7612ff3
     .agents/skills/modern-web-guidance/guides/webmcp/webmcp.md: sha256:78b80afc94fcdc0177345d7cbd0abb83660f309a400266ff408325142db41b2c
   content_hash: sha256:1474b3644935e896583c0f8dfcb5b3f6658b3fe3119804ab342172494c5691ec
+- repo_url: github/awesome-copilot
+  host: github.com
+  resolved_commit: 990c16d6a51bbb649990364c91ba5c5d26866e6d
+  resolved_ref: 990c16d6a51bbb649990364c91ba5c5d26866e6d
+  virtual_path: skills/lsp-setup
+  is_virtual: true
+  package_type: claude_skill
+  deployed_files:
+  - .agents/skills/lsp-setup
+  - .agents/skills/lsp-setup/SKILL.md
+  - .agents/skills/lsp-setup/references/lsp-servers.md
+  deployed_file_hashes:
+    .agents/skills/lsp-setup/SKILL.md: sha256:7a49f98b82b66454ad66a0b8506a50028a16a5c91be73cb39669a18bfba3cb01
+    .agents/skills/lsp-setup/references/lsp-servers.md: sha256:5dc435290338d2c1ddbfa889027145fe6824ffef7de01d7db57f0ac9e9610124
+  content_hash: sha256:081a8a321adb82aa4185cbde288fbfb7c89653ca104c700adc664cbea9d6f3a2
