@@ -74,6 +74,7 @@ public sealed class CopilotSessionFactoryTests
             LogLevel = " debug ",
             SessionIdleTimeoutSeconds = 120,
             TelemetryFilePath = " C:/logs/copilot-otel.jsonl ",
+            TelemetryOtlpProtocol = "http/json",
             CaptureContent = true,
             EnableRemoteSessions = true,
         };
@@ -93,6 +94,7 @@ public sealed class CopilotSessionFactoryTests
         Assert.NotNull(options.Telemetry);
         Assert.Equal("file", options.Telemetry!.ExporterType);
         Assert.Equal("C:/logs/copilot-otel.jsonl", options.Telemetry.FilePath);
+        Assert.Equal("http/json", options.Telemetry.OtlpProtocol);
         Assert.Equal("RepoSyncRadar", options.Telemetry.SourceName);
         Assert.True(options.Telemetry.CaptureContent);
     }

@@ -156,7 +156,7 @@ public class OptionsValidationTests
     {
         var json = _validJson.Replace(
             "\"Streaming\": true,",
-            "\"Streaming\": true,\n    \"ContextTier\": \" Long_Context \",\n    \"LogLevel\": \" Debug \",\n    \"SessionIdleTimeoutSeconds\": 90,\n    \"CopilotHome\": \" C:/data/copilot \",\n    \"TelemetryFilePath\": \" C:/logs/copilot.jsonl \",",
+            "\"Streaming\": true,\n    \"ContextTier\": \" Long_Context \",\n    \"LogLevel\": \" Debug \",\n    \"SessionIdleTimeoutSeconds\": 90,\n    \"CopilotHome\": \" C:/data/copilot \",\n    \"TelemetryFilePath\": \" C:/logs/copilot.jsonl \",\n    \"TelemetryOtlpProtocol\": \" HTTP/PROTOBUF \",",
             StringComparison.Ordinal);
         using var sp = BuildServiceProvider(json);
 
@@ -167,6 +167,7 @@ public class OptionsValidationTests
         Assert.Equal(90, copilot.SessionIdleTimeoutSeconds);
         Assert.Equal("C:/data/copilot", copilot.CopilotHome);
         Assert.Equal("C:/logs/copilot.jsonl", copilot.TelemetryFilePath);
+        Assert.Equal("http/protobuf", copilot.TelemetryOtlpProtocol);
     }
 
     [Fact]

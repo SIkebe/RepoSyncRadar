@@ -1,6 +1,6 @@
 # RepoSyncRadar Copilot Instructions
 
-RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.1.
+RepoSyncRadar is a Windows desktop app for monitoring `github/docs` Repo sync PRs, triaging important documentation changes with the GitHub Copilot SDK, previewing rendered docs changes, and generating sharing drafts for Twitter and customer-facing notices. The solution is C#/.NET with WPF, BlazorWebView, MudBlazor, WebView2, EF Core SQLite, Octokit, and `GitHub.Copilot.SDK` 1.0.2.
 
 Use these repository instructions as the starting point. When code or validated behavior contradicts them, follow the verified source and update this file after confirming the rule is stable.
 
@@ -57,19 +57,19 @@ Use these repository instructions as the starting point. When code or validated 
 ### SDK API
 
 - The app must read Copilot SDK final assistant text from `response?.Data?.Content`, not `response?.ToString()`.
-- `GitHub.Copilot.SDK` 1.0.1 exposes `MessageOptions` prompt, attachments, mode, headers, and `DisplayPrompt`. No public JSON schema or response-format property has been observed in the XML docs.
-- In `GitHub.Copilot.SDK` 1.0.1, public C# types live under `GitHub.Copilot` / `GitHub.Copilot.Rpc`, client process settings use `CopilotClientOptions.Connection = RuntimeConnection.ForStdio(...)`, `BaseDirectory`, and `CopilotLogLevel`, and permission handlers use `Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>>` with `PermissionDecision.ApproveOnce()` / `Reject(...)` / `UserNotAvailable()`.
-- `GitHub.Copilot.SDK` 1.0.1 includes opt-in `CopilotClientOptions.EnableRemoteSessions`, per-session `SessionConfig.EnableSessionTelemetry`, per-session `McpOAuthTokenStorage` (use `InMemory` unless persistent MCP OAuth tokens are explicitly required), and optional `SessionConfig.ContextTier` values `default` / `long_context`.
-- `GitHub.Copilot.SDK` 1.0.1 nupkg includes `build/GitHub.Copilot.SDK.props` with `CopilotCliVersion=1.0.61`; do not pin `CopilotCliVersion` in `Directory.Build.props` unless a future package regresses.
-- In 1.0.1 hook payloads such as `PreToolUseHookInput.ToolArgs`, `PostToolUseHookInput.ToolResult`, and `PreMcpToolCallHookInput.Arguments` are JSON values; tests should create fixtures with `JsonSerializer.SerializeToElement(...)` where needed.
-- In 1.0.1 `AssistantUsageData` does not expose legacy `CopilotUsage`; use `Cost` and session `Usage.GetMetricsAsync()` for SDK-reported billing details, and keep `GHCP001` suppressions local to experimental SDK telemetry/permission types.
-- In 1.0.1 `CopilotSession.OpenCanvases` removes instances after `session.canvas.closed`; RepoSyncRadar does not currently register SDK canvas handlers, so no app-side state sync is required.
-- For Copilot tool metadata such as `skip_permission`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { SkipPermission = true }, ...)` over magic-string `AdditionalProperties`.
-- For 1.0.1 tool filtering, use `ToolSet().AddCustom(toolName)` for RepoSyncRadar's registered radar tools instead of bare tool names, and explicitly disable ambient custom instructions, org-level custom agents, coauthor trailers, and scheduler integration in `SessionConfigBuilder` unless a feature needs them.
+- `GitHub.Copilot.SDK` 1.0.2 exposes `MessageOptions` prompt, attachments, mode, headers, and `DisplayPrompt`. No public JSON schema or response-format property has been observed in the XML docs.
+- In `GitHub.Copilot.SDK` 1.0.2, public C# types live under `GitHub.Copilot` / `GitHub.Copilot.Rpc`, client process settings use `CopilotClientOptions.Connection = RuntimeConnection.ForStdio(...)`, `BaseDirectory`, and `CopilotLogLevel`, and permission handlers use `Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>>` with `PermissionDecision.ApproveOnce()` / `Reject(...)` / `UserNotAvailable()`.
+- `GitHub.Copilot.SDK` 1.0.2 includes opt-in `CopilotClientOptions.EnableRemoteSessions`, per-session `SessionConfig.EnableSessionTelemetry`, `MemoryConfiguration`, per-session `McpOAuthTokenStorage` (use `InMemory` unless persistent MCP OAuth tokens are explicitly required), and optional `SessionConfig.ContextTier` values `default` / `long_context`. RepoSyncRadar explicitly disables session memory unless a future feature designs a user-visible memory policy.
+- `GitHub.Copilot.SDK` 1.0.2 nupkg includes `build/GitHub.Copilot.SDK.props` with `CopilotCliVersion=1.0.64-0`; do not pin `CopilotCliVersion` in `Directory.Build.props` unless a future package regresses.
+- In 1.0.2 hook payloads such as `PreToolUseHookInput.ToolArgs`, `PostToolUseHookInput.ToolResult`, and `PreMcpToolCallHookInput.Arguments` are JSON values; tests should create fixtures with `JsonSerializer.SerializeToElement(...)` where needed.
+- In 1.0.2 `AssistantUsageData` does not expose legacy `CopilotUsage`; use `Cost` and session `Usage.GetMetricsAsync()` for SDK-reported billing details, and keep `GHCP001` suppressions local to experimental SDK telemetry/permission types. `ModelBilling.TokenPrices` is available for model-picker metadata, but do not estimate AI Credits from pricing tables.
+- In 1.0.2 `CopilotSession.OpenCanvases` removes instances after `session.canvas.closed`; RepoSyncRadar does not currently register SDK canvas handlers, so no app-side state sync is required.
+- For Copilot tool metadata such as `skip_permission` and `defer`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { ... }, ...)` over magic-string `AdditionalProperties`. Keep RepoSyncRadar's small radar tool set pre-loaded with `CopilotToolDefer.Never`.
+- For 1.0.2 tool filtering, use `ToolSet().AddCustom(toolName)` for RepoSyncRadar's registered radar tools instead of bare tool names, and explicitly disable ambient custom instructions, org-level custom agents, coauthor trailers, scheduler integration, and session memory in `SessionConfigBuilder` unless a feature needs them.
 
 ### Client And Telemetry
 
-- Wire diagnostics through `CopilotClientOptions.Logger`, `LogLevel`, and `TelemetryConfig`; `TelemetryFilePath` is inert unless passed through SDK options.
+- Wire diagnostics through `CopilotClientOptions.Logger`, `LogLevel`, and `TelemetryConfig`; `TelemetryFilePath` is inert unless passed through SDK options. In SDK 1.0.2, `TelemetryConfig.OtlpProtocol` maps to `OTEL_EXPORTER_OTLP_PROTOCOL` and supports `http/json` or `http/protobuf`.
 - `SessionIdleTimeoutSeconds` is a client option; null or zero disables server-side idle cleanup.
 
 ### Auth Resolution

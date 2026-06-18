@@ -234,6 +234,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 SessionIdleTimeoutSeconds = GetNullableInt(configuration, "Copilot:SessionIdleTimeoutSeconds"),
                 CopilotHome = GetNullableString(configuration, "Copilot:CopilotHome"),
                 TelemetryFilePath = GetNullableString(configuration, "Copilot:TelemetryFilePath"),
+                TelemetryOtlpProtocol = GetNullableString(configuration, "Copilot:TelemetryOtlpProtocol")?.ToLowerInvariant(),
                 CaptureContent = GetBool(configuration, "Copilot:CaptureContent", defaults.Copilot.CaptureContent),
                 EnableRemoteSessions = GetBool(configuration, "Copilot:EnableRemoteSessions", defaults.Copilot.EnableRemoteSessions),
                 EnableSessionTelemetry = GetBool(configuration, "Copilot:EnableSessionTelemetry", defaults.Copilot.EnableSessionTelemetry),
@@ -296,6 +297,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 SessionIdleTimeoutSeconds = GetNullableInt(root, "Copilot", "SessionIdleTimeoutSeconds", fallback.Copilot.SessionIdleTimeoutSeconds),
                 CopilotHome = GetNullableString(root, "Copilot", "CopilotHome", fallback.Copilot.CopilotHome),
                 TelemetryFilePath = GetNullableString(root, "Copilot", "TelemetryFilePath", fallback.Copilot.TelemetryFilePath),
+                TelemetryOtlpProtocol = GetNullableString(root, "Copilot", "TelemetryOtlpProtocol", fallback.Copilot.TelemetryOtlpProtocol),
                 CaptureContent = GetBool(root, "Copilot", "CaptureContent", fallback.Copilot.CaptureContent),
                 EnableRemoteSessions = GetBool(root, "Copilot", "EnableRemoteSessions", fallback.Copilot.EnableRemoteSessions),
                 EnableSessionTelemetry = GetBool(root, "Copilot", "EnableSessionTelemetry", fallback.Copilot.EnableSessionTelemetry),
@@ -361,6 +363,9 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         copilot["TelemetryFilePath"] = string.IsNullOrWhiteSpace(settings.Copilot.TelemetryFilePath)
             ? null
             : settings.Copilot.TelemetryFilePath;
+        copilot["TelemetryOtlpProtocol"] = string.IsNullOrWhiteSpace(settings.Copilot.TelemetryOtlpProtocol)
+            ? null
+            : settings.Copilot.TelemetryOtlpProtocol;
         copilot["CaptureContent"] = settings.Copilot.CaptureContent;
         copilot["EnableRemoteSessions"] = settings.Copilot.EnableRemoteSessions;
         copilot["EnableSessionTelemetry"] = settings.Copilot.EnableSessionTelemetry;
@@ -436,6 +441,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 SessionIdleTimeoutSeconds = settings.Copilot.SessionIdleTimeoutSeconds,
                 CopilotHome = NormalizeNullable(settings.Copilot.CopilotHome),
                 TelemetryFilePath = NormalizeNullable(settings.Copilot.TelemetryFilePath),
+                TelemetryOtlpProtocol = NormalizeNullable(settings.Copilot.TelemetryOtlpProtocol)?.ToLowerInvariant(),
                 CaptureContent = settings.Copilot.CaptureContent,
                 EnableRemoteSessions = settings.Copilot.EnableRemoteSessions,
                 EnableSessionTelemetry = settings.Copilot.EnableSessionTelemetry,
@@ -501,6 +507,12 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             errors.Add("Copilot.ContextTier は default または long_context にしてください。");
         }
         Require(settings.Copilot.LogLevel, "Copilot.LogLevel", errors);
+        if (settings.Copilot.TelemetryOtlpProtocol is { } otlpProtocol
+            && !string.Equals(otlpProtocol, "http/json", StringComparison.Ordinal)
+            && !string.Equals(otlpProtocol, "http/protobuf", StringComparison.Ordinal))
+        {
+            errors.Add("Copilot.TelemetryOtlpProtocol は http/json または http/protobuf にしてください。");
+        }
         if (settings.Copilot.SessionIdleTimeoutSeconds is { } idleTimeout)
         {
             ValidateRange(idleTimeout, 0, int.MaxValue, "Copilot.SessionIdleTimeoutSeconds", errors);
