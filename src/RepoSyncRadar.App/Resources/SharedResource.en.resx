@@ -105,6 +105,9 @@
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>Evidence, impact, and checks</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>Select a commit.</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>Files</value></data>
+  <data name="CommitDetail.FileViewed" xml:space="preserve"><value>Viewed</value></data>
+  <data name="CommitDetail.FileViewed.MarkTitle" xml:space="preserve"><value>Mark {0} as viewed</value></data>
+  <data name="CommitDetail.FileViewed.UnmarkTitle" xml:space="preserve"><value>Unmark {0} as viewed</value></data>
   <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>Preparing local preview for {0}...</value></data>
   <data name="CommitDetail.MarkdownComparisonOpened" xml:space="preserve"><value>Opened {0} as a Markdown parent / PR HEAD comparison</value></data>
   <data name="CommitDetail.MarkdownReusableUsageOpened" xml:space="preserve"><value>Opened {0} through usage page {1}</value></data>
@@ -118,6 +121,7 @@
   <data name="CommitDetail.OpenPrExternalTitle" xml:space="preserve"><value>Open the PR #{0} commit diff in the default browser</value></data>
   <data name="CommitDetail.OpenPrInPaneTitle" xml:space="preserve"><value>Open the PR #{0} commit diff in the right pane</value></data>
   <data name="CommitDetail.PreviewableCount" xml:space="preserve"><value>{0} comparable</value></data>
+  <data name="CommitDetail.ViewedCount" xml:space="preserve"><value>{0}/{1} viewed</value></data>
   <data name="CommitDetail.PreviewPosition" xml:space="preserve"><value>Preview target {0} / {1}</value></data>
   <data name="CommitDetail.PreviewTitle.LocalComparison" xml:space="preserve"><value>Open this file in WebView2 with local previews for the parent commit and PR HEAD side by side</value></data>
   <data name="CommitDetail.PreviewTitle.MarkdownComparison" xml:space="preserve"><value>Render Markdown and open the parent commit vs PR HEAD diff in WebView2</value></data>

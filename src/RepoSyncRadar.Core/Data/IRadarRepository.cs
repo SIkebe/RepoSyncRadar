@@ -51,6 +51,16 @@ public interface IRadarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Marks a changed file within a commit as viewed or not viewed. This mirrors GitHub's
+    /// per-file Viewed checkbox without changing the commit's review status.
+    /// </summary>
+    Task SetCommitFileViewedAsync(
+        string sha,
+        string path,
+        bool viewed,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns the selected commit and the supporting rows needed to render its decision history.
     /// This keeps the list query lightweight while loading draft and review-history details on demand.
     /// </summary>

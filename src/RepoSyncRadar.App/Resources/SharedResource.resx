@@ -105,6 +105,9 @@
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>根拠・影響・確認観点</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>コミットを選択してください。</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>ファイル</value></data>
+  <data name="CommitDetail.FileViewed" xml:space="preserve"><value>確認済み</value></data>
+  <data name="CommitDetail.FileViewed.MarkTitle" xml:space="preserve"><value>{0} を確認済みにします</value></data>
+  <data name="CommitDetail.FileViewed.UnmarkTitle" xml:space="preserve"><value>{0} の確認済みを解除します</value></data>
   <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>{0} のローカルプレビューを準備中…</value></data>
   <data name="CommitDetail.MarkdownComparisonOpened" xml:space="preserve"><value>{0} を Markdown として変更前 / PR HEAD で比較表示しました</value></data>
   <data name="CommitDetail.MarkdownReusableUsageOpened" xml:space="preserve"><value>{0} を使用箇所 {1} で比較表示しました</value></data>
@@ -118,6 +121,7 @@
   <data name="CommitDetail.OpenPrExternalTitle" xml:space="preserve"><value>既定ブラウザーで PR #{0} のコミット差分を開きます</value></data>
   <data name="CommitDetail.OpenPrInPaneTitle" xml:space="preserve"><value>右ペインで PR #{0} のコミット差分を開きます</value></data>
   <data name="CommitDetail.PreviewableCount" xml:space="preserve"><value>{0} 件を比較可能</value></data>
+  <data name="CommitDetail.ViewedCount" xml:space="preserve"><value>{0}/{1} 件を確認済み</value></data>
   <data name="CommitDetail.PreviewPosition" xml:space="preserve"><value>プレビュー対象 {0} / {1}</value></data>
   <data name="CommitDetail.PreviewTitle.LocalComparison" xml:space="preserve"><value>変更前コミットと PR HEAD のローカルプレビューを並べて、このファイルを WebView2 で開きます</value></data>
   <data name="CommitDetail.PreviewTitle.MarkdownComparison" xml:space="preserve"><value>Markdown をレンダリングして変更前コミットと PR HEAD の差分を WebView2 で開きます</value></data>

@@ -139,6 +139,7 @@
             <div class="files-heading">
                 <span class="files-heading-label">@L["CommitDetail.Files"]</span>
                 <span class="files-heading-count">@BuildPreviewableFileCountLabel()</span>
+                <span class="files-heading-count" data-testid="commit-detail-viewed-count">@BuildViewedFileCountLabel()</span>
             </div>
             <div class="preview-cleanup-control">
                 <button type="button"
@@ -198,6 +199,14 @@
                         {
                             <span class="preview-file-index" title="@L["CommitDetail.PreviewPosition", previewPosition.Ordinal, previewPosition.Total]">@previewPosition.Ordinal</span>
                         }
+                        <label class="file-viewed-toggle" title="@BuildViewedTitle(file)">
+                            <input type="checkbox"
+                                   data-testid="commit-detail-file-viewed"
+                                   data-path="@file.Path"
+                                   checked="@(file.ViewedAt is not null)"
+                                   @onchange="args => SetFileViewedAsync(file, args)" />
+                            <span>@L["CommitDetail.FileViewed"]</span>
+                        </label>
                         <span class="path">@file.Path</span>
                         @if (isActivePreview)
                         {
@@ -745,8 +754,49 @@
             : L["CommitDetail.NoPreviewableFiles"];
     }
 
+    private string BuildViewedFileCountLabel()
+    {
+        if (Commit is not { Files.Count: > 0 })
+        {
+            return L["CommitDetail.ViewedCount", 0, 0];
+        }
+
+        var viewed = Commit.Files.Count(static file => file.ViewedAt is not null);
+        return L["CommitDetail.ViewedCount", viewed, Commit.Files.Count];
+    }
+
+    private string BuildViewedTitle(CommitFile file)
+        => file.ViewedAt is null
+            ? L["CommitDetail.FileViewed.MarkTitle", file.Path]
+            : L["CommitDetail.FileViewed.UnmarkTitle", file.Path];
+
     private int CountLocalComparisonPreviewableFiles()
         => Commit?.Files.Count(IsLocalComparisonPreviewable) ?? 0;
+
+    private async Task SetFileViewedAsync(CommitFile file, ChangeEventArgs args)
+    {
+        var viewed = args.Value is bool value && value;
+        var previous = file.ViewedAt;
+        file.ViewedAt = viewed ? DateTime.UtcNow : null;
+
+        if (Commit is not { } commit || Services.GetService<IRadarRepository>() is not { } repo)
+        {
+            return;
+        }
+
+        try
+        {
+            await repo.SetCommitFileViewedAsync(commit.Sha, file.Path, viewed);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            file.ViewedAt = previous;
+            _previewStatus = ex.Message;
+            _previewStatusIsCleanup = false;
+            _previewStatusPath = file.Path;
+            _previewStatusSha = commit.Sha;
+        }
+    }
 
     private async Task OpenInWebViewAsync(CommitFile file)
         => await OpenInWebViewAsync(file, version: null);

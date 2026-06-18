@@ -1031,6 +1031,27 @@ html, body {
     overflow-wrap: anywhere;
 }
 
+.radar-commit-detail .file-viewed-toggle {
+    align-items: center;
+    color: #57606a;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    font-weight: 600;
+    gap: 0.25rem;
+}
+
+.radar-commit-detail .file-viewed-toggle input {
+    accent-color: #1f6feb;
+    inline-size: 0.95rem;
+    block-size: 0.95rem;
+    margin: 0;
+}
+
+.radar-commit-detail .file-row:has(.file-viewed-toggle input:checked) {
+    background: #f6f8fa;
+}
+
 .radar-commit-detail .preview-file-index,
 .radar-commit-detail .preview-active-badge {
     display: inline-flex;
@@ -2650,6 +2671,7 @@ html, body {
 .radar-theme-dark .drafts-busy,
 .radar-theme-dark .drafts-channel-meta,
 .radar-theme-dark .preview-progress-text,
+.radar-theme-dark .file-viewed-toggle,
 .radar-theme-dark .preview-progress-elapsed,
 .radar-theme-dark .preview-progress-pid,
 .radar-theme-dark .commit-search-label,

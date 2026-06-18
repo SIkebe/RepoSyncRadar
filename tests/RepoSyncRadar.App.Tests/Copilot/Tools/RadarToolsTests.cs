@@ -278,6 +278,9 @@ public sealed class RadarToolsTests
         public Task SetReviewAsync(string sha, ReviewStatus status, string? reason, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
 
+        public Task SetCommitFileViewedAsync(string sha, string path, bool viewed, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
+
         public Task<CommitHistorySnapshot?> GetCommitHistoryAsync(string sha, CancellationToken cancellationToken = default)
         {
             var commit = _commits.FirstOrDefault(c => c.Sha == sha);

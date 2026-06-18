@@ -201,6 +201,30 @@ public sealed class RadarRepository : IRadarRepository
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task SetCommitFileViewedAsync(
+        string sha,
+        string path,
+        bool viewed,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        using var db = _contextFactory.CreateDbContext();
+        var file = await db.CommitFiles
+            .FirstOrDefaultAsync(
+                f => f.Sha == sha && f.Path == path,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (file is null)
+        {
+            return;
+        }
+
+        file.ViewedAt = viewed ? DateTime.UtcNow : null;
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<CommitHistorySnapshot?> GetCommitHistoryAsync(
         string sha,
         CancellationToken cancellationToken = default)

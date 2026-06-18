@@ -81,6 +81,67 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void CommitDetail_Shows_Viewed_Count_From_File_State()
+    {
+        var commit = MakeCommit(
+            ("content/copilot/about-copilot.md", 42, 5),
+            ("content/copilot/other.md", 0, 3));
+        commit.Files[1].ViewedAt = new DateTime(2026, 6, 18, 0, 0, 0, DateTimeKind.Utc);
+
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        Assert.Equal("1/2 件を確認済み", cut.Find("[data-testid=\"commit-detail-viewed-count\"]").TextContent);
+        var checkboxes = cut.FindAll("[data-testid=\"commit-detail-file-viewed\"]");
+        Assert.Equal(2, checkboxes.Count);
+        Assert.Null(checkboxes[0].GetAttribute("checked"));
+        Assert.Equal(string.Empty, checkboxes[1].GetAttribute("checked"));
+    }
+
+    [Fact]
+    public void CommitDetail_Persists_Viewed_Checkbox_Changes()
+    {
+        var commit = MakeCommit(
+            ("content/copilot/about-copilot.md", 42, 5),
+            ("content/copilot/other.md", 0, 3));
+
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var repository = Substitute.For<IRadarRepository>();
+        repository.GetCommitHistoryAsync(commit.Sha, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<CommitHistorySnapshot?>(new CommitHistorySnapshot(commit, [], commit.Drafts, [])));
+        repository.SetCommitFileViewedAsync(commit.Sha, "content/copilot/about-copilot.md", true, Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: null,
+            repository: repository);
+
+        cut.Find("[data-testid=\"commit-detail-file-viewed\"][data-path=\"content/copilot/about-copilot.md\"]").Change(true);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.NotNull(commit.Files[0].ViewedAt);
+            Assert.Equal("1/2 件を確認済み", cut.Find("[data-testid=\"commit-detail-viewed-count\"]").TextContent);
+        });
+        _ = repository.Received(1).SetCommitFileViewedAsync(
+            commit.Sha,
+            "content/copilot/about-copilot.md",
+            true,
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void CommitDetail_Formats_Header_For_Scannability()
     {
         var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
@@ -1143,7 +1204,8 @@ public class CommitDetailTests
         PreviewSession? session,
         IPreviewCoordinator? coordinator,
         int previewReadyTimeoutSeconds = 600,
-        CommitHistorySnapshot? historySnapshot = null)
+        CommitHistorySnapshot? historySnapshot = null,
+        IRadarRepository? repository = null)
     {
         var services = new ServiceCollection()
             .AddSingleton(resolver)
@@ -1161,10 +1223,12 @@ public class CommitDetailTests
         {
             services.AddSingleton(coordinator);
         }
-        var repository = Substitute.For<IRadarRepository>();
+        repository ??= Substitute.For<IRadarRepository>();
         repository.GetCommitHistoryAsync(commit.Sha, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<CommitHistorySnapshot?>(
                 historySnapshot ?? new CommitHistorySnapshot(commit, [], commit.Drafts, [])));
+        repository.SetCommitFileViewedAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
         services.AddSingleton(repository);
         // Wire the docs base address so CommitDetail can absolutise the relative
         // paths returned by IPathToUrlResolver — matches the production DI setup.

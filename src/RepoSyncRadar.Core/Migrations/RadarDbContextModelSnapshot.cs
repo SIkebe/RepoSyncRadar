@@ -15,7 +15,7 @@ partial class RadarDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20260606141020_AddReviewHistory";
+    public override string LastMigrationId => "20260618000000_AddCommitFileViewedAt";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -88,6 +88,9 @@ partial class RadarDbContextModelSnapshot : ModelSnapshot
 
                 b.Property<string>("Status")
                     .IsRequired()
+                    .HasColumnType("TEXT");
+
+                b.Property<DateTime?>("ViewedAt")
                     .HasColumnType("TEXT");
 
                 b.HasKey("Sha", "Path");
