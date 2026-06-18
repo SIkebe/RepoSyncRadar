@@ -1,15 +1,11 @@
 using System;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
-using RepoSyncRadar.Core.Data;
 
 #nullable disable
 
 namespace RepoSyncRadar.Core.Migrations
 {
     /// <inheritdoc />
-    [DbContext(typeof(RadarDbContext))]
-    [Migration("20260618000000_AddCommitFileViewedAt")]
     public partial class AddCommitFileViewedAt : Migration
     {
         /// <inheritdoc />
