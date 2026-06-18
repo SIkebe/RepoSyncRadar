@@ -2774,6 +2774,10 @@ html, body {
     background: var(--radar-panel-bg) !important;
 }
 
+.radar-theme-dark .radar-commit-detail .file-row:has(.file-viewed-toggle input:checked) {
+    background: var(--radar-panel-alt-bg) !important;
+}
+
 .radar-theme-dark .review-ignore-panel summary {
     background: var(--radar-panel-alt-bg) !important;
     border-color: var(--radar-border) !important;
