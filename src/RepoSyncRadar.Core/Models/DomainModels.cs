@@ -43,6 +43,8 @@ public sealed class CommitFile
     public int Additions { get; set; }
 
     public int Deletions { get; set; }
+
+    public DateTime? ViewedAt { get; set; }
 }
 
 /// <summary>

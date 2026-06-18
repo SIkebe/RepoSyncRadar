@@ -116,6 +116,39 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
+    public async Task SetCommitFileViewedAsync_Marks_And_Clears_File()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+
+        var commit = MakeCommit("sha-a", prNumber: 1);
+        commit.Files.Add(new CommitFile
+        {
+            Sha = "sha-a",
+            Path = "content/get-started/index.md",
+            Status = "modified",
+            Additions = 3,
+            Deletions = 1,
+        });
+        await repository.UpsertCommitsAsync([commit], ct);
+
+        await repository.SetCommitFileViewedAsync("sha-a", "content/get-started/index.md", viewed: true, ct);
+
+        using (var verify = fixture.CreateContext())
+        {
+            Assert.NotNull(verify.CommitFiles.Single().ViewedAt);
+        }
+
+        await repository.SetCommitFileViewedAsync("sha-a", "content/get-started/index.md", viewed: false, ct);
+
+        using (var verify = fixture.CreateContext())
+        {
+            Assert.Null(verify.CommitFiles.Single().ViewedAt);
+        }
+    }
+
+    [Fact]
     public async Task UpsertCommitsAsync_AutoRejects_New_Commits_Matching_Ignore_Rules()
     {
         using var fixture = new SqliteFixture();

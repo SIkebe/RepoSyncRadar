@@ -1031,6 +1031,27 @@ html, body {
     overflow-wrap: anywhere;
 }
 
+.radar-commit-detail .file-viewed-toggle {
+    align-items: center;
+    color: #57606a;
+    display: inline-flex;
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    font-weight: 600;
+    gap: 0.25rem;
+}
+
+.radar-commit-detail .file-viewed-toggle input {
+    accent-color: #1f6feb;
+    inline-size: 0.95rem;
+    block-size: 0.95rem;
+    margin: 0;
+}
+
+.radar-commit-detail .file-row:has(.file-viewed-toggle input:checked) {
+    background: #f6f8fa;
+}
+
 .radar-commit-detail .preview-file-index,
 .radar-commit-detail .preview-active-badge {
     display: inline-flex;
@@ -1111,16 +1132,15 @@ html, body {
 }
 
 .radar-commit-detail .preview-file-action {
-    align-items: flex-start;
+    align-items: center;
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 0.35rem;
     min-width: 0;
 }
 
 .radar-commit-detail .file-row .open-in-webview {
     align-self: flex-start;
-    margin-top: 0.15rem;
     padding: 0.15rem 0.55rem;
     font-size: 0.8rem;
     border: 1px solid #2f6fd0;
@@ -1141,11 +1161,13 @@ html, body {
 }
 
 .radar-commit-detail .preview-file-status {
+    flex-basis: 100%;
     margin: 0;
     overflow-wrap: anywhere;
 }
 
 .radar-commit-detail .preview-file-progress {
+    flex-basis: 100%;
     margin: 0;
     max-width: 100%;
     width: 100%;
@@ -2650,6 +2672,7 @@ html, body {
 .radar-theme-dark .drafts-busy,
 .radar-theme-dark .drafts-channel-meta,
 .radar-theme-dark .preview-progress-text,
+.radar-theme-dark .file-viewed-toggle,
 .radar-theme-dark .preview-progress-elapsed,
 .radar-theme-dark .preview-progress-pid,
 .radar-theme-dark .commit-search-label,
@@ -2750,6 +2773,10 @@ html, body {
 .radar-theme-dark .batch-explanation-progress,
 .radar-theme-dark .preview-progress {
     background: var(--radar-panel-bg) !important;
+}
+
+.radar-theme-dark .radar-commit-detail .file-row:has(.file-viewed-toggle input:checked) {
+    background: var(--radar-panel-alt-bg) !important;
 }
 
 .radar-theme-dark .review-ignore-panel summary {

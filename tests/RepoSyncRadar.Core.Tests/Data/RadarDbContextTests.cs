@@ -32,6 +32,10 @@ public sealed class RadarDbContextTests
         Assert.Empty(db.IgnoreRules.ToList());
         Assert.Empty(db.BoostRules.ToList());
         Assert.Empty(db.CopilotToolLogs.ToList());
+
+        var columns = db.Database.SqlQueryRaw<string>("SELECT name FROM pragma_table_info('CommitFiles')")
+            .ToList();
+        Assert.Contains("ViewedAt", columns);
     }
 
     [Fact]
