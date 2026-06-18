@@ -199,14 +199,6 @@
                         {
                             <span class="preview-file-index" title="@L["CommitDetail.PreviewPosition", previewPosition.Ordinal, previewPosition.Total]">@previewPosition.Ordinal</span>
                         }
-                        <label class="file-viewed-toggle" title="@BuildViewedTitle(file)">
-                            <input type="checkbox"
-                                   data-testid="commit-detail-file-viewed"
-                                   data-path="@file.Path"
-                                   checked="@(file.ViewedAt is not null)"
-                                   @onchange="args => SetFileViewedAsync(file, args)" />
-                            <span>@L["CommitDetail.FileViewed"]</span>
-                        </label>
                         <span class="path">@file.Path</span>
                         @if (isActivePreview)
                         {
@@ -215,9 +207,9 @@
                     </span>
                     <span class="stats"
                           data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
-                    @if (canOpenPreview)
-                    {
-                        <div class="preview-file-action">
+                    <div class="preview-file-action">
+                        @if (canOpenPreview)
+                        {
                             <button type="button"
                                     class="open-in-webview"
                                     data-testid="commit-detail-open-in-webview"
@@ -225,44 +217,52 @@
                                     disabled="@IsPreviewOperationBusy"
                                     title="@BuildPreviewTitle(file, previewTarget)"
                                     @onclick="() => OpenInWebViewAsync(file)">@BuildPreviewButtonLabel(file)</button>
-                            @if (IsPreviewBusyFile(file))
-                            {
-                                <div class="preview-progress preview-file-progress"
-                                     data-testid="commit-detail-preview-progress"
-                                     role="status"
-                                     aria-live="polite"
-                                     aria-atomic="true">
-                                    <div class="preview-progress-row">
-                                        <span class="preview-spinner" aria-hidden="true"></span>
-                                        <span class="preview-progress-text progress-phase" data-testid="commit-detail-preview-progress-text">
-                                            @(_previewStatus ?? L["CommitDetail.Starting"])
-                                        </span>
-                                        <span class="progress-metric progress-metric-elapsed" data-testid="commit-detail-preview-progress-elapsed">
-                                            <span class="progress-metric-label">@L["Common.Elapsed"]</span>
-                                            <span class="progress-metric-value">@L["Common.Seconds", _previewElapsedSec]</span>
-                                        </span>
-                                        <span class="progress-metric" data-testid="commit-detail-preview-progress-timeout">
-                                            <span class="progress-metric-label">@L["Common.Limit"]</span>
-                                            <span class="progress-metric-value">@L["Common.Seconds", _previewTimeoutSec]</span>
-                                        </span>
-                                        <button type="button"
-                                                data-testid="commit-detail-preview-cancel-button"
-                                                class="preview-cancel"
-                                                disabled="@_previewCanceling"
-                                                @onclick="CancelPreviewAsync">@(_previewCanceling ? L["Common.Canceling"] : L["Common.Cancel"])</button>
-                                    </div>
+                        }
+                        <label class="file-viewed-toggle" title="@BuildViewedTitle(file)">
+                            <input type="checkbox"
+                                   data-testid="commit-detail-file-viewed"
+                                   data-path="@file.Path"
+                                   checked="@(file.ViewedAt is not null)"
+                                   @onchange="args => SetFileViewedAsync(file, args)" />
+                            <span>@L["CommitDetail.FileViewed"]</span>
+                        </label>
+                        @if (canOpenPreview && IsPreviewBusyFile(file))
+                        {
+                            <div class="preview-progress preview-file-progress"
+                                 data-testid="commit-detail-preview-progress"
+                                 role="status"
+                                 aria-live="polite"
+                                 aria-atomic="true">
+                                <div class="preview-progress-row">
+                                    <span class="preview-spinner" aria-hidden="true"></span>
+                                    <span class="preview-progress-text progress-phase" data-testid="commit-detail-preview-progress-text">
+                                        @(_previewStatus ?? L["CommitDetail.Starting"])
+                                    </span>
+                                    <span class="progress-metric progress-metric-elapsed" data-testid="commit-detail-preview-progress-elapsed">
+                                        <span class="progress-metric-label">@L["Common.Elapsed"]</span>
+                                        <span class="progress-metric-value">@L["Common.Seconds", _previewElapsedSec]</span>
+                                    </span>
+                                    <span class="progress-metric" data-testid="commit-detail-preview-progress-timeout">
+                                        <span class="progress-metric-label">@L["Common.Limit"]</span>
+                                        <span class="progress-metric-value">@L["Common.Seconds", _previewTimeoutSec]</span>
+                                    </span>
+                                    <button type="button"
+                                            data-testid="commit-detail-preview-cancel-button"
+                                            class="preview-cancel"
+                                            disabled="@_previewCanceling"
+                                            @onclick="CancelPreviewAsync">@(_previewCanceling ? L["Common.Canceling"] : L["Common.Cancel"])</button>
                                 </div>
-                            }
-                            else if (IsPreviewFeedbackFile(file))
-                            {
-                                <p class="preview-status preview-file-status"
-                                   data-testid="commit-detail-preview-status"
-                                   role="status"
-                                   aria-live="polite"
-                                   aria-atomic="true">@_previewStatus</p>
-                            }
-                        </div>
-                    }
+                            </div>
+                        }
+                        else if (canOpenPreview && IsPreviewFeedbackFile(file))
+                        {
+                            <p class="preview-status preview-file-status"
+                               data-testid="commit-detail-preview-status"
+                               role="status"
+                               aria-live="polite"
+                               aria-atomic="true">@_previewStatus</p>
+                        }
+                    </div>
                     @if (_urlsByPath.TryGetValue(file.Path, out var urls) && urls.Count > 0)
                     {
                         <ul class="urls">

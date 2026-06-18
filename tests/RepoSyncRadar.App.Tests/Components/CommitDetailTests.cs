@@ -100,6 +100,8 @@ public class CommitDetailTests
         Assert.Equal(2, checkboxes.Count);
         Assert.Null(checkboxes[0].GetAttribute("checked"));
         Assert.Equal(string.Empty, checkboxes[1].GetAttribute("checked"));
+        Assert.Empty(cut.FindAll(".file-main .file-viewed-toggle"));
+        Assert.NotNull(cut.Find(".preview-file-action [data-testid=\"commit-detail-file-viewed\"]"));
     }
 
     [Fact]

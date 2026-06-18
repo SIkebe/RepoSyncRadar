@@ -1132,16 +1132,15 @@ html, body {
 }
 
 .radar-commit-detail .preview-file-action {
-    align-items: flex-start;
+    align-items: center;
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 0.35rem;
     min-width: 0;
 }
 
 .radar-commit-detail .file-row .open-in-webview {
     align-self: flex-start;
-    margin-top: 0.15rem;
     padding: 0.15rem 0.55rem;
     font-size: 0.8rem;
     border: 1px solid #2f6fd0;
@@ -1162,11 +1161,13 @@ html, body {
 }
 
 .radar-commit-detail .preview-file-status {
+    flex-basis: 100%;
     margin: 0;
     overflow-wrap: anywhere;
 }
 
 .radar-commit-detail .preview-file-progress {
+    flex-basis: 100%;
     margin: 0;
     max-width: 100%;
     width: 100%;
