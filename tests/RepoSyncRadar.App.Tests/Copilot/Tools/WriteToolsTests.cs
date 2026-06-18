@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using GitHub.Copilot;
 using Microsoft.EntityFrameworkCore;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
@@ -359,6 +360,9 @@ public sealed class WriteToolsTests
             {
                 Assert.NotEqual(true, value);
             }
+
+            Assert.True(f.AdditionalProperties.TryGetValue("defer", out var defer));
+            Assert.Equal(CopilotToolDefer.Never, defer);
         });
     }
 

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GitHub.Copilot;
 using Microsoft.Extensions.AI;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Tools;
@@ -202,6 +203,8 @@ public sealed class RadarToolsTests
         {
             Assert.True(f.AdditionalProperties.TryGetValue("skip_permission", out var value));
             Assert.Equal(true, value);
+            Assert.True(f.AdditionalProperties.TryGetValue("defer", out var defer));
+            Assert.Equal(CopilotToolDefer.Never, defer);
         });
     }
 

@@ -296,6 +296,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             {
                 ExporterType = "file",
                 FilePath = copilot.TelemetryFilePath.Trim(),
+                OtlpProtocol = copilot.TelemetryOtlpProtocol,
                 SourceName = "RepoSyncRadar",
                 CaptureContent = copilot.CaptureContent,
             };

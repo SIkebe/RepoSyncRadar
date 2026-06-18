@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using GitHub.Copilot;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -289,10 +290,11 @@ public sealed class RadarWriteTools
 
     private AIFunction CreateSaveReview()
     {
-        return AIFunctionFactory.Create(
+        return CopilotTool.DefineTool(
             ([Description("Side-effecting: writes to radar.db. Args carry sha + review status (注目=Adopted, 見送り候補=Rejected, アーカイブ=Archived, 保留=Later) + optional reason.")] SaveReviewArgs args,
              CancellationToken cancellationToken)
                 => SaveReviewAsync(args, cancellationToken),
+            CreateWriteToolOptions(),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_save_review",
@@ -302,10 +304,11 @@ public sealed class RadarWriteTools
 
     private AIFunction CreateScoreCommit()
     {
-        return AIFunctionFactory.Create(
+        return CopilotTool.DefineTool(
             ([Description("Side-effecting: writes a Scoring row to radar.db, including score, category, audience, short summary, reason, and detailed Japanese analysis. Keep GitHub Organization and Enterprise in English; do not translate either concept as 組織.")] ScoreCommitArgs args,
              CancellationToken cancellationToken)
                 => ScoreCommitAsync(args, cancellationToken),
+            CreateWriteToolOptions(),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_score_commit",
@@ -315,10 +318,11 @@ public sealed class RadarWriteTools
 
     private AIFunction CreatePostDraft()
     {
-        return AIFunctionFactory.Create(
+        return CopilotTool.DefineTool(
             ([Description("Side-effecting: inserts a Draft row to radar.db. Posted=false until the user shares it.")] PostDraftArgs args,
              CancellationToken cancellationToken)
                 => PostDraftAsync(args, cancellationToken),
+            CreateWriteToolOptions(),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_post_draft",
@@ -328,10 +332,11 @@ public sealed class RadarWriteTools
 
     private AIFunction CreateIgnoreRule()
     {
-        return AIFunctionFactory.Create(
+        return CopilotTool.DefineTool(
             ([Description("Side-effecting: inserts a glob-based IgnoreRule to radar.db.")] IgnoreRuleArgs args,
              CancellationToken cancellationToken)
                 => IgnoreRuleAsync(args, cancellationToken),
+            CreateWriteToolOptions(),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_ignore_rule",
@@ -341,14 +346,21 @@ public sealed class RadarWriteTools
 
     private AIFunction CreateBoostRule()
     {
-        return AIFunctionFactory.Create(
+        return CopilotTool.DefineTool(
             ([Description("Side-effecting: inserts/updates a BoostRule (Delta in -5..+5).")] BoostRuleArgs args,
              CancellationToken cancellationToken)
                 => BoostRuleAsync(args, cancellationToken),
+            CreateWriteToolOptions(),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_boost_rule",
                 Description = "Adds or updates a glob-based score-adjustment rule. Delta must be between -5 and 5. Side-effecting.",
             });
     }
+
+    private static CopilotToolOptions CreateWriteToolOptions()
+        => new()
+        {
+            Defer = CopilotToolDefer.Never,
+        };
 }

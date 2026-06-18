@@ -38,6 +38,10 @@ public sealed class CopilotOptions
     /// <summary>Where to write OpenTelemetry trace lines. Null disables file telemetry.</summary>
     public string? TelemetryFilePath { get; set; }
 
+    /// <summary>Optional OTLP HTTP protocol override: <c>http/json</c> or <c>http/protobuf</c>.</summary>
+    [RegularExpression("^http/(json|protobuf)$")]
+    public string? TelemetryOtlpProtocol { get; set; }
+
     /// <summary>Whether telemetry should include message content. Default off for privacy.</summary>
     public bool CaptureContent { get; set; }
 

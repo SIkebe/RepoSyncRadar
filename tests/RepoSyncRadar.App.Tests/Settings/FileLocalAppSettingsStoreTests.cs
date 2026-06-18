@@ -101,6 +101,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.Copilot.SessionIdleTimeoutSeconds = 120;
         settings.Copilot.CopilotHome = " C:\\Users\\me\\.reposyncradar-copilot ";
         settings.Copilot.TelemetryFilePath = " C:\\logs\\copilot.jsonl ";
+        settings.Copilot.TelemetryOtlpProtocol = " HTTP/JSON ";
         settings.Copilot.CaptureContent = true;
         settings.Copilot.EnableRemoteSessions = true;
         settings.Copilot.EnableSessionTelemetry = false;
@@ -132,6 +133,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal(120, root.GetProperty("Copilot").GetProperty("SessionIdleTimeoutSeconds").GetInt32());
         Assert.Equal("C:\\Users\\me\\.reposyncradar-copilot", root.GetProperty("Copilot").GetProperty("CopilotHome").GetString());
         Assert.Equal("C:\\logs\\copilot.jsonl", root.GetProperty("Copilot").GetProperty("TelemetryFilePath").GetString());
+        Assert.Equal("http/json", root.GetProperty("Copilot").GetProperty("TelemetryOtlpProtocol").GetString());
         Assert.True(root.GetProperty("Copilot").GetProperty("CaptureContent").GetBoolean());
         Assert.True(root.GetProperty("Copilot").GetProperty("EnableRemoteSessions").GetBoolean());
         Assert.False(root.GetProperty("Copilot").GetProperty("EnableSessionTelemetry").GetBoolean());

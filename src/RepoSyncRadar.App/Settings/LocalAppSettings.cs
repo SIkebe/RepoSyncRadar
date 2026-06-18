@@ -89,6 +89,8 @@ public sealed class CopilotLocalAppSettings
 
     public string? TelemetryFilePath { get; set; }
 
+    public string? TelemetryOtlpProtocol { get; set; }
+
     public bool CaptureContent { get; set; }
 
     public bool EnableRemoteSessions { get; set; }
@@ -115,6 +117,7 @@ public sealed class CopilotLocalAppSettings
             SessionIdleTimeoutSeconds = SessionIdleTimeoutSeconds,
             CopilotHome = CopilotHome,
             TelemetryFilePath = TelemetryFilePath,
+            TelemetryOtlpProtocol = TelemetryOtlpProtocol,
             CaptureContent = CaptureContent,
             EnableRemoteSessions = EnableRemoteSessions,
             EnableSessionTelemetry = EnableSessionTelemetry,

@@ -160,7 +160,7 @@ public sealed class RadarTools
              [Description("Maximum rows to return. Defaults to 50.")] int? limit,
              CancellationToken cancellationToken)
                 => ListCommitsAsync(status, limit, cancellationToken),
-            new CopilotToolOptions { SkipPermission = true },
+            CreateReadOnlyToolOptions(),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_list_commits",
@@ -174,7 +174,7 @@ public sealed class RadarTools
             ([Description("Commit SHA (40-char hex) to fetch the unified diff for.")] string sha,
              CancellationToken cancellationToken)
                 => GetDiffAsync(sha, cancellationToken),
-            new CopilotToolOptions { SkipPermission = true },
+            CreateReadOnlyToolOptions(),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_get_diff",
@@ -190,7 +190,7 @@ public sealed class RadarTools
              [Description("Preferred UI language. Defaults to 'en'.")] string? language,
              CancellationToken cancellationToken)
                 => ResolveUrlAsync(repoPath, frontmatterVersions, language ?? "en", cancellationToken),
-            new CopilotToolOptions { SkipPermission = true },
+            CreateReadOnlyToolOptions(),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_resolve_url",
@@ -204,11 +204,18 @@ public sealed class RadarTools
             ([Description("Canonical docs pathname (e.g. /en/copilot/about-copilot).")] string pathname,
              CancellationToken cancellationToken)
                 => FetchRenderedAsync(pathname, cancellationToken),
-            new CopilotToolOptions { SkipPermission = true },
+            CreateReadOnlyToolOptions(),
             new AIFunctionFactoryOptions
             {
                 Name = "radar_fetch_rendered",
                 Description = "Fetches the rendered HTML body for a docs.github.com pathname. Returns an error envelope on failure instead of throwing.",
             });
     }
+
+    private static CopilotToolOptions CreateReadOnlyToolOptions()
+        => new()
+        {
+            SkipPermission = true,
+            Defer = CopilotToolDefer.Never,
+        };
 }
