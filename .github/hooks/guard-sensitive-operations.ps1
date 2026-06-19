@@ -1,11 +1,15 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Copilot PreToolUse sends one JSON payload on stdin. This hook reads that
+# payload, extracts shell-command strings, and denies sensitive repo operations.
 $inputText = [Console]::In.ReadToEnd()
 if ([string]::IsNullOrWhiteSpace($inputText)) {
     exit 0
 }
 
+# Parse a JSON string when possible. Invalid hook input is ignored so the hook
+# does not block unrelated tool calls because of malformed metadata.
 function Convert-ToJsonOrNull {
     param([string]$Text)
 
@@ -21,6 +25,7 @@ function Convert-ToJsonOrNull {
     }
 }
 
+# Support both Copilot CLI camelCase and VS Code snake_case payload fields.
 function Get-PropertyValue {
     param(
         [object]$Object,
@@ -40,6 +45,8 @@ function Get-PropertyValue {
     return $null
 }
 
+# Flatten nested tool input into strings so command arguments can be scanned no
+# matter whether the host sends them as objects, arrays, or JSON-encoded text.
 function Get-StringValues {
     param([object]$Value)
 
@@ -84,6 +91,7 @@ function Get-StringValues {
 function New-DenyOutput {
     param([string]$Reason)
 
+    # Emit both CLI-style and VS Code-style deny fields for shared hook support.
     [ordered]@{
         permissionDecision = 'deny'
         permissionDecisionReason = $Reason
@@ -95,6 +103,7 @@ function New-DenyOutput {
     } | ConvertTo-Json -Compress -Depth 5
 }
 
+# PreToolUse fires for all tools; only inspect actual shell/terminal tools.
 function Test-IsCommandTool {
     param([string]$Name)
 
@@ -105,6 +114,7 @@ function Test-IsCommandTool {
     return $Name -match '(?i)(^|[._-])(bash|sh|zsh|fish|pwsh|powershell|cmd|terminal|shell|command)($|[._-])|run_?in_?terminal|run-?in-?terminal'
 }
 
+# Build a command-search haystack from the tool name and all string inputs.
 $inputObj = Convert-ToJsonOrNull -Text $inputText
 if ($null -eq $inputObj) {
     exit 0
@@ -126,6 +136,7 @@ if ($toolInput -is [string]) {
 $haystackParts = @($toolName) + (Get-StringValues -Value $toolInput)
 $haystack = ($haystackParts -join "`n")
 
+# `gh release create` publishes by default, so require an explicit draft create.
 foreach ($commandSegment in ($haystack -split '[;&|\r\n]')) {
     if ($commandSegment -match '(?i)(^|[^A-Za-z0-9_])gh\s+release\s+create(\s|$)') {
         $isExplicitPublish = $commandSegment -match '(?i)--draft\s*=?\s*false\b'
@@ -137,12 +148,20 @@ foreach ($commandSegment in ($haystack -split '[;&|\r\n]')) {
     }
 }
 
+# Deny rules below use non-word command boundaries so quoted, parenthesized, or
+# shell-expanded commands are detected consistently with the bash hook.
 $rules = @(
+    # PR merges must remain a human action.
     @{ Pattern = '(?im)(^|[^A-Za-z0-9_])gh\s+pr\s+merge(\s|$)'; Reason = 'PR merges must be initiated by a human after explicit approval.' },
+    # Block Release workflow dispatch by file name, display name, path, or ID.
     @{ Pattern = '(?im)(^|[^A-Za-z0-9_])gh\s+workflow\s+run(?:\s+[^\r\n]*)?\s+(?:release\.ya?ml|\.github[\\/]workflows[\\/]release\.ya?ml|["'']?release["'']?|\d+)($|[^A-Za-z0-9_])'; Reason = 'Release workflow runs require explicit human approval.' },
+    # Publishing an existing draft release is sensitive; draft edits remain allowed.
     @{ Pattern = '(?im)(^|[^A-Za-z0-9_])gh\s+release\s+edit\b.*--draft\s*=?\s*false\b'; Reason = 'Publishing a GitHub Release requires explicit human approval.' },
+    # Block direct pushes to main, including commands with git global options.
     @{ Pattern = '(?im)(^|[^A-Za-z0-9_])git(?:\s+[^\s]+)*\s+push\b(?:\s+[^\s]+)*\s+(?:origin\s+)?main(?:$|\s)'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
+    # Block explicit refspec pushes to main.
     @{ Pattern = '(?im)(^|[^A-Za-z0-9_])git(?:\s+[^\s]+)*\s+push\b[^\r\n]*\bHEAD:main(?:$|\s)'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
+    # Block force pushes via long or short flags, with or without git global options.
     @{ Pattern = '(?im)(^|[^A-Za-z0-9_])git(?:\s+[^\s]+)*\s+push\b[^\r\n]*((^|\s)-[^\s]*f([^\w-]|$)|--force)'; Reason = 'Force pushes are blocked by repository policy.' }
 )
 
