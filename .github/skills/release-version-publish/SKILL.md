@@ -23,10 +23,12 @@ RepoSyncRadar の app/package version を更新し、Velopack installer/update-f
 2. **`RepoSyncRadarVersion` だけを正式 version source とする**。通常リリースでは個別 project の `<Version>` や workflow input に ad hoc version を入れない。
 3. **Release workflow は draft で先に実行する**。`draft=true` で assets を生成・アップロードし、GitHub Release と installer/update feed を検証してから publish に進む。
 4. **publish 前にユーザーの明示確認を取る**。「公開して」「publish して」などの明確な指示なしに `draft=false` の workflow 実行や draft の公開をしない。
-5. **official assets は installer/update-feed のみ**。Velopack build は `-NoPortable -NoLegacyManifest` を維持し、portable bundle や legacy Squirrel manifest を公開しない。
-6. **installed package smoke を重視する**。Release workflow の `win-x64` installed smoke が赤なら公開しない。ローカル smoke が必要な場合も uninstaller 経由で cleanup する。
-7. **既存 draft/published release を上書きしない**。draft に assets がある場合は workflow の asset-name validation に従う。失敗したら draft 削除か新 version をユーザーに確認する。
-8. **未コミット変更を壊さない**。関係ない dirty files は戻さない。release version bump に必要な差分だけ触る。
+5. **PR を勝手に merge しない**。CI が全て緑でも、`gh pr merge`、merge button 相当操作、auto-merge enable はユーザーが明示的に「merge して」と指示した場合だけ実行する。
+6. **Release workflow を勝手に起動しない**。PR が merge 済みでも、ユーザーが明示的に「draft release workflow を実行して」と指示するまで `gh workflow run release.yml` を実行しない。
+7. **official assets は installer/update-feed のみ**。Velopack build は `-NoPortable -NoLegacyManifest` を維持し、portable bundle や legacy Squirrel manifest を公開しない。
+8. **installed package smoke を重視する**。Release workflow の `win-x64` installed smoke が赤なら公開しない。ローカル smoke が必要な場合も uninstaller 経由で cleanup する。
+9. **既存 draft/published release を上書きしない**。draft に assets がある場合は workflow の asset-name validation に従う。失敗したら draft 削除か新 version をユーザーに確認する。
+10. **未コミット変更を壊さない**。関係ない dirty files は戻さない。release version bump に必要な差分だけ触る。
 
 ## 手順
 
@@ -96,7 +98,9 @@ version bump を `main` に入れるため、PR を作るか既存 PR を更新�
 1. `.github/pull_request_template.md` を読む。
 2. PR description は英語で、全 section を埋める。
 3. `Validation` は実行済みなら check、未該当なら `N/A - <reason>` に置換する。
-4. merge 前に CI が緑であることを確認する。
+4. branch を push してから PR を作る。`create_pull_request` が 422 で失敗した場合は、未 push branch や既存 PR を疑い、`git push -u origin <branch>` と `gh pr list --head <branch>` を確認してから `gh pr create` で再試行する。
+5. merge 前に CI が緑であることを確認する。
+6. **ここで停止する**。CI が緑でも PR を merge しない。ユーザーに PR URL、CI 結果、次に必要な明示操作(`merge して` / `draft release workflow を実行して`)を報告する。
 
 PR summary に最低限含める:
 
@@ -107,7 +111,7 @@ PR summary に最低限含める:
 
 ### 6. main 反映後に draft release workflow を実行する
 
-`main` に version bump が入ったことを確認してから、まず draft で実行する。
+ユーザーが明示的に draft release workflow の実行を指示した場合だけ進む。`main` に version bump が入ったことを確認してから、まず draft で実行する。PR を agent 自身が merge してこの step に進んではいけない。
 
 ```powershell
 gh workflow run release.yml `
@@ -129,11 +133,11 @@ gh workflow run release.yml `
   -f prerelease=true
 ```
 
-run を追跡する:
+run を追跡する。長い `gh run watch` は出力が肥大化しやすいため、通常は JSON で状態を短く確認し、必要なときだけ watch する。
 
 ```powershell
 gh run list --repo SIkebe/RepoSyncRadar --workflow Release --limit 5
-gh run watch <run-id> --repo SIkebe/RepoSyncRadar --exit-status
+gh run view <run-id> --repo SIkebe/RepoSyncRadar --json status,conclusion,url,jobs
 ```
 
 失敗したら `gh run view <run-id> --log-failed` で原因を読み、version/tag/draft/assets の状態を壊さずに修正方針を提示する。
@@ -205,6 +209,7 @@ gh release view v0.1.16 --repo SIkebe/RepoSyncRadar --json isDraft,isPrerelease,
 | build/test が赤 | publish しない。原因を修正して PR/CI からやり直す |
 | release preflight が published release を検出 | 新 version を選ぶ。既存 published release を削除・上書きしない |
 | draft に partial/unexpected assets | draft が未公開なら削除して再実行するか、新 version に進むかユーザー確認 |
+| 明示確認なしに PR merge / draft workflow 実行まで進めてしまった | そこで即停止。追加の publish / delete / rerun は行わず、merge commit、workflow run、draft release 状態、assets 数を報告してユーザー判断を待つ |
 | package / installed smoke が赤 | publish しない。`gh run view --log-failed` と artifact を確認し、修正 PR を作る |
 | publish workflow が asset validation で赤 | release 状態を変えずに停止し、draft asset set と expected names を報告 |
 | 公開後に不具合発見 | release を mutate しない。hotfix version を bump して新 release を作る |
@@ -214,6 +219,8 @@ gh release view v0.1.16 --repo SIkebe/RepoSyncRadar --json isDraft,isPrerelease,
 - `git push --force`、tag の移動、published release asset の削除・再アップロード
 - `RepoSyncRadarVersion` 以外への恒久的な version source 追加
 - official release で portable bundle / legacy Squirrel manifest を公開
+- CI 緑を理由に PR を自動 merge すること
+- PR merge 後に自動で Release workflow を起動すること
 - `draft=false` をユーザー確認なしに実行
 - release workflow を tag push trigger に変更
 - installer cleanup で `%LOCALAPPDATA%\SIkebe.RepoSyncRadar` を直接削除して済ませる

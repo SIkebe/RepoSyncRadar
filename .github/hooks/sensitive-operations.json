@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "type": "command",
+        "command": "bash .github/hooks/guard-sensitive-operations.sh",
+        "bash": "bash .github/hooks/guard-sensitive-operations.sh",
+        "powershell": "powershell -NoProfile -ExecutionPolicy Bypass -File .github\\hooks\\guard-sensitive-operations.ps1",
+        "windows": "powershell -NoProfile -ExecutionPolicy Bypass -File .github\\hooks\\guard-sensitive-operations.ps1",
+        "linux": "bash .github/hooks/guard-sensitive-operations.sh",
+        "osx": "bash .github/hooks/guard-sensitive-operations.sh",
+        "timeoutSec": 10,
+        "timeout": 10
+      }
+    ]
+  }
+}
