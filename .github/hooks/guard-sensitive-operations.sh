@@ -96,7 +96,7 @@ while IFS= read -r command_segment || [[ -n "$command_segment" ]]; do
   fi
 done < <(printf '%s' "$haystack" | tr ';&|' '\n')
 
-if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git[[:space:]]+push[[:space:]][^[:cntrl:]]*(origin[[:space:]]+)?main($|[[:space:]])"; then
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git[[:space:]]+push([[:space:]]+[^[:space:]]+)*[[:space:]]+(origin[[:space:]]+)?main($|[[:space:]])"; then
   deny "Direct pushes to main are blocked; use a reviewed pull request."
   exit 0
 fi

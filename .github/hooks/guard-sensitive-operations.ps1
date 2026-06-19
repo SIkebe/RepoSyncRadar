@@ -141,7 +141,7 @@ $rules = @(
     @{ Pattern = '(?im)(^|[\s;&|])gh\s+pr\s+merge(\s|$)'; Reason = 'PR merges must be initiated by a human after explicit approval.' },
     @{ Pattern = '(?im)(^|[\s;&|])gh\s+workflow\s+run(?:\s+[^\r\n]*)?\s+(?:release\.ya?ml|\.github[\\/]workflows[\\/]release\.ya?ml|["'']?release["'']?|\d+)(\s|$)'; Reason = 'Release workflow runs require explicit human approval.' },
     @{ Pattern = '(?im)(^|[\s;&|])gh\s+release\s+edit\b.*--draft\s*=?\s*false\b'; Reason = 'Publishing a GitHub Release requires explicit human approval.' },
-    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*\b(origin\s+)?main(?:$|\s)'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
+    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b(?:\s+[^\s]+)*\s+(?:origin\s+)?main(?:$|\s)'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
     @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*\bHEAD:main(?:$|\s)'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
     @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*((^|\s)-[^\s]*f([^\w-]|$)|--force)'; Reason = 'Force pushes are blocked by repository policy.' }
 )
