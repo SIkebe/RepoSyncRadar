@@ -56,37 +56,47 @@ else
   haystack="$input"
 fi
 
-if printf '%s' "$haystack" | grep -Eiq '(^|[;&|[:space:]])gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'; then
+command_prefix='(^|[^[:alnum:]_])'
+release_create_pattern='(^|[^[:alnum:]_])gh[[:space:]]+release[[:space:]]+create([[:space:]]|$)'
+draft_false_pattern='--draft[[:space:]]*=?[[:space:]]*false([^[:alnum:]_]|$)'
+draft_true_pattern='--draft([[:space:]]*=[[:space:]]*true)?([^[:alnum:]_]|$)'
+
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)"; then
   deny "PR merges must be initiated by a human after explicit approval."
   exit 0
 fi
 
-if printf '%s' "$haystack" | grep -Eiq '(^|[;&|[:space:]])gh[[:space:]]+workflow[[:space:]]+run[[:space:]]+release\.ya?ml([[:space:]]|$)'; then
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}gh[[:space:]]+workflow[[:space:]]+run[[:space:]]+release\.ya?ml([[:space:]]|$)"; then
   deny "Release workflow runs require explicit human approval."
   exit 0
 fi
 
-if printf '%s' "$haystack" | grep -Eiq '(^|[;&|[:space:]])gh[[:space:]]+release[[:space:]]+edit[[:space:]][^[:cntrl:]]*--draft[[:space:]]*=?[[:space:]]*false'; then
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}gh[[:space:]]+release[[:space:]]+edit[[:space:]][^[:cntrl:]]*--draft[[:space:]]*=?[[:space:]]*false"; then
   deny "Publishing a GitHub Release requires explicit human approval."
   exit 0
 fi
 
-if printf '%s' "$haystack" | grep -Eiq '(^|[;&|[:space:]])gh[[:space:]]+release[[:space:]]+create[[:space:]][^[:cntrl:]]*--draft[[:space:]]*=?[[:space:]]*false'; then
-  deny "Publishing a GitHub Release requires explicit human approval."
-  exit 0
-fi
+while IFS= read -r command_segment || [[ -n "$command_segment" ]]; do
+  if [[ "$command_segment" =~ $release_create_pattern ]]; then
+    if [[ "$command_segment" =~ $draft_false_pattern ]] ||
+       ! [[ "$command_segment" =~ $draft_true_pattern ]]; then
+      deny "Publishing a GitHub Release requires explicit human approval."
+      exit 0
+    fi
+  fi
+done < <(printf '%s' "$haystack" | tr ';&|' '\n')
 
-if printf '%s' "$haystack" | grep -Eiq '(^|[;&|[:space:]])git[[:space:]]+push[[:space:]][^[:cntrl:]]*(origin[[:space:]]+)?main($|[[:space:]])'; then
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git[[:space:]]+push[[:space:]][^[:cntrl:]]*(origin[[:space:]]+)?main($|[[:space:]])"; then
   deny "Direct pushes to main are blocked; use a reviewed pull request."
   exit 0
 fi
 
-if printf '%s' "$haystack" | grep -Eiq '(^|[;&|[:space:]])git[[:space:]]+push[[:space:]][^[:cntrl:]]*HEAD:main($|[[:space:]])'; then
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git[[:space:]]+push[[:space:]][^[:cntrl:]]*HEAD:main($|[[:space:]])"; then
   deny "Direct pushes to main are blocked; use a reviewed pull request."
   exit 0
 fi
 
-if printf '%s' "$haystack" | grep -Eiq '(^|[;&|[:space:]])git[[:space:]]+push[[:space:]][^[:cntrl:]]*--force'; then
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git[[:space:]]+push[[:space:]][^[:cntrl:]]*--force"; then
   deny "Force pushes are blocked by repository policy."
   exit 0
 fi

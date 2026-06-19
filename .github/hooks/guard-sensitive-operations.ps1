@@ -112,14 +112,24 @@ if ($toolInput -is [string]) {
 $haystackParts = @($toolName) + (Get-StringValues -Value $toolInput)
 $haystack = ($haystackParts -join "`n")
 
+foreach ($commandSegment in ($haystack -split '[;&|\r\n]')) {
+    if ($commandSegment -match '(?i)(^|[^A-Za-z0-9_])gh\s+release\s+create(\s|$)') {
+        $isExplicitPublish = $commandSegment -match '(?i)--draft\s*=?\s*false\b'
+        $isDraftCreate = $commandSegment -match '(?i)--draft(\s*=\s*true)?([^A-Za-z0-9_]|$)'
+        if ($isExplicitPublish -or -not $isDraftCreate) {
+            New-DenyOutput -Reason 'Publishing a GitHub Release requires explicit human approval.'
+            exit 0
+        }
+    }
+}
+
 $rules = @(
-    @{ Pattern = '(?im)(^|[;&|`r`n]\s*)gh\s+pr\s+merge(\s|$)'; Reason = 'PR merges must be initiated by a human after explicit approval.' },
-    @{ Pattern = '(?im)(^|[;&|`r`n]\s*)gh\s+workflow\s+run\s+release\.ya?ml(\s|$)'; Reason = 'Release workflow runs require explicit human approval.' },
-    @{ Pattern = '(?im)(^|[;&|`r`n]\s*)gh\s+release\s+edit\b.*--draft\s*=?\s*false\b'; Reason = 'Publishing a GitHub Release requires explicit human approval.' },
-    @{ Pattern = '(?im)(^|[;&|`r`n]\s*)gh\s+release\s+create\b.*--draft\s*=?\s*false\b'; Reason = 'Publishing a GitHub Release requires explicit human approval.' },
-    @{ Pattern = '(?im)(^|[;&|`r`n]\s*)git\s+push\b[^\r\n]*\b(origin\s+)?main\b'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
-    @{ Pattern = '(?im)(^|[;&|`r`n]\s*)git\s+push\b[^\r\n]*\bHEAD:main\b'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
-    @{ Pattern = '(?im)(^|[;&|`r`n]\s*)git\s+push\b[^\r\n]*--force'; Reason = 'Force pushes are blocked by repository policy.' }
+    @{ Pattern = '(?im)(^|[\s;&|])gh\s+pr\s+merge(\s|$)'; Reason = 'PR merges must be initiated by a human after explicit approval.' },
+    @{ Pattern = '(?im)(^|[\s;&|])gh\s+workflow\s+run\s+release\.ya?ml(\s|$)'; Reason = 'Release workflow runs require explicit human approval.' },
+    @{ Pattern = '(?im)(^|[\s;&|])gh\s+release\s+edit\b.*--draft\s*=?\s*false\b'; Reason = 'Publishing a GitHub Release requires explicit human approval.' },
+    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*\b(origin\s+)?main\b'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
+    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*\bHEAD:main\b'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
+    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*--force'; Reason = 'Force pushes are blocked by repository policy.' }
 )
 
 foreach ($rule in $rules) {
