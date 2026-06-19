@@ -95,12 +95,26 @@ function New-DenyOutput {
     } | ConvertTo-Json -Compress -Depth 5
 }
 
+function Test-IsCommandTool {
+    param([string]$Name)
+
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        return $true
+    }
+
+    return $Name -match '(?i)(^|[._-])(bash|sh|zsh|fish|pwsh|powershell|cmd|terminal|shell|command)($|[._-])|run_?in_?terminal|run-?in-?terminal'
+}
+
 $inputObj = Convert-ToJsonOrNull -Text $inputText
 if ($null -eq $inputObj) {
     exit 0
 }
 
 $toolName = [string](Get-PropertyValue -Object $inputObj -Names @('toolName', 'tool_name'))
+if (-not (Test-IsCommandTool -Name $toolName)) {
+    exit 0
+}
+
 $toolInput = Get-PropertyValue -Object $inputObj -Names @('toolArgs', 'tool_input')
 if ($toolInput -is [string]) {
     $parsedToolInput = Convert-ToJsonOrNull -Text $toolInput
@@ -125,11 +139,11 @@ foreach ($commandSegment in ($haystack -split '[;&|\r\n]')) {
 
 $rules = @(
     @{ Pattern = '(?im)(^|[\s;&|])gh\s+pr\s+merge(\s|$)'; Reason = 'PR merges must be initiated by a human after explicit approval.' },
-    @{ Pattern = '(?im)(^|[\s;&|])gh\s+workflow\s+run\s+release\.ya?ml(\s|$)'; Reason = 'Release workflow runs require explicit human approval.' },
+    @{ Pattern = '(?im)(^|[\s;&|])gh\s+workflow\s+run(?:\s+[^\r\n]*)?\s+(?:release\.ya?ml|\.github[\\/]workflows[\\/]release\.ya?ml|["'']?release["'']?|\d+)(\s|$)'; Reason = 'Release workflow runs require explicit human approval.' },
     @{ Pattern = '(?im)(^|[\s;&|])gh\s+release\s+edit\b.*--draft\s*=?\s*false\b'; Reason = 'Publishing a GitHub Release requires explicit human approval.' },
-    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*\b(origin\s+)?main\b'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
-    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*\bHEAD:main\b'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
-    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*--force'; Reason = 'Force pushes are blocked by repository policy.' }
+    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*\b(origin\s+)?main(?:$|\s)'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
+    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*\bHEAD:main(?:$|\s)'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
+    @{ Pattern = '(?im)(^|[\s;&|])git\s+push\b[^\r\n]*((^|\s)-[^\s]*f([^\w-]|$)|--force)'; Reason = 'Force pushes are blocked by repository policy.' }
 )
 
 foreach ($rule in $rules) {
