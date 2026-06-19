@@ -96,17 +96,17 @@ while IFS= read -r command_segment || [[ -n "$command_segment" ]]; do
   fi
 done < <(printf '%s' "$haystack" | tr ';&|' '\n')
 
-if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git[[:space:]]+push([[:space:]]+[^[:space:]]+)*[[:space:]]+(origin[[:space:]]+)?main($|[[:space:]])"; then
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git([[:space:]]+[^[:space:]]+)*[[:space:]]+push([[:space:]]+[^[:space:]]+)*[[:space:]]+(origin[[:space:]]+)?main($|[[:space:]])"; then
   deny "Direct pushes to main are blocked; use a reviewed pull request."
   exit 0
 fi
 
-if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git[[:space:]]+push[[:space:]][^[:cntrl:]]*HEAD:main($|[[:space:]])"; then
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git([[:space:]]+[^[:space:]]+)*[[:space:]]+push[[:space:]][^[:cntrl:]]*HEAD:main($|[[:space:]])"; then
   deny "Direct pushes to main are blocked; use a reviewed pull request."
   exit 0
 fi
 
-if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git[[:space:]]+push([^[:cntrl:]]*--force|[^[:cntrl:]]*[[:space:]]-[^[:space:]]*f([^[:alnum:]_-]|$))"; then
+if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git([[:space:]]+[^[:space:]]+)*[[:space:]]+push([^[:cntrl:]]*--force|[^[:cntrl:]]*[[:space:]]-[^[:space:]]*f([^[:alnum:]_-]|$))"; then
   deny "Force pushes are blocked by repository policy."
   exit 0
 fi
