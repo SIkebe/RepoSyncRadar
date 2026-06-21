@@ -1236,6 +1236,33 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Restores_Code_Fence_Gap_Diff_Markers()
+    {
+        const string beforeMarkdown = """
+            ```javascript
+            runTask(input, options);
+            ```
+            """;
+        const string afterMarkdown = """
+            ```javascript
+            runTask(input);
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("rsr-rendered-diff-removed rsr-rendered-diff-gap", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_GitHub_Alert_When_Diff_Marked()
     {
         const string beforeMarkdown = """

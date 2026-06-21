@@ -91,7 +91,7 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""<!--.*?-->""", RegexOptions.Singleline)]
     private static partial Regex HtmlCommentRegex();
 
-    [GeneratedRegex("""&lt;span class=&quot;(?<class>rsr-rendered-diff-(?:added|removed))&quot;&gt;(?<body>.*?)&lt;/span&gt;""", RegexOptions.Singleline)]
+    [GeneratedRegex("""&lt;span class=&quot;(?<class>rsr-rendered-diff-(?:added|removed)(?:\s+rsr-rendered-diff-gap)?)&quot;.*?&gt;(?<body>.*?)&lt;/span&gt;""", RegexOptions.Singleline)]
     private static partial Regex EscapedRenderedDiffMarkerRegex();
 
     [GeneratedRegex("""[a-zA-Z_][a-zA-Z0-9_-]*""")]
