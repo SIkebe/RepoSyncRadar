@@ -1937,12 +1937,15 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("markerScrollTop / scrollableHeight", html, StringComparison.Ordinal);
         Assert.Contains("rect.height / documentHeight", html, StringComparison.Ordinal);
         Assert.Contains("const maxMarkerTop = Math.max(0, viewportHeight - height)", html, StringComparison.Ordinal);
+        Assert.Contains("const isVisible = rect.bottom >= 0 && rect.top <= viewportHeight", html, StringComparison.Ordinal);
+        Assert.Contains("const currentScrollTop = scrollableHeight > 0 ? (scrollTop / scrollableHeight) * maxMarkerTop : 0", html, StringComparison.Ordinal);
+        Assert.Contains("isVisible ? currentScrollTop : topRatio * maxMarkerTop", html, StringComparison.Ordinal);
         Assert.Contains("markerTop.toFixed(1)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", html, StringComparison.Ordinal);
         Assert.Contains("let buildPending = false", html, StringComparison.Ordinal);
         Assert.Contains("if (buildPending) return", html, StringComparison.Ordinal);
         Assert.Contains("buildPending = false", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("window.addEventListener('scroll', scheduleBuild", html, StringComparison.Ordinal);
+        Assert.Contains("window.addEventListener('scroll', scheduleBuild, { passive: true })", html, StringComparison.Ordinal);
         Assert.Contains("window.setTimeout(scheduleBuild, 250)", html, StringComparison.Ordinal);
     }
 
