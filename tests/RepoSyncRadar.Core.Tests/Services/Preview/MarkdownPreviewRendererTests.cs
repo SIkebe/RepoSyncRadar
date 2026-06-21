@@ -1933,8 +1933,8 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("const scrollTop = root.scrollTop || window.scrollY || 0", html, StringComparison.Ordinal);
         Assert.Contains("const scrollableHeight = documentHeight - viewportHeight", html, StringComparison.Ordinal);
         Assert.Contains("const documentTop = Math.max(0, rect.top + scrollTop)", html, StringComparison.Ordinal);
-        Assert.Contains("const targetScrollTop = Math.max(0, Math.min(scrollableHeight, documentTop - ((viewportHeight - rect.height) / 2)))", html, StringComparison.Ordinal);
-        Assert.Contains("targetScrollTop / scrollableHeight", html, StringComparison.Ordinal);
+        Assert.Contains("const markerScrollTop = Math.max(0, Math.min(scrollableHeight, documentTop))", html, StringComparison.Ordinal);
+        Assert.Contains("markerScrollTop / scrollableHeight", html, StringComparison.Ordinal);
         Assert.Contains("rect.height / documentHeight", html, StringComparison.Ordinal);
         Assert.Contains("const maxMarkerTop = Math.max(0, viewportHeight - height)", html, StringComparison.Ordinal);
         Assert.Contains("markerTop.toFixed(1)", html, StringComparison.Ordinal);

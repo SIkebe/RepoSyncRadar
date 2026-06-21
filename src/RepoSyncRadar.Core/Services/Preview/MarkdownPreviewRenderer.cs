@@ -380,8 +380,8 @@ internal static partial class MarkdownPreviewRenderer
             marker.className = 'rsr-diff-scrollbar-marker ' + (target.removed ? 'rsr-diff-scrollbar-marker--removed' : 'rsr-diff-scrollbar-marker--added');
             const rect = target.element.getBoundingClientRect();
             const documentTop = Math.max(0, rect.top + scrollTop);
-            const targetScrollTop = Math.max(0, Math.min(scrollableHeight, documentTop - ((viewportHeight - rect.height) / 2)));
-            const topRatio = scrollableHeight > 0 ? targetScrollTop / scrollableHeight : documentTop / documentHeight;
+            const markerScrollTop = Math.max(0, Math.min(scrollableHeight, documentTop));
+            const topRatio = scrollableHeight > 0 ? markerScrollTop / scrollableHeight : documentTop / documentHeight;
             const height = Math.max(4, Math.min(viewportHeight, (rect.height / documentHeight) * viewportHeight));
             const maxMarkerTop = Math.max(0, viewportHeight - height);
             const markerTop = Math.max(0, Math.min(maxMarkerTop, topRatio * maxMarkerTop));
