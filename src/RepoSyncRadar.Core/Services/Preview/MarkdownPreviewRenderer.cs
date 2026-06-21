@@ -393,7 +393,15 @@ internal static partial class MarkdownPreviewRenderer
         });
         document.body.appendChild(rail);
     };
-    const scheduleBuild = () => window.requestAnimationFrame(() => window.requestAnimationFrame(build));
+    let buildPending = false;
+    const scheduleBuild = () => {
+        if (buildPending) return;
+        buildPending = true;
+        window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+            buildPending = false;
+            build();
+        }));
+    };
     document.addEventListener('DOMContentLoaded', scheduleBuild, { once: true });
     window.addEventListener('load', scheduleBuild, { once: true });
     window.addEventListener('resize', scheduleBuild, { passive: true });

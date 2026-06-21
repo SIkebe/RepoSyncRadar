@@ -1942,6 +1942,9 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("isVisible ? visibleMarkerTop : topRatio * maxMarkerTop", html, StringComparison.Ordinal);
         Assert.Contains("markerTop.toFixed(1)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", html, StringComparison.Ordinal);
+        Assert.Contains("let buildPending = false", html, StringComparison.Ordinal);
+        Assert.Contains("if (buildPending) return", html, StringComparison.Ordinal);
+        Assert.Contains("buildPending = false", html, StringComparison.Ordinal);
         Assert.Contains("window.addEventListener('scroll', scheduleBuild, { passive: true })", html, StringComparison.Ordinal);
         Assert.Contains("window.setTimeout(scheduleBuild, 250)", html, StringComparison.Ordinal);
     }
