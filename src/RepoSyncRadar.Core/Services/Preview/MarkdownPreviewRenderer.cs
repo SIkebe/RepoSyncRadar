@@ -384,9 +384,7 @@ internal static partial class MarkdownPreviewRenderer
             const topRatio = scrollableHeight > 0 ? targetScrollTop / scrollableHeight : documentTop / documentHeight;
             const height = Math.max(4, Math.min(viewportHeight, (rect.height / documentHeight) * viewportHeight));
             const maxMarkerTop = Math.max(0, viewportHeight - height);
-            const isVisible = rect.bottom >= 0 && rect.top <= viewportHeight;
-            const visibleMarkerTop = rect.top + (rect.height / 2) - (height / 2);
-            const markerTop = Math.max(0, Math.min(maxMarkerTop, isVisible ? visibleMarkerTop : topRatio * maxMarkerTop));
+            const markerTop = Math.max(0, Math.min(maxMarkerTop, topRatio * maxMarkerTop));
             marker.style.top = `${markerTop.toFixed(1)}px`;
             marker.style.height = `${height.toFixed(1)}px`;
             rail.appendChild(marker);
@@ -405,7 +403,6 @@ internal static partial class MarkdownPreviewRenderer
     document.addEventListener('DOMContentLoaded', scheduleBuild, { once: true });
     window.addEventListener('load', scheduleBuild, { once: true });
     window.addEventListener('resize', scheduleBuild, { passive: true });
-    window.addEventListener('scroll', scheduleBuild, { passive: true });
     window.setTimeout(scheduleBuild, 250);
 })();
 """);

@@ -1937,15 +1937,12 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("targetScrollTop / scrollableHeight", html, StringComparison.Ordinal);
         Assert.Contains("rect.height / documentHeight", html, StringComparison.Ordinal);
         Assert.Contains("const maxMarkerTop = Math.max(0, viewportHeight - height)", html, StringComparison.Ordinal);
-        Assert.Contains("isVisible = rect.bottom >= 0", html, StringComparison.Ordinal);
-        Assert.Contains("visibleMarkerTop = rect.top + (rect.height / 2) - (height / 2)", html, StringComparison.Ordinal);
-        Assert.Contains("isVisible ? visibleMarkerTop : topRatio * maxMarkerTop", html, StringComparison.Ordinal);
         Assert.Contains("markerTop.toFixed(1)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", html, StringComparison.Ordinal);
         Assert.Contains("let buildPending = false", html, StringComparison.Ordinal);
         Assert.Contains("if (buildPending) return", html, StringComparison.Ordinal);
         Assert.Contains("buildPending = false", html, StringComparison.Ordinal);
-        Assert.Contains("window.addEventListener('scroll', scheduleBuild, { passive: true })", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("window.addEventListener('scroll', scheduleBuild", html, StringComparison.Ordinal);
         Assert.Contains("window.setTimeout(scheduleBuild, 250)", html, StringComparison.Ordinal);
     }
 
