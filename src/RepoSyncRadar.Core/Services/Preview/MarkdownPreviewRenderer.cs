@@ -227,7 +227,7 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("blockquote{border-left:4px solid var(--rsr-blockquote-border);color:var(--rsr-muted);padding-left:1rem;}table{border-collapse:collapse;display:block;overflow:auto;}td,th{border:1px solid var(--rsr-border);padding:6px 13px;}th{background:var(--rsr-th-bg);}");
         html.AppendLine(".rsr-rendered-diff-added{background:#2da44e24;border-radius:3px;box-shadow:0 0 0 2px #2da44e24;}.rsr-rendered-diff-removed{background:#cf222e24;border-radius:3px;box-shadow:0 0 0 2px #cf222e24;text-decoration-line:line-through;text-decoration-color:rgba(207,34,46,.85);text-decoration-thickness:1.2px;text-decoration-skip-ink:none;}.rsr-rendered-diff-gap{display:inline-block;width:.55em;height:1.05em;margin:0 .12em;vertical-align:-.15em;text-decoration:none;}");
         html.AppendLine("td .rsr-rendered-diff-added,th .rsr-rendered-diff-added,td .rsr-rendered-diff-removed,th .rsr-rendered-diff-removed{display:block;margin:-6px -13px;padding:6px 13px;}");
-        html.AppendLine(".rsr-diff-scrollbar{bottom:0;pointer-events:none;position:fixed;right:24px;top:0;width:10px;z-index:2147483647;}.rsr-diff-scrollbar-marker{border-radius:999px;box-shadow:0 0 0 1px rgba(255,255,255,.7),0 1px 3px rgba(0,0,0,.25);min-height:4px;position:absolute;right:0;width:10px;}.rsr-diff-scrollbar-marker--added{background:#2da44e;}.rsr-diff-scrollbar-marker--removed{background:#cf222e;}");
+        html.AppendLine(".rsr-diff-scrollbar{bottom:0;pointer-events:none;position:fixed;right:0;top:0;width:10px;z-index:2147483647;}.rsr-diff-scrollbar-marker{border-radius:999px;box-shadow:0 0 0 1px rgba(255,255,255,.7),0 1px 3px rgba(0,0,0,.25);min-height:4px;position:absolute;right:0;width:10px;}.rsr-diff-scrollbar-marker--added{background:#2da44e;}.rsr-diff-scrollbar-marker--removed{background:#cf222e;}");
         html.AppendLine(".octicon{display:inline-block;vertical-align:text-bottom;fill:currentColor;overflow:visible;}");
         html.AppendLine(".ghd-alert{border:1px solid var(--rsr-border);border-left-width:4px;border-radius:6px;margin:0 0 1rem;padding:12px 14px;background:var(--rsr-article-bg);}");
         html.AppendLine(".ghd-alert>:last-child,.ghd-tool>:last-child{margin-bottom:0;}");
@@ -297,7 +297,7 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("</style>");
         html.AppendLine("<script>");
         html.AppendLine("(() => { document.addEventListener('click', event => { const button = event.target?.closest?.('[data-rsr-version-slug]'); if (!button || button.getAttribute('aria-current') === 'true') return; const slug = button.getAttribute('data-rsr-version-slug'); if (!slug) return; window.chrome?.webview?.postMessage(`rsr-preview-version:${slug}`); }); })();");
-        html.AppendLine("(() => { const markerRootId = 'rsr-diff-scrollbar'; const selector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed'; const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,.ghd-markdown-alert'; const collectTargets = () => { const seen = new Set(); const targets = []; Array.from(document.querySelectorAll(selector)).forEach(element => { const target = element.closest(blockSelector) || element; if (seen.has(target)) return; seen.add(target); targets.push({ element: target, removed: element.classList.contains('rsr-rendered-diff-removed') }); }); return targets; }; const build = () => { document.getElementById(markerRootId)?.remove(); const targets = collectTargets(); if (targets.length === 0) return; const root = document.scrollingElement || document.documentElement || document.body; const documentHeight = Math.max(1, root.scrollHeight); const viewportHeight = window.innerHeight; const scrollTop = root.scrollTop || window.scrollY || 0; const rail = document.createElement('div'); rail.id = markerRootId; rail.className = 'rsr-diff-scrollbar'; targets.forEach(target => { const marker = document.createElement('div'); marker.className = 'rsr-diff-scrollbar-marker ' + (target.removed ? 'rsr-diff-scrollbar-marker--removed' : 'rsr-diff-scrollbar-marker--added'); const rect = target.element.getBoundingClientRect(); const documentTop = Math.max(0, rect.top + scrollTop); const top = Math.max(0, Math.min(1, documentTop / documentHeight)); const height = Math.max(4, Math.min(viewportHeight, (rect.height / documentHeight) * viewportHeight)); const markerTop = Math.max(0, Math.min(viewportHeight - height, top * viewportHeight)); marker.style.top = `${markerTop.toFixed(1)}px`; marker.style.height = `${height.toFixed(1)}px`; rail.appendChild(marker); }); document.body.appendChild(rail); }; const scheduleBuild = () => window.requestAnimationFrame(() => window.requestAnimationFrame(build)); document.addEventListener('DOMContentLoaded', scheduleBuild, { once: true }); window.addEventListener('load', scheduleBuild, { once: true }); window.addEventListener('resize', scheduleBuild, { passive: true }); window.setTimeout(scheduleBuild, 250); })();");
+        AppendDiffScrollbarScript(html);
         html.AppendLine("</script>");
         html.AppendLine("</head>");
         html.AppendLine("<body>");
@@ -343,6 +343,64 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("</body>");
         html.AppendLine("</html>");
         return html.ToString();
+    }
+
+    private static void AppendDiffScrollbarScript(StringBuilder html)
+    {
+        html.AppendLine("""
+(() => {
+    const markerRootId = 'rsr-diff-scrollbar';
+    const selector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
+    const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,.ghd-markdown-alert';
+    const collectTargets = () => {
+        const seen = new Set();
+        const targets = [];
+        Array.from(document.querySelectorAll(selector)).forEach(element => {
+            const target = element.closest('pre') ? element : (element.closest(blockSelector) || element);
+            if (seen.has(target)) return;
+            seen.add(target);
+            targets.push({ element: target, removed: element.classList.contains('rsr-rendered-diff-removed') });
+        });
+        return targets;
+    };
+    const build = () => {
+        document.getElementById(markerRootId)?.remove();
+        const targets = collectTargets();
+        if (targets.length === 0) return;
+        const root = document.scrollingElement || document.documentElement || document.body;
+        const viewportHeight = Math.max(1, root.clientHeight || window.innerHeight || 1);
+        const documentHeight = Math.max(viewportHeight, root.scrollHeight);
+        const scrollTop = root.scrollTop || window.scrollY || 0;
+        const scrollableHeight = documentHeight - viewportHeight;
+        const rail = document.createElement('div');
+        rail.id = markerRootId;
+        rail.className = 'rsr-diff-scrollbar';
+        targets.forEach(target => {
+            const marker = document.createElement('div');
+            marker.className = 'rsr-diff-scrollbar-marker ' + (target.removed ? 'rsr-diff-scrollbar-marker--removed' : 'rsr-diff-scrollbar-marker--added');
+            const rect = target.element.getBoundingClientRect();
+            const documentTop = Math.max(0, rect.top + scrollTop);
+            const targetScrollTop = Math.max(0, Math.min(scrollableHeight, documentTop - ((viewportHeight - rect.height) / 2)));
+            const topRatio = scrollableHeight > 0 ? targetScrollTop / scrollableHeight : documentTop / documentHeight;
+            const height = Math.max(4, Math.min(viewportHeight, (rect.height / documentHeight) * viewportHeight));
+            const maxMarkerTop = Math.max(0, viewportHeight - height);
+            const isVisible = rect.bottom >= 0 && rect.top <= viewportHeight;
+            const visibleMarkerTop = rect.top + (rect.height / 2) - (height / 2);
+            const markerTop = Math.max(0, Math.min(maxMarkerTop, isVisible ? visibleMarkerTop : topRatio * maxMarkerTop));
+            marker.style.top = `${markerTop.toFixed(1)}px`;
+            marker.style.height = `${height.toFixed(1)}px`;
+            rail.appendChild(marker);
+        });
+        document.body.appendChild(rail);
+    };
+    const scheduleBuild = () => window.requestAnimationFrame(() => window.requestAnimationFrame(build));
+    document.addEventListener('DOMContentLoaded', scheduleBuild, { once: true });
+    window.addEventListener('load', scheduleBuild, { once: true });
+    window.addEventListener('resize', scheduleBuild, { passive: true });
+    window.addEventListener('scroll', scheduleBuild, { passive: true });
+    window.setTimeout(scheduleBuild, 250);
+})();
+""");
     }
 
     /// <summary>
@@ -2093,11 +2151,26 @@ internal static partial class MarkdownPreviewRenderer
             }
             var line = currentLines[index];
             var trimmed = line.TrimStart();
-            var isCodeFence = trimmed.StartsWith("```", StringComparison.Ordinal) || trimmed.StartsWith("~~~", StringComparison.Ordinal);
-            var canMark = !inCodeFence && !isCodeFence && CanMarkRenderedDiffLine(trimmed);
-            marked.Append(changesByIndex.TryGetValue(index, out var change) && canMark
-                ? MarkRenderedDiffLine(line, markerClass, change.ComparisonLines)
-                : line);
+            var isCodeFence = IsFenceLine(line);
+            if (changesByIndex.TryGetValue(index, out var change))
+            {
+                if (inCodeFence && !isCodeFence)
+                {
+                    marked.Append(MarkRenderedDiffCodeLine(line, markerClass, change.ComparisonLines));
+                }
+                else if (!inCodeFence && !isCodeFence && CanMarkRenderedDiffLine(trimmed))
+                {
+                    marked.Append(MarkRenderedDiffLine(line, markerClass, change.ComparisonLines));
+                }
+                else
+                {
+                    marked.Append(line);
+                }
+            }
+            else
+            {
+                marked.Append(line);
+            }
             if (isCodeFence)
             {
                 inCodeFence = !inCodeFence;
@@ -2304,6 +2377,63 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         return line;
+    }
+
+    private static string MarkRenderedDiffCodeLine(string line, string markerClass, string[] comparisonLines)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+        {
+            return line;
+        }
+
+        var comparisonLine = FindComparableRenderedDiffCodeLine(line, comparisonLines);
+        return MarkRenderedDiffCodeContent(line, markerClass, comparisonLine);
+    }
+
+    private static string MarkRenderedDiffCodeContent(string content, string markerClass, string? comparisonContent)
+    {
+        if (string.IsNullOrEmpty(comparisonContent))
+        {
+            return WrapRenderedDiff(content, markerClass);
+        }
+
+        var changedRange = FindInlineChangedRange(content, comparisonContent);
+        if (changedRange.Length == 0)
+        {
+            return TryMarkRenderedDiffGap(content, comparisonContent, markerClass, changedRange.Start, out var marked)
+                ? marked
+                : content;
+        }
+
+        return content[..changedRange.Start]
+            + WrapRenderedDiff(content.Substring(changedRange.Start, changedRange.Length), markerClass)
+            + content[(changedRange.Start + changedRange.Length)..];
+    }
+
+    private static string? FindComparableRenderedDiffCodeLine(string line, string[] comparisonLines)
+    {
+        string? bestLine = null;
+        var bestScore = 0;
+        foreach (var comparisonLine in comparisonLines)
+        {
+            if (IsFenceLine(comparisonLine))
+            {
+                continue;
+            }
+
+            var changedRange = FindInlineChangedRange(line, comparisonLine);
+            var score = line.Length - changedRange.Length;
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestLine = comparisonLine;
+            }
+        }
+
+        var minimumScore = Math.Max(4, line.Length / 3);
+        return bestScore >= minimumScore && bestScore * 5 >= line.Length * 3
+            ? bestLine
+            : null;
     }
 
     private static bool TryGetMarkableRenderedDiffParts(string line, out RenderedDiffLineParts parts)
