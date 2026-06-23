@@ -1928,25 +1928,56 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,.ghd-markdown-alert'", html, StringComparison.Ordinal);
         Assert.Contains("element.closest('pre') ? element : (element.closest(blockSelector) || element)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", html, StringComparison.Ordinal);
-        Assert.Contains("const viewportHeight = Math.max(1, root.clientHeight || window.innerHeight || 1)", html, StringComparison.Ordinal);
-        Assert.Contains("const documentHeight = Math.max(viewportHeight, root.scrollHeight)", html, StringComparison.Ordinal);
-        Assert.Contains("const scrollTop = root.scrollTop || window.scrollY || 0", html, StringComparison.Ordinal);
-        Assert.Contains("const scrollableHeight = documentHeight - viewportHeight", html, StringComparison.Ordinal);
-        Assert.Contains("const documentTop = Math.max(0, rect.top + scrollTop)", html, StringComparison.Ordinal);
-        Assert.Contains("const markerScrollTop = Math.max(0, Math.min(scrollableHeight, documentTop))", html, StringComparison.Ordinal);
-        Assert.Contains("markerScrollTop / scrollableHeight", html, StringComparison.Ordinal);
-        Assert.Contains("rect.height / documentHeight", html, StringComparison.Ordinal);
-        Assert.Contains("const maxMarkerTop = Math.max(0, viewportHeight - height)", html, StringComparison.Ordinal);
-        Assert.Contains("const isVisible = rect.bottom >= 0 && rect.top <= viewportHeight", html, StringComparison.Ordinal);
-        Assert.Contains("const currentScrollTop = scrollableHeight > 0 ? (scrollTop / scrollableHeight) * maxMarkerTop : 0", html, StringComparison.Ordinal);
-        Assert.Contains("isVisible ? currentScrollTop : topRatio * maxMarkerTop", html, StringComparison.Ordinal);
+        Assert.Contains("const docHeight = Math.max(1, document.documentElement.scrollHeight)", html, StringComparison.Ordinal);
+        Assert.Contains("const scrollbarSize = Math.max(0, window.innerWidth - document.documentElement.clientWidth)", html, StringComparison.Ordinal);
+        Assert.Contains("const buttonSize = Math.min(scrollbarSize, viewport / 4)", html, StringComparison.Ordinal);
+        Assert.Contains("const trackHeight = Math.max(1, viewport - buttonSize * 2)", html, StringComparison.Ordinal);
+        Assert.Contains("const absTop = rect.top + scrollY", html, StringComparison.Ordinal);
+        Assert.Contains("const center = (absTop + rect.height / 2) / docHeight", html, StringComparison.Ordinal);
+        Assert.Contains("trackTop + center * trackHeight - height / 2", html, StringComparison.Ordinal);
         Assert.Contains("markerTop.toFixed(1)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", html, StringComparison.Ordinal);
         Assert.Contains("let buildPending = false", html, StringComparison.Ordinal);
         Assert.Contains("if (buildPending) return", html, StringComparison.Ordinal);
         Assert.Contains("buildPending = false", html, StringComparison.Ordinal);
-        Assert.Contains("window.addEventListener('scroll', scheduleBuild, { passive: true })", html, StringComparison.Ordinal);
+        Assert.Contains("window.addEventListener('resize', scheduleBuild, { passive: true })", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("window.addEventListener('scroll'", html, StringComparison.Ordinal);
         Assert.Contains("window.setTimeout(scheduleBuild, 250)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Wraps_Code_Blocks_That_Contain_A_Diff()
+    {
+        const string beforeMarkdown = """
+            Intro.
+
+            ```ts
+            const session = await client.createSession({ model: "gpt-4.1" });
+            ```
+            """;
+        const string afterMarkdown = """
+            Intro.
+
+            ```ts
+            const session = await client.createSession({ model: "auto" });
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        // A changed token inside a horizontally scrolling code block would be clipped
+        // off the right edge of the narrow comparison pane, hiding the diff. Only the
+        // code blocks that actually contain a diff must wrap so the change stays visible.
+        Assert.Contains(
+            "pre:has(.rsr-rendered-diff-added,.rsr-rendered-diff-removed){white-space:pre-wrap;overflow-wrap:anywhere;}",
+            html,
+            StringComparison.Ordinal);
     }
 
     [Fact]
