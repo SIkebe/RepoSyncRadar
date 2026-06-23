@@ -1499,7 +1499,14 @@ internal static partial class MarkdownPreviewRenderer
     private static string RestoreEscapedRenderedDiffMarkers(string html)
         => EscapedRenderedDiffMarkerRegex().Replace(
             html,
-            static match => "<span class=\"" + match.Groups["class"].Value + "\">" + match.Groups["body"].Value + "</span>");
+            static match =>
+            {
+                var markerClass = match.Groups["class"].Value;
+                var ariaHidden = markerClass.Contains("rsr-rendered-diff-gap", StringComparison.Ordinal)
+                    ? " aria-hidden=\"true\""
+                    : string.Empty;
+                return "<span class=\"" + markerClass + "\"" + ariaHidden + ">" + match.Groups["body"].Value + "</span>";
+            });
 
     private static string ShortSha(string sha)
         => sha.Length <= 7 ? sha : sha[..7];

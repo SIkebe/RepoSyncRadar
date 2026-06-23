@@ -1981,6 +1981,41 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Preserves_AriaHidden_On_Restored_Code_Fence_Gap_Marker()
+    {
+        const string beforeMarkdown = """
+            Intro.
+
+            ```ts
+            const session = await client.createSession({ model: "auto", temperature: 0.2 });
+            ```
+            """;
+        const string afterMarkdown = """
+            Intro.
+
+            ```ts
+            const session = await client.createSession({ model: "auto" });
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        // The gap marker emitted inside a code fence is HTML-escaped by Markdig and
+        // later restored. The restored marker must keep aria-hidden so screen readers
+        // do not announce the decorative gap, and no escaped span must leak as text.
+        Assert.Contains("rsr-rendered-diff-gap", html, StringComparison.Ordinal);
+        Assert.Contains("aria-hidden=\"true\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Highlights_Added_GitHub_Alert_Body()
     {
         const string beforeMarkdown = """
