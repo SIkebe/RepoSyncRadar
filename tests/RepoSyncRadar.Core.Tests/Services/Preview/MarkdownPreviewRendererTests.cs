@@ -1193,6 +1193,76 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Changed_Code_Fence_Literals()
+    {
+        const string beforeMarkdown = """
+            ## Step 2: send your first message
+
+            ```typescript
+            const client = new CopilotClient();
+            const session = await client.createSession({ model: "gpt-4.1" });
+            console.log(response?.data.content);
+            ```
+            """;
+        const string afterMarkdown = """
+            ## Step 2: send your first message
+
+            ```typescript
+            const client = new CopilotClient();
+            const session = await client.createSession({ model: "auto" });
+            console.log(response?.data.content);
+            ```
+            """;
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/copilot-sdk/getting-started.md",
+            beforeMarkdown,
+            "6742a65-parent",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/copilot-sdk/getting-started.md",
+            afterMarkdown,
+            "6742a65",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<span class=\"rsr-rendered-diff-removed\">gpt-4.1</span>", beforeHtml, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">auto</span>", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=", beforeHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=", afterHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Restores_Code_Fence_Gap_Diff_Markers()
+    {
+        const string beforeMarkdown = """
+            ```javascript
+            runTask(input, options);
+            ```
+            """;
+        const string afterMarkdown = """
+            ```javascript
+            runTask(input);
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("rsr-rendered-diff-removed rsr-rendered-diff-gap", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_GitHub_Alert_When_Diff_Marked()
     {
         const string beforeMarkdown = """
@@ -1852,21 +1922,97 @@ public sealed class MarkdownPreviewRendererTests
 
         Assert.Contains("rsr-diff-scrollbar", html, StringComparison.Ordinal);
         Assert.Contains("rsr-diff-scrollbar-marker", html, StringComparison.Ordinal);
-        Assert.Contains("right:24px", html, StringComparison.Ordinal);
+        Assert.Contains("right:0", html, StringComparison.Ordinal);
         Assert.Contains("width:10px", html, StringComparison.Ordinal);
         Assert.Contains(".rsr-rendered-diff-added,.rsr-rendered-diff-removed", html, StringComparison.Ordinal);
         Assert.Contains("const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,.ghd-markdown-alert'", html, StringComparison.Ordinal);
-        Assert.Contains("element.closest(blockSelector) || element", html, StringComparison.Ordinal);
+        Assert.Contains("element.closest('pre') ? element : (element.closest(blockSelector) || element)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", html, StringComparison.Ordinal);
-        Assert.Contains("const documentHeight = Math.max(1, root.scrollHeight)", html, StringComparison.Ordinal);
-        Assert.Contains("const scrollTop = root.scrollTop || window.scrollY || 0", html, StringComparison.Ordinal);
-        Assert.Contains("const documentTop = Math.max(0, rect.top + scrollTop)", html, StringComparison.Ordinal);
-        Assert.Contains("documentTop / documentHeight", html, StringComparison.Ordinal);
-        Assert.Contains("rect.height / documentHeight", html, StringComparison.Ordinal);
-        Assert.Contains("viewportHeight - height", html, StringComparison.Ordinal);
+        Assert.Contains("const docHeight = Math.max(1, document.documentElement.scrollHeight)", html, StringComparison.Ordinal);
+        Assert.Contains("const scrollbarSize = Math.max(0, window.innerWidth - document.documentElement.clientWidth)", html, StringComparison.Ordinal);
+        Assert.Contains("const buttonSize = Math.min(scrollbarSize, viewport / 4)", html, StringComparison.Ordinal);
+        Assert.Contains("const trackHeight = Math.max(1, viewport - buttonSize * 2)", html, StringComparison.Ordinal);
+        Assert.Contains("const absTop = rect.top + scrollY", html, StringComparison.Ordinal);
+        Assert.Contains("const center = (absTop + rect.height / 2) / docHeight", html, StringComparison.Ordinal);
+        Assert.Contains("trackTop + center * trackHeight - height / 2", html, StringComparison.Ordinal);
         Assert.Contains("markerTop.toFixed(1)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", html, StringComparison.Ordinal);
+        Assert.Contains("let buildPending = false", html, StringComparison.Ordinal);
+        Assert.Contains("if (buildPending) return", html, StringComparison.Ordinal);
+        Assert.Contains("buildPending = false", html, StringComparison.Ordinal);
+        Assert.Contains("window.addEventListener('resize', scheduleBuild, { passive: true })", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("window.addEventListener('scroll'", html, StringComparison.Ordinal);
         Assert.Contains("window.setTimeout(scheduleBuild, 250)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Wraps_Code_Blocks_That_Contain_A_Diff()
+    {
+        const string beforeMarkdown = """
+            Intro.
+
+            ```ts
+            const session = await client.createSession({ model: "gpt-4.1" });
+            ```
+            """;
+        const string afterMarkdown = """
+            Intro.
+
+            ```ts
+            const session = await client.createSession({ model: "auto" });
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        // A changed token inside a horizontally scrolling code block would be clipped
+        // off the right edge of the narrow comparison pane, hiding the diff. Only the
+        // code blocks that actually contain a diff must wrap so the change stays visible.
+        Assert.Contains(
+            "pre:has(.rsr-rendered-diff-added,.rsr-rendered-diff-removed){white-space:pre-wrap;overflow-wrap:anywhere;}",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Preserves_AriaHidden_On_Restored_Code_Fence_Gap_Marker()
+    {
+        const string beforeMarkdown = """
+            Intro.
+
+            ```ts
+            const session = await client.createSession({ model: "auto", temperature: 0.2 });
+            ```
+            """;
+        const string afterMarkdown = """
+            Intro.
+
+            ```ts
+            const session = await client.createSession({ model: "auto" });
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        // The gap marker emitted inside a code fence is HTML-escaped by Markdig and
+        // later restored. The restored marker must keep aria-hidden so screen readers
+        // do not announce the decorative gap, and no escaped span must leak as text.
+        Assert.Contains("rsr-rendered-diff-gap", html, StringComparison.Ordinal);
+        Assert.Contains("aria-hidden=\"true\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
     }
 
     [Fact]
