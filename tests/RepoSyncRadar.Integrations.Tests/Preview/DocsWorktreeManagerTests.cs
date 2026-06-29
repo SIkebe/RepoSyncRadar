@@ -46,7 +46,13 @@ public sealed class DocsWorktreeManagerTests : IDisposable
         var bare = Path.Combine(_tempRoot, "bare.git");
         Directory.CreateDirectory(bare);
         var runner = Substitute.For<IProcessRunner>();
-        runner.RunAsync("git", "show abcdef:content/index.md", bare, Arg.Any<CancellationToken>())
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(args => args.Contains("--git-dir ", StringComparison.Ordinal)
+                    && args.Contains('"' + bare + '"', StringComparison.Ordinal)
+                    && args.EndsWith(" show abcdef:content/index.md", StringComparison.Ordinal)),
+                Path.GetDirectoryName(bare)!,
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, "# Home", string.Empty)));
         var sut = BuildSut(runner, bareCloneDir: bare, cloneUrl: "https://example.invalid/docs.git");
 
@@ -66,10 +72,17 @@ public sealed class DocsWorktreeManagerTests : IDisposable
         Directory.CreateDirectory(bare);
         Directory.CreateDirectory(tracked);
         Directory.CreateDirectory(untracked);
+        var bareParent = Path.GetDirectoryName(bare)!;
         var runner = Substitute.For<IProcessRunner>();
-        runner.RunAsync("git", Arg.Any<string>(), bare, Arg.Any<CancellationToken>())
+        runner.RunAsync("git", Arg.Any<string>(), bareParent, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
-        runner.RunAsync("git", "worktree list --porcelain", bare, Arg.Any<CancellationToken>())
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(args => args.Contains("--git-dir ", StringComparison.Ordinal)
+                    && args.Contains('"' + bare + '"', StringComparison.Ordinal)
+                    && args.EndsWith(" worktree list --porcelain", StringComparison.Ordinal)),
+                bareParent,
+                Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(new ProcessRunResult(
                 0,
                 $"worktree {tracked}\nHEAD abcdef0123456789\ndetached\n\n",
@@ -83,8 +96,10 @@ public sealed class DocsWorktreeManagerTests : IDisposable
         Assert.False(Directory.Exists(untracked));
         await runner.Received().RunAsync(
             "git",
-            Arg.Is<string>(args => args.StartsWith("worktree unlock ", StringComparison.Ordinal)),
-            bare,
+            Arg.Is<string>(args => args.Contains("--git-dir ", StringComparison.Ordinal)
+                && args.Contains('"' + bare + '"', StringComparison.Ordinal)
+                && args.Contains(" worktree unlock ", StringComparison.Ordinal)),
+            bareParent,
             Arg.Any<CancellationToken>());
     }
 

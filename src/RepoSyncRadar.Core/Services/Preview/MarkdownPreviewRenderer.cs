@@ -2158,6 +2158,7 @@ internal static partial class MarkdownPreviewRenderer
         var currentLines = SplitMarkdownLines(renderedMarkdown);
         var comparisonLines = SplitMarkdownLines(comparisonRendered);
         var changes = FindCurrentLineDiffs(currentLines, comparisonLines);
+        IncludeCodeFenceStructuralDiffBridges(currentLines, comparisonLines, changes);
         if (changes.Count == 0)
         {
             return renderedMarkdown;
@@ -2182,7 +2183,7 @@ internal static partial class MarkdownPreviewRenderer
             {
                 if (inCodeFence && !isCodeFence)
                 {
-                    marked.Append(MarkRenderedDiffCodeLine(line, markerClass, change.ComparisonLines));
+                    marked.Append(MarkRenderedDiffCodeLine(line, markerClass, change.ComparisonLines, comparisonLines));
                 }
                 else if (!inCodeFence && !isCodeFence && CanMarkRenderedDiffLine(trimmed))
                 {
@@ -2203,6 +2204,252 @@ internal static partial class MarkdownPreviewRenderer
             }
         }
         return marked.ToString();
+    }
+
+    private static void IncludeCodeFenceStructuralDiffBridges(
+        string[] currentLines,
+        string[] comparisonLines,
+        List<CurrentLineDiff> changes)
+    {
+        if (changes.Count == 0)
+        {
+            return;
+        }
+
+        var changedIndexes = changes.Select(static change => change.Index).ToHashSet();
+        var inCodeFence = false;
+        var fenceStart = 0;
+        for (var index = 0; index < currentLines.Length; index++)
+        {
+            if (!IsFenceLine(currentLines[index]))
+            {
+                continue;
+            }
+
+            if (inCodeFence)
+            {
+                IncludeCodeFenceStructuralDiffBridges(currentLines, comparisonLines, fenceStart, index, changes, changedIndexes);
+                inCodeFence = false;
+            }
+            else
+            {
+                inCodeFence = true;
+                fenceStart = index + 1;
+            }
+        }
+    }
+
+    private static void IncludeCodeFenceStructuralDiffBridges(
+        string[] currentLines,
+        string[] comparisonLines,
+        int startIndex,
+        int endIndex,
+        List<CurrentLineDiff> changes,
+        HashSet<int> changedIndexes)
+    {
+        for (var index = startIndex; index < endIndex; index++)
+        {
+            if (!changedIndexes.Contains(index)
+                || !TryFindChangedStructuralBlockEnd(currentLines, comparisonLines, index, endIndex, changedIndexes, out var blockEndIndex))
+            {
+                continue;
+            }
+
+            for (var bridgeIndex = index + 1; bridgeIndex < blockEndIndex; bridgeIndex++)
+            {
+                SetCodeFenceStructuralBridgeDiff(currentLines, changes, changedIndexes, bridgeIndex);
+            }
+        }
+    }
+
+    private static void SetCodeFenceStructuralBridgeDiff(
+        string[] currentLines,
+        List<CurrentLineDiff> changes,
+        HashSet<int> changedIndexes,
+        int index)
+    {
+        if (string.IsNullOrWhiteSpace(currentLines[index]))
+        {
+            return;
+        }
+
+        var bridged = new CurrentLineDiff(index, Array.Empty<string>());
+        var existingIndex = changes.FindIndex(change => change.Index == index);
+        if (existingIndex >= 0)
+        {
+            changes[existingIndex] = bridged;
+            return;
+        }
+
+        changedIndexes.Add(index);
+        changes.Add(bridged);
+    }
+
+    private static bool TryFindChangedStructuralBlockEnd(
+        string[] lines,
+        string[] comparisonLines,
+        int startIndex,
+        int endIndex,
+        HashSet<int> changedIndexes,
+        out int blockEndIndex)
+    {
+        blockEndIndex = -1;
+        if (!IsNamedCodeStructuralBlockOpeningLine(lines[startIndex]))
+        {
+            return false;
+        }
+        if (FindExactTrimmedCodeLineMatch(lines[startIndex], comparisonLines) is not null)
+        {
+            return false;
+        }
+
+        var depth = CountCodeStructuralBracketDelta(lines[startIndex]);
+        if (depth <= 0)
+        {
+            return false;
+        }
+
+        for (var index = startIndex + 1; index < endIndex; index++)
+        {
+            depth += CountCodeStructuralBracketDelta(lines[index]);
+            if (depth <= 0)
+            {
+                blockEndIndex = index;
+                if (HasMatchingCodeStructuralBlockBody(lines, startIndex, blockEndIndex, comparisonLines))
+                {
+                    return false;
+                }
+
+                return changedIndexes.Contains(blockEndIndex);
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsNamedCodeStructuralBlockOpeningLine(string line)
+    {
+        var trimmed = line.Trim();
+        return trimmed.Contains(':', StringComparison.Ordinal)
+            && (trimmed.EndsWith('[', StringComparison.Ordinal) || trimmed.EndsWith('{', StringComparison.Ordinal));
+    }
+
+    private static bool HasMatchingCodeStructuralBlockBody(
+        string[] currentLines,
+        int currentStartIndex,
+        int currentEndIndex,
+        string[] comparisonLines)
+    {
+        var openingKind = GetCodeStructuralOpeningKind(currentLines[currentStartIndex]);
+        for (var index = 0; index < comparisonLines.Length; index++)
+        {
+            if (!IsNamedCodeStructuralBlockOpeningLine(comparisonLines[index])
+                || GetCodeStructuralOpeningKind(comparisonLines[index]) != openingKind
+                || !TryFindCodeStructuralBlockEnd(comparisonLines, index, comparisonLines.Length, out var comparisonEndIndex))
+            {
+                continue;
+            }
+
+            if (CodeStructuralBlockBodiesMatch(currentLines, currentStartIndex, currentEndIndex, comparisonLines, index, comparisonEndIndex))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static char GetCodeStructuralOpeningKind(string line)
+    {
+        var trimmed = line.TrimEnd();
+        return trimmed.EndsWith('[', StringComparison.Ordinal) ? '[' : '{';
+    }
+
+    private static bool TryFindCodeStructuralBlockEnd(string[] lines, int startIndex, int endIndex, out int blockEndIndex)
+    {
+        blockEndIndex = -1;
+        var depth = CountCodeStructuralBracketDelta(lines[startIndex]);
+        if (depth <= 0)
+        {
+            return false;
+        }
+
+        for (var index = startIndex + 1; index < endIndex; index++)
+        {
+            depth += CountCodeStructuralBracketDelta(lines[index]);
+            if (depth <= 0)
+            {
+                blockEndIndex = index;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool CodeStructuralBlockBodiesMatch(
+        string[] leftLines,
+        int leftStartIndex,
+        int leftEndIndex,
+        string[] rightLines,
+        int rightStartIndex,
+        int rightEndIndex)
+    {
+        var leftLength = leftEndIndex - leftStartIndex - 1;
+        if (leftLength != rightEndIndex - rightStartIndex - 1)
+        {
+            return false;
+        }
+
+        for (var offset = 0; offset < leftLength; offset++)
+        {
+            if (!string.Equals(
+                    leftLines[leftStartIndex + 1 + offset].Trim(),
+                    rightLines[rightStartIndex + 1 + offset].Trim(),
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static int CountCodeStructuralBracketDelta(string line)
+    {
+        var depth = 0;
+        var inString = false;
+        var escaping = false;
+        foreach (var ch in line)
+        {
+            if (escaping)
+            {
+                escaping = false;
+                continue;
+            }
+
+            if (inString && ch == '\\')
+            {
+                escaping = true;
+                continue;
+            }
+
+            if (ch == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (inString)
+            {
+                continue;
+            }
+
+            depth += ch is '[' or '{' ? 1 : 0;
+            depth -= ch is ']' or '}' ? 1 : 0;
+        }
+
+        return depth;
     }
 
     private static string ExpandMarkdownTableFragments(string markdown)
@@ -2405,7 +2652,11 @@ internal static partial class MarkdownPreviewRenderer
         return line;
     }
 
-    private static string MarkRenderedDiffCodeLine(string line, string markerClass, string[] comparisonLines)
+    private static string MarkRenderedDiffCodeLine(
+        string line,
+        string markerClass,
+        string[] comparisonLines,
+        string[] allComparisonLines)
     {
         if (string.IsNullOrWhiteSpace(line))
         {
@@ -2413,7 +2664,16 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var comparisonLine = FindComparableRenderedDiffCodeLine(line, comparisonLines);
-        return MarkRenderedDiffCodeContent(line, markerClass, comparisonLine);
+        comparisonLine ??= comparisonLines.Length == 0
+            ? null
+            : FindExactTrimmedCodeLineMatch(line, allComparisonLines);
+        var leadingWhitespaceLength = CountLeadingWhitespace(line);
+        var prefix = line[..leadingWhitespaceLength];
+        var content = line[leadingWhitespaceLength..];
+        var comparisonContent = comparisonLine is null
+            ? null
+            : comparisonLine[CountLeadingWhitespace(comparisonLine)..];
+        return prefix + MarkRenderedDiffCodeContent(content, markerClass, comparisonContent);
     }
 
     private static string MarkRenderedDiffCodeContent(string content, string markerClass, string? comparisonContent)
@@ -2421,6 +2681,10 @@ internal static partial class MarkdownPreviewRenderer
         if (string.IsNullOrEmpty(comparisonContent))
         {
             return WrapRenderedDiff(content, markerClass);
+        }
+        if (IsWhitespaceOnlyCodeLineDiff(content, comparisonContent))
+        {
+            return content;
         }
 
         var changedRange = FindInlineChangedRange(content, comparisonContent);
@@ -2438,6 +2702,16 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string? FindComparableRenderedDiffCodeLine(string line, string[] comparisonLines)
     {
+        var trimmedLine = line.Trim();
+        foreach (var comparisonLine in comparisonLines)
+        {
+            if (!IsFenceLine(comparisonLine)
+                && string.Equals(trimmedLine, comparisonLine.Trim(), StringComparison.Ordinal))
+            {
+                return comparisonLine;
+            }
+        }
+
         string? bestLine = null;
         var bestScore = 0;
         foreach (var comparisonLine in comparisonLines)
@@ -2460,6 +2734,21 @@ internal static partial class MarkdownPreviewRenderer
         return bestScore >= minimumScore && bestScore * 5 >= line.Length * 3
             ? bestLine
             : null;
+    }
+
+    private static string? FindExactTrimmedCodeLineMatch(string line, string[] comparisonLines)
+    {
+        var trimmedLine = line.Trim();
+        foreach (var comparisonLine in comparisonLines)
+        {
+            if (!IsFenceLine(comparisonLine)
+                && string.Equals(trimmedLine, comparisonLine.Trim(), StringComparison.Ordinal))
+            {
+                return comparisonLine;
+            }
+        }
+
+        return null;
     }
 
     private static bool TryGetMarkableRenderedDiffParts(string line, out RenderedDiffLineParts parts)
@@ -2866,6 +3155,20 @@ internal static partial class MarkdownPreviewRenderer
         return bestScore >= minimumScore && bestScore * 5 >= currentParts.Content.Length * 3
             ? bestContent
             : null;
+    }
+
+    private static bool IsWhitespaceOnlyCodeLineDiff(string content, string comparisonContent)
+        => !string.Equals(content, comparisonContent, StringComparison.Ordinal)
+            && string.Equals(content.Trim(), comparisonContent.Trim(), StringComparison.Ordinal);
+
+    private static int CountLeadingWhitespace(string value)
+    {
+        var index = 0;
+        while (index < value.Length && char.IsWhiteSpace(value[index]))
+        {
+            index++;
+        }
+        return index;
     }
 
     private readonly record struct RenderedDiffLineParts(RenderedDiffLineKind Kind, string Prefix, string Content);

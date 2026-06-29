@@ -1236,6 +1236,95 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Does_Not_Mark_Code_Fence_Indentation_Only_Diffs()
+    {
+        const string beforeMarkdown = """
+            1. Add your plugin policy configuration to the file.
+
+               ```json copy
+               {
+                 "extraKnownMarketplaces": {
+                   "MARKETPLACE-NAME": {
+                     "source": {
+                       "source": "github",
+                       "repo": "OWNER/REPO"
+                     }
+                   }
+                 },
+                 "enabledPlugins": {
+                   "PLUGIN-NAME@MARKETPLACE-NAME": true
+                 }
+               }
+               ```
+            """;
+        const string afterMarkdown = """
+            1. Add your plugin policy configuration to the file.
+
+               ```json copy
+                {
+                  "extraKnownMarketplaces": {
+                    "agent-skills": {
+                      "source": {
+                        "source": "github",
+                        "repo": "OWNER/REPO"
+                      }
+                    }
+                  },
+                  "strictKnownMarketplaces": [
+                    {
+                      "source": "github",
+                      "repo": "OWNER/REPO"
+                    }
+                  ],
+                  "enabledPlugins": {
+                    "PLUGIN-NAME@MARKETPLACE-NAME": true
+                  }
+                }
+               ```
+            """;
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/administer-copilot/manage-for-enterprise/manage-agents/configure-enterprise-plugin-standards.md",
+            beforeMarkdown,
+            "34dbca9",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/administer-copilot/manage-for-enterprise/manage-agents/configure-enterprise-plugin-standards.md",
+            afterMarkdown,
+            "76a0870",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("MARKETPLACE-NAME", beforeHtml, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-removed", beforeHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added rsr-rendered-diff-gap\"", beforeHtml, StringComparison.Ordinal);
+        Assert.Contains("agent-skills", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("strictKnownMarketplaces", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("<pre><code class=\"language-json\">", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("&quot;strictKnownMarketplaces&quot;: [", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">&quot;source&quot;: &quot;github&quot;,</span>", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">&quot;repo&quot;: &quot;OWNER/REPO&quot;</span>", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">&quot;PLUGIN-NAME@MARKETPLACE-NAME&quot;: true</span>", afterHtml, StringComparison.Ordinal);
+        var renamedMarketplaceStart = afterHtml.IndexOf("&quot;agent-skills&quot;: {", StringComparison.Ordinal);
+        var strictMarketplaceStart = afterHtml.IndexOf("&quot;strictKnownMarketplaces&quot;: [", StringComparison.Ordinal);
+        Assert.True(renamedMarketplaceStart >= 0);
+        Assert.True(strictMarketplaceStart > renamedMarketplaceStart);
+        var renamedMarketplaceHtml = afterHtml[renamedMarketplaceStart..strictMarketplaceStart];
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">&quot;source&quot;: {</span>", renamedMarketplaceHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">&quot;source&quot;: &quot;github&quot;,</span>", renamedMarketplaceHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">&quot;repo&quot;: &quot;OWNER/REPO&quot;</span>", renamedMarketplaceHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("</code></pre>\n</li>\n</ol>\n<p><span class=\"rsr-rendered-diff-added\">", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<pre><code></code></pre>", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"> </span>{", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"> </span>}", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-removed rsr-rendered-diff-gap\" aria-hidden=\"true\"></span>{", afterHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Restores_Code_Fence_Gap_Diff_Markers()
     {
         const string beforeMarkdown = """
