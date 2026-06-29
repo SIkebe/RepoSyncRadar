@@ -48,6 +48,12 @@ public sealed class CopilotOptions
     /// <summary>Enable SDK remote session URL support. Default off because installed builds may not run from a GitHub repository.</summary>
     public bool EnableRemoteSessions { get; set; }
 
+    /// <summary>
+    /// Optional CAPI Responses API WebSocket transport override. Null keeps the SDK/runtime default;
+    /// false forces HTTP Responses transport for networks where WebSockets fail.
+    /// </summary>
+    public bool? EnableWebSocketResponses { get; set; }
+
     /// <summary>Enable Copilot's internal per-session telemetry. Set false to opt out.</summary>
     public bool EnableSessionTelemetry { get; set; } = true;
 
