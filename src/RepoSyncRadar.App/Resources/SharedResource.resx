@@ -262,6 +262,7 @@
   <data name="LocalSettings.Label.TelemetryFilePath" xml:space="preserve"><value>テレメトリファイル</value></data>
   <data name="LocalSettings.Label.CaptureContent" xml:space="preserve"><value>内容をキャプチャ</value></data>
   <data name="LocalSettings.Label.EnableRemoteSessions" xml:space="preserve"><value>リモートセッションを有効化</value></data>
+  <data name="LocalSettings.Label.EnableWebSocketResponses" xml:space="preserve"><value>WebSocket Responses を有効化</value></data>
   <data name="LocalSettings.Label.EnableSessionTelemetry" xml:space="preserve"><value>セッションテレメトリを有効化</value></data>
   <data name="LocalSettings.Label.OAuthClientId" xml:space="preserve"><value>OAuthClientId</value></data>
   <data name="LocalSettings.Label.AllowedUrlHosts" xml:space="preserve"><value>許可 URL ホスト</value></data>
@@ -282,6 +283,8 @@
   <data name="LocalSettings.Option.SdkDefault" xml:space="preserve"><value>SDK 既定 (未設定)</value></data>
   <data name="LocalSettings.Option.Default" xml:space="preserve"><value>default</value></data>
   <data name="LocalSettings.Option.LongContext" xml:space="preserve"><value>long_context</value></data>
+  <data name="LocalSettings.Option.Enabled" xml:space="preserve"><value>有効</value></data>
+  <data name="LocalSettings.Option.Disabled" xml:space="preserve"><value>無効</value></data>
   <data name="Common.Triage" xml:space="preserve"><value>Triage</value></data>
   <data name="CopilotUsage.ModelUnknown" xml:space="preserve"><value>model unknown</value></data>
   <data name="ReviewActions.AddToIgnoreList" xml:space="preserve"><value>無視リストへ追加</value></data>

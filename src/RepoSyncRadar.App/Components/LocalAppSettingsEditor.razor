@@ -133,6 +133,14 @@
                     <input type="checkbox" data-testid="settings-copilot-enable-remote-sessions" checked="@settings.Copilot.EnableRemoteSessions" disabled="@_saving" @onchange="e => settings.Copilot.EnableRemoteSessions = BoolValue(e)" />
                     <span>@L["LocalSettings.Label.EnableRemoteSessions"]</span>
                 </label>
+                <label class="local-settings-field">
+                    <span>@L["LocalSettings.Label.EnableWebSocketResponses"]</span>
+                    <select data-testid="settings-copilot-enable-websocket-responses" @bind:get="EnableWebSocketResponsesValue" @bind:set="value => settings.Copilot.EnableWebSocketResponses = NullableBoolValue(value)" disabled="@_saving">
+                        <option value="">@L["LocalSettings.Option.SdkDefault"]</option>
+                        <option value="true">@L["LocalSettings.Option.Enabled"]</option>
+                        <option value="false">@L["LocalSettings.Option.Disabled"]</option>
+                    </select>
+                </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-copilot-enable-session-telemetry" checked="@settings.Copilot.EnableSessionTelemetry" disabled="@_saving" @onchange="e => settings.Copilot.EnableSessionTelemetry = BoolValue(e)" />
                     <span>@L["LocalSettings.Label.EnableSessionTelemetry"]</span>
@@ -342,6 +350,17 @@
 
     private static bool BoolValue(ChangeEventArgs e)
         => e.Value is bool value && value;
+
+    private string EnableWebSocketResponsesValue
+        => _settings?.Copilot.EnableWebSocketResponses?.ToString().ToLowerInvariant() ?? string.Empty;
+
+    private static bool? NullableBoolValue(string? value)
+        => value switch
+        {
+            "true" => true,
+            "false" => false,
+            _ => null,
+        };
 
     private static string JoinLines(IEnumerable<string> values)
         => string.Join(Environment.NewLine, values);

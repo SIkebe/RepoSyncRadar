@@ -44,6 +44,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
                 ["GitHub:PullRequestTitleFilter"] = "Repo sync",
                 ["Copilot:DefaultModel"] = "gpt-config",
                 ["Copilot:ContextTier"] = " Long_Context ",
+                ["Copilot:EnableWebSocketResponses"] = "false",
                 ["Copilot:OAuthScopes:0"] = "public_repo",
                 ["DocsRepository:PrewarmOnStartup"] = "true",
             })
@@ -57,6 +58,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal(8, settings.GitHub.MaxPullRequests);
         Assert.Equal("gpt-config", settings.Copilot.DefaultModel);
         Assert.Equal("long_context", settings.Copilot.ContextTier);
+        Assert.False(settings.Copilot.EnableWebSocketResponses.GetValueOrDefault());
         Assert.Equal(["docs.github.com", "api.github.com"], settings.Copilot.AllowedUrlHosts);
         Assert.Empty(settings.Copilot.OAuthScopes);
         Assert.Equal(["docs.github.com", "github.com"], settings.WebView.AllowedUrlHosts);
@@ -104,6 +106,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.Copilot.TelemetryOtlpProtocol = " HTTP/JSON ";
         settings.Copilot.CaptureContent = true;
         settings.Copilot.EnableRemoteSessions = true;
+        settings.Copilot.EnableWebSocketResponses = false;
         settings.Copilot.EnableSessionTelemetry = false;
         settings.Copilot.AllowedUrlHosts = ["https://docs.github.com", "api.github.com"];
         settings.WebView.AllowedUrlHosts = ["https://github.com", "github.githubassets.com"];
@@ -136,6 +139,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("http/json", root.GetProperty("Copilot").GetProperty("TelemetryOtlpProtocol").GetString());
         Assert.True(root.GetProperty("Copilot").GetProperty("CaptureContent").GetBoolean());
         Assert.True(root.GetProperty("Copilot").GetProperty("EnableRemoteSessions").GetBoolean());
+        Assert.False(root.GetProperty("Copilot").GetProperty("EnableWebSocketResponses").GetBoolean());
         Assert.False(root.GetProperty("Copilot").GetProperty("EnableSessionTelemetry").GetBoolean());
         Assert.Equal("docs.github.com", root.GetProperty("Copilot").GetProperty("AllowedUrlHosts")[0].GetString());
         Assert.Equal("github.com", root.GetProperty("WebView").GetProperty("AllowedUrlHosts")[0].GetString());

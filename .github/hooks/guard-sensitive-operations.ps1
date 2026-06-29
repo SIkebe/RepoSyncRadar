@@ -148,6 +148,28 @@ foreach ($commandSegment in ($haystack -split '[;&|\r\n]')) {
     }
 }
 
+foreach ($commandSegment in ($haystack -split '[;&|\r\n]')) {
+    # Block direct pushes to main, but only inspect the git-push command segment.
+    # A later command such as `gh pr create --base main` must not be treated as
+    # the push destination.
+    if ($commandSegment -match '(?im)(^|[^A-Za-z0-9_])git(?:\s+[^\s]+)*\s+push\b(?:\s+[^\s]+)*\s+(?:origin\s+)?(?:main|refs/heads/main)(?:$|\s)') {
+        New-DenyOutput -Reason 'Direct pushes to main are blocked; use a reviewed pull request.'
+        exit 0
+    }
+
+    # Block explicit refspec pushes to main.
+    if ($commandSegment -match '(?im)(^|[^A-Za-z0-9_])git(?:\s+[^\s]+)*\s+push\b[^\r\n]*\b(?:HEAD|\+?refs/heads/[^:\s]+|\+?[^:\s]+):(?:main|refs/heads/main)(?:$|\s)') {
+        New-DenyOutput -Reason 'Direct pushes to main are blocked; use a reviewed pull request.'
+        exit 0
+    }
+
+    # Block force pushes via long or short flags, with or without git global options.
+    if ($commandSegment -match '(?im)(^|[^A-Za-z0-9_])git(?:\s+[^\s]+)*\s+push\b[^\r\n]*((^|\s)-[^\s]*f([^\w-]|$)|--force)') {
+        New-DenyOutput -Reason 'Force pushes are blocked by repository policy.'
+        exit 0
+    }
+}
+
 # Deny rules below use non-word command boundaries so quoted, parenthesized, or
 # shell-expanded commands are detected consistently with the bash hook.
 $rules = @(
@@ -156,13 +178,7 @@ $rules = @(
     # Block Release workflow dispatch by file name, display name, path, or ID.
     @{ Pattern = '(?im)(^|[^A-Za-z0-9_])gh\s+workflow\s+run(?:\s+[^\r\n]*)?\s+(?:release\.ya?ml|\.github[\\/]workflows[\\/]release\.ya?ml|["'']?release["'']?|\d+)($|[^A-Za-z0-9_])'; Reason = 'Release workflow runs require explicit human approval.' },
     # Publishing an existing draft release is sensitive; draft edits remain allowed.
-    @{ Pattern = '(?im)(^|[^A-Za-z0-9_])gh\s+release\s+edit\b.*--draft\s*=?\s*false\b'; Reason = 'Publishing a GitHub Release requires explicit human approval.' },
-    # Block direct pushes to main, including commands with git global options.
-    @{ Pattern = '(?im)(^|[^A-Za-z0-9_])git(?:\s+[^\s]+)*\s+push\b(?:\s+[^\s]+)*\s+(?:origin\s+)?main(?:$|\s)'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
-    # Block explicit refspec pushes to main.
-    @{ Pattern = '(?im)(^|[^A-Za-z0-9_])git(?:\s+[^\s]+)*\s+push\b[^\r\n]*\bHEAD:main(?:$|\s)'; Reason = 'Direct pushes to main are blocked; use a reviewed pull request.' },
-    # Block force pushes via long or short flags, with or without git global options.
-    @{ Pattern = '(?im)(^|[^A-Za-z0-9_])git(?:\s+[^\s]+)*\s+push\b[^\r\n]*((^|\s)-[^\s]*f([^\w-]|$)|--force)'; Reason = 'Force pushes are blocked by repository policy.' }
+    @{ Pattern = '(?im)(^|[^A-Za-z0-9_])gh\s+release\s+edit\b.*--draft\s*=?\s*false\b'; Reason = 'Publishing a GitHub Release requires explicit human approval.' }
 )
 
 foreach ($rule in $rules) {

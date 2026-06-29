@@ -237,6 +237,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 TelemetryOtlpProtocol = GetNullableString(configuration, "Copilot:TelemetryOtlpProtocol")?.ToLowerInvariant(),
                 CaptureContent = GetBool(configuration, "Copilot:CaptureContent", defaults.Copilot.CaptureContent),
                 EnableRemoteSessions = GetBool(configuration, "Copilot:EnableRemoteSessions", defaults.Copilot.EnableRemoteSessions),
+                EnableWebSocketResponses = GetNullableBool(configuration, "Copilot:EnableWebSocketResponses"),
                 EnableSessionTelemetry = GetBool(configuration, "Copilot:EnableSessionTelemetry", defaults.Copilot.EnableSessionTelemetry),
                 AllowedUrlHosts = GetStringList(configuration, "Copilot:AllowedUrlHosts", defaults.Copilot.AllowedUrlHosts),
                 OAuthClientId = GetNullableString(configuration, "Copilot:OAuthClientId"),
@@ -300,6 +301,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 TelemetryOtlpProtocol = GetNullableString(root, "Copilot", "TelemetryOtlpProtocol", fallback.Copilot.TelemetryOtlpProtocol),
                 CaptureContent = GetBool(root, "Copilot", "CaptureContent", fallback.Copilot.CaptureContent),
                 EnableRemoteSessions = GetBool(root, "Copilot", "EnableRemoteSessions", fallback.Copilot.EnableRemoteSessions),
+                EnableWebSocketResponses = GetNullableBool(root, "Copilot", "EnableWebSocketResponses", fallback.Copilot.EnableWebSocketResponses),
                 EnableSessionTelemetry = GetBool(root, "Copilot", "EnableSessionTelemetry", fallback.Copilot.EnableSessionTelemetry),
                 AllowedUrlHosts = GetStringList(root, "Copilot", "AllowedUrlHosts", fallback.Copilot.AllowedUrlHosts),
                 OAuthClientId = GetNullableString(root, "Copilot", "OAuthClientId", fallback.Copilot.OAuthClientId),
@@ -368,6 +370,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             : settings.Copilot.TelemetryOtlpProtocol;
         copilot["CaptureContent"] = settings.Copilot.CaptureContent;
         copilot["EnableRemoteSessions"] = settings.Copilot.EnableRemoteSessions;
+        copilot["EnableWebSocketResponses"] = settings.Copilot.EnableWebSocketResponses;
         copilot["EnableSessionTelemetry"] = settings.Copilot.EnableSessionTelemetry;
         copilot["AllowedUrlHosts"] = ToJsonArray(settings.Copilot.AllowedUrlHosts);
         copilot["OAuthClientId"] = string.IsNullOrWhiteSpace(settings.Copilot.OAuthClientId)
@@ -444,6 +447,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 TelemetryOtlpProtocol = NormalizeNullable(settings.Copilot.TelemetryOtlpProtocol)?.ToLowerInvariant(),
                 CaptureContent = settings.Copilot.CaptureContent,
                 EnableRemoteSessions = settings.Copilot.EnableRemoteSessions,
+                EnableWebSocketResponses = settings.Copilot.EnableWebSocketResponses,
                 EnableSessionTelemetry = settings.Copilot.EnableSessionTelemetry,
                 AllowedUrlHosts = NormalizeHosts(settings.Copilot.AllowedUrlHosts),
                 OAuthClientId = NormalizeNullable(settings.Copilot.OAuthClientId),
@@ -621,6 +625,9 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
     private static bool GetBool(IConfiguration configuration, string key, bool fallback)
         => bool.TryParse(configuration[key], out var value) ? value : fallback;
 
+    private static bool? GetNullableBool(IConfiguration configuration, string key)
+        => bool.TryParse(configuration[key], out var value) ? value : null;
+
     private static List<string> GetStringList(IConfiguration configuration, string key, IReadOnlyList<string> fallback)
     {
         var values = configuration.GetSection(key).GetChildren()
@@ -656,6 +663,11 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
 
     private static bool GetBool(JsonObject root, string sectionName, string propertyName, bool fallback)
         => root[sectionName] is JsonObject section && ReadBool(section[propertyName]) is { } value ? value : fallback;
+
+    private static bool? GetNullableBool(JsonObject root, string sectionName, string propertyName, bool? fallback)
+        => root[sectionName] is JsonObject section && section.ContainsKey(propertyName)
+            ? ReadBool(section[propertyName])
+            : fallback;
 
     private static List<string> GetStringList(JsonObject root, string sectionName, string propertyName, IReadOnlyList<string> fallback)
     {

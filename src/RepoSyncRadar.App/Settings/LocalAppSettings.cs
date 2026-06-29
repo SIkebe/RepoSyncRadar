@@ -95,6 +95,8 @@ public sealed class CopilotLocalAppSettings
 
     public bool EnableRemoteSessions { get; set; }
 
+    public bool? EnableWebSocketResponses { get; set; }
+
     public bool EnableSessionTelemetry { get; set; } = true;
 
     public List<string> AllowedUrlHosts { get; set; } =
@@ -120,6 +122,7 @@ public sealed class CopilotLocalAppSettings
             TelemetryOtlpProtocol = TelemetryOtlpProtocol,
             CaptureContent = CaptureContent,
             EnableRemoteSessions = EnableRemoteSessions,
+            EnableWebSocketResponses = EnableWebSocketResponses,
             EnableSessionTelemetry = EnableSessionTelemetry,
             AllowedUrlHosts = [.. AllowedUrlHosts],
             OAuthClientId = OAuthClientId,
