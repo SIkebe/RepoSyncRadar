@@ -95,7 +95,7 @@ public sealed partial class DocsWorktreeManager
             CultureInfo.InvariantCulture,
             $"+refs/pull/{pullRequestNumber}/head:refs/pull/{pullRequestNumber}/head");
         var args = string.Create(CultureInfo.InvariantCulture, $"-c maintenance.auto=false fetch origin {refspec}");
-        var result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        var result = await RunBareGitAsync(args, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"git fetch failed (exit {result.ExitCode}): {result.StandardError}");
@@ -133,7 +133,7 @@ public sealed partial class DocsWorktreeManager
     private async Task<bool> ContainsCommitAsync(string commitSha, CancellationToken cancellationToken)
     {
         var args = string.Create(CultureInfo.InvariantCulture, $"cat-file -e {commitSha}^{{commit}}");
-        var result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        var result = await RunBareGitAsync(args, cancellationToken).ConfigureAwait(false);
         return result.ExitCode == 0;
     }
 
@@ -147,7 +147,7 @@ public sealed partial class DocsWorktreeManager
         }
 
         var args = string.Create(CultureInfo.InvariantCulture, $"rev-parse {commitSha}^");
-        var result = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        var result = await RunBareGitAsync(args, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0)
         {
             throw new InvalidOperationException($"git rev-parse failed (exit {result.ExitCode}): {result.StandardError}");
@@ -172,8 +172,8 @@ public sealed partial class DocsWorktreeManager
         var normalizedPath = NormalizeRepoPath(repoPath);
         var result = await _runner.RunAsync(
                 "git",
-                string.Create(CultureInfo.InvariantCulture, $"show {commitSha}:{normalizedPath}"),
-                _options.BareCloneDir,
+                BareGitArgs(string.Create(CultureInfo.InvariantCulture, $"show {commitSha}:{normalizedPath}")),
+                BareGitWorkingDirectory(),
                 cancellationToken)
             .ConfigureAwait(false);
         return result.ExitCode == 0 ? result.StandardOutput : null;
@@ -196,8 +196,8 @@ public sealed partial class DocsWorktreeManager
         var normalizedDirectory = NormalizeRepoPath(repoDirectory);
         var result = await _runner.RunAsync(
                 "git",
-                string.Create(CultureInfo.InvariantCulture, $"ls-tree -r --name-only {commitSha} -- {normalizedDirectory}"),
-                _options.BareCloneDir,
+                BareGitArgs(string.Create(CultureInfo.InvariantCulture, $"ls-tree -r --name-only {commitSha} -- {normalizedDirectory}")),
+                BareGitWorkingDirectory(),
                 cancellationToken)
             .ConfigureAwait(false);
         if (result.ExitCode != 0)
@@ -234,8 +234,8 @@ public sealed partial class DocsWorktreeManager
             $"grep -l -F -- {QuoteGitArgument(text)} {commitSha} -- {normalizedDirectory}");
         var result = await _runner.RunAsync(
                 "git",
-                args,
-                _options.BareCloneDir,
+                BareGitArgs(args),
+                BareGitWorkingDirectory(),
                 cancellationToken)
             .ConfigureAwait(false);
         if (result.ExitCode != 0)
@@ -288,8 +288,8 @@ public sealed partial class DocsWorktreeManager
         {
             var exists = await _runner.RunAsync(
                     "git",
-                    string.Create(CultureInfo.InvariantCulture, $"cat-file -e {QuoteProcessArgument(commitSha + ":" + path)}"),
-                    _options.BareCloneDir,
+                    BareGitArgs(string.Create(CultureInfo.InvariantCulture, $"cat-file -e {QuoteProcessArgument(commitSha + ":" + path)}")),
+                    BareGitWorkingDirectory(),
                     cancellationToken)
                 .ConfigureAwait(false);
             if (exists.ExitCode == 0)
@@ -307,7 +307,7 @@ public sealed partial class DocsWorktreeManager
         var args = string.Create(
             CultureInfo.InvariantCulture,
             $"archive --format=tar --output {QuoteProcessArgument(tarPath)} {QuoteProcessArgument(commitSha)} -- {string.Join(' ', existingPaths.Select(QuoteProcessArgument))}");
-        var archive = await _runner.RunAsync("git", args, _options.BareCloneDir, cancellationToken).ConfigureAwait(false);
+        var archive = await RunBareGitAsync(args, cancellationToken).ConfigureAwait(false);
         if (archive.ExitCode != 0)
         {
             throw new InvalidOperationException($"git archive failed (exit {archive.ExitCode}): {archive.StandardError}");
@@ -327,6 +327,17 @@ public sealed partial class DocsWorktreeManager
 
     private static string NormalizeRepoPath(string repoPath)
         => repoPath.Replace('\\', '/').Trim('/');
+
+    private Task<ProcessRunResult> RunBareGitAsync(string args, CancellationToken cancellationToken)
+        => _runner.RunAsync("git", BareGitArgs(args), BareGitWorkingDirectory(), cancellationToken);
+
+    private string BareGitArgs(string args)
+        => string.Create(CultureInfo.InvariantCulture, $"--git-dir {QuoteProcessArgument(_options.BareCloneDir)} {args}");
+
+    private string BareGitWorkingDirectory()
+        => Path.GetDirectoryName(_options.BareCloneDir) is { Length: > 0 } parent
+            ? parent
+            : Directory.GetCurrentDirectory();
 
     private static string QuoteProcessArgument(string value)
     {
@@ -383,14 +394,14 @@ public sealed partial class DocsWorktreeManager
 
         await _runner.RunAsync(
             "git",
-            string.Create(CultureInfo.InvariantCulture, $"worktree unlock {path}"),
-            _options.BareCloneDir,
+            BareGitArgs(string.Create(CultureInfo.InvariantCulture, $"worktree unlock {path}")),
+            BareGitWorkingDirectory(),
             cancellationToken).ConfigureAwait(false);
 
         var removeResult = await _runner.RunAsync(
             "git",
-            string.Create(CultureInfo.InvariantCulture, $"worktree remove --force --force {path}"),
-            _options.BareCloneDir,
+            BareGitArgs(string.Create(CultureInfo.InvariantCulture, $"worktree remove --force --force {path}")),
+            BareGitWorkingDirectory(),
             cancellationToken).ConfigureAwait(false);
         if (removeResult.ExitCode == 0)
         {
@@ -405,8 +416,8 @@ public sealed partial class DocsWorktreeManager
 
         await _runner.RunAsync(
             "git",
-            "worktree prune",
-            _options.BareCloneDir,
+            BareGitArgs("worktree prune"),
+            BareGitWorkingDirectory(),
             cancellationToken).ConfigureAwait(false);
         return Directory.Exists(path) is false;
     }
@@ -443,8 +454,8 @@ public sealed partial class DocsWorktreeManager
         {
             result = await _runner.RunAsync(
                 "git",
-                "worktree list --porcelain",
-                _options.BareCloneDir,
+                BareGitArgs("worktree list --porcelain"),
+                BareGitWorkingDirectory(),
                 cancellationToken).ConfigureAwait(false);
         }
         catch (InvalidOperationException ex)
@@ -564,8 +575,8 @@ public sealed partial class DocsWorktreeManager
             {
                 var result = await _runner.RunAsync(
                         "git",
-                        "worktree prune",
-                        _options.BareCloneDir,
+                        BareGitArgs("worktree prune"),
+                        BareGitWorkingDirectory(),
                         CancellationToken.None)
                     .ConfigureAwait(false);
                 if (result.ExitCode != 0)
@@ -585,8 +596,8 @@ public sealed partial class DocsWorktreeManager
 
         await _runner.RunAsync(
             "git",
-            string.Create(CultureInfo.InvariantCulture, $"worktree unlock {path}"),
-            _options.BareCloneDir,
+            BareGitArgs(string.Create(CultureInfo.InvariantCulture, $"worktree unlock {path}")),
+            BareGitWorkingDirectory(),
             cancellationToken).ConfigureAwait(false);
 
         if (!Directory.Exists(path))
