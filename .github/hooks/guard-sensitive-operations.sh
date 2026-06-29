@@ -111,20 +111,24 @@ while IFS= read -r command_segment || [[ -n "$command_segment" ]]; do
   fi
 done < <(printf '%s' "$haystack" | tr ';&|' '\n')
 
-# Block direct pushes to main, including commands that use git global options.
-if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git([[:space:]]+[^[:space:]]+)*[[:space:]]+push([[:space:]]+[^[:space:]]+)*[[:space:]]+(origin[[:space:]]+)?main($|[[:space:]])"; then
-  deny "Direct pushes to main are blocked; use a reviewed pull request."
-  exit 0
-fi
+while IFS= read -r command_segment || [[ -n "$command_segment" ]]; do
+  # Block direct pushes to main, but only inspect the git-push command segment.
+  # A later command such as `gh pr create --base main` must not be treated as
+  # the push destination.
+  if printf '%s' "$command_segment" | grep -Eiq "${command_prefix}git([[:space:]]+[^[:space:]]+)*[[:space:]]+push([[:space:]]+[^[:space:]]+)*[[:space:]]+(origin[[:space:]]+)?(main|refs/heads/main)($|[[:space:]])"; then
+    deny "Direct pushes to main are blocked; use a reviewed pull request."
+    exit 0
+  fi
 
-# Block explicit refspec pushes to main.
-if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git([[:space:]]+[^[:space:]]+)*[[:space:]]+push[[:space:]][^[:cntrl:]]*HEAD:main($|[[:space:]])"; then
-  deny "Direct pushes to main are blocked; use a reviewed pull request."
-  exit 0
-fi
+  # Block explicit refspec pushes to main.
+  if printf '%s' "$command_segment" | grep -Eiq "${command_prefix}git([[:space:]]+[^[:space:]]+)*[[:space:]]+push[[:space:]][^[:cntrl:]]*(HEAD|\+?refs/heads/[^:[:space:]]+|\+?[^:[:space:]]+):(main|refs/heads/main)($|[[:space:]])"; then
+    deny "Direct pushes to main are blocked; use a reviewed pull request."
+    exit 0
+  fi
 
-# Block force pushes via long or short flags, with or without git global options.
-if printf '%s' "$haystack" | grep -Eiq "${command_prefix}git([[:space:]]+[^[:space:]]+)*[[:space:]]+push([^[:cntrl:]]*--force|[^[:cntrl:]]*[[:space:]]-[^[:space:]]*f([^[:alnum:]_-]|$))"; then
-  deny "Force pushes are blocked by repository policy."
-  exit 0
-fi
+  # Block force pushes via long or short flags, with or without git global options.
+  if printf '%s' "$command_segment" | grep -Eiq "${command_prefix}git([[:space:]]+[^[:space:]]+)*[[:space:]]+push([^[:cntrl:]]*--force|[^[:cntrl:]]*[[:space:]]-[^[:space:]]*f([^[:alnum:]_-]|$))"; then
+    deny "Force pushes are blocked by repository policy."
+    exit 0
+  fi
+done < <(printf '%s' "$haystack" | tr ';&|' '\n')
