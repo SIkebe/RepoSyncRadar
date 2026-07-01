@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 
 namespace RepoSyncRadar.App.Copilot;
 
-#pragma warning disable GHCP001 // SDK 1.0.4 exposes permission decisions through experimental RPC types.
+#pragma warning disable GHCP001 // SDK 1.0.5-preview.1 exposes permission decisions through experimental RPC types.
 
 /// <summary>
 /// Implements <see cref="PermissionRequestHandler"/> for RepoSyncRadar. The policy is

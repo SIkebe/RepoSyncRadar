@@ -7,7 +7,7 @@ using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;
 
-#pragma warning disable GHCP001 // SDK 1.0.4 exposes permission decisions through experimental RPC types.
+#pragma warning disable GHCP001 // SDK 1.0.5-preview.1 exposes permission and MCP auth decisions through experimental RPC types.
 
 /// <summary>
 /// Builds <see cref="SessionConfig"/> values for a given <see cref="SessionPurpose"/>.
@@ -51,6 +51,9 @@ internal static class SessionConfigBuilder
             CoauthorEnabled = false,
             ManageScheduleEnabled = false,
             McpOAuthTokenStorage = McpOAuthTokenStorageMode.InMemory,
+            // RepoSyncRadar does not broker third-party MCP OAuth tokens. Fail closed if
+            // an OAuth-protected MCP server is introduced before a user-visible flow exists.
+            OnMcpAuthRequest = CancelMcpAuthRequestAsync,
         };
 
         if (copilot.EnableWebSocketResponses is { } enableWebSocketResponses)
@@ -101,6 +104,12 @@ internal static class SessionConfigBuilder
             "long_context" => ContextTier.LongContext,
             _ => null,
         };
+
+    private static Task<McpAuthResult?> CancelMcpAuthRequestAsync(McpAuthContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return Task.FromResult<McpAuthResult?>(McpAuthResult.Cancel());
+    }
 
     private static string SystemPromptFor(SessionPurpose purpose) => purpose switch
     {
