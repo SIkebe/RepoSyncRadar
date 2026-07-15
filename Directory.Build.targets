@@ -1,0 +1,8 @@
+<Project>
+
+  <PropertyGroup>
+    <!-- SDK 1.0.7-preview.3 references unpublished CLI 1.0.71-2 platform packages. -->
+    <CopilotCliVersion>1.0.69</CopilotCliVersion>
+  </PropertyGroup>
+
+</Project>

@@ -8,7 +8,7 @@ using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
 
-#pragma warning disable GHCP001 // SDK 1.0.5 exposes permission and MCP auth decisions through experimental RPC types.
+#pragma warning disable GHCP001 // SDK 1.0.7-preview.3 exposes permission and MCP auth decisions through experimental RPC types.
 
 public class SessionConfigBuilderTests
 {
@@ -38,6 +38,8 @@ public class SessionConfigBuilderTests
         Assert.False(config.EnableSessionTelemetry);
         Assert.NotNull(config.Memory);
         Assert.False(config.Memory!.Enabled);
+        Assert.NotNull(config.ToolSearch);
+        Assert.False(config.ToolSearch!.Enabled.GetValueOrDefault());
         Assert.NotNull(config.Capi);
         Assert.False(config.Capi!.EnableWebSocketResponses.GetValueOrDefault());
         Assert.NotNull(config.SystemMessage);
