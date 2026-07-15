@@ -39,7 +39,7 @@ public class SessionConfigBuilderTests
         Assert.NotNull(config.Memory);
         Assert.False(config.Memory!.Enabled);
         Assert.NotNull(config.ToolSearch);
-        Assert.False(config.ToolSearch!.Enabled.GetValueOrDefault());
+        Assert.Equal(false, config.ToolSearch!.Enabled);
         Assert.NotNull(config.Capi);
         Assert.False(config.Capi!.EnableWebSocketResponses.GetValueOrDefault());
         Assert.NotNull(config.SystemMessage);
