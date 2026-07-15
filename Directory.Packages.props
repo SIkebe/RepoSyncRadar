@@ -40,7 +40,7 @@
 
   <ItemGroup Label="GitHub / Copilot">
     <PackageVersion Include="Octokit" Version="14.0.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.7-preview.1" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.7-preview.2" />
   </ItemGroup>
 
   <ItemGroup Label="Installer / Updates">

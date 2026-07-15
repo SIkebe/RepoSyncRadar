@@ -12,7 +12,7 @@ It combines deterministic ingestion of Repo sync PRs with GitHub Copilot SDK tri
 ## What it does
 
 - Ingests recent `github/docs` Repo sync PRs and stores commit, file, scoring, review, ignore-rule, and draft data in SQLite.
-- Uses the **GitHub Copilot SDK** (`GitHub.Copilot.SDK` 1.0.7-preview.1) to run Morning Triage, score candidate commits, and generate review summaries.
+- Uses the **GitHub Copilot SDK** (`GitHub.Copilot.SDK` 1.0.7-preview.2) to run Morning Triage, score candidate commits, and generate review summaries.
 - Keeps operator decisions explicit with **Unseen**, **Watch**, **Later**, **Rejected**, **Archive**, directory ignore rules, and importance boost data.
 - Maps changed docs paths to `docs.github.com` URLs so reviewers can jump from a commit to the public article context.
 - Renders local before/after Markdown previews for docs changes through the app's .NET Markdown/Liquid pipeline and WebView2, without requiring Node.js.
