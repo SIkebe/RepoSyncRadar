@@ -202,7 +202,7 @@ function Resolve-CopilotCliBinary {
 
     $packageInfo = Get-CopilotCliPackageInfo -RepoRoot $RepoRoot -Runtime $Runtime
     $cacheDir = [System.IO.Path]::Combine($RepoRoot, $OutputRoot, 'copilot-cli', $packageInfo.Version, $packageInfo.Platform)
-    $archivePath = Join-Path $cacheDir 'copilot.tgz'
+    $archivePath = Join-Path $cacheDir 'copilot.zip'
     $binaryPath = Join-Path $cacheDir $packageInfo.BinaryName
 
     if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version -Platform $packageInfo.Platform) {
@@ -214,7 +214,7 @@ function Resolve-CopilotCliBinary {
         Remove-Item $cacheDir -Recurse -Force
     }
 
-    $downloadUrl = "https://registry.npmjs.org/@github/copilot-$($packageInfo.Platform)/-/copilot-$($packageInfo.Platform)-$($packageInfo.Version).tgz"
+    $downloadUrl = "https://github.com/github/copilot-cli/releases/download/v$($packageInfo.Version)/copilot-$($packageInfo.Platform).zip"
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
@@ -222,7 +222,7 @@ function Resolve-CopilotCliBinary {
         try {
             Write-Host "Downloading Copilot CLI $($packageInfo.Version) for $($packageInfo.Platform) (attempt $attempt of 3)."
             Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -TimeoutSec 600
-            Invoke-NativeCommand -FilePath 'tar' -ArgumentList @('-xzf', $archivePath, '--strip-components=1', '-C', $cacheDir)
+            Invoke-NativeCommand -FilePath 'tar' -ArgumentList @('-xf', $archivePath, '-C', $cacheDir)
 
             if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version -Platform $packageInfo.Platform) {
                 return $binaryPath
