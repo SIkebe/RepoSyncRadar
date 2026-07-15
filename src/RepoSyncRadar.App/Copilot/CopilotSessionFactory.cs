@@ -264,6 +264,8 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 
         var clientOptions = new CopilotClientOptions
         {
+            Connection = RuntimeConnection.ForStdio(
+                path: string.IsNullOrWhiteSpace(copilot.CliPath) ? null : copilot.CliPath.Trim()),
             Logger = logger,
             LogLevel = string.IsNullOrWhiteSpace(copilot.LogLevel)
                 ? CopilotLogLevel.Info
@@ -274,11 +276,6 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             UseLoggedInUser = false,
             EnableRemoteSessions = copilot.EnableRemoteSessions,
         };
-
-        if (!string.IsNullOrWhiteSpace(copilot.CliPath))
-        {
-            clientOptions.Connection = RuntimeConnection.ForStdio(path: copilot.CliPath.Trim());
-        }
 
         if (!string.IsNullOrWhiteSpace(copilot.CopilotHome))
         {
