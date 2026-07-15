@@ -110,4 +110,16 @@ public sealed class CopilotSessionFactoryTests
         Assert.Null(options.Telemetry);
         Assert.Null(options.SessionIdleTimeoutSeconds);
     }
+
+    [Fact]
+    public void BuildClientOptions_Uses_Bundled_Stdio_When_CliPath_Is_Missing()
+    {
+        var options = CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(),
+            NullLogger<CopilotSessionFactory>.Instance,
+            "token-123");
+
+        var stdio = Assert.IsType<StdioRuntimeConnection>(options.Connection);
+        Assert.Null(stdio.Path);
+    }
 }

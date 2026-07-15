@@ -96,10 +96,26 @@ function Get-CopilotCliPackageInfo {
         'win-arm64' { 'win32-arm64' }
     }
 
+    $releasePropsPath = Join-Path $RepoRoot 'scripts/CopilotCliRelease.props'
+    [xml]$releaseProps = Get-Content $releasePropsPath
+    $releaseVersion = [string]$releaseProps.Project.PropertyGroup.CopilotCliReleaseVersion
+    if (-not [string]::Equals($cliVersion, $releaseVersion, [System.StringComparison]::Ordinal)) {
+        throw "Copilot CLI release metadata version '$releaseVersion' does not match the SDK-requested version '$cliVersion'."
+    }
+
+    $expectedSha256 = switch ($platform) {
+        'win32-x64' { [string]$releaseProps.Project.PropertyGroup.CopilotCliWin32X64Sha256 }
+        'win32-arm64' { [string]$releaseProps.Project.PropertyGroup.CopilotCliWin32Arm64Sha256 }
+    }
+    if ($expectedSha256 -notmatch '^[0-9a-fA-F]{64}$') {
+        throw "Copilot CLI release metadata does not define a valid SHA-256 hash for '$platform'."
+    }
+
     [pscustomobject]@{
         Version = $cliVersion
         Platform = $platform
         BinaryName = 'copilot.exe'
+        ExpectedSha256 = $expectedSha256
     }
 }
 
@@ -202,7 +218,7 @@ function Resolve-CopilotCliBinary {
 
     $packageInfo = Get-CopilotCliPackageInfo -RepoRoot $RepoRoot -Runtime $Runtime
     $cacheDir = [System.IO.Path]::Combine($RepoRoot, $OutputRoot, 'copilot-cli', $packageInfo.Version, $packageInfo.Platform)
-    $archivePath = Join-Path $cacheDir 'copilot.tgz'
+    $archivePath = Join-Path $cacheDir 'copilot.zip'
     $binaryPath = Join-Path $cacheDir $packageInfo.BinaryName
 
     if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version -Platform $packageInfo.Platform) {
@@ -214,7 +230,7 @@ function Resolve-CopilotCliBinary {
         Remove-Item $cacheDir -Recurse -Force
     }
 
-    $downloadUrl = "https://registry.npmjs.org/@github/copilot-$($packageInfo.Platform)/-/copilot-$($packageInfo.Platform)-$($packageInfo.Version).tgz"
+    $downloadUrl = "https://github.com/github/copilot-cli/releases/download/v$($packageInfo.Version)/copilot-$($packageInfo.Platform).zip"
     for ($attempt = 1; $attempt -le 3; $attempt++) {
         Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
@@ -222,7 +238,12 @@ function Resolve-CopilotCliBinary {
         try {
             Write-Host "Downloading Copilot CLI $($packageInfo.Version) for $($packageInfo.Platform) (attempt $attempt of 3)."
             Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -TimeoutSec 600
-            Invoke-NativeCommand -FilePath 'tar' -ArgumentList @('-xzf', $archivePath, '--strip-components=1', '-C', $cacheDir)
+            $actualSha256 = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash
+            if (-not [string]::Equals($actualSha256, $packageInfo.ExpectedSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Copilot CLI archive SHA-256 mismatch for '$archivePath'. Expected '$($packageInfo.ExpectedSha256)', actual '$actualSha256'."
+            }
+
+            Invoke-NativeCommand -FilePath 'tar' -ArgumentList @('-xf', $archivePath, '-C', $cacheDir)
 
             if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version -Platform $packageInfo.Platform) {
                 return $binaryPath

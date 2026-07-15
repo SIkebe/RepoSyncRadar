@@ -1,0 +1,50 @@
+<Project>
+
+  <Import Project="$(MSBuildThisFileDirectory)scripts\CopilotCliRelease.props" />
+
+  <!--
+    SDK 1.0.7-preview.3 resolves CLI 1.0.71-2 from npm, but that version is
+    distributed as GitHub Release assets instead. Supply the official executable
+    explicitly until the SDK's default download source can resolve this version.
+  -->
+  <PropertyGroup Condition="'$(CopilotCliVersion)' == '$(CopilotCliReleaseVersion)' And '$(CopilotCliBinaryPath)' == '' And '$(CopilotSkipCliDownload)' != 'true'">
+    <_RepoCopilotRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_RepoCopilotRid>
+    <_RepoCopilotRid Condition="'$(_RepoCopilotRid)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</_RepoCopilotRid>
+    <_RepoCopilotPlatform Condition="$(_RepoCopilotRid.StartsWith('win')) And $(_RepoCopilotRid.EndsWith('-x64'))">win32-x64</_RepoCopilotPlatform>
+    <_RepoCopilotPlatform Condition="$(_RepoCopilotRid.StartsWith('win')) And $(_RepoCopilotRid.EndsWith('-arm64'))">win32-arm64</_RepoCopilotPlatform>
+    <_RepoCopilotCacheDir>$(BaseIntermediateOutputPath)copilot-cli\$(CopilotCliVersion)\$(_RepoCopilotPlatform)</_RepoCopilotCacheDir>
+    <_RepoCopilotArchivePath>$(_RepoCopilotCacheDir)\copilot.zip</_RepoCopilotArchivePath>
+    <_RepoCopilotExpectedSha256 Condition="'$(_RepoCopilotPlatform)' == 'win32-x64'">$(CopilotCliWin32X64Sha256)</_RepoCopilotExpectedSha256>
+    <_RepoCopilotExpectedSha256 Condition="'$(_RepoCopilotPlatform)' == 'win32-arm64'">$(CopilotCliWin32Arm64Sha256)</_RepoCopilotExpectedSha256>
+    <CopilotCliBinaryPath>$(_RepoCopilotCacheDir)\copilot.exe</CopilotCliBinaryPath>
+  </PropertyGroup>
+
+  <Target Name="PrepareCopilotCliFromGitHubRelease"
+          BeforeTargets="_DownloadCopilotCli"
+          Condition="'$(_RepoCopilotPlatform)' != ''">
+    <Delete Files="$(_RepoCopilotArchivePath)"
+            Condition="!Exists('$(CopilotCliBinaryPath)') And Exists('$(_RepoCopilotArchivePath)')" />
+    <MakeDir Directories="$(_RepoCopilotCacheDir)"
+             Condition="!Exists('$(CopilotCliBinaryPath)')" />
+    <DownloadFile SourceUrl="https://github.com/github/copilot-cli/releases/download/v$(CopilotCliVersion)/copilot-$(_RepoCopilotPlatform).zip"
+                  DestinationFolder="$(_RepoCopilotCacheDir)"
+                  DestinationFileName="copilot.zip"
+                  Timeout="600000"
+                  Condition="!Exists('$(CopilotCliBinaryPath)')" />
+    <Error Condition="'$(_RepoCopilotExpectedSha256)' == ''"
+           Text="No trusted SHA-256 is configured for Copilot CLI $(CopilotCliVersion) on $(_RepoCopilotPlatform)." />
+    <VerifyFileHash File="$(_RepoCopilotArchivePath)"
+                    Hash="$(_RepoCopilotExpectedSha256)"
+                    Algorithm="SHA256"
+                    HashEncoding="hex"
+                    Condition="!Exists('$(CopilotCliBinaryPath)')" />
+    <Exec Command="&quot;$(SystemRoot)\System32\tar.exe&quot; -xf &quot;$(_RepoCopilotArchivePath)&quot; -C &quot;$(_RepoCopilotCacheDir)&quot;"
+          Condition="!Exists('$(CopilotCliBinaryPath)')" />
+    <Error Condition="!Exists('$(CopilotCliBinaryPath)')"
+           Text="Failed to extract Copilot CLI $(CopilotCliVersion) from its official GitHub Release." />
+    <PropertyGroup>
+      <_CopilotCliBinaryPath>$(CopilotCliBinaryPath)</_CopilotCliBinaryPath>
+    </PropertyGroup>
+  </Target>
+
+</Project>
