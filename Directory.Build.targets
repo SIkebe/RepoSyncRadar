@@ -5,7 +5,7 @@
     distributed as GitHub Release assets instead. Supply the official executable
     explicitly until the SDK's default download source can resolve this version.
   -->
-  <PropertyGroup Condition="'$(CopilotCliVersion)' == '1.0.71-2' And '$(CopilotCliBinaryPath)' == ''">
+  <PropertyGroup Condition="'$(CopilotCliVersion)' == '1.0.71-2' And '$(CopilotCliBinaryPath)' == '' And '$(CopilotSkipCliDownload)' != 'true'">
     <_RepoCopilotRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_RepoCopilotRid>
     <_RepoCopilotRid Condition="'$(_RepoCopilotRid)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</_RepoCopilotRid>
     <_RepoCopilotPlatform Condition="$(_RepoCopilotRid.StartsWith('win')) And $(_RepoCopilotRid.EndsWith('-x64'))">win32-x64</_RepoCopilotPlatform>
