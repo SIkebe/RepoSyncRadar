@@ -9,7 +9,7 @@ using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
 
-#pragma warning disable GHCP001 // SDK 1.0.7-preview.3 exposes permission decisions through experimental RPC types.
+#pragma warning disable GHCP001 // SDK 1.0.7 exposes permission decisions through experimental RPC types.
 
 public class RadarPermissionPolicyTests
 {
