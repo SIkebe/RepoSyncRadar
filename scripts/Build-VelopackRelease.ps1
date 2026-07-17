@@ -315,38 +315,34 @@ function Resolve-IjwHostBinary {
         (Get-NuGetPackagesRoot),
         $packageName.ToLowerInvariant(),
         $runtimeVersion)
-    $ijwHostCandidates = @(
+    $ijwHostCandidateDirectories = @(
         [System.IO.Path]::Combine(
             $runtimePackageRoot,
             'runtimes',
             $Runtime,
             'lib',
-            ($frameworkName -split '-')[0],
-            'Ijwhost.dll'),
+            ($frameworkName -split '-')[0]),
         [System.IO.Path]::Combine(
             $runtimePackageRoot,
             'runtimes',
             $Runtime,
-            'native',
-            'ijwhost.dll')
+            'native')
     )
 
-    foreach ($candidatePath in $ijwHostCandidates) {
-        if (Test-Path $candidatePath) {
-            return $candidatePath
+    foreach ($candidateDirectory in $ijwHostCandidateDirectories) {
+        if (-not (Test-Path $candidateDirectory)) {
+            continue
         }
-    }
 
-    $runtimeRoot = [System.IO.Path]::Combine($runtimePackageRoot, 'runtimes', $Runtime)
-    if (Test-Path $runtimeRoot) {
-        $resolvedPath = Get-ChildItem -Path $runtimeRoot -Filter 'ijwhost.dll' -File -Recurse |
+        $resolvedPath = Get-ChildItem -Path $candidateDirectory -File |
+            Where-Object { [string]::Equals($_.Name, 'ijwhost.dll', [System.StringComparison]::OrdinalIgnoreCase) } |
             Select-Object -ExpandProperty FullName -First 1
         if (-not [string]::IsNullOrWhiteSpace($resolvedPath)) {
             return $resolvedPath
         }
     }
 
-    throw "ijwhost.dll was not found under '$runtimePackageRoot'. Checked: $($ijwHostCandidates -join ', ')"
+    throw "ijwhost.dll was not found under '$runtimePackageRoot'. Checked: $($ijwHostCandidateDirectories -join ', ')"
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
