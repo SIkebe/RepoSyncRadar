@@ -1897,14 +1897,12 @@ public partial class MainWindow : Window
         }
     }
 
-#pragma warning disable SYSLIB1054
     [DllImport("dwmapi.dll", ExactSpelling = true)]
     private static extern int DwmSetWindowAttribute(
         IntPtr hwnd,
         int dwAttribute,
         ref int pvAttribute,
         int cbAttribute);
-#pragma warning restore SYSLIB1054
 
         internal static DocsThemeMode ToggleDocsTheme(DocsThemeMode current)
             => current == DocsThemeMode.Dark ? DocsThemeMode.Light : DocsThemeMode.Dark;

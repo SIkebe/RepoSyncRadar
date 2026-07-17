@@ -7,7 +7,7 @@ using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;
 
-#pragma warning disable GHCP001 // SDK 1.0.7-preview.3 exposes permission and MCP auth decisions through experimental RPC types.
+#pragma warning disable GHCP001 // Copilot SDK permission and MCP auth decisions remain experimental.
 
 /// <summary>
 /// Builds <see cref="SessionConfig"/> values for a given <see cref="SessionPurpose"/>.
