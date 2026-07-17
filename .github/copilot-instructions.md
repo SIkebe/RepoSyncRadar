@@ -16,7 +16,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 ## Build And Test
 
-- The pinned SDK is in `global.json`: .NET SDK `11.0.100-preview.5.26302.115` with `rollForward: latestFeature` and `allowPrerelease: true`.
+- The pinned SDK is in `global.json`: .NET SDK `11.0.100-preview.6.26359.118` with `rollForward: latestFeature` and `allowPrerelease: true`.
 - Restore/build from the repo root. Prefer PowerShell on Windows.
 - Validate ordinary changes with:
   - `dotnet build RepoSyncRadar.sln -warnaserror`
