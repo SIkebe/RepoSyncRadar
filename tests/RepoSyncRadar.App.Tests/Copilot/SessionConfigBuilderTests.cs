@@ -8,7 +8,7 @@ using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
 
-#pragma warning disable GHCP001 // SDK 1.0.7 exposes permission and MCP auth decisions through experimental RPC types.
+#pragma warning disable GHCP001 // Copilot SDK permission and MCP auth decisions remain experimental.
 
 public class SessionConfigBuilderTests
 {
