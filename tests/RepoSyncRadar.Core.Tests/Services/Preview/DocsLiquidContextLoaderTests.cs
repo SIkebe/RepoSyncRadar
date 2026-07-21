@@ -187,6 +187,37 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadForMarkdownAsync_Loads_Variable_Files_Referenced_By_Variable_Value()
+    {
+        WriteVariablesFile(
+            "product.yml",
+            """
+            security_products: 'GitHub Code Quality ({% data variables.release-phases.public_preview %})'
+            """);
+        WriteVariablesFile(
+            "release-phases.yml",
+            """
+            public_preview: public preview
+            """);
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/admin/example.md",
+            "{% data variables.product.security_products %}",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            "GitHub Code Quality ({% data variables.release-phases.public_preview %})",
+            context.Variables["product.security_products"]);
+        Assert.Equal("public preview", context.Variables["release-phases.public_preview"]);
+        Assert.Equal(
+            "GitHub Code Quality (public preview)",
+            DocsLiquidEvaluator.Evaluate(
+                "{% data variables.product.security_products %}",
+                context));
+    }
+
+    [Fact]
     public async Task LoadForMarkdownAsync_Loads_Only_Referenced_Data_Sequences()
     {
         WriteDataFile(
