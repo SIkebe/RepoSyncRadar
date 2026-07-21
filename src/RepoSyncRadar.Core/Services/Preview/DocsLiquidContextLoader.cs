@@ -831,16 +831,33 @@ internal static partial class DocsLiquidContextLoader
         CancellationToken cancellationToken)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var root in sources.SelectMany(ExtractVariableRoots).Distinct(StringComparer.Ordinal))
+        var pendingSources = new Queue<string?>(sources);
+        var loadedRoots = new HashSet<string>(StringComparer.Ordinal);
+        while (pendingSources.Count > 0)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var yaml = await source.ReadTextAsync($"data/variables/{root}.yml", cancellationToken).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(yaml))
+            var liquidSource = pendingSources.Dequeue();
+            foreach (var root in ExtractVariableRoots(liquidSource))
             {
-                continue;
-            }
+                if (!loadedRoots.Add(root))
+                {
+                    continue;
+                }
 
-            TryFlattenYaml(yaml, root, result);
+                cancellationToken.ThrowIfCancellationRequested();
+                var yaml = await source.ReadTextAsync($"data/variables/{root}.yml", cancellationToken).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(yaml))
+                {
+                    continue;
+                }
+
+                var loadedVariables = new Dictionary<string, string>(StringComparer.Ordinal);
+                TryFlattenYaml(yaml, root, loadedVariables);
+                foreach (var (key, value) in loadedVariables)
+                {
+                    result[key] = value;
+                    pendingSources.Enqueue(value);
+                }
+            }
         }
         return result;
     }
