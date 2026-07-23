@@ -2528,7 +2528,7 @@ internal static partial class MarkdownPreviewRenderer
             {
                 markdown.Append('\n');
             }
-            markdown.Append(row);
+            markdown.Append(NormalizeMarkdownTableSeparatorRow(row));
         }
         pendingRows.Clear();
     }
@@ -3481,8 +3481,54 @@ internal static partial class MarkdownPreviewRenderer
     }
 
     private static bool IsMarkdownTableSeparatorRow(string value)
-        => value.Trim('|', ' ').Split('|', StringSplitOptions.RemoveEmptyEntries)
-            .All(static cell => cell.Trim().Trim(':').All(static ch => ch == '-'));
+        => TryNormalizeMarkdownTableSeparatorRow(value, out _);
+
+    private static string NormalizeMarkdownTableSeparatorRow(string value)
+        => TryNormalizeMarkdownTableSeparatorRow(value, out var normalized) ? normalized : value;
+
+    private static bool TryNormalizeMarkdownTableSeparatorRow(string value, out string normalized)
+    {
+        normalized = value;
+        var trimmed = value.Trim();
+        if (!trimmed.Contains('|', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var cells = value.Split('|');
+        var firstCell = trimmed.StartsWith('|') ? 1 : 0;
+        var lastCell = cells.Length - (trimmed.EndsWith('|') ? 1 : 0);
+        if (lastCell - firstCell < 2)
+        {
+            return false;
+        }
+
+        var hasDelimiter = false;
+        for (var index = firstCell; index < lastCell; index++)
+        {
+            var cell = cells[index].Trim();
+            if (cell.Length == 0)
+            {
+                cells[index] = " --- ";
+                continue;
+            }
+
+            var delimiter = cell.Trim(':');
+            if (delimiter.Length == 0 || delimiter.Any(static ch => ch != '-'))
+            {
+                return false;
+            }
+            hasDelimiter = true;
+        }
+
+        if (!hasDelimiter)
+        {
+            return false;
+        }
+
+        normalized = string.Join('|', cells);
+        return true;
+    }
 
     private static string BuildChangeKindSlug(DocsVersionChangeKind kind)
         => kind switch
