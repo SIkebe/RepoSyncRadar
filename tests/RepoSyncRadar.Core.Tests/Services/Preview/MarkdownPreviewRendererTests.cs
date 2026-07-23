@@ -198,6 +198,27 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Does_Not_Normalize_Table_Delimiters_Inside_Code_Blocks()
+    {
+        const string markdown = """
+            ```markdown
+            | --- |  | --- |
+            ```
+
+                | --- |  | --- |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("| --- |  | --- |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| --- | --- | --- |", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Frontmatter_Only_Index_Page_Shows_Metadata_Only_Message()
     {
         var context = new DocsLiquidContext(

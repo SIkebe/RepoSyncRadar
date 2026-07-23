@@ -2457,9 +2457,28 @@ internal static partial class MarkdownPreviewRenderer
         var lines = SplitMarkdownLines(markdown);
         var expanded = new StringBuilder(markdown.Length + 128);
         var pendingRows = new List<string>();
+        var inCodeFence = false;
         for (var index = 0; index < lines.Length; index++)
         {
             var line = lines[index];
+            var isIndentedCode = line.StartsWith("    ", StringComparison.Ordinal)
+                || (line.Length > 0 && line[0] == '\t');
+            var isCodeFence = !isIndentedCode && IsFenceLine(line);
+            if (inCodeFence || isCodeFence || isIndentedCode)
+            {
+                FlushTableFragment(expanded, pendingRows);
+                if (expanded.Length > 0)
+                {
+                    expanded.Append('\n');
+                }
+                expanded.Append(line);
+                if (isCodeFence)
+                {
+                    inCodeFence = !inCodeFence;
+                }
+                continue;
+            }
+
             var tableRows = SplitConcatenatedMarkdownTableRows(line);
             if (tableRows.Count > 0)
             {
