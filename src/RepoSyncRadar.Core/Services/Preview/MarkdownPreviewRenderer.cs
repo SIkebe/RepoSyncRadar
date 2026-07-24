@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Markdig;
+using Markdig.Syntax;
 
 namespace RepoSyncRadar.Core.Services.Preview;
 
@@ -2454,33 +2455,15 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string ExpandMarkdownTableFragments(string markdown)
     {
-        var lines = SplitMarkdownLines(markdown);
+        var normalizedMarkdown = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        var lines = normalizedMarkdown.Split('\n');
         var expanded = new StringBuilder(markdown.Length + 128);
         var pendingRows = new List<string>();
-        char? fenceMarker = null;
-        var fenceLength = 0;
+        var protectedLines = FindProtectedMarkdownBlockLines(normalizedMarkdown, lines.Length);
         for (var index = 0; index < lines.Length; index++)
         {
             var line = lines[index];
-            var isIndentedCode = line.StartsWith("    ", StringComparison.Ordinal)
-                || (line.Length > 0 && line[0] == '\t');
-            var opensFence = false;
-            var closesFence = false;
-            char openingMarker = default;
-            var openingLength = 0;
-            if (!isIndentedCode)
-            {
-                if (fenceMarker is null)
-                {
-                    opensFence = TryReadOpeningFence(line, out openingMarker, out openingLength);
-                }
-                else
-                {
-                    closesFence = IsClosingFence(line, fenceMarker.Value, fenceLength);
-                }
-            }
-
-            if (fenceMarker is not null || opensFence || closesFence || isIndentedCode)
+            if (protectedLines[index])
             {
                 FlushTableFragment(expanded, pendingRows);
                 if (expanded.Length > 0)
@@ -2488,16 +2471,6 @@ internal static partial class MarkdownPreviewRenderer
                     expanded.Append('\n');
                 }
                 expanded.Append(line);
-                if (opensFence)
-                {
-                    fenceMarker = openingMarker;
-                    fenceLength = openingLength;
-                }
-                else if (closesFence)
-                {
-                    fenceMarker = null;
-                    fenceLength = 0;
-                }
                 continue;
             }
 
@@ -2520,58 +2493,39 @@ internal static partial class MarkdownPreviewRenderer
         return expanded.ToString();
     }
 
-    private static bool TryReadOpeningFence(string line, out char marker, out int length)
+    private static bool[] FindProtectedMarkdownBlockLines(string markdown, int lineCount)
     {
-        marker = default;
-        length = 0;
-        var markerStart = 0;
-        while (markerStart < line.Length && markerStart < 3 && line[markerStart] == ' ')
+        var protectedLines = new bool[lineCount];
+        var lineStarts = new int[lineCount];
+        var lineIndex = 1;
+        for (var offset = 0; offset < markdown.Length && lineIndex < lineCount; offset++)
         {
-            markerStart++;
+            if (markdown[offset] == '\n')
+            {
+                lineStarts[lineIndex++] = offset + 1;
+            }
         }
 
-        if (markerStart >= line.Length || line[markerStart] is not ('`' or '~'))
+        var document = Markdown.Parse(markdown, _pipeline);
+        foreach (var block in document.Descendants().OfType<Block>())
         {
-            return false;
+            if (block is not (CodeBlock or HtmlBlock) || block.Span.Start < 0 || block.Span.End < block.Span.Start)
+            {
+                continue;
+            }
+
+            var startLine = FindSourceLine(lineStarts, block.Span.Start);
+            var endLine = FindSourceLine(lineStarts, block.Span.End);
+            Array.Fill(protectedLines, true, startLine, endLine - startLine + 1);
         }
 
-        marker = line[markerStart];
-        var cursor = markerStart;
-        while (cursor < line.Length && line[cursor] == marker)
-        {
-            cursor++;
-        }
-
-        length = cursor - markerStart;
-        return length >= 3
-            && (marker != '`' || !line.AsSpan(cursor).Contains('`'));
+        return protectedLines;
     }
 
-    private static bool IsClosingFence(string line, char marker, int minimumLength)
+    private static int FindSourceLine(int[] lineStarts, int offset)
     {
-        var markerStart = 0;
-        while (markerStart < line.Length && markerStart < 3 && line[markerStart] == ' ')
-        {
-            markerStart++;
-        }
-
-        var cursor = markerStart;
-        while (cursor < line.Length && line[cursor] == marker)
-        {
-            cursor++;
-        }
-
-        if (cursor - markerStart < minimumLength)
-        {
-            return false;
-        }
-
-        while (cursor < line.Length && line[cursor] is ' ' or '\t')
-        {
-            cursor++;
-        }
-
-        return cursor == line.Length;
+        var index = Array.BinarySearch(lineStarts, offset);
+        return index >= 0 ? index : Math.Max(0, ~index - 1);
     }
 
     private static List<string> SplitConcatenatedMarkdownTableRows(string line)
@@ -2617,15 +2571,39 @@ internal static partial class MarkdownPreviewRenderer
             AppendInferredTableHeader(markdown, columnCount);
         }
 
-        foreach (var row in pendingRows)
+        for (var index = 0; index < pendingRows.Count; index++)
         {
             if (markdown.Length > 0)
             {
                 markdown.Append('\n');
             }
-            markdown.Append(NormalizeMarkdownTableSeparatorRow(row));
+            var row = pendingRows[index];
+            markdown.Append(HasCompatibleMarkdownTableHeader(pendingRows, index)
+                ? NormalizeMarkdownTableSeparatorRow(row)
+                : row);
         }
         pendingRows.Clear();
+    }
+
+    private static bool HasCompatibleMarkdownTableHeader(List<string> rows, int separatorIndex)
+    {
+        if (separatorIndex == 0 || !IsMarkdownTableSeparatorRow(rows[separatorIndex]))
+        {
+            return false;
+        }
+
+        var headerColumnCount = SplitMarkdownTableRow(rows[separatorIndex - 1]).Count;
+        return headerColumnCount >= 2
+            && headerColumnCount == CountMarkdownTableSeparatorColumns(rows[separatorIndex]);
+    }
+
+    private static int CountMarkdownTableSeparatorColumns(string value)
+    {
+        var trimmed = value.Trim();
+        var cells = trimmed.Split('|');
+        var firstCell = trimmed.StartsWith('|') ? 1 : 0;
+        var lastCell = cells.Length - (trimmed.EndsWith('|') ? 1 : 0);
+        return Math.Max(0, lastCell - firstCell);
     }
 
     private static void AppendInferredTableHeader(StringBuilder markdown, int columnCount)

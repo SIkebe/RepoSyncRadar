@@ -255,6 +255,52 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Does_Not_Normalize_Table_Delimiters_Inside_List_Code_Fences()
+    {
+        const string markdown = """
+            - ```markdown
+              | Model | IDE |
+              | --- |  |
+              ```
+
+            | Model | IDE |
+            | --- |  |
+            | Gemini 3.6 Flash | TBD |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("| --- |  |", html, StringComparison.Ordinal);
+        Assert.Contains("<table>", html, StringComparison.Ordinal);
+        Assert.Contains("<td>Gemini 3.6 Flash</td>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Normalize_Standalone_Or_Html_Table_Delimiters()
+    {
+        const string markdown = """
+            | --- |  | --- |
+
+            <pre>
+            | --- |  | --- |
+            </pre>
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("| --- |  | --- |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| --- | --- | --- |", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Frontmatter_Only_Index_Page_Shows_Metadata_Only_Message()
     {
         var context = new DocsLiquidContext(
