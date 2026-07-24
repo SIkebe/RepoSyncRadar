@@ -2457,14 +2457,30 @@ internal static partial class MarkdownPreviewRenderer
         var lines = SplitMarkdownLines(markdown);
         var expanded = new StringBuilder(markdown.Length + 128);
         var pendingRows = new List<string>();
-        var inCodeFence = false;
+        char? fenceMarker = null;
+        var fenceLength = 0;
         for (var index = 0; index < lines.Length; index++)
         {
             var line = lines[index];
             var isIndentedCode = line.StartsWith("    ", StringComparison.Ordinal)
                 || (line.Length > 0 && line[0] == '\t');
-            var isCodeFence = !isIndentedCode && IsFenceLine(line);
-            if (inCodeFence || isCodeFence || isIndentedCode)
+            var opensFence = false;
+            var closesFence = false;
+            char openingMarker = default;
+            var openingLength = 0;
+            if (!isIndentedCode)
+            {
+                if (fenceMarker is null)
+                {
+                    opensFence = TryReadOpeningFence(line, out openingMarker, out openingLength);
+                }
+                else
+                {
+                    closesFence = IsClosingFence(line, fenceMarker.Value, fenceLength);
+                }
+            }
+
+            if (fenceMarker is not null || opensFence || closesFence || isIndentedCode)
             {
                 FlushTableFragment(expanded, pendingRows);
                 if (expanded.Length > 0)
@@ -2472,9 +2488,15 @@ internal static partial class MarkdownPreviewRenderer
                     expanded.Append('\n');
                 }
                 expanded.Append(line);
-                if (isCodeFence)
+                if (opensFence)
                 {
-                    inCodeFence = !inCodeFence;
+                    fenceMarker = openingMarker;
+                    fenceLength = openingLength;
+                }
+                else if (closesFence)
+                {
+                    fenceMarker = null;
+                    fenceLength = 0;
                 }
                 continue;
             }
@@ -2496,6 +2518,60 @@ internal static partial class MarkdownPreviewRenderer
 
         FlushTableFragment(expanded, pendingRows);
         return expanded.ToString();
+    }
+
+    private static bool TryReadOpeningFence(string line, out char marker, out int length)
+    {
+        marker = default;
+        length = 0;
+        var markerStart = 0;
+        while (markerStart < line.Length && markerStart < 3 && line[markerStart] == ' ')
+        {
+            markerStart++;
+        }
+
+        if (markerStart >= line.Length || line[markerStart] is not ('`' or '~'))
+        {
+            return false;
+        }
+
+        marker = line[markerStart];
+        var cursor = markerStart;
+        while (cursor < line.Length && line[cursor] == marker)
+        {
+            cursor++;
+        }
+
+        length = cursor - markerStart;
+        return length >= 3
+            && (marker != '`' || !line.AsSpan(cursor).Contains('`'));
+    }
+
+    private static bool IsClosingFence(string line, char marker, int minimumLength)
+    {
+        var markerStart = 0;
+        while (markerStart < line.Length && markerStart < 3 && line[markerStart] == ' ')
+        {
+            markerStart++;
+        }
+
+        var cursor = markerStart;
+        while (cursor < line.Length && line[cursor] == marker)
+        {
+            cursor++;
+        }
+
+        if (cursor - markerStart < minimumLength)
+        {
+            return false;
+        }
+
+        while (cursor < line.Length && line[cursor] is ' ' or '\t')
+        {
+            cursor++;
+        }
+
+        return cursor == line.Length;
     }
 
     private static List<string> SplitConcatenatedMarkdownTableRows(string line)

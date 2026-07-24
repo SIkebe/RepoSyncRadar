@@ -219,6 +219,42 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Does_Not_Treat_Incompatible_Fences_As_Code_Block_Closers()
+    {
+        const string markdown = """
+            ````markdown
+            ```markdown
+            | --- |  | --- |
+            ```
+            ````
+
+            ```markdown
+            ~~~
+            | :--- |  | ---: |
+            ~~~
+            ```
+
+            ```markdown
+            ```not-a-closer
+            | :---: |  | --- |
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("| --- |  | --- |", html, StringComparison.Ordinal);
+        Assert.Contains("| :--- |  | ---: |", html, StringComparison.Ordinal);
+        Assert.Contains("| :---: |  | --- |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| --- | --- | --- |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| :--- | --- | ---: |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| :---: | --- | --- |", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Frontmatter_Only_Index_Page_Shows_Metadata_Only_Message()
     {
         var context = new DocsLiquidContext(
