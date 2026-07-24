@@ -1713,7 +1713,7 @@ graph TD
             diffAgainstMarkdown: beforeMarkdown,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
-        Assert.Contains("<pre class=\"mermaid\">", html, StringComparison.Ordinal);
+        Assert.Contains("<pre class=\"mermaid rsr-rendered-diff-added\">", html, StringComparison.Ordinal);
         Assert.Contains("A --&gt; C", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<code class=\"language-mermaid\">", html, StringComparison.Ordinal);
         Assert.DoesNotContain("RSR-CODE-DIFF:", html, StringComparison.Ordinal);

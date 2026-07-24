@@ -114,7 +114,8 @@ internal sealed partial class MarkdownCodeBlockRenderer : HtmlObjectRenderer<Cod
                     codeBlock,
                     fencedCodeBlockParser,
                     languageId,
-                    parsedCode.Code);
+                    parsedCode.Code,
+                    GetMappedBlockDiffClass(parsedCode.DiffRanges));
             }
             return;
         }
@@ -142,13 +143,15 @@ internal sealed partial class MarkdownCodeBlockRenderer : HtmlObjectRenderer<Cod
         CodeBlock codeBlock,
         FencedCodeBlockParser parser,
         string languageId,
-        string code)
+        string code,
+        string diffClass)
     {
         renderer.EnsureLine();
         var blockName = _fallbackRenderer.BlockMapping.TryGetValue(languageId, out var mappedBlockName)
             ? mappedBlockName
             : "div";
         var infoPrefix = parser.InfoPrefix ?? FencedCodeBlockParser.DefaultInfoPrefix;
+        codeBlock.GetAttributes().AddClass(diffClass);
         renderer.Write('<');
         renderer.Write(blockName);
         renderer.WriteAttributes(
@@ -162,6 +165,22 @@ internal sealed partial class MarkdownCodeBlockRenderer : HtmlObjectRenderer<Cod
         renderer.Write(blockName);
         renderer.WriteLine(">");
         renderer.EnsureLine();
+    }
+
+    private static string GetMappedBlockDiffClass(IReadOnlyList<DiffRange> ranges)
+    {
+        var className = ranges[0].ClassName;
+        foreach (var range in ranges)
+        {
+            if (range.Length > 0)
+            {
+                className = range.ClassName;
+                break;
+            }
+        }
+
+        var separatorIndex = className.IndexOf(' ');
+        return separatorIndex < 0 ? className : className[..separatorIndex];
     }
 
     private static Dictionary<string, string> BuildLanguageScopes()
