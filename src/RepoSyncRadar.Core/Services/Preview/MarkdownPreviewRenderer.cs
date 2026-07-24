@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using Markdig;
+using Markdig.Syntax;
 
 namespace RepoSyncRadar.Core.Services.Preview;
 
@@ -2454,12 +2455,25 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string ExpandMarkdownTableFragments(string markdown)
     {
-        var lines = SplitMarkdownLines(markdown);
+        var normalizedMarkdown = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        var lines = normalizedMarkdown.Split('\n');
         var expanded = new StringBuilder(markdown.Length + 128);
         var pendingRows = new List<string>();
+        var protectedLines = FindProtectedMarkdownBlockLines(normalizedMarkdown, lines.Length);
         for (var index = 0; index < lines.Length; index++)
         {
             var line = lines[index];
+            if (protectedLines[index])
+            {
+                FlushTableFragment(expanded, pendingRows);
+                if (expanded.Length > 0)
+                {
+                    expanded.Append('\n');
+                }
+                expanded.Append(line);
+                continue;
+            }
+
             var tableRows = SplitConcatenatedMarkdownTableRows(line);
             if (tableRows.Count > 0)
             {
@@ -2477,6 +2491,41 @@ internal static partial class MarkdownPreviewRenderer
 
         FlushTableFragment(expanded, pendingRows);
         return expanded.ToString();
+    }
+
+    private static bool[] FindProtectedMarkdownBlockLines(string markdown, int lineCount)
+    {
+        var protectedLines = new bool[lineCount];
+        var lineStarts = new int[lineCount];
+        var lineIndex = 1;
+        for (var offset = 0; offset < markdown.Length && lineIndex < lineCount; offset++)
+        {
+            if (markdown[offset] == '\n')
+            {
+                lineStarts[lineIndex++] = offset + 1;
+            }
+        }
+
+        var document = Markdown.Parse(markdown, _pipeline);
+        foreach (var block in document.Descendants().OfType<Block>())
+        {
+            if (block is not (CodeBlock or HtmlBlock) || block.Span.Start < 0 || block.Span.End < block.Span.Start)
+            {
+                continue;
+            }
+
+            var startLine = FindSourceLine(lineStarts, block.Span.Start);
+            var endLine = FindSourceLine(lineStarts, block.Span.End);
+            Array.Fill(protectedLines, true, startLine, endLine - startLine + 1);
+        }
+
+        return protectedLines;
+    }
+
+    private static int FindSourceLine(int[] lineStarts, int offset)
+    {
+        var index = Array.BinarySearch(lineStarts, offset);
+        return index >= 0 ? index : Math.Max(0, ~index - 1);
     }
 
     private static List<string> SplitConcatenatedMarkdownTableRows(string line)
@@ -2522,15 +2571,39 @@ internal static partial class MarkdownPreviewRenderer
             AppendInferredTableHeader(markdown, columnCount);
         }
 
-        foreach (var row in pendingRows)
+        for (var index = 0; index < pendingRows.Count; index++)
         {
             if (markdown.Length > 0)
             {
                 markdown.Append('\n');
             }
-            markdown.Append(row);
+            var row = pendingRows[index];
+            markdown.Append(HasCompatibleMarkdownTableHeader(pendingRows, index)
+                ? NormalizeMarkdownTableSeparatorRow(row)
+                : row);
         }
         pendingRows.Clear();
+    }
+
+    private static bool HasCompatibleMarkdownTableHeader(List<string> rows, int separatorIndex)
+    {
+        if (separatorIndex != 1 || !IsMarkdownTableSeparatorRow(rows[separatorIndex]))
+        {
+            return false;
+        }
+
+        var headerColumnCount = SplitMarkdownTableRow(rows[separatorIndex - 1]).Count;
+        return headerColumnCount >= 2
+            && headerColumnCount == CountMarkdownTableSeparatorColumns(rows[separatorIndex]);
+    }
+
+    private static int CountMarkdownTableSeparatorColumns(string value)
+    {
+        var trimmed = value.Trim();
+        var cells = trimmed.Split('|');
+        var firstCell = trimmed.StartsWith('|') ? 1 : 0;
+        var lastCell = cells.Length - (trimmed.EndsWith('|') ? 1 : 0);
+        return Math.Max(0, lastCell - firstCell);
     }
 
     private static void AppendInferredTableHeader(StringBuilder markdown, int columnCount)
@@ -3481,8 +3554,54 @@ internal static partial class MarkdownPreviewRenderer
     }
 
     private static bool IsMarkdownTableSeparatorRow(string value)
-        => value.Trim('|', ' ').Split('|', StringSplitOptions.RemoveEmptyEntries)
-            .All(static cell => cell.Trim().Trim(':').All(static ch => ch == '-'));
+        => TryNormalizeMarkdownTableSeparatorRow(value, out _);
+
+    private static string NormalizeMarkdownTableSeparatorRow(string value)
+        => TryNormalizeMarkdownTableSeparatorRow(value, out var normalized) ? normalized : value;
+
+    private static bool TryNormalizeMarkdownTableSeparatorRow(string value, out string normalized)
+    {
+        normalized = value;
+        var trimmed = value.Trim();
+        if (!trimmed.Contains('|', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var cells = value.Split('|');
+        var firstCell = trimmed.StartsWith('|') ? 1 : 0;
+        var lastCell = cells.Length - (trimmed.EndsWith('|') ? 1 : 0);
+        if (lastCell - firstCell < 2)
+        {
+            return false;
+        }
+
+        var hasDelimiter = false;
+        for (var index = firstCell; index < lastCell; index++)
+        {
+            var cell = cells[index].Trim();
+            if (cell.Length == 0)
+            {
+                cells[index] = " --- ";
+                continue;
+            }
+
+            var delimiter = cell.Trim(':');
+            if (delimiter.Length == 0 || delimiter.Any(static ch => ch != '-'))
+            {
+                return false;
+            }
+            hasDelimiter = true;
+        }
+
+        if (!hasDelimiter)
+        {
+            return false;
+        }
+
+        normalized = string.Join('|', cells);
+        return true;
+    }
 
     private static string BuildChangeKindSlug(DocsVersionChangeKind kind)
         => kind switch

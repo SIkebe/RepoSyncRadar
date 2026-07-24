@@ -150,6 +150,176 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Renders_Rowheaders_Table_With_Empty_Delimiter_Cell()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["product.prodname_vscode"] = "Visual Studio Code",
+                ["product.prodname_vs"] = "Visual Studio",
+                ["copilot.copilot_gemini_35_flash"] = "Gemini 3.5 Flash",
+                ["copilot.copilot_gemini_36_flash"] = "Gemini 3.6 Flash",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal));
+        const string beforeMarkdown = """
+            {% rowheaders %}
+
+            | Model | {% data variables.product.prodname_vscode %} | {% data variables.product.prodname_vs %} | JetBrains IDEs | Xcode | Eclipse |
+            | --- | --- | --- | --- | --- | --- |
+            | {% data variables.copilot.copilot_gemini_35_flash %} | `v1.115.0` | `17.14.22` or `18.1.0` | `1.5.62` | `0.46.0` | `0.14.0` |
+
+            {% endrowheaders %}
+            """;
+        const string afterMarkdown = """
+            {% rowheaders %}
+
+            | Model | {% data variables.product.prodname_vscode %} | {% data variables.product.prodname_vs %} | JetBrains IDEs | Xcode | Eclipse |
+            | --- |  | --- | --- | --- | --- |
+            | {% data variables.copilot.copilot_gemini_35_flash %} | `v1.115.0` | `17.14.22` or `18.1.0` | `1.5.62` | `0.46.0` | `0.14.0` |
+            | {% data variables.copilot.copilot_gemini_36_flash %} | TBD | `17.14.22` or `18.1.0` | TBD | TBD | TBD |
+
+            {% endrowheaders %}
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/reference/ai-models/supported-models.md",
+            afterMarkdown,
+            "0ffe479",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffAgainstLiquidContext: context,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<table>", html, StringComparison.Ordinal);
+        Assert.Contains("<th>Visual Studio Code</th>", html, StringComparison.Ordinal);
+        Assert.Contains("Gemini 3.6 Flash", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<p>| Model | Visual Studio Code", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Normalize_Delimiter_Shaped_Table_Data_Row()
+    {
+        const string markdown = """
+            | A | B |
+            | --- | --- |
+            | value | value |
+            | --- |  |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("<td>---</td>\n<td></td>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Normalize_Table_Delimiters_Inside_Code_Blocks()
+    {
+        const string markdown = """
+            ```markdown
+            | --- |  | --- |
+            ```
+
+                | --- |  | --- |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("| --- |  | --- |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| --- | --- | --- |", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Treat_Incompatible_Fences_As_Code_Block_Closers()
+    {
+        const string markdown = """
+            ````markdown
+            ```markdown
+            | --- |  | --- |
+            ```
+            ````
+
+            ```markdown
+            ~~~
+            | :--- |  | ---: |
+            ~~~
+            ```
+
+            ```markdown
+            ```not-a-closer
+            | :---: |  | --- |
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("| --- |  | --- |", html, StringComparison.Ordinal);
+        Assert.Contains("| :--- |  | ---: |", html, StringComparison.Ordinal);
+        Assert.Contains("| :---: |  | --- |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| --- | --- | --- |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| :--- | --- | ---: |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| :---: | --- | --- |", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Normalize_Table_Delimiters_Inside_List_Code_Fences()
+    {
+        const string markdown = """
+            - ```markdown
+              | Model | IDE |
+              | --- |  |
+              ```
+
+            | Model | IDE |
+            | --- |  |
+            | Gemini 3.6 Flash | TBD |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("| --- |  |", html, StringComparison.Ordinal);
+        Assert.Contains("<table>", html, StringComparison.Ordinal);
+        Assert.Contains("<td>Gemini 3.6 Flash</td>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Normalize_Standalone_Or_Html_Table_Delimiters()
+    {
+        const string markdown = """
+            | --- |  | --- |
+
+            <pre>
+            | --- |  | --- |
+            </pre>
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("| --- |  | --- |", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("| --- | --- | --- |", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Frontmatter_Only_Index_Page_Shows_Metadata_Only_Message()
     {
         var context = new DocsLiquidContext(
