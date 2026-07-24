@@ -30,6 +30,7 @@ internal static partial class MarkdownPreviewRenderer
 
     private static readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
+        .UseRepoSyncRadarSyntaxHighlighting()
         // NOTE: We intentionally do NOT call DisableHtml() here. github/docs
         // markdown sources ship with inline HTML (<picture>, <video>, tables
         // with <thead>, <details>/<summary>, etc.) that are integral to the
@@ -170,7 +171,8 @@ internal static partial class MarkdownPreviewRenderer
                 diffAgainstLiquidContext ?? DocsLiquidContext.Empty,
                 effectiveVersion,
                 diffSide);
-            var liquidBlocksRendered = RenderOfficialLiquidBlocks(diffMarked);
+            var protectedHtmlFragments = new RenderedHtmlPlaceholderStore();
+            var liquidBlocksRendered = RenderOfficialLiquidBlocks(diffMarked, protectedHtmlFragments);
             var githubAlertsRendered = RenderGitHubAlertBlocks(liquidBlocksRendered);
             var autotitleMarkdownRewritten = RewriteAutotitleMarkdownLinks(
                 githubAlertsRendered,
@@ -179,6 +181,7 @@ internal static partial class MarkdownPreviewRenderer
                 effectiveVersion);
             var liquidNeutralized = NeutralizeLiquid(autotitleMarkdownRewritten);
             body = Markdown.ToHtml(liquidNeutralized, _pipeline);
+            body = protectedHtmlFragments.Restore(body);
             body = RestoreEscapedRenderedDiffMarkers(body);
             hasVisibleBody = HasVisibleBodyMarkup(body);
             if (!hasVisibleBody)
@@ -224,6 +227,9 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("p,ul,ol,pre,blockquote,table{margin:0 0 1rem;}");
         html.AppendLine("a{color:var(--rsr-link);}code{background:var(--rsr-code-bg);border-radius:4px;padding:.12em .28em;font-family:'Cascadia Mono',Consolas,monospace;font-size:.92em;}");
         html.AppendLine("pre{background:var(--rsr-pre-bg);border-radius:6px;overflow:auto;padding:16px;}pre code{background:transparent;padding:0;}");
+        html.AppendLine(".rsr-syntax-token{color:var(--rsr-syntax-light);}");
+        html.AppendLine("@media (prefers-color-scheme: dark){:root:not([data-color-mode=\"light\"]) .rsr-syntax-token{color:var(--rsr-syntax-dark);}}");
+        html.AppendLine(":root[data-color-mode=\"dark\"] .rsr-syntax-token{color:var(--rsr-syntax-dark);}:root[data-color-mode=\"light\"] .rsr-syntax-token{color:var(--rsr-syntax-light);}");
         // Code blocks normally scroll horizontally to mirror docs.github.com, but a
         // changed token can then sit past the right edge of the narrow comparison
         // pane, so navigating to its scrollbar marker shows no visible diff. Wrap
@@ -632,7 +638,9 @@ internal static partial class MarkdownPreviewRenderer
         return vars;
     }
 
-    private static string RenderOfficialLiquidBlocks(string content)
+    private static string RenderOfficialLiquidBlocks(
+        string content,
+        RenderedHtmlPlaceholderStore? protectedHtmlFragments = null)
     {
         if (string.IsNullOrEmpty(content))
         {
@@ -643,10 +651,26 @@ internal static partial class MarkdownPreviewRenderer
         for (var safety = 0; safety < 16; safety++)
         {
             var before = current;
-            current = CodeTabsBlockRegex().Replace(current, RenderCodeTabsBlock);
-            current = CodeTabBlockRegex().Replace(current, RenderStandaloneCodeTabBlock);
-            current = SpotlightBlockRegex().Replace(current, RenderSpotlightBlock);
-            current = ToolBlockRegex().Replace(current, RenderToolBlock);
+            current = CodeTabsBlockRegex().Replace(
+                current,
+                match => ProtectRenderedHtml(
+                    RenderCodeTabsBlock(match),
+                    protectedHtmlFragments));
+            current = CodeTabBlockRegex().Replace(
+                current,
+                match => ProtectRenderedHtml(
+                    RenderStandaloneCodeTabBlock(match),
+                    protectedHtmlFragments));
+            current = SpotlightBlockRegex().Replace(
+                current,
+                match => ProtectRenderedHtml(
+                    RenderSpotlightBlock(match),
+                    protectedHtmlFragments));
+            current = ToolBlockRegex().Replace(
+                current,
+                match => ProtectRenderedHtml(
+                    RenderToolBlock(match),
+                    protectedHtmlFragments));
             current = PromptBlockRegex().Replace(current, RenderPromptBlock);
             if (string.Equals(before, current, StringComparison.Ordinal))
             {
@@ -654,6 +678,45 @@ internal static partial class MarkdownPreviewRenderer
             }
         }
         return current;
+    }
+
+    private static string ProtectRenderedHtml(
+        string html,
+        RenderedHtmlPlaceholderStore? protectedHtmlFragments)
+        => protectedHtmlFragments?.Protect(html) ?? html;
+
+    private sealed class RenderedHtmlPlaceholderStore
+    {
+        private readonly string _id = Guid.NewGuid().ToString("N");
+        private readonly List<string> _fragments = [];
+
+        public string Protect(string html)
+        {
+            var index = _fragments.Count;
+            _fragments.Add(html);
+            return "\n<!--rsr-protected-html:"
+                + _id
+                + ":"
+                + index.ToString(CultureInfo.InvariantCulture)
+                + "-->\n";
+        }
+
+        public string Restore(string html)
+        {
+            for (var index = _fragments.Count - 1; index >= 0; index--)
+            {
+                var placeholder = "<!--rsr-protected-html:"
+                    + _id
+                    + ":"
+                    + index.ToString(CultureInfo.InvariantCulture)
+                    + "-->";
+                html = html.Replace(
+                    placeholder,
+                    _fragments[index],
+                    StringComparison.Ordinal);
+            }
+            return html;
+        }
     }
 
     private static string RenderGitHubAlertBlocks(string content)
@@ -2753,7 +2816,7 @@ internal static partial class MarkdownPreviewRenderer
     {
         if (string.IsNullOrEmpty(comparisonContent))
         {
-            return WrapRenderedDiff(content, markerClass);
+            return MarkdownCodeDiffMarker.Wrap(content, markerClass);
         }
         if (IsWhitespaceOnlyCodeLineDiff(content, comparisonContent))
         {
@@ -2763,14 +2826,38 @@ internal static partial class MarkdownPreviewRenderer
         var changedRange = FindInlineChangedRange(content, comparisonContent);
         if (changedRange.Length == 0)
         {
-            return TryMarkRenderedDiffGap(content, comparisonContent, markerClass, changedRange.Start, out var marked)
+            return TryMarkRenderedDiffCodeGap(content, comparisonContent, markerClass, changedRange.Start, out var marked)
                 ? marked
                 : content;
         }
 
         return content[..changedRange.Start]
-            + WrapRenderedDiff(content.Substring(changedRange.Start, changedRange.Length), markerClass)
+            + MarkdownCodeDiffMarker.Wrap(content.Substring(changedRange.Start, changedRange.Length), markerClass)
             + content[(changedRange.Start + changedRange.Length)..];
+    }
+
+    private static bool TryMarkRenderedDiffCodeGap(
+        string content,
+        string comparisonContent,
+        string markerClass,
+        int insertionIndex,
+        out string marked)
+    {
+        marked = content;
+        if (content.Length >= comparisonContent.Length
+            || insertionIndex < 0
+            || insertionIndex > content.Length)
+        {
+            return false;
+        }
+
+        var gapClass = string.Equals(markerClass, "rsr-rendered-diff-added", StringComparison.Ordinal)
+            ? "rsr-rendered-diff-removed"
+            : "rsr-rendered-diff-added";
+        marked = content[..insertionIndex]
+            + MarkdownCodeDiffMarker.CreateGap(gapClass + " rsr-rendered-diff-gap")
+            + content[insertionIndex..];
+        return true;
     }
 
     private static string? FindComparableRenderedDiffCodeLine(string line, string[] comparisonLines)

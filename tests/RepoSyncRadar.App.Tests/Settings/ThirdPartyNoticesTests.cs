@@ -56,6 +56,9 @@ public sealed class ThirdPartyNoticesTests
 
         Assert.Contains("Copyright 2026 MudBlazor", notices["MudBlazor"].LicenseText, StringComparison.Ordinal);
         Assert.Contains("Copyright GitHub 2017", notices["Octokit"].LicenseText, StringComparison.Ordinal);
+        Assert.Contains("Copyright (c) 2021 Daniel Peñalba", notices["TextMateSharp"].LicenseText, StringComparison.Ordinal);
+        Assert.Contains("Oniguruma LICENSE", notices["Onigwrap"].LicenseText, StringComparison.Ordinal);
+        Assert.Contains("K.Kosako", notices["Onigwrap"].LicenseText, StringComparison.Ordinal);
         Assert.Contains("Redistribution and use in source and binary forms", notices["Microsoft.Web.WebView2"].LicenseText, StringComparison.Ordinal);
     }
 

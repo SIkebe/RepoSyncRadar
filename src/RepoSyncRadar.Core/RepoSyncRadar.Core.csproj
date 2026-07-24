@@ -21,6 +21,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Markdig" />
     <PackageReference Include="Octokit" />
+    <PackageReference Include="TextMateSharp.Grammars" />
     <PackageReference Include="YamlDotNet" />
   </ItemGroup>
 
