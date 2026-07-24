@@ -1690,6 +1690,36 @@ graph TD
     }
 
     [Fact]
+    public void RenderDocument_Preserves_Changed_Mermaid_Fence_Rendering()
+    {
+        const string beforeMarkdown = """
+```mermaid
+graph TD
+    A --> B
+```
+""";
+        const string afterMarkdown = """
+```mermaid
+graph TD
+    A --> C
+```
+""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/example.md",
+            afterMarkdown,
+            "abc1234",
+            "After",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<pre class=\"mermaid\">", html, StringComparison.Ordinal);
+        Assert.Contains("A --&gt; C", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<code class=\"language-mermaid\">", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("RSR-CODE-DIFF:", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_Fenced_Code_Attributes()
     {
         const string markdown = """

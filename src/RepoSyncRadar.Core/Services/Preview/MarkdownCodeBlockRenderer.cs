@@ -100,11 +100,22 @@ internal sealed partial class MarkdownCodeBlockRenderer : HtmlObjectRenderer<Cod
             fencedCodeBlock.Info?.Replace(fencedCodeBlockParser.InfoPrefix ?? string.Empty, string.Empty, StringComparison.Ordinal)
             ?? string.Empty);
         var parsedCode = ParseDiffMarkers(ExtractCode(codeBlock));
-        if (parsedCode.DiffRanges.Count == 0
-            && (_fallbackRenderer.BlockMapping.ContainsKey(languageId)
-                || _fallbackRenderer.BlocksAsDiv.Contains(languageId)))
+        if (_fallbackRenderer.BlockMapping.ContainsKey(languageId)
+            || _fallbackRenderer.BlocksAsDiv.Contains(languageId))
         {
-            _fallbackRenderer.Write(renderer, codeBlock);
+            if (parsedCode.DiffRanges.Count == 0)
+            {
+                _fallbackRenderer.Write(renderer, codeBlock);
+            }
+            else
+            {
+                WriteMappedBlock(
+                    renderer,
+                    codeBlock,
+                    fencedCodeBlockParser,
+                    languageId,
+                    parsedCode.Code);
+            }
             return;
         }
 
@@ -124,6 +135,33 @@ internal sealed partial class MarkdownCodeBlockRenderer : HtmlObjectRenderer<Cod
         }
 
         renderer.Write("</code></pre>\n");
+    }
+
+    private void WriteMappedBlock(
+        HtmlRenderer renderer,
+        CodeBlock codeBlock,
+        FencedCodeBlockParser parser,
+        string languageId,
+        string code)
+    {
+        renderer.EnsureLine();
+        var blockName = _fallbackRenderer.BlockMapping.TryGetValue(languageId, out var mappedBlockName)
+            ? mappedBlockName
+            : "div";
+        var infoPrefix = parser.InfoPrefix ?? FencedCodeBlockParser.DefaultInfoPrefix;
+        renderer.Write('<');
+        renderer.Write(blockName);
+        renderer.WriteAttributes(
+            codeBlock.TryGetAttributes(),
+            cssClass => cssClass.StartsWith(infoPrefix, StringComparison.Ordinal)
+                ? cssClass[infoPrefix.Length..]
+                : cssClass);
+        renderer.Write('>');
+        renderer.Write(WebUtility.HtmlEncode(code));
+        renderer.Write("</");
+        renderer.Write(blockName);
+        renderer.WriteLine(">");
+        renderer.EnsureLine();
     }
 
     private static Dictionary<string, string> BuildLanguageScopes()
