@@ -2587,7 +2587,7 @@ internal static partial class MarkdownPreviewRenderer
 
     private static bool HasCompatibleMarkdownTableHeader(List<string> rows, int separatorIndex)
     {
-        if (separatorIndex == 0 || !IsMarkdownTableSeparatorRow(rows[separatorIndex]))
+        if (separatorIndex != 1 || !IsMarkdownTableSeparatorRow(rows[separatorIndex]))
         {
             return false;
         }

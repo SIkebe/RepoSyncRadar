@@ -198,6 +198,25 @@ public sealed class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Does_Not_Normalize_Delimiter_Shaped_Table_Data_Row()
+    {
+        const string markdown = """
+            | A | B |
+            | --- | --- |
+            | value | value |
+            | --- |  |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("<td>---</td>\n<td></td>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Does_Not_Normalize_Table_Delimiters_Inside_Code_Blocks()
     {
         const string markdown = """
