@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using RepoSyncRadar.Core.Services.Preview;
 using Xunit;
 
@@ -10,7 +11,7 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 /// `content/**/*.md` without crashing or letting raw template syntax leak
 /// through as visible noise.
 /// </summary>
-public sealed class MarkdownPreviewRendererTests
+public sealed partial class MarkdownPreviewRendererTests
 {
     [Fact]
     public void Renders_Title_From_Frontmatter_As_H1()
@@ -1398,9 +1399,11 @@ public sealed class MarkdownPreviewRendererTests
             "PR HEAD",
             diffAgainstMarkdown: beforeMarkdown,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        var beforeHtmlWithoutSyntax = RemoveSyntaxHighlightingMarkup(beforeHtml);
+        var afterHtmlWithoutSyntax = RemoveSyntaxHighlightingMarkup(afterHtml);
 
-        Assert.Contains("<span class=\"rsr-rendered-diff-removed\">gpt-4.1</span>", beforeHtml, StringComparison.Ordinal);
-        Assert.Contains("<span class=\"rsr-rendered-diff-added\">auto</span>", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-removed\">gpt-4.1</span>", beforeHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">auto</span>", afterHtmlWithoutSyntax, StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;span class=", beforeHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;span class=", afterHtml, StringComparison.Ordinal);
     }
@@ -1467,31 +1470,33 @@ public sealed class MarkdownPreviewRendererTests
             "PR HEAD",
             diffAgainstMarkdown: beforeMarkdown,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        var beforeHtmlWithoutSyntax = RemoveSyntaxHighlightingMarkup(beforeHtml);
+        var afterHtmlWithoutSyntax = RemoveSyntaxHighlightingMarkup(afterHtml);
 
-        Assert.Contains("MARKETPLACE-NAME", beforeHtml, StringComparison.Ordinal);
-        Assert.Contains("rsr-rendered-diff-removed", beforeHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added rsr-rendered-diff-gap\"", beforeHtml, StringComparison.Ordinal);
-        Assert.Contains("agent-skills", afterHtml, StringComparison.Ordinal);
-        Assert.Contains("strictKnownMarketplaces", afterHtml, StringComparison.Ordinal);
-        Assert.Contains("rsr-rendered-diff-added", afterHtml, StringComparison.Ordinal);
-        Assert.Contains("<pre><code class=\"language-json\">", afterHtml, StringComparison.Ordinal);
-        Assert.Contains("&quot;strictKnownMarketplaces&quot;: [", afterHtml, StringComparison.Ordinal);
-        Assert.Contains("<span class=\"rsr-rendered-diff-added\">&quot;source&quot;: &quot;github&quot;,</span>", afterHtml, StringComparison.Ordinal);
-        Assert.Contains("<span class=\"rsr-rendered-diff-added\">&quot;repo&quot;: &quot;OWNER/REPO&quot;</span>", afterHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">&quot;PLUGIN-NAME@MARKETPLACE-NAME&quot;: true</span>", afterHtml, StringComparison.Ordinal);
-        var renamedMarketplaceStart = afterHtml.IndexOf("&quot;agent-skills&quot;: {", StringComparison.Ordinal);
-        var strictMarketplaceStart = afterHtml.IndexOf("&quot;strictKnownMarketplaces&quot;: [", StringComparison.Ordinal);
+        Assert.Contains("MARKETPLACE-NAME", beforeHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-removed", beforeHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added rsr-rendered-diff-gap\"", beforeHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.Contains("agent-skills", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.Contains("strictKnownMarketplaces", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.Contains("<pre tabindex=\"0\"><code class=\"language-json\">", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.Contains("&quot;strictKnownMarketplaces&quot;: [", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">&quot;source&quot;: &quot;github&quot;,</span>", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\">&quot;repo&quot;: &quot;OWNER/REPO&quot;</span>", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">&quot;PLUGIN-NAME@MARKETPLACE-NAME&quot;: true</span>", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        var renamedMarketplaceStart = afterHtmlWithoutSyntax.IndexOf("&quot;agent-skills&quot;: {", StringComparison.Ordinal);
+        var strictMarketplaceStart = afterHtmlWithoutSyntax.IndexOf("&quot;strictKnownMarketplaces&quot;: [", StringComparison.Ordinal);
         Assert.True(renamedMarketplaceStart >= 0);
         Assert.True(strictMarketplaceStart > renamedMarketplaceStart);
-        var renamedMarketplaceHtml = afterHtml[renamedMarketplaceStart..strictMarketplaceStart];
+        var renamedMarketplaceHtml = afterHtmlWithoutSyntax[renamedMarketplaceStart..strictMarketplaceStart];
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">&quot;source&quot;: {</span>", renamedMarketplaceHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">&quot;source&quot;: &quot;github&quot;,</span>", renamedMarketplaceHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">&quot;repo&quot;: &quot;OWNER/REPO&quot;</span>", renamedMarketplaceHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("</code></pre>\n</li>\n</ol>\n<p><span class=\"rsr-rendered-diff-added\">", afterHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("<pre><code></code></pre>", afterHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"> </span>{", afterHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"> </span>}", afterHtml, StringComparison.Ordinal);
-        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-removed rsr-rendered-diff-gap\" aria-hidden=\"true\"></span>{", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("</code></pre>\n</li>\n</ol>\n<p><span class=\"rsr-rendered-diff-added\">", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.DoesNotContain("<pre tabindex=\"0\"><code></code></pre>", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"> </span>{", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"> </span>}", afterHtmlWithoutSyntax, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-removed rsr-rendered-diff-gap\" aria-hidden=\"true\"></span>{", afterHtmlWithoutSyntax, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1519,6 +1524,194 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Contains("rsr-rendered-diff-removed rsr-rendered-diff-gap", html, StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;span class=", html, StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Highlights_Added_CodeTab_Without_Escaping_Diff_Markers()
+    {
+        const string beforeMarkdown = """
+            {% codetabs %}
+            {% codetab csharp %}
+            ```csharp
+            var client = new CopilotClient();
+            ```
+            {% endcodetab %}
+            {% endcodetabs %}
+            """;
+        const string afterMarkdown = """
+            {% codetabs %}
+            {% codetab csharp %}
+            ```csharp
+            var client = new CopilotClient();
+            ```
+            {% endcodetab %}
+            {% codetab go %}
+            ```golang
+            package main
+
+            import (
+                "context"
+                "github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+            )
+
+            func main() {
+                credential, err := azidentity.NewDefaultAzureCredential(nil)
+                if err != nil {
+                    log.Fatal(err)
+                }
+            }
+            ```
+            {% endcodetab %}
+            {% endcodetabs %}
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/copilot-sdk/setup/azure-managed-identity.md",
+            afterMarkdown,
+            "129b085",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("<pre tabindex=\"0\"><code class=\"language-golang\">", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"rsr-syntax-token\"", html, StringComparison.Ordinal);
+        Assert.Contains("<span class=\"rsr-rendered-diff-added\"><span class=\"rsr-syntax-token\"", html, StringComparison.Ordinal);
+        Assert.Contains(">package</span>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&amp;lt;span", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=&quot;rsr-rendered-diff", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span class=\"rsr-syntax-token\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<p>package main", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<p><span class=\"rsr-rendered-diff-added\">", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<pre><code>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Restores_Nested_Protected_Liquid_Blocks()
+    {
+        const string markdown = """
+{% warning %}
+{% codetabs %}
+{% codetab csharp %}
+```csharp
+var value = 1;
+```
+{% endcodetab %}
+{% endcodetabs %}
+{% endwarning %}
+""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/example.md",
+            markdown,
+            "abc1234",
+            "After");
+
+        Assert.Contains("class=\"ghd-alert ghd-alert-attention ghd-spotlight-attention\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"ghd-code-tabs\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"rsr-syntax-token\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<!--rsr-protected-html:", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Preserves_Source_Comments_That_Resemble_Placeholders()
+    {
+        const string markdown = """
+<!--rsr-protected-html:0-->
+
+{% codetabs %}
+{% codetab csharp %}
+```csharp
+var value = 1;
+```
+{% endcodetab %}
+{% endcodetabs %}
+""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/example.md",
+            markdown,
+            "abc1234",
+            "After");
+
+        Assert.Contains("<!--rsr-protected-html:0-->", html, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(html, "class=\"ghd-code-tabs\""));
+    }
+
+    [Fact]
+    public void RenderDocument_Preserves_Literal_Span_Tags_In_Changed_Code()
+    {
+        const string beforeMarkdown = """
+```markdown
+<div><b>same</b></div>
+```
+""";
+        const string afterMarkdown = """
+```markdown
+<div><span>new</span><b>same</b></div>
+```
+""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/example.md",
+            afterMarkdown,
+            "abc1234",
+            "After",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        var literalSpanOpen = html.IndexOf("&lt;span&gt;", StringComparison.Ordinal);
+        var literalSpanClose = html.IndexOf("&lt;/span&gt;", StringComparison.Ordinal);
+        var literalBoldOpen = html.IndexOf("&lt;b&gt;", StringComparison.Ordinal);
+        Assert.True(literalSpanOpen >= 0);
+        Assert.True(literalSpanClose > literalSpanOpen);
+        Assert.True(literalBoldOpen > literalSpanClose);
+        Assert.Contains("class=\"rsr-rendered-diff-added\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("RSR-CODE-DIFF:", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Preserves_Mermaid_Fence_Rendering()
+    {
+        const string markdown = """
+```mermaid
+graph TD
+    A --> B
+```
+""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/example.md",
+            markdown,
+            "abc1234",
+            "After");
+
+        Assert.Contains("<pre class=\"mermaid\">", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<code class=\"language-mermaid\">", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Preserves_Fenced_Code_Attributes()
+    {
+        const string markdown = """
+```csharp {#example .custom data-kind=sample}
+var value = 1;
+```
+""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/example.md",
+            markdown,
+            "abc1234",
+            "After");
+
+        var codeTagStart = html.IndexOf("<code", StringComparison.Ordinal);
+        var codeTagEnd = html.IndexOf('>', codeTagStart);
+        var codeTag = html[codeTagStart..(codeTagEnd + 1)];
+        Assert.Contains("id=\"example\"", codeTag, StringComparison.Ordinal);
+        Assert.Contains("language-csharp", codeTag, StringComparison.Ordinal);
+        Assert.Contains("custom", codeTag, StringComparison.Ordinal);
+        Assert.Contains("data-kind=\"sample\"", codeTag, StringComparison.Ordinal);
+        Assert.Contains("class=\"rsr-syntax-token\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1816,6 +2009,14 @@ public sealed class MarkdownPreviewRendererTests
         Assert.Matches("<h1[^>]*>Hello</h1>", html);
         Assert.Contains("<p>World</p>", html, StringComparison.Ordinal);
     }
+
+    private static string RemoveSyntaxHighlightingMarkup(string html)
+        => SyntaxHighlightingSpanRegex().Replace(html, "${body}");
+
+    [GeneratedRegex(
+        """<span class="rsr-syntax-token"[^>]*>(?<body>.*?)</span>""",
+        RegexOptions.Singleline)]
+    private static partial Regex SyntaxHighlightingSpanRegex();
 
     [Fact]
     public void Falls_Back_When_Markdown_Is_Null()
