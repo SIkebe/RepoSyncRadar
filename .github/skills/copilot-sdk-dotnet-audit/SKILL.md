@@ -1,10 +1,10 @@
 ---
-name: copilot-sdk-audit
+name: copilot-sdk-dotnet-audit
 description: 'Upgrade RepoSyncRadar to a newer GitHub.Copilot.SDK version or audit a related .NET preview update in the same PR. USE FOR: Copilot SDK update/upgrade, beta upgrade, GitHub.Copilot.SDK beta.N に更新, bundled Copilot CLI refresh, .NET preview release-note audit, SDK source/package diff review, API breaking-change対応, beta/.NET preview変更点をアプリに活かす, PR作成まで. Reads user-provided official URLs plus linked area release notes, updates package/version notices, reads NuGet metadata plus SDK source/tests, applies safe app improvements, validates build/tests, and opens or updates a PR.'
 argument-hint: 'target SDK/.NET version or official URL, e.g. 1.0.0-beta.9 / .NET 11 Preview 5 blog; optional: PR作成 / 調査のみ / 特定領域 usage/auth/telemetry/tools'
 ---
 
-# Copilot SDK Update
+# Copilot SDK and .NET Update Audit
 
 ## 役割
 
