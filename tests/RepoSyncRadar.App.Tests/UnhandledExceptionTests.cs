@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using RepoSyncRadar.App;
@@ -63,5 +65,41 @@ public sealed class UnhandledExceptionTests
         // Dialogs can fail when the WPF Dispatcher is already torn down. The handler
         // must still log and return cleanly so the process can finish unwinding.
         App.HandleUnhandled(new InvalidOperationException("boom"), NullLogger<App>.Instance, showDialog: null);
+    }
+
+    [Fact]
+    public void IsRenderThreadFailure_With_UceerrRenderThreadFailure_Returns_True()
+    {
+        var exception = Assert.IsType<COMException>(
+            Marshal.GetExceptionForHR(unchecked((int)0x88980406)));
+        var otherException = Assert.IsType<COMException>(
+            Marshal.GetExceptionForHR(unchecked((int)0x80004005)));
+
+        Assert.True(App.IsRenderThreadFailure(exception));
+        Assert.False(App.IsRenderThreadFailure(otherException));
+    }
+
+    [Fact]
+    public void HandleUnhandled_With_RenderThreadFailure_Explains_Recovery()
+    {
+        var previousCulture = CultureInfo.CurrentUICulture;
+        var dialogs = new List<string>();
+        try
+        {
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("en-US");
+            var exception = Assert.IsType<COMException>(
+                Marshal.GetExceptionForHR(unchecked((int)0x88980406)));
+
+            App.HandleUnhandled(exception, NullLogger<App>.Instance, dialogs.Add);
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = previousCulture;
+        }
+
+        var message = Assert.Single(dialogs);
+        Assert.Contains("will close", message, StringComparison.Ordinal);
+        Assert.Contains("sleep/resume", message, StringComparison.Ordinal);
+        Assert.Contains("graphics-driver updates", message, StringComparison.Ordinal);
     }
 }

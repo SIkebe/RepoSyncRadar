@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using Microsoft.AspNetCore.Components.WebView.Wpf;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,8 @@ namespace RepoSyncRadar.App;
 /// </summary>
 public partial class App : Application
 {
+    private const int _uceerrRenderThreadFailure = unchecked((int)0x88980406);
+
     /// <summary>
     /// Warning shown when <c>Copilot:OAuthClientId</c> is missing on startup. Made
     /// <c>internal</c> so the test project can assert against the exact text.
@@ -35,6 +38,7 @@ public partial class App : Application
         "\u624b\u9806\u306f docs/USAGE.md \u3092\u53c2\u7167\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
 
     private IHost? _host;
+    private int _renderThreadFailureHandlingStarted;
 
     /// <summary>The composed DI container, shared with the BlazorWebView.</summary>
     public IServiceProvider Services => _host?.Services
@@ -297,7 +301,7 @@ public partial class App : Application
     private static partial void LogStartupSignInFailed(ILogger logger, Exception exception);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Error,
-        Message = "Unhandled exception caught by global sink. Application kept alive; user should consider restarting.")]
+        Message = "Unhandled exception caught by global sink.")]
     private static partial void LogUnhandled(ILogger logger, Exception exception);
 
     [LoggerMessage(EventId = 4, Level = LogLevel.Information,
@@ -355,6 +359,19 @@ public partial class App : Application
 
     private void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
     {
+        if (IsRenderThreadFailure(e.Exception))
+        {
+            e.Handled = true;
+            if (Interlocked.Exchange(ref _renderThreadFailureHandlingStarted, 1) != 0)
+            {
+                return;
+            }
+
+            HandleUnhandled(e.Exception, _host?.Services.GetService<ILogger<App>>(), ShowUnhandledDialog);
+            Shutdown(-1);
+            return;
+        }
+
         HandleUnhandled(e.Exception, _host?.Services.GetService<ILogger<App>>(), ShowUnhandledDialog);
         e.Handled = true; // Keep the WPF message pump alive.
     }
@@ -388,11 +405,24 @@ public partial class App : Application
 
     private static string BuildUnhandledDialogMessage(Exception exception)
     {
+        if (IsRenderThreadFailure(exception))
+        {
+            var renderFailureMessage = IsEnglishUiCulture()
+                ? "The display renderer stopped working. RepoSyncRadar will close after this dialog.\n\n" +
+                  "This can happen after sleep/resume or a display change. Restart the app. If it happens again, install current Windows and graphics-driver updates."
+                : "\u753b\u9762\u306e\u63cf\u753b\u51e6\u7406\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u3053\u306e\u30c0\u30a4\u30a2\u30ed\u30b0\u3092\u9589\u3058\u308b\u3068 RepoSyncRadar \u3092\u7d42\u4e86\u3057\u307e\u3059\u3002\n\n" +
+                  "\u30b9\u30ea\u30fc\u30d7\u304b\u3089\u306e\u5fa9\u5e30\u3084\u30c7\u30a3\u30b9\u30d7\u30ec\u30a4\u69cb\u6210\u306e\u5909\u66f4\u5f8c\u306b\u767a\u751f\u3059\u308b\u3053\u3068\u304c\u3042\u308a\u307e\u3059\u3002\u30a2\u30d7\u30ea\u3092\u518d\u8d77\u52d5\u3057\u3066\u304f\u3060\u3055\u3044\u3002\u518d\u767a\u3059\u308b\u5834\u5408\u306f\u3001Windows Update \u3068\u30b0\u30e9\u30d5\u30a3\u30c3\u30af\u30b9 \u30c9\u30e9\u30a4\u30d0\u30fc\u306e\u66f4\u65b0\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
+            return $"{renderFailureMessage}\n\n{exception.GetType().Name}: {exception.Message}";
+        }
+
         var prefix = IsEnglishUiCulture()
             ? "An unexpected error occurred."
             : "想定外のエラーが発生しました。";
         return $"{prefix}\n\n{exception.GetType().Name}: {exception.Message}";
     }
+
+    internal static bool IsRenderThreadFailure(Exception exception)
+        => exception is COMException { ErrorCode: _uceerrRenderThreadFailure };
 
     private static string BuildUnhandledDialogTitle()
         => IsEnglishUiCulture()
