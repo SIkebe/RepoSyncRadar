@@ -102,4 +102,20 @@ public sealed class UnhandledExceptionTests
         Assert.Contains("sleep/resume", message, StringComparison.Ordinal);
         Assert.Contains("graphics-driver updates", message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void HandleRenderThreadFailure_RepeatedFailures_ReportAndShutdownOnce()
+    {
+        var exception = Assert.IsType<COMException>(
+            Marshal.GetExceptionForHR(unchecked((int)0x88980406)));
+        var handlingStarted = 0;
+        var reports = new List<Exception>();
+        var shutdownCount = 0;
+
+        App.HandleRenderThreadFailure(exception, ref handlingStarted, reports.Add, () => shutdownCount++);
+        App.HandleRenderThreadFailure(exception, ref handlingStarted, reports.Add, () => shutdownCount++);
+
+        Assert.Same(exception, Assert.Single(reports));
+        Assert.Equal(1, shutdownCount);
+    }
 }

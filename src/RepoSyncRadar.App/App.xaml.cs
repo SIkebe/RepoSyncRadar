@@ -362,13 +362,11 @@ public partial class App : Application
         if (IsRenderThreadFailure(e.Exception))
         {
             e.Handled = true;
-            if (Interlocked.Exchange(ref _renderThreadFailureHandlingStarted, 1) != 0)
-            {
-                return;
-            }
-
-            HandleUnhandled(e.Exception, _host?.Services.GetService<ILogger<App>>(), ShowUnhandledDialog);
-            Shutdown(-1);
+            HandleRenderThreadFailure(
+                e.Exception,
+                ref _renderThreadFailureHandlingStarted,
+                exception => HandleUnhandled(exception, _host?.Services.GetService<ILogger<App>>(), ShowUnhandledDialog),
+                () => Shutdown(-1));
             return;
         }
 
@@ -423,6 +421,21 @@ public partial class App : Application
 
     internal static bool IsRenderThreadFailure(Exception exception)
         => exception is COMException { ErrorCode: _uceerrRenderThreadFailure };
+
+    internal static void HandleRenderThreadFailure(
+        Exception exception,
+        ref int handlingStarted,
+        Action<Exception> report,
+        Action shutdown)
+    {
+        if (Interlocked.Exchange(ref handlingStarted, 1) != 0)
+        {
+            return;
+        }
+
+        report(exception);
+        shutdown();
+    }
 
     private static string BuildUnhandledDialogTitle()
         => IsEnglishUiCulture()
