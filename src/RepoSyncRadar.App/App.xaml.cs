@@ -433,8 +433,14 @@ public partial class App : Application
             return;
         }
 
-        report(exception);
-        shutdown();
+        try
+        {
+            report(exception);
+        }
+        finally
+        {
+            shutdown();
+        }
     }
 
     private static string BuildUnhandledDialogTitle()

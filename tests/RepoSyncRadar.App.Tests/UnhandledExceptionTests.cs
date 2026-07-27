@@ -118,4 +118,22 @@ public sealed class UnhandledExceptionTests
         Assert.Same(exception, Assert.Single(reports));
         Assert.Equal(1, shutdownCount);
     }
+
+    [Fact]
+    public void HandleRenderThreadFailure_WhenReportingFails_StillShutsDown()
+    {
+        var exception = Assert.IsType<COMException>(
+            Marshal.GetExceptionForHR(unchecked((int)0x88980406)));
+        var handlingStarted = 0;
+        var shutdownCount = 0;
+
+        Assert.Throws<InvalidOperationException>(() =>
+            App.HandleRenderThreadFailure(
+                exception,
+                ref handlingStarted,
+                _ => throw new InvalidOperationException("Report failed."),
+                () => shutdownCount++));
+
+        Assert.Equal(1, shutdownCount);
+    }
 }
