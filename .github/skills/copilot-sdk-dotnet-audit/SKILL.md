@@ -62,6 +62,7 @@ PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-S
 - `src/RepoSyncRadar.App/Settings/ThirdPartyNotices.cs`: SDK version
 - `.github/copilot-instructions.md`: SDK version、bundled Copilot CLI version、安定した SDK 契約
 - `GHCP001` suppression コメントなど、古い beta 番号を含む説明
+- `scripts/CopilotCliRelease.props`: SDK の `CopilotCliVersion` と一致する GitHub Release の `copilot-win32-x64.zip` / `copilot-win32-arm64.zip` SHA-256。npm 用 `github-copilot-*-win32-*.tgz` の hash と取り違えない。
 
 更新後に `dotnet restore RepoSyncRadar.sln` を実行し、target package を NuGet cache に落とす。
 
