@@ -203,7 +203,7 @@
 - **イベント** — `UserMessageEvent`, `AssistantMessageEvent`, `AssistantMessageDeltaEvent`, `AssistantReasoningEvent`, `ToolExecutionStartEvent`, `ToolExecutionCompleteEvent`, `SessionStartEvent`, `SessionIdleEvent`, `SessionErrorEvent`, `SessionCompactionStartEvent`, `SessionCompactionCompleteEvent`。
 - **必須ハンドラ** — `OnPermissionRequest`(全セッションで必須)。
 - **任意ハンドラ** — `OnUserInputRequest`(`ask_user` ツール用)、`OnElicitationRequest`(フォーム UI 提供)。
-- **Hooks** — `OnPreToolUse` / `OnPostToolUse` / `OnUserPromptSubmitted` / `OnSessionStart` / `OnSessionEnd` / `OnErrorOccurred` / `OnAgentStop`。`OnAgentStop` は決定的な完了チェックがある場合のみ停止を block し、継続ターンでは block しない。
+- **Hooks** — `OnPreToolUse` / `OnPostToolUse` / `OnUserPromptSubmitted` / `OnSessionStart` / `OnSessionEnd` / `OnErrorOccurred`。
 - **System Message Modes** — `Append`(推奨、ガードレール保持)/ `Customize`(セクション単位の上書き)/ `Replace`(全置換、危険)。
 - **Tools** — `Microsoft.Extensions.AI.AIFunctionFactory.Create` で型安全に定義。`AdditionalProperties` で `is_override` / `skip_permission` を制御可。
 - **Slash commands** — `CommandDefinition` で `/myCmd` を定義し TUI から呼べる(本アプリでは未使用予定)。
