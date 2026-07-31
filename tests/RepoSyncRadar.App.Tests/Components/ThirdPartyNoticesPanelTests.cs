@@ -24,6 +24,7 @@ public sealed class ThirdPartyNoticesPanelTests
             .ToArray();
         Assert.Contains("MudBlazor", packages);
         Assert.Contains("GitHub.Copilot.SDK", packages);
+        Assert.Contains("1.0.9-preview.1", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("Microsoft.Web.WebView2", packages);
         Assert.Contains("BSD-2-Clause", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("MIT", cut.Markup, StringComparison.Ordinal);

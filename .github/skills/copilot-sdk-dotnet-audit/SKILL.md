@@ -60,8 +60,9 @@ PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-S
 
 - `Directory.Packages.props`: `GitHub.Copilot.SDK` version
 - `src/RepoSyncRadar.App/Settings/ThirdPartyNotices.cs`: SDK version
-- `.github/copilot-instructions.md`: SDK version、bundled Copilot CLI version、安定した SDK 契約
+- `.github/copilot-instructions.md`: 常時必要な repo-wide SDK 契約が変わる場合だけ更新する。package / bundled CLI version や release 固有 API は毎回の context を膨らませるため記録しない。
 - `GHCP001` suppression コメントなど、古い beta 番号を含む説明
+- `scripts/CopilotCliRelease.props`: SDK の `CopilotCliVersion` と一致する GitHub Release の `copilot-win32-x64.zip` / `copilot-win32-arm64.zip` SHA-256。npm download の `copilot-win32-x64-<version>.tgz` / `copilot-win32-arm64-<version>.tgz` の hash と取り違えない。
 
 更新後に `dotnet restore RepoSyncRadar.sln` を実行し、target package を NuGet cache に落とす。
 
