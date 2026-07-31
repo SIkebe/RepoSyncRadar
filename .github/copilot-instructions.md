@@ -56,9 +56,10 @@ Use these repository instructions as the starting point. When code or validated 
 
 ### SDK API
 
-- `GitHub.Copilot.SDK` is pinned to `1.0.9-preview.0`, which bundles Copilot CLI `1.0.76-5`.
+- `GitHub.Copilot.SDK` is pinned to `1.0.9-preview.1`, which bundles Copilot CLI `1.0.76-5`.
 - The app must read Copilot SDK final assistant text from `response?.Data?.Content`, not `response?.ToString()`.
 - `SessionHooks.OnAgentStop` can block a natural top-level agent stop by returning `Decision = "block"` plus a follow-up reason. Only use it for deterministic completion checks, and return no decision when `StopHookActive` is true to avoid continuation loops.
+- For MCP tools configured through `McpServers`, use `mcp:<server-key>-<tool-name>` in session-level `AvailableTools` / `ExcludedTools`; custom/default agent tool lists use `<server-key>-<tool-name>` without the source prefix.
 - For Copilot tool metadata such as `skip_permission` and `defer`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { ... }, ...)` over magic-string `AdditionalProperties`. Keep RepoSyncRadar's small radar tool set pre-loaded with `CopilotToolDefer.Never`.
 - Restrict sessions to the registered radar tools and explicitly disable tool search, ambient custom instructions, org-level custom agents, coauthor trailers, scheduler integration, and session memory unless a feature deliberately needs them.
 - Keep experimental API warning suppressions local to the integration that requires them.
