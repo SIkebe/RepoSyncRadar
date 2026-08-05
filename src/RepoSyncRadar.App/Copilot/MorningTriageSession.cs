@@ -172,7 +172,7 @@ public sealed partial class MorningTriageSession
         if (scoringTargets is { Count: 0 })
         {
             progress?.Report("今回の未スコア未確認コミットはありません。画面を更新しています…");
-            return report;
+            return report with { RemainingUnscoredCommitCount = 0 };
         }
 
         progress?.Report("Copilot セッションを準備しています…");
@@ -180,7 +180,7 @@ public sealed partial class MorningTriageSession
         if (scoringTargets is { Count: >= 2 })
         {
             await RunParallelScoringAsync(scoringTargets, progress, cancellationToken).ConfigureAwait(false);
-            return report;
+            return await AddRemainingUnscoredCountAsync(report, cancellationToken).ConfigureAwait(false);
         }
 
         var session = await _sessionFactory.CreateSessionAsync(SessionPurpose.Triage, cancellationToken).ConfigureAwait(false);
@@ -209,7 +209,7 @@ public sealed partial class MorningTriageSession
             }
         }
 
-        return report;
+        return await AddRemainingUnscoredCountAsync(report, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyList<Commit>?> LoadScoringTargetsAsync(CancellationToken cancellationToken)
@@ -225,8 +225,28 @@ public sealed partial class MorningTriageSession
                 Status = ReviewStatus.Unseen,
                 Limit = TriagePreflightSummaryBuilder.ScoringTargetLimit,
                 UnscoredOnly = true,
+                OldestFirst = true,
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IngestionReport> AddRemainingUnscoredCountAsync(
+        IngestionReport report,
+        CancellationToken cancellationToken)
+    {
+        if (_repository is null)
+        {
+            return report;
+        }
+
+        var remaining = await _repository.QueryCommitsAsync(
+            new CommitQueryFilter
+            {
+                Status = ReviewStatus.Unseen,
+                UnscoredOnly = true,
+            },
+            cancellationToken).ConfigureAwait(false);
+        return report with { RemainingUnscoredCommitCount = remaining.Count };
     }
 
     private async Task RunParallelScoringAsync(

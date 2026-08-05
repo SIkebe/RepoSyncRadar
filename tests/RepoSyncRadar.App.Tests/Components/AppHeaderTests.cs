@@ -153,6 +153,42 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Triage_Completion_Warns_When_Unscored_Items_Remain()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+
+        var sp = BuildServices(session, out var agent, out _);
+        agent
+            .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new IngestionReport(Total: 50, Inserted: 0, Skipped: 50)
+            {
+                RemainingUnscoredCommitCount = 55,
+            }));
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        cut.Find("[data-testid=\"app-header-sync\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var status = cut.Find("[data-testid=\"app-header-triage-status\"]");
+            Assert.Contains("未採点が 55 件残っています", status.TextContent, StringComparison.Ordinal);
+            Assert.Contains("再実行", status.TextContent, StringComparison.Ordinal);
+            Assert.Contains("app-header-warning-text", status.ClassList);
+            Assert.Equal("status", status.GetAttribute("role"));
+            Assert.Equal("polite", status.GetAttribute("aria-live"));
+        });
+    }
+
+    [Fact]
     public void Preflight_Button_Shows_ReadOnly_Summary()
     {
         var session = Substitute.For<IGitHubAuthSession>();

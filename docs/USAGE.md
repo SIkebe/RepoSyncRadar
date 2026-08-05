@@ -158,11 +158,12 @@ dotnet run --project src/RepoSyncRadar.App
 1. `github/docs` の Repo sync PR を最大 `MaxPullRequests` 件取得
    - `GitHub:PullRequestCreatedAtOrAfter` を設定している場合は、その日時以降に作成された PR だけを対象にします
 2. 各 PR のコミットを SQLite に **冪等取り込み**(既知 SHA はスキップ)
-3. Copilot に「上位候補を未確認に残し、明らかに不要なものは見送り候補へ送る」方針でスコアリング
+3. DB 内の未採点・未確認コミットを古い順に最大 50 件選び、Copilot が「上位候補を未確認に残し、明らかに不要なものは見送り候補へ送る」方針でスコアリング
 4. `radar_score_commit` で `Scoring` テーブルに要約・理由・スコアを保存
 5. 見送り判定が明確なものは `radar_save_review` で `Reviews.Status = Rejected` として保存
 
 > 起動直後はサイドバーの **未確認** に並びます。
+> 1 回の上限を超える未採点コミットが残った場合は、完了後に残件数を表示します。**Triage** を再実行すると、残っている最も古いコミットから続行します。
 
 ### 4.2 レビュー(注目 / 保留 / 見送り候補 / アーカイブ / Ignore)
 

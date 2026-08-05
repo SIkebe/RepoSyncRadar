@@ -15,6 +15,7 @@
   <data name="AppHeader.SignInFailed" xml:space="preserve"><value>Sign-in failed</value></data>
   <data name="AppHeader.SignOutFailed" xml:space="preserve"><value>Sign-out failed</value></data>
   <data name="AppHeader.TriageCompleted" xml:space="preserve"><value>Triage completed</value></data>
+  <data name="AppHeader.TriageCompletedWithRemaining" xml:space="preserve"><value>This triage batch completed. {0} unscored items remain. Run Triage again to continue from the oldest items.</value></data>
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage failed</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage failed. Check the error details.</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Starting triage...</value></data>

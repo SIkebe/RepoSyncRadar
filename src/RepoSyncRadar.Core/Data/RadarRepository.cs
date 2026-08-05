@@ -350,7 +350,9 @@ public sealed class RadarRepository : IRadarRepository
                     || EF.Functions.Like(c.Message, searchPattern));
         }
 
-        query = query.OrderByDescending(c => c.AuthoredAt);
+        query = filter.OldestFirst
+            ? query.OrderBy(c => c.AuthoredAt)
+            : query.OrderByDescending(c => c.AuthoredAt);
 
         if (filter.Limit is { } limit && limit >= 0)
         {

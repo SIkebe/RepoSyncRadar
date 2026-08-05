@@ -542,6 +542,36 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
+    public async Task QueryCommitsAsync_OldestFirst_Applies_Before_Limit()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+        var baseTime = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await repository.UpsertCommitsAsync(
+            new[]
+            {
+                MakeCommit("sha-oldest", prNumber: 1, authoredAt: baseTime),
+                MakeCommit("sha-newest", prNumber: 1, authoredAt: baseTime.AddDays(1)),
+            },
+            ct);
+
+        var commits = await repository.QueryCommitsAsync(
+            new CommitQueryFilter
+            {
+                Status = ReviewStatus.Unseen,
+                Limit = 1,
+                UnscoredOnly = true,
+                OldestFirst = true,
+            },
+            ct);
+
+        var commit = Assert.Single(commits);
+        Assert.Equal("sha-oldest", commit.Sha);
+    }
+
+    [Fact]
     public async Task GetReviewCountsAsync_Counts_All_Buckets()
     {
         using var fixture = new SqliteFixture();

@@ -31,4 +31,10 @@ public sealed record CommitQueryFilter
     /// When true, only commits that do not yet have a <see cref="Scoring"/> row are returned.
     /// </summary>
     public bool UnscoredOnly { get; init; }
+
+    /// <summary>
+    /// When true, commits are ordered by <see cref="Commit.AuthoredAt"/> ascending instead of
+    /// the default descending order. Use this for FIFO processing queues without changing the UI order.
+    /// </summary>
+    public bool OldestFirst { get; init; }
 }
