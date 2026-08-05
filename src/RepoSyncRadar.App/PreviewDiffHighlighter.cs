@@ -64,6 +64,33 @@ internal static class PreviewDiffHighlighter
     normalize(value).replace(
       /\/markdown-assets\/(?:before|after)(?=\/)/,
       '/markdown-assets/shared');
+  const fingerprintMediaContent = (element) => {
+    if (!(element instanceof HTMLImageElement) ||
+        !element.complete ||
+        element.naturalWidth <= 0 ||
+        element.naturalHeight <= 0) {
+      return '';
+    }
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.min(32, element.naturalWidth);
+      canvas.height = Math.min(32, element.naturalHeight);
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) {
+        return '';
+      }
+      context.drawImage(element, 0, 0, canvas.width, canvas.height);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let hash = 2166136261;
+      for (let index = 0; index < pixels.length; index++) {
+        hash ^= pixels[index];
+        hash = Math.imul(hash, 16777619);
+      }
+      return `${element.naturalWidth}x${element.naturalHeight}:${hash >>> 0}`;
+    } catch {
+      return '';
+    }
+  };
   const describe = (element) => {
     if (element.matches(mediaSelector)) {
       const source =
@@ -72,7 +99,7 @@ internal static class PreviewDiffHighlighter
         element.getAttribute('poster') ||
         element.getAttribute('alt') ||
         element.outerHTML;
-      return `media:${element.tagName.toLowerCase()}:${canonicalizeMediaSource(source)}`;
+      return `media:${element.tagName.toLowerCase()}:${canonicalizeMediaSource(source)}:${fingerprintMediaContent(element)}`;
     }
     return normalize(element.innerText || element.textContent);
   };

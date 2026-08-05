@@ -737,6 +737,9 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("element.getClientRects().length > 0", script, StringComparison.Ordinal);
         Assert.Contains("/\\/markdown-assets\\/(?:before|after)(?=\\/)/", script, StringComparison.Ordinal);
         Assert.Contains("'/markdown-assets/shared'", script, StringComparison.Ordinal);
+        Assert.Contains("const fingerprintMediaContent = (element)", script, StringComparison.Ordinal);
+        Assert.Contains("context.getImageData(0, 0, canvas.width, canvas.height).data", script, StringComparison.Ordinal);
+        Assert.Contains("hash = Math.imul(hash, 16777619)", script, StringComparison.Ordinal);
         Assert.Contains("return isVisibleMedia(element)", script, StringComparison.Ordinal);
         Assert.Contains("return `media:${element.tagName.toLowerCase()}", script, StringComparison.Ordinal);
     }
@@ -779,13 +782,16 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Theory]
-    [InlineData(3, 3, true, false, true)]
-    [InlineData(3, 3, false, true, true)]
-    [InlineData(3, 3, false, false, false)]
-    [InlineData(3, 4, true, true, false)]
-    public void CanCommitPreviewDiffNavigation_Requires_Current_Generation_And_Found_Target(
+    [InlineData(3, 3, 7, 7, true, false, true)]
+    [InlineData(3, 3, 7, 7, false, true, true)]
+    [InlineData(3, 3, 7, 7, false, false, false)]
+    [InlineData(3, 4, 7, 7, true, true, false)]
+    [InlineData(3, 3, 7, 8, true, true, false)]
+    public void CanCommitPreviewDiffNavigation_Requires_Latest_Operation_And_Found_Target(
         int expectedGeneration,
         int currentGeneration,
+        int expectedOperationId,
+        int currentOperationId,
         bool beforeFound,
         bool afterFound,
         bool expected)
@@ -798,6 +804,8 @@ public sealed class MainWindowPreviewComparisonTests
             MainWindow.CanCommitPreviewDiffNavigation(
                 expectedGeneration,
                 currentGeneration,
+                expectedOperationId,
+                currentOperationId,
                 beforeResult,
                 afterResult));
     }

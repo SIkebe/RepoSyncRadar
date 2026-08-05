@@ -163,7 +163,10 @@ public partial class MainWindow : Window
     private int _singlePageTransientRetryCount;
     private int _previewDiffGeneration;
     private int _currentPreviewDiffIndex = -1;
+    private int _requestedPreviewDiffIndex = -1;
+    private int _previewDiffNavigationOperationId;
     private int _previewDiffCount;
+    private Task _previewDiffNavigationTask = Task.CompletedTask;
     private bool _beforePreviewDiffReady;
     private bool _afterPreviewDiffReady;
     private ulong? _beforePreviewDiffNavigationId;
@@ -1095,13 +1098,18 @@ public partial class MainWindow : Window
         }
 
         var offset = direction == PreviewDiffNavigationDirection.Previous ? -1 : 1;
-        var targetIndex = _currentPreviewDiffIndex + offset;
+        var sourceIndex = _requestedPreviewDiffIndex >= 0
+            ? _requestedPreviewDiffIndex
+            : _currentPreviewDiffIndex;
+        var targetIndex = sourceIndex + offset;
         if (targetIndex < 0 || targetIndex >= _previewDiffCount)
         {
             return;
         }
 
-        _ = NavigateToPreviewDiffAsync(targetIndex, _previewDiffGeneration);
+        _requestedPreviewDiffIndex = targetIndex;
+        var operationId = ++_previewDiffNavigationOperationId;
+        _ = QueuePreviewDiffNavigationAsync(targetIndex, _previewDiffGeneration, operationId);
     }
 
     private async Task InitializePreviewDiffNavigationAsync(int count, int generation)
@@ -1113,19 +1121,43 @@ public partial class MainWindow : Window
 
         _previewDiffCount = Math.Max(0, count);
         _currentPreviewDiffIndex = -1;
+        _requestedPreviewDiffIndex = _previewDiffCount > 0 ? 0 : -1;
         UpdatePreviewDiffNavigationControls();
         if (_previewDiffCount > 0)
         {
-            await NavigateToPreviewDiffAsync(0, generation);
+            var operationId = ++_previewDiffNavigationOperationId;
+            await QueuePreviewDiffNavigationAsync(0, generation, operationId);
         }
     }
 
-    private async Task NavigateToPreviewDiffAsync(int targetIndex, int generation)
+    private Task QueuePreviewDiffNavigationAsync(int targetIndex, int generation, int operationId)
+    {
+        var previousTask = _previewDiffNavigationTask;
+        _previewDiffNavigationTask = NavigateAfterPreviousPreviewDiffAsync(
+            previousTask,
+            targetIndex,
+            generation,
+            operationId);
+        return _previewDiffNavigationTask;
+    }
+
+    private async Task NavigateAfterPreviousPreviewDiffAsync(
+        Task previousTask,
+        int targetIndex,
+        int generation,
+        int operationId)
+    {
+        await previousTask;
+        await NavigateToPreviewDiffAsync(targetIndex, generation, operationId);
+    }
+
+    private async Task NavigateToPreviewDiffAsync(int targetIndex, int generation, int operationId)
     {
         try
         {
             if (_activePreviewDiffRequest is null
                 || generation != _previewDiffGeneration
+                || operationId != _previewDiffNavigationOperationId
                 || targetIndex < 0
                 || targetIndex >= _previewDiffCount
                 || DocsView.CoreWebView2 is null
@@ -1144,6 +1176,8 @@ public partial class MainWindow : Window
                 || !CanCommitPreviewDiffNavigation(
                     generation,
                     _previewDiffGeneration,
+                    operationId,
+                    _previewDiffNavigationOperationId,
                     beforeResult,
                     afterResult))
             {
@@ -1151,6 +1185,7 @@ public partial class MainWindow : Window
             }
 
             _currentPreviewDiffIndex = targetIndex;
+            _requestedPreviewDiffIndex = targetIndex;
             UpdatePreviewDiffNavigationControls();
             if (beforeResult.Found && !afterResult.Found)
             {
@@ -1178,6 +1213,11 @@ public partial class MainWindow : Window
 
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            if (generation == _previewDiffGeneration
+                && operationId == _previewDiffNavigationOperationId)
+            {
+                _requestedPreviewDiffIndex = _currentPreviewDiffIndex;
+            }
             LogPreviewDiffNavigationFailed(_logger, ex);
         }
     }
@@ -1185,15 +1225,20 @@ public partial class MainWindow : Window
     internal static bool CanCommitPreviewDiffNavigation(
         int expectedGeneration,
         int currentGeneration,
+        int expectedOperationId,
+        int currentOperationId,
         PreviewDiffNavigationResult beforeResult,
         PreviewDiffNavigationResult afterResult)
         => expectedGeneration == currentGeneration
+            && expectedOperationId == currentOperationId
             && (beforeResult.Found || afterResult.Found);
 
     private void ResetPreviewDiffNavigation()
     {
         _previewDiffCount = 0;
         _currentPreviewDiffIndex = -1;
+        _requestedPreviewDiffIndex = -1;
+        _previewDiffNavigationOperationId++;
         PreviewDiffNavigationPanel.Visibility = Visibility.Collapsed;
         PreviewDiffNavigationText.Text = "差分なし";
         PreviousPreviewDiffButton.IsEnabled = false;
