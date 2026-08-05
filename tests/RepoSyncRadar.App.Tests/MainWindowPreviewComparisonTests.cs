@@ -665,6 +665,8 @@ public sealed class MainWindowPreviewComparisonTests
         var change = Assert.Single(plan.Changes);
         Assert.Equal([1, 2], change.BeforeIndexes);
         Assert.Equal(_indexOne, change.AfterIndexes);
+        Assert.Equal(2, plan.BeforeChangedIndexes.Count);
+        Assert.Single(plan.AfterChangedIndexes);
     }
 
     [Fact]
@@ -776,6 +778,30 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(expectedDirection, (int)direction);
     }
 
+    [Theory]
+    [InlineData(3, 3, true, false, true)]
+    [InlineData(3, 3, false, true, true)]
+    [InlineData(3, 3, false, false, false)]
+    [InlineData(3, 4, true, true, false)]
+    public void CanCommitPreviewDiffNavigation_Requires_Current_Generation_And_Found_Target(
+        int expectedGeneration,
+        int currentGeneration,
+        bool beforeFound,
+        bool afterFound,
+        bool expected)
+    {
+        var beforeResult = new PreviewDiffNavigationResult(beforeFound, 0);
+        var afterResult = new PreviewDiffNavigationResult(afterFound, 0);
+
+        Assert.Equal(
+            expected,
+            MainWindow.CanCommitPreviewDiffNavigation(
+                expectedGeneration,
+                currentGeneration,
+                beforeResult,
+                afterResult));
+    }
+
     [Fact]
     public void PreviewDiffHighlighter_ApplyPlanScript_Preserves_GitHub_Alert_Layout()
     {
@@ -818,6 +844,12 @@ public sealed class MainWindowPreviewComparisonTests
 
         Assert.Contains("data-rsr-diff-navigation-index=\"2\"", script, StringComparison.Ordinal);
         Assert.Contains("rsr-preview-diff-active-overlay", script, StringComparison.Ordinal);
+        Assert.Contains("--rsr-preview-diff-outline: #0969da", script, StringComparison.Ordinal);
+        Assert.Contains("--rsr-preview-diff-outline: #58a6ff", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "border: 2px solid var(--rsr-preview-diff-outline)",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("pointer-events: none", script, StringComparison.Ordinal);
         Assert.Contains("overlay.setAttribute('aria-hidden', 'true')", script, StringComparison.Ordinal);
         Assert.Contains("Math.min(...rects.map((rect) => rect.left))", script, StringComparison.Ordinal);

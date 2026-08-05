@@ -449,9 +449,23 @@ internal static class PreviewDiffHighlighter
     const style = document.createElement('style');
     style.id = styleId;
     style.textContent = `
+:root {
+  --rsr-preview-diff-outline: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-color-mode="light"]) {
+    --rsr-preview-diff-outline: #58a6ff;
+  }
+}
+:root[data-color-mode="dark"] {
+  --rsr-preview-diff-outline: #58a6ff;
+}
+:root[data-color-mode="light"] {
+  --rsr-preview-diff-outline: #0969da;
+}
 .rsr-preview-diff-active-overlay {
   background: rgba(88, 166, 255, 0.035) !important;
-  border: 2px solid #58a6ff !important;
+  border: 2px solid var(--rsr-preview-diff-outline) !important;
   border-radius: 6px !important;
   box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.16) !important;
   box-sizing: border-box !important;

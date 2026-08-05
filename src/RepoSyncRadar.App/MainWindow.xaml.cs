@@ -1112,7 +1112,7 @@ public partial class MainWindow : Window
         }
 
         _previewDiffCount = Math.Max(0, count);
-        _currentPreviewDiffIndex = _previewDiffCount > 0 ? 0 : -1;
+        _currentPreviewDiffIndex = -1;
         UpdatePreviewDiffNavigationControls();
         if (_previewDiffCount > 0)
         {
@@ -1134,14 +1134,24 @@ public partial class MainWindow : Window
                 return;
             }
 
-            _currentPreviewDiffIndex = targetIndex;
-            UpdatePreviewDiffNavigationControls();
             var script = PreviewDiffHighlighter.BuildNavigateToDiffScript(targetIndex);
             var results = await Task.WhenAll(
                 DocsView.ExecuteScriptAsync(script),
                 PreviewView.ExecuteScriptAsync(script));
             var beforeResult = PreviewDiffHighlighter.ParseNavigateResult(results[0]);
             var afterResult = PreviewDiffHighlighter.ParseNavigateResult(results[1]);
+            if (_activePreviewDiffRequest is null
+                || !CanCommitPreviewDiffNavigation(
+                    generation,
+                    _previewDiffGeneration,
+                    beforeResult,
+                    afterResult))
+            {
+                return;
+            }
+
+            _currentPreviewDiffIndex = targetIndex;
+            UpdatePreviewDiffNavigationControls();
             if (beforeResult.Found && !afterResult.Found)
             {
                 await ApplySynchronizedScrollAsync(
@@ -1165,11 +1175,20 @@ public partial class MainWindow : Window
                     generation);
             }
         }
+
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogPreviewDiffNavigationFailed(_logger, ex);
         }
     }
+
+    internal static bool CanCommitPreviewDiffNavigation(
+        int expectedGeneration,
+        int currentGeneration,
+        PreviewDiffNavigationResult beforeResult,
+        PreviewDiffNavigationResult afterResult)
+        => expectedGeneration == currentGeneration
+            && (beforeResult.Found || afterResult.Found);
 
     private void ResetPreviewDiffNavigation()
     {
@@ -1811,8 +1830,8 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var beforeCount = plan.Changes.Count(static change => change.BeforeIndexes.Count > 0);
-            var afterCount = plan.Changes.Count(static change => change.AfterIndexes.Count > 0);
+            var beforeCount = plan.BeforeChangedIndexes.Count;
+            var afterCount = plan.AfterChangedIndexes.Count;
             OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
                 request.BeforeLabel,
                 beforeCount,
