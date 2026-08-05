@@ -60,9 +60,10 @@ internal static class PreviewDiffHighlighter
   });
 
   const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
-  const canonicalizeMediaSource = (value) =>
+  const diffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
+  const canonicalizePaneRoutes = (value) =>
     normalize(value).replace(
-      /\/markdown-assets\/(?:before|after)(?=\/)/,
+      /\/markdown-assets\/(?:before|after)(?=\/)/g,
       '/markdown-assets/shared');
   const fingerprintMediaContent = (element) => {
     if (!(element instanceof HTMLImageElement) ||
@@ -91,6 +92,30 @@ internal static class PreviewDiffHighlighter
       return '';
     }
   };
+  const describeChangedMarkup = (element) => {
+    const clone = element.cloneNode(true);
+    const markers = [
+      ...(clone.matches(diffSelector) ? [clone] : []),
+      ...clone.querySelectorAll(diffSelector),
+    ];
+    markers.forEach((marker) => {
+      marker.classList.remove('rsr-rendered-diff-added', 'rsr-rendered-diff-removed');
+      marker.classList.add('rsr-rendered-diff-changed');
+    });
+    clone.querySelectorAll('[src],[poster]').forEach((media) => {
+      ['src', 'poster'].forEach((attribute) => {
+        if (media.hasAttribute(attribute)) {
+          media.setAttribute(attribute, canonicalizePaneRoutes(media.getAttribute(attribute)));
+        }
+      });
+    });
+    clone.querySelectorAll('[data-rsr-diff-index],[data-rsr-diff-navigation-index]')
+      .forEach((target) => {
+        target.removeAttribute('data-rsr-diff-index');
+        target.removeAttribute('data-rsr-diff-navigation-index');
+      });
+    return normalize(clone.innerHTML);
+  };
   const describe = (element) => {
     if (element.matches(mediaSelector)) {
       const source =
@@ -99,9 +124,12 @@ internal static class PreviewDiffHighlighter
         element.getAttribute('poster') ||
         element.getAttribute('alt') ||
         element.outerHTML;
-      return `media:${element.tagName.toLowerCase()}:${canonicalizeMediaSource(source)}:${fingerprintMediaContent(element)}`;
+      return `media:${element.tagName.toLowerCase()}:${canonicalizePaneRoutes(source)}:${fingerprintMediaContent(element)}`;
     }
-    return normalize(element.innerText || element.textContent);
+    const text = normalize(element.innerText || element.textContent);
+    return element.matches(diffSelector) || element.querySelector(diffSelector)
+      ? `${text}|markup:${describeChangedMarkup(element)}`
+      : text;
   };
   const isVisibleMedia = (element) => {
     if (!element.matches(mediaSelector)) {

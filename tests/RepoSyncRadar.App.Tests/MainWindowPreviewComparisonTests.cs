@@ -568,6 +568,25 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Preserves_FormattingOnly_Changes()
+    {
+        var beforeBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "plain|markup:<span class=\"rsr-rendered-diff-changed\">plain</span>"),
+        };
+        var afterBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "plain|markup:<strong><span class=\"rsr-rendered-diff-changed\">plain</span></strong>"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Equal([0], plan.BeforeChangedIndexes);
+        Assert.Equal([0], plan.AfterChangedIndexes);
+        Assert.Single(plan.Changes);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildPlan_Marks_Inserted_Block_On_After_Pane()
     {
         var beforeBlocks = new[]
@@ -735,11 +754,14 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("isVisibleMedia(element)", script, StringComparison.Ordinal);
         Assert.Contains("const textContainer = element.closest(blockSelector)", script, StringComparison.Ordinal);
         Assert.Contains("element.getClientRects().length > 0", script, StringComparison.Ordinal);
-        Assert.Contains("/\\/markdown-assets\\/(?:before|after)(?=\\/)/", script, StringComparison.Ordinal);
+        Assert.Contains("/\\/markdown-assets\\/(?:before|after)(?=\\/)/g", script, StringComparison.Ordinal);
         Assert.Contains("'/markdown-assets/shared'", script, StringComparison.Ordinal);
         Assert.Contains("const fingerprintMediaContent = (element)", script, StringComparison.Ordinal);
         Assert.Contains("context.getImageData(0, 0, canvas.width, canvas.height).data", script, StringComparison.Ordinal);
         Assert.Contains("hash = Math.imul(hash, 16777619)", script, StringComparison.Ordinal);
+        Assert.Contains("const describeChangedMarkup = (element)", script, StringComparison.Ordinal);
+        Assert.Contains("marker.classList.add('rsr-rendered-diff-changed')", script, StringComparison.Ordinal);
+        Assert.Contains("`${text}|markup:${describeChangedMarkup(element)}`", script, StringComparison.Ordinal);
         Assert.Contains("return isVisibleMedia(element)", script, StringComparison.Ordinal);
         Assert.Contains("return `media:${element.tagName.toLowerCase()}", script, StringComparison.Ordinal);
     }
