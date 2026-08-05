@@ -182,6 +182,8 @@ public sealed class MorningTriageSessionTests
                 MakeCommit("bbb2222222222222222222222222222222222222", 2, "content/b.md"),
                 MakeCommit("ccc3333333333333333333333333333333333333", 3, "content/c.md"),
             ]));
+        repository.CountCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(3);
 
         var prompts = new List<string>();
         var session1 = Substitute.For<ICopilotSession>();
@@ -220,6 +222,11 @@ public sealed class MorningTriageSessionTests
                 && filter.UnscoredOnly
                 && filter.OldestFirst
                 && filter.Limit == TriagePreflightSummaryBuilder.ScoringTargetLimit),
+            Arg.Any<CancellationToken>());
+        await repository.Received(1).CountCommitsAsync(
+            Arg.Is<CommitQueryFilter>(filter =>
+                filter.Status == ReviewStatus.Unseen
+                && filter.UnscoredOnly),
             Arg.Any<CancellationToken>());
         await session1.Received(1).SendAsync(Arg.Any<string>(), MorningTriageSession.TriageSendTimeout, Arg.Any<CancellationToken>());
         await session2.Received(1).SendAsync(Arg.Any<string>(), MorningTriageSession.TriageSendTimeout, Arg.Any<CancellationToken>());

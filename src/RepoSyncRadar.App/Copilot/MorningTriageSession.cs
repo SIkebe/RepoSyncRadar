@@ -239,14 +239,14 @@ public sealed partial class MorningTriageSession
             return report;
         }
 
-        var remaining = await _repository.QueryCommitsAsync(
+        var remainingCount = await _repository.CountCommitsAsync(
             new CommitQueryFilter
             {
                 Status = ReviewStatus.Unseen,
                 UnscoredOnly = true,
             },
             cancellationToken).ConfigureAwait(false);
-        return report with { RemainingUnscoredCommitCount = remaining.Count };
+        return report with { RemainingUnscoredCommitCount = remainingCount };
     }
 
     private async Task RunParallelScoringAsync(

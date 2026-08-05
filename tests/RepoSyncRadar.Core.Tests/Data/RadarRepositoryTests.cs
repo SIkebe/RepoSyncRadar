@@ -539,6 +539,15 @@ public sealed class RadarRepositoryTests
         var commit = Assert.Single(commits);
         Assert.Equal("sha-unscored-new", commit.Sha);
         Assert.Null(commit.Scoring);
+
+        var count = await repository.CountCommitsAsync(
+            new CommitQueryFilter
+            {
+                Status = ReviewStatus.Unseen,
+                UnscoredOnly = true,
+            },
+            ct);
+        Assert.Equal(2, count);
     }
 
     [Fact]

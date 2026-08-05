@@ -311,6 +311,9 @@ public sealed class RadarToolsTests
             return Task.FromResult<IReadOnlyList<Commit>>(filtered.ToList());
         }
 
+        public Task<int> CountCommitsAsync(CommitQueryFilter filter, CancellationToken cancellationToken = default)
+            => Task.FromResult(_commits.Count);
+
         public Task<IReadOnlyDictionary<ReviewStatus, int>> GetReviewCountsAsync(CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(new Dictionary<ReviewStatus, int>());
 

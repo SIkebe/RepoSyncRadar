@@ -92,6 +92,14 @@ public interface IRadarRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns the number of commits matching <paramref name="filter"/> without loading commit
+    /// entities or their related rows.
+    /// </summary>
+    Task<int> CountCommitsAsync(
+        CommitQueryFilter filter,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns a count per <see cref="ReviewStatus"/> across all persisted commits. Commits
     /// without a <see cref="Review"/> row and legacy <see cref="ReviewStatus.Seen"/> rows count toward <see cref="ReviewStatus.Unseen"/>. The
     /// returned dictionary is guaranteed to contain every <see cref="ReviewStatus"/> key (with

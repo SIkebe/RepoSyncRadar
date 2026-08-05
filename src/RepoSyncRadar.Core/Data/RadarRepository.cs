@@ -317,6 +317,36 @@ public sealed class RadarRepository : IRadarRepository
             .Include(c => c.Review)
             .Include(c => c.Scoring);
 
+        query = ApplyCommitFilter(query, filter);
+
+        query = filter.OldestFirst
+            ? query.OrderBy(c => c.AuthoredAt)
+            : query.OrderByDescending(c => c.AuthoredAt);
+
+        if (filter.Limit is { } limit && limit >= 0)
+        {
+            query = query.Take(limit);
+        }
+
+        var commits = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        return commits;
+    }
+
+    public async Task<int> CountCommitsAsync(
+        CommitQueryFilter filter,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+
+        using var db = _contextFactory.CreateDbContext();
+        var query = ApplyCommitFilter(db.Commits.AsNoTracking(), filter);
+        return await query.CountAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static IQueryable<Commit> ApplyCommitFilter(
+        IQueryable<Commit> query,
+        CommitQueryFilter filter)
+    {
         if (filter.Status is { } status)
         {
             query = status == ReviewStatus.Unseen
@@ -350,17 +380,7 @@ public sealed class RadarRepository : IRadarRepository
                     || EF.Functions.Like(c.Message, searchPattern));
         }
 
-        query = filter.OldestFirst
-            ? query.OrderBy(c => c.AuthoredAt)
-            : query.OrderByDescending(c => c.AuthoredAt);
-
-        if (filter.Limit is { } limit && limit >= 0)
-        {
-            query = query.Take(limit);
-        }
-
-        var commits = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
-        return commits;
+        return query;
     }
 
     private static string NormalizeSearchQuery(string? value)
