@@ -182,6 +182,8 @@ public sealed class MorningTriageSessionTests
                 MakeCommit("bbb2222222222222222222222222222222222222", 2, "content/b.md"),
                 MakeCommit("ccc3333333333333333333333333333333333333", 3, "content/c.md"),
             ]));
+        repository.CountCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(3);
 
         var prompts = new List<string>();
         var session1 = Substitute.For<ICopilotSession>();
@@ -211,11 +213,24 @@ public sealed class MorningTriageSessionTests
             reviewBroadcaster: null,
             NullLogger<MorningTriageSession>.Instance);
 
-        await triage.RunAsync(ct);
+        var report = await triage.RunAsync(ct);
 
         await factory.Received(2).CreateSessionAsync(SessionPurpose.Triage, Arg.Any<CancellationToken>());
+        await repository.Received(1).QueryCommitsAsync(
+            Arg.Is<CommitQueryFilter>(filter =>
+                filter.Status == ReviewStatus.Unseen
+                && filter.UnscoredOnly
+                && filter.OldestFirst
+                && filter.Limit == TriagePreflightSummaryBuilder.ScoringTargetLimit),
+            Arg.Any<CancellationToken>());
+        await repository.Received(1).CountCommitsAsync(
+            Arg.Is<CommitQueryFilter>(filter =>
+                filter.Status == ReviewStatus.Unseen
+                && filter.UnscoredOnly),
+            Arg.Any<CancellationToken>());
         await session1.Received(1).SendAsync(Arg.Any<string>(), MorningTriageSession.TriageSendTimeout, Arg.Any<CancellationToken>());
         await session2.Received(1).SendAsync(Arg.Any<string>(), MorningTriageSession.TriageSendTimeout, Arg.Any<CancellationToken>());
+        Assert.Equal(3, report.RemainingUnscoredCommitCount);
         Assert.Equal(2, prompts.Count);
         Assert.Contains(prompts, prompt => prompt.Contains("aaa1111111111111111111111111111111111111", StringComparison.Ordinal)
             && prompt.Contains("ccc3333333333333333333333333333333333333", StringComparison.Ordinal));

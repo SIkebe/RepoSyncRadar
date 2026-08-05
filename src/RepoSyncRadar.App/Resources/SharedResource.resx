@@ -15,6 +15,7 @@
   <data name="AppHeader.SignInFailed" xml:space="preserve"><value>サインイン失敗</value></data>
   <data name="AppHeader.SignOutFailed" xml:space="preserve"><value>サインアウト失敗</value></data>
   <data name="AppHeader.TriageCompleted" xml:space="preserve"><value>Triage 完了</value></data>
+  <data name="AppHeader.TriageCompletedWithRemaining" xml:space="preserve"><value>今回の Triage は完了しました。未採点が {0} 件残っています。古いものから処理するため、Triage を再実行してください。</value></data>
   <data name="AppHeader.TriageFailed" xml:space="preserve"><value>Triage 失敗</value></data>
   <data name="AppHeader.TriageFailedStatus" xml:space="preserve"><value>Triage は失敗しました。詳細はエラーを確認してください。</value></data>
   <data name="AppHeader.TriageStarting" xml:space="preserve"><value>Triage を開始しています…</value></data>

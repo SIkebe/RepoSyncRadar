@@ -80,13 +80,22 @@ public interface IRadarRepository
 
     /// <summary>
     /// Returns commits matching <paramref name="filter"/>, eagerly loading <see cref="Commit.Files"/>
-    /// and <see cref="Commit.Review"/>, ordered by <see cref="Commit.AuthoredAt"/> descending.
+    /// and <see cref="Commit.Review"/>, ordered by <see cref="Commit.AuthoredAt"/> descending
+    /// unless <see cref="CommitQueryFilter.OldestFirst"/> is set.
     /// Search text matches SHA, PR number, and commit message.
     /// A commit without a <see cref="Review"/> row is treated as <see cref="ReviewStatus.Unseen"/>.
     /// Legacy <see cref="ReviewStatus.Seen"/> rows are also returned by the
     /// <see cref="ReviewStatus.Unseen"/> filter.
     /// </summary>
     Task<IReadOnlyList<Commit>> QueryCommitsAsync(
+        CommitQueryFilter filter,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the number of commits matching <paramref name="filter"/> without loading commit
+    /// entities or their related rows.
+    /// </summary>
+    Task<int> CountCommitsAsync(
         CommitQueryFilter filter,
         CancellationToken cancellationToken = default);
 

@@ -110,6 +110,12 @@ html, body {
     opacity: 0.85;
 }
 
+.app-header-warning-text {
+    color: var(--radar-warning-fg, #7d4e00);
+    font-size: 0.85em;
+    font-weight: 600;
+}
+
 .app-header-error-text {
     color: #ef4444;
     font-size: 0.85em;

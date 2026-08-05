@@ -94,7 +94,7 @@
             else
             {
                 <span data-testid="app-header-triage-status"
-                      class="app-header-secondary-text"
+                      class="@(_lastReport?.RemainingUnscoredCommitCount is > 0 ? "app-header-warning-text" : "app-header-secondary-text")"
                       role="status"
                       aria-live="polite"
                       aria-atomic="true">
@@ -757,7 +757,9 @@
             // data the moment Triage finishes. The broadcaster is a no-op
             // pub/sub so we can publish freely without coupling to a triage-specific bus.
             _broadcaster?.Publish();
-            _triageStatus = L["AppHeader.TriageCompleted"];
+            _triageStatus = _lastReport.RemainingUnscoredCommitCount is > 0
+                ? L["AppHeader.TriageCompletedWithRemaining", _lastReport.RemainingUnscoredCommitCount]
+                : L["AppHeader.TriageCompleted"];
         }
         catch (Exception ex)
         {
