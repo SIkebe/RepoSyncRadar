@@ -429,6 +429,74 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
+    public async Task QueryCommitsAsync_Orders_By_Date_Or_Score_In_Both_Directions()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+        var baseTime = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await repository.UpsertCommitsAsync(
+            new[]
+            {
+                MakeCommit("sha-old-low", prNumber: 1, authoredAt: baseTime),
+                MakeCommit("sha-middle-high", prNumber: 2, authoredAt: baseTime.AddDays(1)),
+                MakeCommit("sha-new-unscored", prNumber: 3, authoredAt: baseTime.AddDays(2)),
+            },
+            ct);
+
+        using (var seed = fixture.CreateContext())
+        {
+            seed.Scorings.AddRange(
+                new Scoring
+                {
+                    Sha = "sha-old-low",
+                    Score = 0.31,
+                    Category = "feature-update",
+                    AudienceJson = "[]",
+                    ScoredAt = baseTime,
+                },
+                new Scoring
+                {
+                    Sha = "sha-middle-high",
+                    Score = 0.92,
+                    Category = "feature-update",
+                    AudienceJson = "[]",
+                    ScoredAt = baseTime,
+                });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var oldest = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.Oldest },
+            ct);
+        var highestScore = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.ScoreDescending },
+            ct);
+        var lowestScore = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.ScoreAscending },
+            ct);
+        var highestScoreLimited = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.ScoreDescending, Limit = 1 },
+            ct);
+        var lowestScoreLimited = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.ScoreAscending, Limit = 1 },
+            ct);
+
+        Assert.Equal(
+            ["sha-old-low", "sha-middle-high", "sha-new-unscored"],
+            oldest.Select(static commit => commit.Sha));
+        Assert.Equal(
+            ["sha-middle-high", "sha-old-low", "sha-new-unscored"],
+            highestScore.Select(static commit => commit.Sha));
+        Assert.Equal(
+            ["sha-old-low", "sha-middle-high", "sha-new-unscored"],
+            lowestScore.Select(static commit => commit.Sha));
+        Assert.Equal("sha-middle-high", Assert.Single(highestScoreLimited).Sha);
+        Assert.Equal("sha-old-low", Assert.Single(lowestScoreLimited).Sha);
+    }
+
+    [Fact]
     public async Task DeleteUnseenCommitsAsync_Removes_Only_Unseen_And_Cascades_Local_Rows()
     {
         using var fixture = new SqliteFixture();
@@ -551,7 +619,7 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
-    public async Task QueryCommitsAsync_OldestFirst_Applies_Before_Limit()
+    public async Task QueryCommitsAsync_Oldest_Sort_Applies_Before_Limit()
     {
         using var fixture = new SqliteFixture();
         var repository = fixture.CreateRepository();
@@ -572,7 +640,7 @@ public sealed class RadarRepositoryTests
                 Status = ReviewStatus.Unseen,
                 Limit = 1,
                 UnscoredOnly = true,
-                OldestFirst = true,
+                SortOrder = CommitSortOrder.Oldest,
             },
             ct);
 

@@ -319,9 +319,25 @@ public sealed class RadarRepository : IRadarRepository
 
         query = ApplyCommitFilter(query, filter);
 
-        query = filter.OldestFirst
-            ? query.OrderBy(c => c.AuthoredAt)
-            : query.OrderByDescending(c => c.AuthoredAt);
+        query = filter.SortOrder switch
+        {
+            CommitSortOrder.Oldest => query
+                .OrderBy(c => c.AuthoredAt)
+                .ThenBy(c => c.Sha),
+            CommitSortOrder.ScoreDescending => query
+                .OrderBy(c => c.Scoring == null)
+                .ThenByDescending(c => c.Scoring!.Score)
+                .ThenByDescending(c => c.AuthoredAt)
+                .ThenBy(c => c.Sha),
+            CommitSortOrder.ScoreAscending => query
+                .OrderBy(c => c.Scoring == null)
+                .ThenBy(c => c.Scoring!.Score)
+                .ThenByDescending(c => c.AuthoredAt)
+                .ThenBy(c => c.Sha),
+            _ => query
+                .OrderByDescending(c => c.AuthoredAt)
+                .ThenBy(c => c.Sha),
+        };
 
         if (filter.Limit is { } limit && limit >= 0)
         {

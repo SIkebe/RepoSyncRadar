@@ -93,6 +93,11 @@
   <data name="CommitList.Empty.WatchTitle" xml:space="preserve"><value>注目キューは空です。</value></data>
   <data name="CommitList.ScoreTitle" xml:space="preserve"><value>スコア {0}</value></data>
   <data name="CommitList.SelectCommitAriaLabel" xml:space="preserve"><value>{0} を選択</value></data>
+  <data name="CommitList.Sort.Label" xml:space="preserve"><value>並び順</value></data>
+  <data name="CommitList.Sort.Newest" xml:space="preserve"><value>新しい順</value></data>
+  <data name="CommitList.Sort.Oldest" xml:space="preserve"><value>古い順</value></data>
+  <data name="CommitList.Sort.ScoreAscending" xml:space="preserve"><value>スコア低い順</value></data>
+  <data name="CommitList.Sort.ScoreDescending" xml:space="preserve"><value>スコア高い順</value></data>
   <data name="CommitList.Unscored" xml:space="preserve"><value>未採点</value></data>
   <data name="CommitList.UnscoredTitle" xml:space="preserve"><value>未スコアリング</value></data>
   <data name="CommitDetail.Audience" xml:space="preserve"><value>対象</value></data>

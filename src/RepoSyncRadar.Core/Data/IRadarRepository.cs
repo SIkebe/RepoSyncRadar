@@ -80,8 +80,7 @@ public interface IRadarRepository
 
     /// <summary>
     /// Returns commits matching <paramref name="filter"/>, eagerly loading <see cref="Commit.Files"/>
-    /// and <see cref="Commit.Review"/>, ordered by <see cref="Commit.AuthoredAt"/> descending
-    /// unless <see cref="CommitQueryFilter.OldestFirst"/> is set.
+    /// and <see cref="Commit.Review"/>, ordered according to <see cref="CommitQueryFilter.SortOrder"/>.
     /// Search text matches SHA, PR number, and commit message.
     /// A commit without a <see cref="Review"/> row is treated as <see cref="ReviewStatus.Unseen"/>.
     /// Legacy <see cref="ReviewStatus.Seen"/> rows are also returned by the

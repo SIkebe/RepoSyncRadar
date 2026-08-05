@@ -507,6 +507,76 @@ public sealed class WorkbenchTests
     }
 
     [Fact]
+    public async Task Commit_Sort_Options_Are_Grouped_By_Field_And_Reorder_Without_Clearing_Selection()
+    {
+        var olderHighScore = MakeWorkbenchCommit("aaa1111aaa1111aaa1111aaa1111aaa1111aaa1", "older high score");
+        olderHighScore.AuthoredAt = new DateTime(2026, 5, 14, 4, 0, 0, DateTimeKind.Utc);
+        olderHighScore.Scoring = new Scoring { Sha = olderHighScore.Sha, Score = 0.91 };
+        var newerLowScore = MakeWorkbenchCommit("bbb2222bbb2222bbb2222bbb2222bbb2222bbb2", "newer low score");
+        newerLowScore.Scoring = new Scoring { Sha = newerLowScore.Sha, Score = 0.42 };
+        var oldestUnscored = MakeWorkbenchCommit("ccc3333ccc3333ccc3333ccc3333ccc3333ccc3", "oldest unscored");
+        oldestUnscored.AuthoredAt = new DateTime(2026, 5, 13, 4, 0, 0, DateTimeKind.Utc);
+        var commits = new[] { olderHighScore, newerLowScore, oldestUnscored };
+
+        var repo = Substitute.For<IRadarRepository>();
+        repo.GetReviewCountsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyDictionary<ReviewStatus, int>>(BuildCounts(commits.Select(static _ => ReviewStatus.Unseen))));
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var filter = call.Arg<CommitQueryFilter>();
+                IReadOnlyList<Commit> ordered = filter.SortOrder switch
+                {
+                    CommitSortOrder.ScoreDescending => commits
+                        .OrderBy(static commit => commit.Scoring is null)
+                        .ThenByDescending(static commit => commit.Scoring?.Score)
+                        .ToArray(),
+                    CommitSortOrder.ScoreAscending => commits
+                        .OrderBy(static commit => commit.Scoring is null)
+                        .ThenBy(static commit => commit.Scoring?.Score)
+                        .ToArray(),
+                    CommitSortOrder.Oldest => commits.OrderBy(static commit => commit.AuthoredAt).ToArray(),
+                    _ => commits.OrderByDescending(static commit => commit.AuthoredAt).ToArray(),
+                };
+                return Task.FromResult(ordered);
+            });
+
+        await using var ctx = CreateWorkbenchTestContext(repo, out _);
+        var cut = ctx.Render<Workbench>();
+        cut.WaitForAssertion(() => Assert.Equal(newerLowScore.Sha, cut.FindAll("[data-testid=\"commit-row\"]")[0].GetAttribute("data-sha")));
+        Assert.Equal(
+            [
+                CommitSortOrder.Newest.ToString(),
+                CommitSortOrder.Oldest.ToString(),
+                CommitSortOrder.ScoreDescending.ToString(),
+                CommitSortOrder.ScoreAscending.ToString(),
+            ],
+            cut.FindAll("[data-testid=\"commit-sort-order\"] option")
+                .Select(static option => option.GetAttribute("value")));
+
+        cut.Find($"[data-testid=\"commit-select\"][data-sha=\"{newerLowScore.Sha}\"]").Change(true);
+        cut.Find("[data-testid=\"commit-sort-order\"]").Change(CommitSortOrder.ScoreDescending.ToString());
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(
+                [olderHighScore.Sha, newerLowScore.Sha, oldestUnscored.Sha],
+                cut.FindAll("[data-testid=\"commit-row\"]").Select(static row => row.GetAttribute("data-sha")));
+            Assert.True(cut.Find($"[data-testid=\"commit-select\"][data-sha=\"{newerLowScore.Sha}\"]").HasAttribute("checked"));
+        });
+
+        cut.Find("[data-testid=\"commit-sort-order\"]").Change(CommitSortOrder.ScoreAscending.ToString());
+
+        cut.WaitForAssertion(() => Assert.Equal(
+            [newerLowScore.Sha, olderHighScore.Sha, oldestUnscored.Sha],
+            cut.FindAll("[data-testid=\"commit-row\"]").Select(static row => row.GetAttribute("data-sha"))));
+
+        cut.Find("[data-testid=\"commit-sort-order\"]").Change(CommitSortOrder.Oldest.ToString());
+
+        cut.WaitForAssertion(() => Assert.Equal(oldestUnscored.Sha, cut.FindAll("[data-testid=\"commit-row\"]")[0].GetAttribute("data-sha")));
+    }
+
+    [Fact]
     public async Task Bulk_Move_Selected_Unseen_Commits_To_Later_Updates_Each_Review()
     {
         var commits = new List<Commit>

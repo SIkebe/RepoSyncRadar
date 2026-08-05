@@ -93,6 +93,11 @@
   <data name="CommitList.Empty.WatchTitle" xml:space="preserve"><value>The watch queue is empty.</value></data>
   <data name="CommitList.ScoreTitle" xml:space="preserve"><value>Score {0}</value></data>
   <data name="CommitList.SelectCommitAriaLabel" xml:space="preserve"><value>Select {0}</value></data>
+  <data name="CommitList.Sort.Label" xml:space="preserve"><value>Sort</value></data>
+  <data name="CommitList.Sort.Newest" xml:space="preserve"><value>Newest</value></data>
+  <data name="CommitList.Sort.Oldest" xml:space="preserve"><value>Oldest</value></data>
+  <data name="CommitList.Sort.ScoreAscending" xml:space="preserve"><value>Lowest score</value></data>
+  <data name="CommitList.Sort.ScoreDescending" xml:space="preserve"><value>Highest score</value></data>
   <data name="CommitList.Unscored" xml:space="preserve"><value>Unscored</value></data>
   <data name="CommitList.UnscoredTitle" xml:space="preserve"><value>Unscored</value></data>
   <data name="CommitDetail.Audience" xml:space="preserve"><value>Audience</value></data>

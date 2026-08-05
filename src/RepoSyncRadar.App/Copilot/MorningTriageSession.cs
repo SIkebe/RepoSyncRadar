@@ -225,7 +225,7 @@ public sealed partial class MorningTriageSession
                 Status = ReviewStatus.Unseen,
                 Limit = TriagePreflightSummaryBuilder.ScoringTargetLimit,
                 UnscoredOnly = true,
-                OldestFirst = true,
+                SortOrder = CommitSortOrder.Oldest,
             },
             cancellationToken).ConfigureAwait(false);
     }

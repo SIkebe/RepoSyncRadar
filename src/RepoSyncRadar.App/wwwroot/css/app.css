@@ -407,6 +407,8 @@ html, body {
 }
 
 .radar-workbench {
+    container-name: radar-workbench;
+    container-type: inline-size;
     padding: 0.75rem 1rem;
     overflow-x: hidden;
     overflow-y: auto;
@@ -437,11 +439,12 @@ html, body {
     align-items: center;
     display: grid;
     gap: 0.45rem;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     margin-bottom: 0.5rem;
 }
 
-.commit-search-label {
+.commit-search-label,
+.commit-sort-label {
     color: #57606a;
     font-size: 0.78rem;
     font-weight: 700;
@@ -486,6 +489,35 @@ html, body {
 
 .commit-search-clear:hover:not(:disabled) {
     background: #f6f8fa;
+}
+
+.commit-sort-select {
+    background: #fff;
+    border: 1px solid #d0d7de;
+    border-radius: 4px;
+    color: #24292f;
+    font: inherit;
+    font-size: 0.78rem;
+    min-height: 2rem;
+    padding: 0.22rem 1.6rem 0.22rem 0.55rem;
+}
+
+@container radar-workbench (max-width: 42rem) {
+    .commit-search-toolbar {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+
+    .commit-sort-label {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .commit-sort-select {
+        grid-column: 2 / -1;
+        grid-row: 2;
+        min-width: 0;
+        width: 100%;
+    }
 }
 
 .commit-list-selection-toolbar {
@@ -1326,6 +1358,7 @@ html, body {
 .review-input-action input:focus-visible,
 .review-boost-field input:focus-visible,
 .commit-search-input:focus-visible,
+.commit-sort-select:focus-visible,
 .commit-row-select:focus-visible,
 .radar-commit-detail .urls a:focus-visible {
     outline: 2px solid var(--radar-focus-ring, #0969da);
@@ -2682,6 +2715,7 @@ html, body {
 .radar-theme-dark .preview-progress-elapsed,
 .radar-theme-dark .preview-progress-pid,
 .radar-theme-dark .commit-search-label,
+.radar-theme-dark .commit-sort-label,
 .radar-theme-dark .commit-list-selection-count,
 .radar-theme-dark .bulk-review-count,
 .radar-theme-dark .bulk-review-status,
@@ -2750,6 +2784,7 @@ html, body {
 .radar-theme-dark .review-suggestion-chip.already-ignored,
 .radar-theme-dark .review-archived-reason,
 .radar-theme-dark .commit-search-input,
+.radar-theme-dark .commit-sort-select,
 .radar-theme-dark .preview-progress,
 .radar-theme-dark .preview-cancel,
 .radar-theme-dark .commit-search-clear,

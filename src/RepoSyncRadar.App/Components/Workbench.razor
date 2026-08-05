@@ -61,6 +61,17 @@
                             data-testid="commit-hash-search-clear"
                             disabled="@string.IsNullOrWhiteSpace(_commitHashQuery)"
                             @onclick="ClearCommitHashSearchAsync">@L["Common.Clear"]</button>
+                    <label class="commit-sort-label" for="commit-sort-order">@L["CommitList.Sort.Label"]</label>
+                    <select id="commit-sort-order"
+                            class="commit-sort-select"
+                            data-testid="commit-sort-order"
+                            value="@_sortOrder"
+                            @onchange="HandleCommitSortChanged">
+                        <option value="@CommitSortOrder.Newest">@L["CommitList.Sort.Newest"]</option>
+                        <option value="@CommitSortOrder.Oldest">@L["CommitList.Sort.Oldest"]</option>
+                        <option value="@CommitSortOrder.ScoreDescending">@L["CommitList.Sort.ScoreDescending"]</option>
+                        <option value="@CommitSortOrder.ScoreAscending">@L["CommitList.Sort.ScoreAscending"]</option>
+                    </select>
                 </div>
                 @if (_selectedCommitShas.Count > 0 || !string.IsNullOrWhiteSpace(_bulkReviewStatus))
                 {
@@ -221,6 +232,7 @@
     private readonly HashSet<string> _selectedCommitShas = new(StringComparer.Ordinal);
     private CommitQueryFilter _filter = new() { Status = ReviewStatus.Unseen };
     private string _commitHashQuery = string.Empty;
+    private CommitSortOrder _sortOrder = CommitSortOrder.Newest;
     private int _listRefreshVersion;
     private bool _bulkReviewBusy;
     private string? _bulkReviewStatus;
@@ -401,6 +413,20 @@
         return Task.CompletedTask;
     }
 
+    private Task HandleCommitSortChanged(ChangeEventArgs args)
+    {
+        if (!Enum.TryParse<CommitSortOrder>(args.Value?.ToString(), out var sortOrder)
+            || _sortOrder == sortOrder)
+        {
+            return Task.CompletedTask;
+        }
+
+        _sortOrder = sortOrder;
+        _filter = BuildCurrentFilter();
+        _listRefreshVersion++;
+        return Task.CompletedTask;
+    }
+
     private void RefreshCommitListForCurrentFilter()
     {
         _filter = BuildCurrentFilter();
@@ -416,6 +442,7 @@
         {
             Status = _selectedStatus,
             ShaQuery = NormalizeCommitSearchQuery(_commitHashQuery),
+            SortOrder = _sortOrder,
         };
 
     private static string? NormalizeCommitSearchQuery(string? value)
