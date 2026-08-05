@@ -70,6 +70,12 @@ internal enum PreviewScrollDirection
     Down,
 }
 
+internal enum PreviewDiffNavigationDirection
+{
+    Previous = -1,
+    Next = 1,
+}
+
 /// <summary>
 /// Top-level shell. Hosts a BlazorWebView (UI shell) and WebView2 docs surfaces.
 /// Rendering mode C from DESIGN.md §9.3.
@@ -156,6 +162,8 @@ public partial class MainWindow : Window
     private ulong? _pendingSinglePageBlankNavigationId;
     private int _singlePageTransientRetryCount;
     private int _previewDiffGeneration;
+    private int _currentPreviewDiffIndex = -1;
+    private int _previewDiffCount;
     private bool _beforePreviewDiffReady;
     private bool _afterPreviewDiffReady;
     private ulong? _beforePreviewDiffNavigationId;
@@ -190,6 +198,7 @@ public partial class MainWindow : Window
         ArgumentNullException.ThrowIfNull(services);
         InitializeComponent();
         SourceInitialized += OnSourceInitialized;
+        PreviewKeyDown += OnMainWindowPreviewKeyDown;
         _previewFocusLayoutShieldTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = _previewFocusLayoutShieldDuration,
@@ -229,6 +238,7 @@ public partial class MainWindow : Window
             DocsView.PreviewMouseDown -= OnDocsSurfacePreviewMouseDown;
             PreviewView.PreviewMouseDown -= OnDocsSurfacePreviewMouseDown;
             _userSettingsStore.SettingsChanged -= OnUserSettingsChanged;
+            PreviewKeyDown -= OnMainWindowPreviewKeyDown;
             _windowHwndSource?.RemoveHook(OnWindowMessage);
             _windowHwndSource = null;
             if (DocsView.CoreWebView2 is not null)
@@ -603,6 +613,7 @@ public partial class MainWindow : Window
         PreviewDocsHeaderText.Foreground = headerForeground;
         OfficialDocsFilePathText.Foreground = headerMutedForeground;
         PreviewDocsFilePathText.Foreground = headerMutedForeground;
+        PreviewDiffNavigationText.Foreground = headerMutedForeground;
         WorkbenchPreviewSplitter.Background = splitterBackground;
         PreviewDocsSplitter.Background = splitterBackground;
         DocsPreviewStatusOverlay.Background = overlayBackground;
@@ -1031,6 +1042,26 @@ public partial class MainWindow : Window
     private void OnNextPreviewFileClicked(object sender, RoutedEventArgs e)
         => RequestPreviewFileNavigation(PreviewFileNavigationDirection.Next);
 
+    private void OnPreviousPreviewDiffClicked(object sender, RoutedEventArgs e)
+        => RequestPreviewDiffNavigation(PreviewDiffNavigationDirection.Previous);
+
+    private void OnNextPreviewDiffClicked(object sender, RoutedEventArgs e)
+        => RequestPreviewDiffNavigation(PreviewDiffNavigationDirection.Next);
+
+    private void OnMainWindowPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.F7 || _previewDiffCount <= 0)
+        {
+            return;
+        }
+
+        var direction = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
+            ? PreviewDiffNavigationDirection.Previous
+            : PreviewDiffNavigationDirection.Next;
+        RequestPreviewDiffNavigation(direction);
+        e.Handled = true;
+    }
+
     private void RequestPreviewFileNavigation(PreviewFileNavigationDirection direction)
     {
         if (_activePreviewDiffRequest is not { FileOrdinal: > 0, FileCount: > 1 })
@@ -1041,10 +1072,135 @@ public partial class MainWindow : Window
         _previewNavigator.RequestFileNavigation(direction);
     }
 
+    private void RequestPreviewDiffNavigation(PreviewDiffNavigationDirection direction)
+    {
+        if (_activePreviewDiffRequest is null || _previewDiffCount <= 0)
+        {
+            return;
+        }
+
+        var offset = direction == PreviewDiffNavigationDirection.Previous ? -1 : 1;
+        var targetIndex = _currentPreviewDiffIndex + offset;
+        if (targetIndex < 0 || targetIndex >= _previewDiffCount)
+        {
+            return;
+        }
+
+        _ = NavigateToPreviewDiffAsync(targetIndex, _previewDiffGeneration);
+    }
+
+    private async Task InitializePreviewDiffNavigationAsync(int count, int generation)
+    {
+        if (_activePreviewDiffRequest is null || generation != _previewDiffGeneration)
+        {
+            return;
+        }
+
+        _previewDiffCount = Math.Max(0, count);
+        _currentPreviewDiffIndex = _previewDiffCount > 0 ? 0 : -1;
+        UpdatePreviewDiffNavigationControls();
+        if (_previewDiffCount > 0)
+        {
+            await NavigateToPreviewDiffAsync(0, generation);
+        }
+    }
+
+    private async Task NavigateToPreviewDiffAsync(int targetIndex, int generation)
+    {
+        try
+        {
+            if (_activePreviewDiffRequest is null
+                || generation != _previewDiffGeneration
+                || targetIndex < 0
+                || targetIndex >= _previewDiffCount
+                || DocsView.CoreWebView2 is null
+                || PreviewView.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            _currentPreviewDiffIndex = targetIndex;
+            UpdatePreviewDiffNavigationControls();
+            var script = PreviewDiffHighlighter.BuildNavigateToDiffScript(targetIndex);
+            var results = await Task.WhenAll(
+                DocsView.ExecuteScriptAsync(script),
+                PreviewView.ExecuteScriptAsync(script));
+            var beforeResult = PreviewDiffHighlighter.ParseNavigateResult(results[0]);
+            var afterResult = PreviewDiffHighlighter.ParseNavigateResult(results[1]);
+            if (beforeResult.Found && !afterResult.Found)
+            {
+                await ApplySynchronizedScrollAsync(
+                    PreviewView,
+                    beforeResult.Ratio,
+                    double.NaN,
+                    null,
+                    double.NaN,
+                    PreviewScrollDirection.Unknown,
+                    generation);
+            }
+            else if (!beforeResult.Found && afterResult.Found)
+            {
+                await ApplySynchronizedScrollAsync(
+                    DocsView,
+                    afterResult.Ratio,
+                    double.NaN,
+                    null,
+                    double.NaN,
+                    PreviewScrollDirection.Unknown,
+                    generation);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPreviewDiffNavigationFailed(_logger, ex);
+        }
+    }
+
+    private void ResetPreviewDiffNavigation()
+    {
+        _previewDiffCount = 0;
+        _currentPreviewDiffIndex = -1;
+        PreviewDiffNavigationPanel.Visibility = Visibility.Collapsed;
+        PreviewDiffNavigationText.Text = "差分なし";
+        PreviousPreviewDiffButton.IsEnabled = false;
+        NextPreviewDiffButton.IsEnabled = false;
+    }
+
+    private void UpdatePreviewDiffNavigationControls()
+    {
+        PreviewDiffNavigationPanel.Visibility = Visibility.Visible;
+        PreviewDiffNavigationText.Text = BuildPreviewDiffNavigationLabel(
+            _currentPreviewDiffIndex,
+            _previewDiffCount);
+        var canPrevious = _currentPreviewDiffIndex > 0;
+        var canNext = _currentPreviewDiffIndex >= 0
+            && _currentPreviewDiffIndex < _previewDiffCount - 1;
+        PreviousPreviewDiffButton.IsEnabled = canPrevious;
+        NextPreviewDiffButton.IsEnabled = canNext;
+        PreviousPreviewDiffButton.ToolTip = canPrevious
+            ? "前の差分へ (Shift+F7)"
+            : _previewDiffCount > 0 ? "最初の差分です" : "本文差分はありません";
+        NextPreviewDiffButton.ToolTip = canNext
+            ? "次の差分へ (F7)"
+            : _previewDiffCount > 0 ? "最後の差分です" : "本文差分はありません";
+        AutomationProperties.SetName(
+            PreviousPreviewDiffButton,
+            canPrevious ? "前の差分へ" : "前の差分はありません");
+        AutomationProperties.SetName(
+            NextPreviewDiffButton,
+            canNext ? "次の差分へ" : "次の差分はありません");
+    }
+
+    internal static string BuildPreviewDiffNavigationLabel(int currentIndex, int count)
+        => currentIndex >= 0 && currentIndex < count
+            ? string.Create(CultureInfo.InvariantCulture, $"差分 {currentIndex + 1}/{count}")
+            : "差分なし";
+
     private void StartPreviewDiffTracking(PreviewComparisonRequest request)
     {
         _activePreviewDiffRequest = request;
         _previewDiffGeneration++;
+        ResetPreviewDiffNavigation();
         _beforePreviewDiffReady = false;
         _afterPreviewDiffReady = false;
         _beforePreviewDiffNavigationId = null;
@@ -1055,6 +1211,7 @@ public partial class MainWindow : Window
     {
         _activePreviewDiffRequest = null;
         _previewDiffGeneration++;
+        ResetPreviewDiffNavigation();
         _beforePreviewDiffReady = false;
         _afterPreviewDiffReady = false;
         _beforePreviewDiffNavigationId = null;
@@ -1266,16 +1423,7 @@ public partial class MainWindow : Window
             var generation = _previewDiffGeneration;
             if (IsMarkdownComparisonRequest(request))
             {
-                OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
-                    request.BeforeLabel,
-                    0,
-                    request.SourceChangeCount);
-                PreviewDocsHeaderText.Text = BuildDiffHeaderLabel(
-                    request.AfterLabel,
-                    0,
-                    request.SourceChangeCount);
-                HidePreviewPaneStatus(isBeforePane: true);
-                HidePreviewPaneStatus(isBeforePane: false);
+                _ = PrepareRenderedPreviewDiffNavigationAsync(generation, request);
                 return;
             }
 
@@ -1365,6 +1513,17 @@ public partial class MainWindow : Window
 
         if (_activePreviewDiffRequest is null)
         {
+            return;
+        }
+
+        if (TryParsePreviewDiffNavigationMessage(message, out var diffNavigationDirection))
+        {
+            var diffNavigationSender = sender as CoreWebView2;
+            if (ReferenceEquals(diffNavigationSender, DocsView.CoreWebView2)
+                || ReferenceEquals(diffNavigationSender, PreviewView.CoreWebView2))
+            {
+                RequestPreviewDiffNavigation(diffNavigationDirection);
+            }
             return;
         }
 
@@ -1584,6 +1743,60 @@ public partial class MainWindow : Window
         }
     }
 
+    private async Task PrepareRenderedPreviewDiffNavigationAsync(
+        int generation,
+        PreviewComparisonRequest request)
+    {
+        try
+        {
+            if (_activePreviewDiffRequest is null
+                || generation != _previewDiffGeneration
+                || DocsView.CoreWebView2 is null
+                || PreviewView.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            var results = await Task.WhenAll(
+                DocsView.ExecuteScriptAsync(PreviewDiffHighlighter.PrepareRenderedDiffNavigationScriptForTests),
+                PreviewView.ExecuteScriptAsync(PreviewDiffHighlighter.PrepareRenderedDiffNavigationScriptForTests));
+            if (!ReferenceEquals(request, _activePreviewDiffRequest)
+                || generation != _previewDiffGeneration)
+            {
+                return;
+            }
+
+            var beforeCount = ParseScriptInteger(results[0]);
+            var afterCount = ParseScriptInteger(results[1]);
+            OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
+                request.BeforeLabel,
+                beforeCount,
+                request.SourceChangeCount);
+            PreviewDocsHeaderText.Text = BuildDiffHeaderLabel(
+                request.AfterLabel,
+                afterCount,
+                request.SourceChangeCount);
+            await InitializePreviewDiffNavigationAsync(Math.Max(beforeCount, afterCount), generation);
+            HidePreviewPaneStatus(isBeforePane: true);
+            HidePreviewPaneStatus(isBeforePane: false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPreviewDiffNavigationFailed(_logger, ex);
+            ShowPreviewPaneStatus(isBeforePane: true, "差分移動の準備に失敗しました", ex.Message);
+            ShowPreviewPaneStatus(isBeforePane: false, "差分移動の準備に失敗しました", ex.Message);
+        }
+    }
+
+    internal static int ParseScriptInteger(string? scriptResult)
+        => int.TryParse(
+            scriptResult,
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var value)
+                ? Math.Max(0, value)
+                : 0;
+
     private async Task ApplyPreviewDiffHighlightsAsync(int generation)
     {
         try
@@ -1602,14 +1815,26 @@ public partial class MainWindow : Window
             }
 
             var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+            var beforeNavigationTargets = plan.Changes
+                .SelectMany(
+                    static (change, navigationIndex) => change.BeforeIndexes.Select(
+                        index => new PreviewDiffNavigationTarget(index, navigationIndex)))
+                .ToArray();
+            var afterNavigationTargets = plan.Changes
+                .SelectMany(
+                    static (change, navigationIndex) => change.AfterIndexes.Select(
+                        index => new PreviewDiffNavigationTarget(index, navigationIndex)))
+                .ToArray();
             await PreviewDiffHighlighter.ApplyPlanAsync(
                 DocsView,
                 plan.BeforeChangedIndexes,
-                PreviewDiffPane.Before);
+                PreviewDiffPane.Before,
+                beforeNavigationTargets);
             await PreviewDiffHighlighter.ApplyPlanAsync(
                 PreviewView,
                 plan.AfterChangedIndexes,
-                PreviewDiffPane.After);
+                PreviewDiffPane.After,
+                afterNavigationTargets);
 
             if (ReferenceEquals(request, _activePreviewDiffRequest) && generation == _previewDiffGeneration)
             {
@@ -1621,6 +1846,7 @@ public partial class MainWindow : Window
                     request.AfterLabel,
                     plan.AfterChangedIndexes.Count,
                     request.SourceChangeCount);
+                await InitializePreviewDiffNavigationAsync(plan.Changes.Count, generation);
                 HidePreviewPaneStatus(isBeforePane: true);
                 HidePreviewPaneStatus(isBeforePane: false);
             }
@@ -2005,6 +2231,9 @@ public partial class MainWindow : Window
     if (existing && existing.handler) {
         window.removeEventListener('scroll', existing.handler);
     }
+    if (existing && existing.keyHandler) {
+        window.removeEventListener('keydown', existing.keyHandler, true);
+    }
     if (existing && existing.correctionTimer) {
         window.clearTimeout(existing.correctionTimer);
     }
@@ -2130,14 +2359,27 @@ public partial class MainWindow : Window
         });
     };
 
+    const keyHandler = (event) => {
+        if (event.key !== 'F7' || event.altKey || event.ctrlKey || event.metaKey) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const direction = event.shiftKey ? 'previous' : 'next';
+        window.chrome?.webview?.postMessage(
+            `rsr-preview-diff-navigation:${direction}`);
+    };
+
     window[stateKey] = {
         pane,
         handler,
+        keyHandler,
         suppressUntil: existing?.suppressUntil || 0,
         lastScrollTop: existing?.lastScrollTop ?? getScrollTop(),
         correctionTimer: 0,
     };
     window.addEventListener('scroll', handler, { passive: true });
+    window.addEventListener('keydown', keyHandler, true);
     return true;
 })();
 """;
@@ -2339,6 +2581,33 @@ public partial class MainWindow : Window
             if (string.Equals(value, "forward", StringComparison.OrdinalIgnoreCase))
             {
                 direction = WebViewHistoryNavigationDirection.Forward;
+                return true;
+            }
+
+            return false;
+        }
+
+        internal static bool TryParsePreviewDiffNavigationMessage(
+            string? message,
+            out PreviewDiffNavigationDirection direction)
+        {
+            direction = default;
+            const string Prefix = "rsr-preview-diff-navigation:";
+            if (string.IsNullOrWhiteSpace(message)
+                || !message.StartsWith(Prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var value = message[Prefix.Length..].Trim();
+            if (string.Equals(value, "previous", StringComparison.OrdinalIgnoreCase))
+            {
+                direction = PreviewDiffNavigationDirection.Previous;
+                return true;
+            }
+            if (string.Equals(value, "next", StringComparison.OrdinalIgnoreCase))
+            {
+                direction = PreviewDiffNavigationDirection.Next;
                 return true;
             }
 
@@ -2773,4 +3042,10 @@ public partial class MainWindow : Window
         Level = LogLevel.Debug,
         Message = "Blocked WebView2 message from disallowed source: {Source}")]
     private static partial void LogBlockedWebMessageSource(ILogger logger, string source);
+
+    [LoggerMessage(
+        EventId = 11,
+        Level = LogLevel.Debug,
+        Message = "Preview diff navigation failed.")]
+    private static partial void LogPreviewDiffNavigationFailed(ILogger logger, Exception exception);
 }
