@@ -733,7 +733,25 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("isVisibleMedia(element)", script, StringComparison.Ordinal);
         Assert.Contains("const textContainer = element.closest(blockSelector)", script, StringComparison.Ordinal);
         Assert.Contains("element.getClientRects().length > 0", script, StringComparison.Ordinal);
+        Assert.Contains("/\\/markdown-assets\\/(?:before|after)(?=\\/)/", script, StringComparison.Ordinal);
+        Assert.Contains("'/markdown-assets/shared'", script, StringComparison.Ordinal);
+        Assert.Contains("return isVisibleMedia(element)", script, StringComparison.Ordinal);
         Assert.Contains("return `media:${element.tagName.toLowerCase()}", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IsPreviewDiffOperationCurrent_Requires_Same_Request_And_Generation()
+    {
+        var request = new PreviewComparisonRequest(
+            new Uri("http://localhost:4501/markdown/before"),
+            new Uri("http://localhost:4501/markdown/after"),
+            "Before",
+            "After");
+        var equalRequest = request with { };
+
+        Assert.True(MainWindow.IsPreviewDiffOperationCurrent(request, request, 3, 3));
+        Assert.False(MainWindow.IsPreviewDiffOperationCurrent(equalRequest, request, 3, 3));
+        Assert.False(MainWindow.IsPreviewDiffOperationCurrent(request, request, 4, 3));
     }
 
     [Theory]

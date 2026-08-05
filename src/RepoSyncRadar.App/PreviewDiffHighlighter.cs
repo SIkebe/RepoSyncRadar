@@ -60,6 +60,10 @@ internal static class PreviewDiffHighlighter
   });
 
   const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const canonicalizeMediaSource = (value) =>
+    normalize(value).replace(
+      /\/markdown-assets\/(?:before|after)(?=\/)/,
+      '/markdown-assets/shared');
   const describe = (element) => {
     if (element.matches(mediaSelector)) {
       const source =
@@ -68,7 +72,7 @@ internal static class PreviewDiffHighlighter
         element.getAttribute('poster') ||
         element.getAttribute('alt') ||
         element.outerHTML;
-      return `media:${element.tagName.toLowerCase()}:${normalize(source)}`;
+      return `media:${element.tagName.toLowerCase()}:${canonicalizeMediaSource(source)}`;
     }
     return normalize(element.innerText || element.textContent);
   };
@@ -96,8 +100,8 @@ internal static class PreviewDiffHighlighter
   const elements = Array.from(root.querySelectorAll(leafSelector))
     .filter((element) => !isNavigationOrChrome(element))
     .filter((element) => {
-      if (isVisibleMedia(element)) {
-        return true;
+      if (element.matches(mediaSelector)) {
+        return isVisibleMedia(element);
       }
       const text = describe(element);
       if (text.length < 2) {

@@ -1775,8 +1775,11 @@ public partial class MainWindow : Window
             var blocks = await Task.WhenAll(
                 PreviewDiffHighlighter.ExtractBlocksAsync(DocsView),
                 PreviewDiffHighlighter.ExtractBlocksAsync(PreviewView));
-            if (!ReferenceEquals(request, _activePreviewDiffRequest)
-                || generation != _previewDiffGeneration)
+            if (!IsPreviewDiffOperationCurrent(
+                    _activePreviewDiffRequest,
+                    request,
+                    _previewDiffGeneration,
+                    generation))
             {
                 return;
             }
@@ -1799,6 +1802,15 @@ public partial class MainWindow : Window
                 PreviewDiffHighlighter.ApplyRenderedNavigationPlanAsync(
                     PreviewView,
                     afterNavigationTargets));
+            if (!IsPreviewDiffOperationCurrent(
+                    _activePreviewDiffRequest,
+                    request,
+                    _previewDiffGeneration,
+                    generation))
+            {
+                return;
+            }
+
             var beforeCount = plan.Changes.Count(static change => change.BeforeIndexes.Count > 0);
             var afterCount = plan.Changes.Count(static change => change.AfterIndexes.Count > 0);
             OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
@@ -1816,10 +1828,25 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogPreviewDiffNavigationFailed(_logger, ex);
-            ShowPreviewPaneStatus(isBeforePane: true, "差分移動の準備に失敗しました", ex.Message);
-            ShowPreviewPaneStatus(isBeforePane: false, "差分移動の準備に失敗しました", ex.Message);
+            if (IsPreviewDiffOperationCurrent(
+                    _activePreviewDiffRequest,
+                    request,
+                    _previewDiffGeneration,
+                    generation))
+            {
+                ShowPreviewPaneStatus(isBeforePane: true, "差分移動の準備に失敗しました", ex.Message);
+                ShowPreviewPaneStatus(isBeforePane: false, "差分移動の準備に失敗しました", ex.Message);
+            }
         }
     }
+
+    internal static bool IsPreviewDiffOperationCurrent(
+        PreviewComparisonRequest? activeRequest,
+        PreviewComparisonRequest expectedRequest,
+        int currentGeneration,
+        int expectedGeneration)
+        => ReferenceEquals(activeRequest, expectedRequest)
+            && currentGeneration == expectedGeneration;
 
     internal static int ParseScriptInteger(string? scriptResult)
         => int.TryParse(
