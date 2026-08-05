@@ -832,6 +832,26 @@ public sealed class MainWindowPreviewComparisonTests
                 afterResult));
     }
 
+    [Theory]
+    [InlineData(3, 3, 7, 7, true)]
+    [InlineData(3, 4, 7, 7, false)]
+    [InlineData(3, 3, 7, 8, false)]
+    public void IsPreviewDiffNavigationOperationCurrent_Requires_Generation_And_Operation(
+        int expectedGeneration,
+        int currentGeneration,
+        int expectedOperationId,
+        int currentOperationId,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            MainWindow.IsPreviewDiffNavigationOperationCurrent(
+                expectedGeneration,
+                currentGeneration,
+                expectedOperationId,
+                currentOperationId));
+    }
+
     [Fact]
     public async Task ObservePreviousPreviewDiffNavigationAsync_Allows_Queue_After_Cancellation()
     {
@@ -894,6 +914,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("Math.min(...rects.map((rect) => rect.left))", script, StringComparison.Ordinal);
         Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
         Assert.Contains("new ResizeObserver(positionOverlay)", script, StringComparison.Ordinal);
+        Assert.Contains("resizeObserver.observe(document.body)", script, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "targets.forEach((target) => target.classList.add('rsr-preview-diff-active'))",
             script,

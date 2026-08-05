@@ -1185,7 +1185,15 @@ public partial class MainWindow : Window
             var beforeResult = PreviewDiffHighlighter.ParseNavigateResult(results[0]);
             var afterResult = PreviewDiffHighlighter.ParseNavigateResult(results[1]);
             if (_activePreviewDiffRequest is null
-                || !CanCommitPreviewDiffNavigation(
+                || !IsPreviewDiffNavigationOperationCurrent(
+                    generation,
+                    _previewDiffGeneration,
+                    operationId,
+                    _previewDiffNavigationOperationId))
+            {
+                return;
+            }
+            if (!CanCommitPreviewDiffNavigation(
                     generation,
                     _previewDiffGeneration,
                     operationId,
@@ -1193,6 +1201,8 @@ public partial class MainWindow : Window
                     beforeResult,
                     afterResult))
             {
+                _requestedPreviewDiffIndex = _currentPreviewDiffIndex;
+                UpdatePreviewDiffNavigationControls();
                 return;
             }
 
@@ -1241,9 +1251,20 @@ public partial class MainWindow : Window
         int currentOperationId,
         PreviewDiffNavigationResult beforeResult,
         PreviewDiffNavigationResult afterResult)
-        => expectedGeneration == currentGeneration
-            && expectedOperationId == currentOperationId
+        => IsPreviewDiffNavigationOperationCurrent(
+                expectedGeneration,
+                currentGeneration,
+                expectedOperationId,
+                currentOperationId)
             && (beforeResult.Found || afterResult.Found);
+
+    internal static bool IsPreviewDiffNavigationOperationCurrent(
+        int expectedGeneration,
+        int currentGeneration,
+        int expectedOperationId,
+        int currentOperationId)
+        => expectedGeneration == currentGeneration
+            && expectedOperationId == currentOperationId;
 
     private void ResetPreviewDiffNavigation()
     {
@@ -1264,8 +1285,7 @@ public partial class MainWindow : Window
             _currentPreviewDiffIndex,
             _previewDiffCount);
         var canPrevious = _currentPreviewDiffIndex > 0;
-        var canNext = _currentPreviewDiffIndex >= 0
-            && _currentPreviewDiffIndex < _previewDiffCount - 1;
+        var canNext = _currentPreviewDiffIndex < _previewDiffCount - 1;
         PreviousPreviewDiffButton.IsEnabled = canPrevious;
         NextPreviewDiffButton.IsEnabled = canNext;
         PreviousPreviewDiffButton.ToolTip = canPrevious

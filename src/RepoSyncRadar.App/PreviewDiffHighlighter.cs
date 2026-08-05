@@ -588,6 +588,7 @@ internal static class PreviewDiffHighlighter
   if (typeof ResizeObserver === 'function') {
     const resizeObserver = new ResizeObserver(positionOverlay);
     targets.forEach((target) => resizeObserver.observe(target));
+    resizeObserver.observe(document.body);
     overlay.__resizeObserver = resizeObserver;
   }
   const scrollSyncState = window.__repoSyncRadarPreviewScrollSync;
