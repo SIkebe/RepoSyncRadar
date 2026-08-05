@@ -220,7 +220,7 @@ public sealed class MorningTriageSessionTests
             Arg.Is<CommitQueryFilter>(filter =>
                 filter.Status == ReviewStatus.Unseen
                 && filter.UnscoredOnly
-                && filter.OldestFirst
+                && filter.SortOrder == CommitSortOrder.Oldest
                 && filter.Limit == TriagePreflightSummaryBuilder.ScoringTargetLimit),
             Arg.Any<CancellationToken>());
         await repository.Received(1).CountCommitsAsync(

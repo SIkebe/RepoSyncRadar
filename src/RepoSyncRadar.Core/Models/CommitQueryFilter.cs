@@ -1,9 +1,19 @@
 namespace RepoSyncRadar.Core.Models;
 
 /// <summary>
+/// Determines how commit query results are ordered.
+/// </summary>
+public enum CommitSortOrder
+{
+    Newest,
+    Oldest,
+    ScoreDescending,
+    ScoreAscending,
+}
+
+/// <summary>
 /// Filter passed to <see cref="Data.IRadarRepository.QueryCommitsAsync"/> by the UI.
-/// All members are optional; an empty filter returns every persisted commit ordered by
-/// <see cref="Commit.AuthoredAt"/> descending.
+/// All members are optional; an empty filter returns every persisted commit newest first.
 /// </summary>
 public sealed record CommitQueryFilter
 {
@@ -33,8 +43,7 @@ public sealed record CommitQueryFilter
     public bool UnscoredOnly { get; init; }
 
     /// <summary>
-    /// When true, commits are ordered by <see cref="Commit.AuthoredAt"/> ascending instead of
-    /// the default descending order. Use this for FIFO processing queues without changing the UI order.
+    /// Controls the result order. Score ordering places unscored commits last.
     /// </summary>
-    public bool OldestFirst { get; init; }
+    public CommitSortOrder SortOrder { get; init; } = CommitSortOrder.Newest;
 }
