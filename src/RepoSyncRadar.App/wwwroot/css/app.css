@@ -407,6 +407,8 @@ html, body {
 }
 
 .radar-workbench {
+    container-name: radar-workbench;
+    container-type: inline-size;
     padding: 0.75rem 1rem;
     overflow-x: hidden;
     overflow-y: auto;
@@ -498,6 +500,24 @@ html, body {
     font-size: 0.78rem;
     min-height: 2rem;
     padding: 0.22rem 1.6rem 0.22rem 0.55rem;
+}
+
+@container radar-workbench (max-width: 42rem) {
+    .commit-search-toolbar {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+
+    .commit-sort-label {
+        grid-column: 1;
+        grid-row: 2;
+    }
+
+    .commit-sort-select {
+        grid-column: 2 / -1;
+        grid-row: 2;
+        min-width: 0;
+        width: 100%;
+    }
 }
 
 .commit-list-selection-toolbar {
