@@ -41,7 +41,9 @@ internal static class PreviewDiffHighlighter
 
     internal const string ExtractBlocksScriptForTests = """
 (() => {
-  const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-markdown-alert';
+  const mediaSelector = 'img,video,audio,iframe,object,embed';
+  const blockSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-markdown-alert';
+  const leafSelector = `${blockSelector},${mediaSelector}`;
   const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
   const root =
     document.querySelector('main article') ||
@@ -58,6 +60,31 @@ internal static class PreviewDiffHighlighter
   });
 
   const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const describe = (element) => {
+    if (element.matches(mediaSelector)) {
+      const source =
+        element.currentSrc ||
+        element.getAttribute('src') ||
+        element.getAttribute('poster') ||
+        element.getAttribute('alt') ||
+        element.outerHTML;
+      return `media:${element.tagName.toLowerCase()}:${normalize(source)}`;
+    }
+    return normalize(element.innerText || element.textContent);
+  };
+  const isVisibleMedia = (element) => {
+    if (!element.matches(mediaSelector)) {
+      return false;
+    }
+    const textContainer = element.closest(blockSelector);
+    if (textContainer && normalize(textContainer.innerText || textContainer.textContent).length >= 2) {
+      return false;
+    }
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      element.getClientRects().length > 0;
+  };
   const isNavigationOrChrome = (element) => {
     if (element.closest(blockedAncestorSelector)) {
       return true;
@@ -69,16 +96,19 @@ internal static class PreviewDiffHighlighter
   const elements = Array.from(root.querySelectorAll(leafSelector))
     .filter((element) => !isNavigationOrChrome(element))
     .filter((element) => {
-      const text = normalize(element.innerText || element.textContent);
+      if (isVisibleMedia(element)) {
+        return true;
+      }
+      const text = describe(element);
       if (text.length < 2) {
         return false;
       }
-      return element.classList.contains('ghd-markdown-alert') || !element.querySelector(leafSelector);
+      return element.classList.contains('ghd-markdown-alert') || !element.querySelector(blockSelector);
     });
 
   return elements.map((element, index) => {
     element.setAttribute('data-rsr-diff-index', String(index));
-    return { index, text: normalize(element.innerText || element.textContent) };
+    return { index, text: describe(element) };
   });
 })();
 """;
@@ -369,55 +399,39 @@ internal static class PreviewDiffHighlighter
 """;
     }
 
-    internal const string PrepareRenderedDiffNavigationScriptForTests = """
+    internal static async Task ApplyRenderedNavigationPlanAsync(
+        WebView2CompositionControl view,
+        IReadOnlyList<PreviewDiffNavigationTarget> navigationTargets)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(navigationTargets);
+        if (view.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        var targetsJson = JsonSerializer.Serialize(navigationTargets, _jsonOptions);
+        await view.ExecuteScriptAsync(BuildApplyRenderedNavigationPlanScript(targetsJson));
+    }
+
+    internal static string BuildApplyRenderedNavigationPlanScript(string navigationTargetsJson)
+        => $$"""
 (() => {
-  const diffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
-  const structuralBlockSelector = 'pre,li,td,th,blockquote,.ghd-markdown-alert';
-  const textBlockSelector = 'p,h1,h2,h3,h4,h5,h6';
+  const navigationTargets = {{navigationTargetsJson}};
+  const navigationIndexes = new Map(
+    navigationTargets.map((target) => [target.index, target.navigationIndex]));
   document.querySelectorAll('[data-rsr-diff-navigation-index]').forEach((element) => {
     element.removeAttribute('data-rsr-diff-navigation-index');
   });
-
-  const seen = new Set();
-  const targets = [];
-  document.querySelectorAll(diffSelector).forEach((element) => {
-    const target =
-      element.closest(structuralBlockSelector) ||
-      element.closest(textBlockSelector) ||
-      element;
-    if (seen.has(target)) {
-      return;
+  document.querySelectorAll('[data-rsr-diff-index]').forEach((element) => {
+    const index = Number(element.getAttribute('data-rsr-diff-index'));
+    if (navigationIndexes.has(index)) {
+      element.setAttribute(
+        'data-rsr-diff-navigation-index',
+        String(navigationIndexes.get(index)));
     }
-    seen.add(target);
-    targets.push(target);
-  });
-
-  const hasMeaningfulContentBetween = (previous, current) => {
-    try {
-      const range = document.createRange();
-      range.setStartAfter(previous);
-      range.setEndBefore(current);
-      const fragment = range.cloneContents();
-      fragment.querySelectorAll('script,style,[aria-hidden="true"]').forEach((element) => {
-        element.remove();
-      });
-      return (fragment.textContent || '').replace(/\s+/g, ' ').trim().length > 0;
-    } catch {
-      return true;
-    }
-  };
-
-  let navigationIndex = -1;
-  let previousTarget = null;
-  targets.forEach((target) => {
-    if (!previousTarget || hasMeaningfulContentBetween(previousTarget, target)) {
-      navigationIndex++;
-    }
-    target.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
-    previousTarget = target;
   });
   window.__repoSyncRadarDiffScrollbar?.scheduleBuild?.();
-  return navigationIndex + 1;
 })();
 """;
 
@@ -465,8 +479,12 @@ internal static class PreviewDiffHighlighter
   }
   const root = document.scrollingElement || document.documentElement || document.body;
   const maxScrollTop = Math.max(1, (root?.scrollHeight || 0) - window.innerHeight);
-  const targetTop = targets[0].getBoundingClientRect().top + window.scrollY;
-  const ratio = Math.max(0, Math.min(1, targetTop / maxScrollTop));
+  const targetRect = targets[0].getBoundingClientRect();
+  const targetTop = targetRect.top + window.scrollY;
+  const centeredScrollTop = Math.max(
+    0,
+    Math.min(maxScrollTop, targetTop - (window.innerHeight - targetRect.height) / 2));
+  const ratio = Math.max(0, Math.min(1, centeredScrollTop / maxScrollTop));
   const overlay = document.createElement('div');
   overlay.id = overlayId;
   overlay.className = 'rsr-preview-diff-active-overlay';
@@ -503,7 +521,7 @@ internal static class PreviewDiffHighlighter
   if (scrollSyncState) {
     scrollSyncState.suppressUntil = Date.now() + 1000;
   }
-  targets[0].scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+  window.scrollTo({ top: centeredScrollTop, behavior: 'auto' });
   return { found: true, ratio };
 })();
 """;

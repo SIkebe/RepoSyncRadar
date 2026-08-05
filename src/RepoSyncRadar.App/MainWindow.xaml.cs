@@ -1050,16 +1050,31 @@ public partial class MainWindow : Window
 
     private void OnMainWindowPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key != Key.F7 || _previewDiffCount <= 0)
+        if (_previewDiffCount <= 0
+            || !TryResolvePreviewDiffNavigationDirection(e.Key, Keyboard.Modifiers, out var direction))
         {
             return;
         }
 
-        var direction = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
-            ? PreviewDiffNavigationDirection.Previous
-            : PreviewDiffNavigationDirection.Next;
         RequestPreviewDiffNavigation(direction);
         e.Handled = true;
+    }
+
+    internal static bool TryResolvePreviewDiffNavigationDirection(
+        Key key,
+        ModifierKeys modifiers,
+        out PreviewDiffNavigationDirection direction)
+    {
+        direction = default;
+        if (key != Key.F7 || modifiers is not (ModifierKeys.None or ModifierKeys.Shift))
+        {
+            return false;
+        }
+
+        direction = modifiers == ModifierKeys.Shift
+            ? PreviewDiffNavigationDirection.Previous
+            : PreviewDiffNavigationDirection.Next;
+        return true;
     }
 
     private void RequestPreviewFileNavigation(PreviewFileNavigationDirection direction)
@@ -1757,17 +1772,35 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var results = await Task.WhenAll(
-                DocsView.ExecuteScriptAsync(PreviewDiffHighlighter.PrepareRenderedDiffNavigationScriptForTests),
-                PreviewView.ExecuteScriptAsync(PreviewDiffHighlighter.PrepareRenderedDiffNavigationScriptForTests));
+            var blocks = await Task.WhenAll(
+                PreviewDiffHighlighter.ExtractBlocksAsync(DocsView),
+                PreviewDiffHighlighter.ExtractBlocksAsync(PreviewView));
             if (!ReferenceEquals(request, _activePreviewDiffRequest)
                 || generation != _previewDiffGeneration)
             {
                 return;
             }
 
-            var beforeCount = ParseScriptInteger(results[0]);
-            var afterCount = ParseScriptInteger(results[1]);
+            var plan = PreviewDiffHighlighter.BuildPlan(blocks[0], blocks[1]);
+            var beforeNavigationTargets = plan.Changes
+                .SelectMany(
+                    static (change, navigationIndex) => change.BeforeIndexes.Select(
+                        index => new PreviewDiffNavigationTarget(index, navigationIndex)))
+                .ToArray();
+            var afterNavigationTargets = plan.Changes
+                .SelectMany(
+                    static (change, navigationIndex) => change.AfterIndexes.Select(
+                        index => new PreviewDiffNavigationTarget(index, navigationIndex)))
+                .ToArray();
+            await Task.WhenAll(
+                PreviewDiffHighlighter.ApplyRenderedNavigationPlanAsync(
+                    DocsView,
+                    beforeNavigationTargets),
+                PreviewDiffHighlighter.ApplyRenderedNavigationPlanAsync(
+                    PreviewView,
+                    afterNavigationTargets));
+            var beforeCount = plan.Changes.Count(static change => change.BeforeIndexes.Count > 0);
+            var afterCount = plan.Changes.Count(static change => change.AfterIndexes.Count > 0);
             OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
                 request.BeforeLabel,
                 beforeCount,
@@ -1776,7 +1809,7 @@ public partial class MainWindow : Window
                 request.AfterLabel,
                 afterCount,
                 request.SourceChangeCount);
-            await InitializePreviewDiffNavigationAsync(Math.Max(beforeCount, afterCount), generation);
+            await InitializePreviewDiffNavigationAsync(plan.Changes.Count, generation);
             HidePreviewPaneStatus(isBeforePane: true);
             HidePreviewPaneStatus(isBeforePane: false);
         }
