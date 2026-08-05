@@ -415,6 +415,9 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("lastScrollTop", script, StringComparison.Ordinal);
         Assert.Contains("delta.toFixed(2)", script, StringComparison.Ordinal);
         Assert.Contains("rsr-preview-scroll:${pane}:${ratio}:delta", script, StringComparison.Ordinal);
+        Assert.Contains("event.key !== 'F7'", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-preview-diff-navigation:${direction}", script, StringComparison.Ordinal);
+        Assert.Contains("window.addEventListener('keydown', keyHandler, true)", script, StringComparison.Ordinal);
         Assert.DoesNotContain("rsr-preview-scroll:${pane}:${ratio}`", script, StringComparison.Ordinal);
     }
 
@@ -565,6 +568,25 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Preserves_FormattingOnly_Changes()
+    {
+        var beforeBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "plain|markup:<span class=\"rsr-rendered-diff-changed\">plain</span>"),
+        };
+        var afterBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "plain|markup:<strong><span class=\"rsr-rendered-diff-changed\">plain</span></strong>"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Equal([0], plan.BeforeChangedIndexes);
+        Assert.Equal([0], plan.AfterChangedIndexes);
+        Assert.Single(plan.Changes);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildPlan_Marks_Inserted_Block_On_After_Pane()
     {
         var beforeBlocks = new[]
@@ -635,6 +657,63 @@ public sealed class MainWindowPreviewComparisonTests
 
         Assert.Equal(_indexOne, plan.BeforeChangedIndexes);
         Assert.Equal(_indexOne, plan.AfterChangedIndexes);
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(_indexOne, change.BeforeIndexes);
+        Assert.Equal(_indexOne, change.AfterIndexes);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Groups_Adjacent_Changed_Blocks_For_Navigation()
+    {
+        var beforeBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "Intro"),
+            new PreviewDiffBlock(1, "Old first paragraph"),
+            new PreviewDiffBlock(2, "Old second paragraph"),
+            new PreviewDiffBlock(3, "Shared ending"),
+        };
+        var afterBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "Intro"),
+            new PreviewDiffBlock(1, "New paragraph"),
+            new PreviewDiffBlock(2, "Shared ending"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal([1, 2], change.BeforeIndexes);
+        Assert.Equal(_indexOne, change.AfterIndexes);
+        Assert.Equal(2, plan.BeforeChangedIndexes.Count);
+        Assert.Single(plan.AfterChangedIndexes);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Keeps_OneSided_Insertion_Aligned_Before_Later_Replacement()
+    {
+        var beforeBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "Intro"),
+            new PreviewDiffBlock(1, "Shared separator"),
+            new PreviewDiffBlock(2, "Old paragraph"),
+            new PreviewDiffBlock(3, "Ending"),
+        };
+        var afterBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "Intro"),
+            new PreviewDiffBlock(1, "Added guidance"),
+            new PreviewDiffBlock(2, "Shared separator"),
+            new PreviewDiffBlock(3, "New paragraph"),
+            new PreviewDiffBlock(4, "Ending"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Equal(2, plan.Changes.Count);
+        Assert.Empty(plan.Changes[0].BeforeIndexes);
+        Assert.Equal(_indexOne, plan.Changes[0].AfterIndexes);
+        Assert.Equal([2], plan.Changes[1].BeforeIndexes);
+        Assert.Equal([3], plan.Changes[1].AfterIndexes);
     }
 
     [Fact]
@@ -646,9 +725,11 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("rsr-preview-diff-scrollbar-marker-after", script, StringComparison.Ordinal);
         Assert.Contains("right: 24px", script, StringComparison.Ordinal);
         Assert.Contains("width: 10px", script, StringComparison.Ordinal);
-        Assert.Contains("const rect = element.getBoundingClientRect();", script, StringComparison.Ordinal);
-        Assert.Contains("rect.top + window.scrollY", script, StringComparison.Ordinal);
-        Assert.Contains("rect.height / maxScrollTop", script, StringComparison.Ordinal);
+        Assert.Contains("const markerGroups = new Map()", script, StringComparison.Ordinal);
+        Assert.Contains("`hunk-${navigationIndex}`", script, StringComparison.Ordinal);
+        Assert.Contains("Math.min(...rects.map((rect) => rect.top))", script, StringComparison.Ordinal);
+        Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
+        Assert.Contains("(absoluteBottom - absoluteTop) / maxScrollTop", script, StringComparison.Ordinal);
         Assert.Contains("window.innerHeight - height", script, StringComparison.Ordinal);
         Assert.Contains("markerTop.toFixed(1)", script, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", script, StringComparison.Ordinal);
@@ -665,12 +746,223 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_ExtractScript_Treats_Visible_Media_As_Content()
+    {
+        var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
+
+        Assert.Contains("const mediaSelector = 'img,video,audio,iframe,object,embed'", script, StringComparison.Ordinal);
+        Assert.Contains("isVisibleMedia(element)", script, StringComparison.Ordinal);
+        Assert.Contains("const textContainer = element.closest(blockSelector)", script, StringComparison.Ordinal);
+        Assert.Contains("element.getClientRects().length > 0", script, StringComparison.Ordinal);
+        Assert.Contains("/\\/markdown-assets\\/(?:before|after)(?=\\/)/g", script, StringComparison.Ordinal);
+        Assert.Contains("'/markdown-assets/shared'", script, StringComparison.Ordinal);
+        Assert.Contains("const fingerprintMediaContent = (element)", script, StringComparison.Ordinal);
+        Assert.Contains("context.getImageData(0, 0, canvas.width, canvas.height).data", script, StringComparison.Ordinal);
+        Assert.Contains("hash = Math.imul(hash, 16777619)", script, StringComparison.Ordinal);
+        Assert.Contains("const describeChangedMarkup = (element)", script, StringComparison.Ordinal);
+        Assert.Contains("marker.classList.add('rsr-rendered-diff-changed')", script, StringComparison.Ordinal);
+        Assert.Contains("`${text}|markup:${describeChangedMarkup(element)}`", script, StringComparison.Ordinal);
+        Assert.Contains("return isVisibleMedia(element)", script, StringComparison.Ordinal);
+        Assert.Contains("return `media:${element.tagName.toLowerCase()}", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IsPreviewDiffOperationCurrent_Requires_Same_Request_And_Generation()
+    {
+        var request = new PreviewComparisonRequest(
+            new Uri("http://localhost:4501/markdown/before"),
+            new Uri("http://localhost:4501/markdown/after"),
+            "Before",
+            "After");
+        var equalRequest = request with { };
+
+        Assert.True(MainWindow.IsPreviewDiffOperationCurrent(request, request, 3, 3));
+        Assert.False(MainWindow.IsPreviewDiffOperationCurrent(equalRequest, request, 3, 3));
+        Assert.False(MainWindow.IsPreviewDiffOperationCurrent(request, request, 4, 3));
+    }
+
+    [Theory]
+    [InlineData(Key.F7, ModifierKeys.None, true, 1)]
+    [InlineData(Key.F7, ModifierKeys.Shift, true, -1)]
+    [InlineData(Key.F7, ModifierKeys.Control, false, 0)]
+    [InlineData(Key.F7, ModifierKeys.Alt, false, 0)]
+    [InlineData(Key.F7, ModifierKeys.Windows, false, 0)]
+    [InlineData(Key.F6, ModifierKeys.None, false, 0)]
+    public void TryResolvePreviewDiffNavigationDirection_Only_Handles_Documented_Shortcuts(
+        Key key,
+        ModifierKeys modifiers,
+        bool expectedHandled,
+        int expectedDirection)
+    {
+        var handled = MainWindow.TryResolvePreviewDiffNavigationDirection(
+            key,
+            modifiers,
+            out var direction);
+
+        Assert.Equal(expectedHandled, handled);
+        Assert.Equal(expectedDirection, (int)direction);
+    }
+
+    [Theory]
+    [InlineData(3, 3, 7, 7, true, false, true)]
+    [InlineData(3, 3, 7, 7, false, true, true)]
+    [InlineData(3, 3, 7, 7, false, false, false)]
+    [InlineData(3, 4, 7, 7, true, true, false)]
+    [InlineData(3, 3, 7, 8, true, true, false)]
+    public void CanCommitPreviewDiffNavigation_Requires_Latest_Operation_And_Found_Target(
+        int expectedGeneration,
+        int currentGeneration,
+        int expectedOperationId,
+        int currentOperationId,
+        bool beforeFound,
+        bool afterFound,
+        bool expected)
+    {
+        var beforeResult = new PreviewDiffNavigationResult(beforeFound, 0);
+        var afterResult = new PreviewDiffNavigationResult(afterFound, 0);
+
+        Assert.Equal(
+            expected,
+            MainWindow.CanCommitPreviewDiffNavigation(
+                expectedGeneration,
+                currentGeneration,
+                expectedOperationId,
+                currentOperationId,
+                beforeResult,
+                afterResult));
+    }
+
+    [Theory]
+    [InlineData(3, 3, 7, 7, true)]
+    [InlineData(3, 4, 7, 7, false)]
+    [InlineData(3, 3, 7, 8, false)]
+    public void IsPreviewDiffNavigationOperationCurrent_Requires_Generation_And_Operation(
+        int expectedGeneration,
+        int currentGeneration,
+        int expectedOperationId,
+        int currentOperationId,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            MainWindow.IsPreviewDiffNavigationOperationCurrent(
+                expectedGeneration,
+                currentGeneration,
+                expectedOperationId,
+                currentOperationId));
+    }
+
+    [Fact]
+    public async Task ObservePreviousPreviewDiffNavigationAsync_Allows_Queue_After_Cancellation()
+    {
+        var canceledTask = Task.FromCanceled(new CancellationToken(canceled: true));
+
+        await MainWindow.ObservePreviousPreviewDiffNavigationAsync(canceledTask);
+        await MainWindow.ObservePreviousPreviewDiffNavigationAsync(Task.CompletedTask);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_ApplyPlanScript_Preserves_GitHub_Alert_Layout()
     {
         var script = PreviewDiffHighlighter.BuildApplyPlanScript("[1]", "\"after\"");
 
         Assert.Contains(".ghd-markdown-alert.rsr-preview-diff-block", script, StringComparison.Ordinal);
         Assert.Contains("padding: 8px 0 8px 14px", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ApplyPlanScript_Stamps_Navigation_Indexes()
+    {
+        var script = PreviewDiffHighlighter.BuildApplyPlanScript(
+            "[1,2]",
+            "\"after\"",
+            """[{"index":1,"navigationIndex":0},{"index":2,"navigationIndex":0}]""");
+
+        Assert.Contains("data-rsr-diff-navigation-index", script, StringComparison.Ordinal);
+        Assert.Contains("navigationIndexes.get(index)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("firstChanged.scrollIntoView", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ApplyRenderedNavigationPlanScript_Uses_Shared_Indexes()
+    {
+        var script = PreviewDiffHighlighter.BuildApplyRenderedNavigationPlanScript(
+            """[{"index":2,"navigationIndex":1}]""");
+
+        Assert.Contains("""{"index":2,"navigationIndex":1}""", script, StringComparison.Ordinal);
+        Assert.Contains("const navigationIndexes = new Map", script, StringComparison.Ordinal);
+        Assert.Contains("document.querySelectorAll('[data-rsr-diff-index]')", script, StringComparison.Ordinal);
+        Assert.Contains("data-rsr-diff-navigation-index", script, StringComparison.Ordinal);
+        Assert.Contains("__repoSyncRadarDiffScrollbar?.scheduleBuild?.()", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_NavigateScript_Draws_One_Overlay_And_Centers_Target()
+    {
+        var script = PreviewDiffHighlighter.BuildNavigateToDiffScript(2);
+
+        Assert.Contains("data-rsr-diff-navigation-index=\"2\"", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-preview-diff-active-overlay", script, StringComparison.Ordinal);
+        Assert.Contains("--rsr-preview-diff-outline: #0969da", script, StringComparison.Ordinal);
+        Assert.Contains("--rsr-preview-diff-outline: #58a6ff", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "border: 2px solid var(--rsr-preview-diff-outline)",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("pointer-events: none", script, StringComparison.Ordinal);
+        Assert.Contains("overlay.setAttribute('aria-hidden', 'true')", script, StringComparison.Ordinal);
+        Assert.Contains("Math.min(...rects.map((rect) => rect.left))", script, StringComparison.Ordinal);
+        Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
+        Assert.Contains("new ResizeObserver(positionOverlay)", script, StringComparison.Ordinal);
+        Assert.Contains("resizeObserver.observe(document.body)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "targets.forEach((target) => target.classList.add('rsr-preview-diff-active'))",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("targetTop - (window.innerHeight - targetRect.height) / 2", script, StringComparison.Ordinal);
+        Assert.Contains("window.scrollTo({ top: centeredScrollTop, behavior: 'auto' })", script, StringComparison.Ordinal);
+        Assert.Contains("__repoSyncRadarPreviewScrollSync", script, StringComparison.Ordinal);
+        Assert.Contains("return { found: true, ratio }", script, StringComparison.Ordinal);
+        Assert.Contains("return { found: false, ratio: 0 }", script, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""{"found":true,"ratio":0.75}""", true, 0.75)]
+    [InlineData("""{"found":true,"ratio":2.5}""", true, 1.0)]
+    [InlineData("""{"found":false,"ratio":0}""", false, 0.0)]
+    [InlineData("null", false, 0.0)]
+    [InlineData("invalid", false, 0.0)]
+    public void PreviewDiffHighlighter_ParseNavigateResult_Handles_WebView_Result(
+        string result,
+        bool expectedFound,
+        double expectedRatio)
+    {
+        var parsed = PreviewDiffHighlighter.ParseNavigateResult(result);
+
+        Assert.Equal(expectedFound, parsed.Found);
+        Assert.Equal(expectedRatio, parsed.Ratio);
+    }
+
+    [Theory]
+    [InlineData(0, 3, "差分 1/3")]
+    [InlineData(2, 3, "差分 3/3")]
+    [InlineData(-1, 0, "差分なし")]
+    public void BuildPreviewDiffNavigationLabel_Reports_Current_Position(
+        int currentIndex,
+        int count,
+        string expected)
+    {
+        Assert.Equal(expected, MainWindow.BuildPreviewDiffNavigationLabel(currentIndex, count));
+    }
+
+    [Theory]
+    [InlineData("3", 3)]
+    [InlineData("-2", 0)]
+    [InlineData("\"3\"", 0)]
+    [InlineData(null, 0)]
+    public void ParseScriptInteger_Handles_WebView_Script_Results(string? result, int expected)
+    {
+        Assert.Equal(expected, MainWindow.ParseScriptInteger(result));
     }
 
     [Fact]
@@ -776,6 +1068,27 @@ public sealed class MainWindowPreviewComparisonTests
     public void TryParsePreviewVersionMessage_Rejects_Non_Version_Messages(string? message)
     {
         Assert.False(MainWindow.TryParsePreviewVersionMessage(message, out _));
+    }
+
+    [Theory]
+    [InlineData("rsr-preview-diff-navigation:previous", -1)]
+    [InlineData("rsr-preview-diff-navigation:next", 1)]
+    public void TryParsePreviewDiffNavigationMessage_Parses_Known_Directions(
+        string message,
+        int expected)
+    {
+        Assert.True(MainWindow.TryParsePreviewDiffNavigationMessage(message, out var direction));
+        Assert.Equal(expected, (int)direction);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("rsr-preview-diff-navigation:sideways")]
+    [InlineData("rsr-preview-scroll:after:0.5")]
+    public void TryParsePreviewDiffNavigationMessage_Rejects_Unknown_Messages(string? message)
+    {
+        Assert.False(MainWindow.TryParsePreviewDiffNavigationMessage(message, out _));
     }
 
     [Theory]

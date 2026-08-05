@@ -362,17 +362,41 @@ internal static partial class MarkdownPreviewRenderer
     {
         html.AppendLine("""
 (() => {
+    const stateKey = '__repoSyncRadarDiffScrollbar';
     const markerRootId = 'rsr-diff-scrollbar';
     const selector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
-    const blockSelector = 'p,li,h1,h2,h3,h4,h5,h6,td,th,blockquote,.ghd-markdown-alert';
+    const structuralBlockSelector = 'pre,li,td,th,blockquote,.ghd-markdown-alert';
+    const textBlockSelector = 'p,h1,h2,h3,h4,h5,h6';
+    const isRemoved = (element) =>
+        element.matches('.rsr-rendered-diff-removed') ||
+        element.querySelector('.rsr-rendered-diff-removed') !== null;
     const collectTargets = () => {
+        const annotated = Array.from(
+            document.querySelectorAll('[data-rsr-diff-navigation-index]'));
+        if (annotated.length > 0) {
+            const groups = new Map();
+            annotated.forEach(element => {
+                const navigationIndex = element.getAttribute('data-rsr-diff-navigation-index');
+                if (!groups.has(navigationIndex)) {
+                    groups.set(navigationIndex, { elements: [], removed: false });
+                }
+                const group = groups.get(navigationIndex);
+                group.elements.push(element);
+                group.removed = group.removed || isRemoved(element);
+            });
+            return Array.from(groups.values());
+        }
+
         const seen = new Set();
         const targets = [];
         Array.from(document.querySelectorAll(selector)).forEach(element => {
-            const target = element.closest('pre') ? element : (element.closest(blockSelector) || element);
+            const target =
+                element.closest(structuralBlockSelector) ||
+                element.closest(textBlockSelector) ||
+                element;
             if (seen.has(target)) return;
             seen.add(target);
-            targets.push({ element: target, removed: element.classList.contains('rsr-rendered-diff-removed') });
+            targets.push({ elements: [target], removed: isRemoved(target) });
         });
         return targets;
     };
@@ -387,10 +411,18 @@ internal static partial class MarkdownPreviewRenderer
         const trackHeight = Math.max(1, viewport - buttonSize * 2);
         const scrollY = window.scrollY || window.pageYOffset || 0;
         pairs.forEach(pair => {
-            const rect = pair.element.getBoundingClientRect();
-            const absTop = rect.top + scrollY;
-            const center = (absTop + rect.height / 2) / docHeight;
-            const height = Math.max(6, Math.min(trackHeight, (rect.height / docHeight) * trackHeight));
+            const rects = pair.elements
+                .map(element => element.getBoundingClientRect())
+                .filter(rect => rect.width > 0 && rect.height > 0);
+            if (rects.length === 0) {
+                pair.marker.hidden = true;
+                return;
+            }
+            pair.marker.hidden = false;
+            const absTop = Math.min(...rects.map(rect => rect.top)) + scrollY;
+            const absBottom = Math.max(...rects.map(rect => rect.bottom)) + scrollY;
+            const center = (absTop + absBottom) / 2 / docHeight;
+            const height = Math.max(6, Math.min(trackHeight, ((absBottom - absTop) / docHeight) * trackHeight));
             const markerTop = Math.max(trackTop, Math.min(trackTop + trackHeight - height, trackTop + center * trackHeight - height / 2));
             pair.marker.style.top = `${markerTop.toFixed(1)}px`;
             pair.marker.style.height = `${height.toFixed(1)}px`;
@@ -407,7 +439,7 @@ internal static partial class MarkdownPreviewRenderer
             const marker = document.createElement('div');
             marker.className = 'rsr-diff-scrollbar-marker ' + (target.removed ? 'rsr-diff-scrollbar-marker--removed' : 'rsr-diff-scrollbar-marker--added');
             rail.appendChild(marker);
-            return { element: target.element, marker };
+            return { elements: target.elements, marker };
         });
         document.body.appendChild(rail);
         position();
@@ -424,6 +456,7 @@ internal static partial class MarkdownPreviewRenderer
     document.addEventListener('DOMContentLoaded', scheduleBuild, { once: true });
     window.addEventListener('load', scheduleBuild, { once: true });
     window.addEventListener('resize', scheduleBuild, { passive: true });
+    window[stateKey] = { scheduleBuild };
     window.setTimeout(scheduleBuild, 250);
 })();
 """);

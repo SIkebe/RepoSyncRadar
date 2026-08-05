@@ -17,7 +17,20 @@ internal sealed record PreviewDiffBlock(
 
 internal sealed record PreviewDiffPlan(
     IReadOnlyList<int> BeforeChangedIndexes,
-    IReadOnlyList<int> AfterChangedIndexes);
+    IReadOnlyList<int> AfterChangedIndexes,
+    IReadOnlyList<PreviewDiffChange> Changes);
+
+internal sealed record PreviewDiffChange(
+    IReadOnlyList<int> BeforeIndexes,
+    IReadOnlyList<int> AfterIndexes);
+
+internal sealed record PreviewDiffNavigationTarget(
+    [property: JsonPropertyName("index")] int Index,
+    [property: JsonPropertyName("navigationIndex")] int NavigationIndex);
+
+internal readonly record struct PreviewDiffNavigationResult(
+    [property: JsonPropertyName("found")] bool Found,
+    [property: JsonPropertyName("ratio")] double Ratio);
 
 internal static class PreviewDiffHighlighter
 {
@@ -28,7 +41,9 @@ internal static class PreviewDiffHighlighter
 
     internal const string ExtractBlocksScriptForTests = """
 (() => {
-  const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-markdown-alert';
+  const mediaSelector = 'img,video,audio,iframe,object,embed';
+  const blockSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-markdown-alert';
+  const leafSelector = `${blockSelector},${mediaSelector}`;
   const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
   const root =
     document.querySelector('main article') ||
@@ -45,6 +60,90 @@ internal static class PreviewDiffHighlighter
   });
 
   const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
+  const diffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
+  const canonicalizePaneRoutes = (value) =>
+    normalize(value).replace(
+      /\/markdown-assets\/(?:before|after)(?=\/)/g,
+      '/markdown-assets/shared');
+  const fingerprintMediaContent = (element) => {
+    if (!(element instanceof HTMLImageElement) ||
+        !element.complete ||
+        element.naturalWidth <= 0 ||
+        element.naturalHeight <= 0) {
+      return '';
+    }
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.min(32, element.naturalWidth);
+      canvas.height = Math.min(32, element.naturalHeight);
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      if (!context) {
+        return '';
+      }
+      context.drawImage(element, 0, 0, canvas.width, canvas.height);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let hash = 2166136261;
+      for (let index = 0; index < pixels.length; index++) {
+        hash ^= pixels[index];
+        hash = Math.imul(hash, 16777619);
+      }
+      return `${element.naturalWidth}x${element.naturalHeight}:${hash >>> 0}`;
+    } catch {
+      return '';
+    }
+  };
+  const describeChangedMarkup = (element) => {
+    const clone = element.cloneNode(true);
+    const markers = [
+      ...(clone.matches(diffSelector) ? [clone] : []),
+      ...clone.querySelectorAll(diffSelector),
+    ];
+    markers.forEach((marker) => {
+      marker.classList.remove('rsr-rendered-diff-added', 'rsr-rendered-diff-removed');
+      marker.classList.add('rsr-rendered-diff-changed');
+    });
+    clone.querySelectorAll('[src],[poster]').forEach((media) => {
+      ['src', 'poster'].forEach((attribute) => {
+        if (media.hasAttribute(attribute)) {
+          media.setAttribute(attribute, canonicalizePaneRoutes(media.getAttribute(attribute)));
+        }
+      });
+    });
+    clone.querySelectorAll('[data-rsr-diff-index],[data-rsr-diff-navigation-index]')
+      .forEach((target) => {
+        target.removeAttribute('data-rsr-diff-index');
+        target.removeAttribute('data-rsr-diff-navigation-index');
+      });
+    return normalize(clone.innerHTML);
+  };
+  const describe = (element) => {
+    if (element.matches(mediaSelector)) {
+      const source =
+        element.currentSrc ||
+        element.getAttribute('src') ||
+        element.getAttribute('poster') ||
+        element.getAttribute('alt') ||
+        element.outerHTML;
+      return `media:${element.tagName.toLowerCase()}:${canonicalizePaneRoutes(source)}:${fingerprintMediaContent(element)}`;
+    }
+    const text = normalize(element.innerText || element.textContent);
+    return element.matches(diffSelector) || element.querySelector(diffSelector)
+      ? `${text}|markup:${describeChangedMarkup(element)}`
+      : text;
+  };
+  const isVisibleMedia = (element) => {
+    if (!element.matches(mediaSelector)) {
+      return false;
+    }
+    const textContainer = element.closest(blockSelector);
+    if (textContainer && normalize(textContainer.innerText || textContainer.textContent).length >= 2) {
+      return false;
+    }
+    const style = window.getComputedStyle(element);
+    return style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      element.getClientRects().length > 0;
+  };
   const isNavigationOrChrome = (element) => {
     if (element.closest(blockedAncestorSelector)) {
       return true;
@@ -56,16 +155,19 @@ internal static class PreviewDiffHighlighter
   const elements = Array.from(root.querySelectorAll(leafSelector))
     .filter((element) => !isNavigationOrChrome(element))
     .filter((element) => {
-      const text = normalize(element.innerText || element.textContent);
+      if (element.matches(mediaSelector)) {
+        return isVisibleMedia(element);
+      }
+      const text = describe(element);
       if (text.length < 2) {
         return false;
       }
-      return element.classList.contains('ghd-markdown-alert') || !element.querySelector(leafSelector);
+      return element.classList.contains('ghd-markdown-alert') || !element.querySelector(blockSelector);
     });
 
   return elements.map((element, index) => {
     element.setAttribute('data-rsr-diff-index', String(index));
-    return { index, text: normalize(element.innerText || element.textContent) };
+    return { index, text: describe(element) };
   });
 })();
 """;
@@ -102,9 +204,15 @@ internal static class PreviewDiffHighlighter
 
         if (beforeBlocks.Count == 0 || afterBlocks.Count == 0)
         {
+            var beforeIndexes = beforeBlocks.Select(static block => block.Index).ToArray();
+            var afterIndexes = afterBlocks.Select(static block => block.Index).ToArray();
+            var emptySideChanges = beforeIndexes.Length == 0 && afterIndexes.Length == 0
+                ? Array.Empty<PreviewDiffChange>()
+                : [new PreviewDiffChange(beforeIndexes, afterIndexes)];
             return new PreviewDiffPlan(
-                beforeBlocks.Select(static block => block.Index).ToArray(),
-                afterBlocks.Select(static block => block.Index).ToArray());
+                beforeIndexes,
+                afterIndexes,
+                emptySideChanges);
         }
 
         var beforeTexts = beforeBlocks.Select(block => NormalizeText(block.Text)).ToArray();
@@ -126,12 +234,30 @@ internal static class PreviewDiffHighlighter
 
         var beforeChanged = new List<int>();
         var afterChanged = new List<int>();
+        var changes = new List<PreviewDiffChange>();
+        var currentBeforeIndexes = new List<int>();
+        var currentAfterIndexes = new List<int>();
+        void FlushChange()
+        {
+            if (currentBeforeIndexes.Count == 0 && currentAfterIndexes.Count == 0)
+            {
+                return;
+            }
+
+            changes.Add(new PreviewDiffChange(
+                currentBeforeIndexes.ToArray(),
+                currentAfterIndexes.ToArray()));
+            currentBeforeIndexes.Clear();
+            currentAfterIndexes.Clear();
+        }
+
         var beforeCursor = 0;
         var afterCursor = 0;
         while (beforeCursor < beforeTexts.Length && afterCursor < afterTexts.Length)
         {
             if (string.Equals(beforeTexts[beforeCursor], afterTexts[afterCursor], StringComparison.Ordinal))
             {
+                FlushChange();
                 beforeCursor++;
                 afterCursor++;
                 continue;
@@ -140,11 +266,13 @@ internal static class PreviewDiffHighlighter
             if (lengths[beforeCursor + 1, afterCursor] >= lengths[beforeCursor, afterCursor + 1])
             {
                 beforeChanged.Add(beforeBlocks[beforeCursor].Index);
+                currentBeforeIndexes.Add(beforeBlocks[beforeCursor].Index);
                 beforeCursor++;
             }
             else
             {
                 afterChanged.Add(afterBlocks[afterCursor].Index);
+                currentAfterIndexes.Add(afterBlocks[afterCursor].Index);
                 afterCursor++;
             }
         }
@@ -152,22 +280,26 @@ internal static class PreviewDiffHighlighter
         while (beforeCursor < beforeBlocks.Count)
         {
             beforeChanged.Add(beforeBlocks[beforeCursor].Index);
+            currentBeforeIndexes.Add(beforeBlocks[beforeCursor].Index);
             beforeCursor++;
         }
 
         while (afterCursor < afterBlocks.Count)
         {
             afterChanged.Add(afterBlocks[afterCursor].Index);
+            currentAfterIndexes.Add(afterBlocks[afterCursor].Index);
             afterCursor++;
         }
+        FlushChange();
 
-        return new PreviewDiffPlan(beforeChanged, afterChanged);
+        return new PreviewDiffPlan(beforeChanged, afterChanged, changes);
     }
 
     internal static async Task ApplyPlanAsync(
         WebView2CompositionControl view,
         IReadOnlyList<int> changedIndexes,
-        PreviewDiffPane pane)
+        PreviewDiffPane pane,
+        IReadOnlyList<PreviewDiffNavigationTarget>? navigationTargets = null)
     {
         ArgumentNullException.ThrowIfNull(view);
         ArgumentNullException.ThrowIfNull(changedIndexes);
@@ -178,15 +310,22 @@ internal static class PreviewDiffHighlighter
 
         var indexesJson = JsonSerializer.Serialize(changedIndexes, _jsonOptions);
         var paneJson = JsonSerializer.Serialize(pane == PreviewDiffPane.Before ? "before" : "after", _jsonOptions);
-        var script = BuildApplyPlanScript(indexesJson, paneJson);
+        var navigationTargetsJson = JsonSerializer.Serialize(
+            navigationTargets ?? Array.Empty<PreviewDiffNavigationTarget>(),
+            _jsonOptions);
+        var script = BuildApplyPlanScript(indexesJson, paneJson, navigationTargetsJson);
 
         await view.ExecuteScriptAsync(script);
     }
 
-    internal static string BuildApplyPlanScript(string indexesJson, string paneJson)
+    internal static string BuildApplyPlanScript(
+        string indexesJson,
+        string paneJson,
+        string navigationTargetsJson = "[]")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(indexesJson);
         ArgumentException.ThrowIfNullOrWhiteSpace(paneJson);
+        ArgumentException.ThrowIfNullOrWhiteSpace(navigationTargetsJson);
 
         return $$"""
 (() => {
@@ -248,11 +387,14 @@ internal static class PreviewDiffHighlighter
     document.head.appendChild(style);
   }
 
-  document.querySelectorAll('.rsr-preview-diff-block').forEach((element) => {
+  document.querySelectorAll('.rsr-preview-diff-block,[data-rsr-diff-navigation-index]').forEach((element) => {
     element.classList.remove('rsr-preview-diff-block', 'rsr-preview-diff-before', 'rsr-preview-diff-after');
+    element.removeAttribute('data-rsr-diff-navigation-index');
   });
 
   const changedIndexes = new Set({{indexesJson}});
+  const navigationIndexes = new Map(
+    {{navigationTargetsJson}}.map((target) => [target.index, target.navigationIndex]));
   const pane = {{paneJson}};
   changedIndexes.forEach((index) => {
     const element = document.querySelector(`[data-rsr-diff-index="${index}"]`);
@@ -262,6 +404,11 @@ internal static class PreviewDiffHighlighter
     element.classList.add(
       'rsr-preview-diff-block',
       pane === 'before' ? 'rsr-preview-diff-before' : 'rsr-preview-diff-after');
+    if (navigationIndexes.has(index)) {
+      element.setAttribute(
+        'data-rsr-diff-navigation-index',
+        String(navigationIndexes.get(index)));
+    }
   });
 
   const markerRootId = 'rsr-preview-diff-scrollbar';
@@ -272,16 +419,32 @@ internal static class PreviewDiffHighlighter
     const rail = document.createElement('div');
     rail.id = markerRootId;
     rail.className = 'rsr-preview-diff-scrollbar';
+    const markerGroups = new Map();
     changedIndexes.forEach((index) => {
       const element = document.querySelector(`[data-rsr-diff-index="${index}"]`);
       if (!element) {
         return;
       }
+      const navigationIndex = element.getAttribute('data-rsr-diff-navigation-index');
+      const groupKey = navigationIndex === null ? `block-${index}` : `hunk-${navigationIndex}`;
+      if (!markerGroups.has(groupKey)) {
+        markerGroups.set(groupKey, []);
+      }
+      markerGroups.get(groupKey).push(element);
+    });
+    markerGroups.forEach((elements) => {
+      const rects = elements
+        .map((element) => element.getBoundingClientRect())
+        .filter((rect) => rect.width > 0 && rect.height > 0);
+      if (rects.length === 0) {
+        return;
+      }
       const marker = document.createElement('div');
       marker.className = `rsr-preview-diff-scrollbar-marker ${pane === 'before' ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
-      const rect = element.getBoundingClientRect();
-      const top = Math.max(0, Math.min(1, (rect.top + window.scrollY) / maxScrollTop));
-      const height = Math.max(4, Math.min(window.innerHeight, (rect.height / maxScrollTop) * window.innerHeight));
+      const absoluteTop = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
+      const absoluteBottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
+      const top = Math.max(0, Math.min(1, absoluteTop / maxScrollTop));
+      const height = Math.max(4, Math.min(window.innerHeight, ((absoluteBottom - absoluteTop) / maxScrollTop) * window.innerHeight));
       const markerTop = Math.max(0, Math.min(window.innerHeight - height, top * window.innerHeight));
       marker.style.top = `${markerTop.toFixed(1)}px`;
       marker.style.height = `${height.toFixed(1)}px`;
@@ -290,14 +453,173 @@ internal static class PreviewDiffHighlighter
     document.body.appendChild(rail);
   }
 
-  const firstChanged = document.querySelector('.rsr-preview-diff-block');
-  if (firstChanged) {
-    firstChanged.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-
   return changedIndexes.size;
 })();
 """;
+    }
+
+    internal static async Task ApplyRenderedNavigationPlanAsync(
+        WebView2CompositionControl view,
+        IReadOnlyList<PreviewDiffNavigationTarget> navigationTargets)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        ArgumentNullException.ThrowIfNull(navigationTargets);
+        if (view.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        var targetsJson = JsonSerializer.Serialize(navigationTargets, _jsonOptions);
+        await view.ExecuteScriptAsync(BuildApplyRenderedNavigationPlanScript(targetsJson));
+    }
+
+    internal static string BuildApplyRenderedNavigationPlanScript(string navigationTargetsJson)
+        => $$"""
+(() => {
+  const navigationTargets = {{navigationTargetsJson}};
+  const navigationIndexes = new Map(
+    navigationTargets.map((target) => [target.index, target.navigationIndex]));
+  document.querySelectorAll('[data-rsr-diff-navigation-index]').forEach((element) => {
+    element.removeAttribute('data-rsr-diff-navigation-index');
+  });
+  document.querySelectorAll('[data-rsr-diff-index]').forEach((element) => {
+    const index = Number(element.getAttribute('data-rsr-diff-index'));
+    if (navigationIndexes.has(index)) {
+      element.setAttribute(
+        'data-rsr-diff-navigation-index',
+        String(navigationIndexes.get(index)));
+    }
+  });
+  window.__repoSyncRadarDiffScrollbar?.scheduleBuild?.();
+})();
+""";
+
+    internal static string BuildNavigateToDiffScript(int navigationIndex)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(navigationIndex);
+        return $$"""
+(() => {
+  const styleId = 'rsr-preview-diff-navigation-style';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+:root {
+  --rsr-preview-diff-outline: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-color-mode="light"]) {
+    --rsr-preview-diff-outline: #58a6ff;
+  }
+}
+:root[data-color-mode="dark"] {
+  --rsr-preview-diff-outline: #58a6ff;
+}
+:root[data-color-mode="light"] {
+  --rsr-preview-diff-outline: #0969da;
+}
+.rsr-preview-diff-active-overlay {
+  background: rgba(88, 166, 255, 0.035) !important;
+  border: 2px solid var(--rsr-preview-diff-outline) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.16) !important;
+  box-sizing: border-box !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  z-index: 2147483646 !important;
+}
+`;
+    document.head.appendChild(style);
+  }
+
+  document.querySelectorAll('.rsr-preview-diff-active').forEach((element) => {
+    element.classList.remove('rsr-preview-diff-active');
+  });
+  const overlayId = 'rsr-preview-diff-active-overlay';
+  const existingOverlay = document.getElementById(overlayId);
+  if (existingOverlay?.__resizeObserver) {
+    existingOverlay.__resizeObserver.disconnect();
+  }
+  if (existingOverlay?.__positionHandler) {
+    window.removeEventListener('resize', existingOverlay.__positionHandler);
+  }
+  existingOverlay?.remove();
+
+  const targets = Array.from(
+    document.querySelectorAll('[data-rsr-diff-navigation-index="{{navigationIndex}}"]'));
+  if (targets.length === 0) {
+    return { found: false, ratio: 0 };
+  }
+  const root = document.scrollingElement || document.documentElement || document.body;
+  const maxScrollTop = Math.max(1, (root?.scrollHeight || 0) - window.innerHeight);
+  const targetRect = targets[0].getBoundingClientRect();
+  const targetTop = targetRect.top + window.scrollY;
+  const centeredScrollTop = Math.max(
+    0,
+    Math.min(maxScrollTop, targetTop - (window.innerHeight - targetRect.height) / 2));
+  const ratio = Math.max(0, Math.min(1, centeredScrollTop / maxScrollTop));
+  const overlay = document.createElement('div');
+  overlay.id = overlayId;
+  overlay.className = 'rsr-preview-diff-active-overlay';
+  overlay.setAttribute('aria-hidden', 'true');
+  const positionOverlay = () => {
+    const rects = targets
+      .map((target) => target.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    if (rects.length === 0) {
+      overlay.hidden = true;
+      return;
+    }
+    overlay.hidden = false;
+    const padding = 6;
+    const left = Math.min(...rects.map((rect) => rect.left)) + window.scrollX - padding;
+    const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY - padding;
+    const right = Math.max(...rects.map((rect) => rect.right)) + window.scrollX + padding;
+    const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY + padding;
+    overlay.style.left = `${left.toFixed(1)}px`;
+    overlay.style.top = `${top.toFixed(1)}px`;
+    overlay.style.width = `${Math.max(0, right - left).toFixed(1)}px`;
+    overlay.style.height = `${Math.max(0, bottom - top).toFixed(1)}px`;
+  };
+  overlay.__positionHandler = positionOverlay;
+  document.body.appendChild(overlay);
+  positionOverlay();
+  window.addEventListener('resize', positionOverlay, { passive: true });
+  if (typeof ResizeObserver === 'function') {
+    const resizeObserver = new ResizeObserver(positionOverlay);
+    targets.forEach((target) => resizeObserver.observe(target));
+    resizeObserver.observe(document.body);
+    overlay.__resizeObserver = resizeObserver;
+  }
+  const scrollSyncState = window.__repoSyncRadarPreviewScrollSync;
+  if (scrollSyncState) {
+    scrollSyncState.suppressUntil = Date.now() + 1000;
+  }
+  window.scrollTo({ top: centeredScrollTop, behavior: 'auto' });
+  return { found: true, ratio };
+})();
+""";
+    }
+
+    internal static PreviewDiffNavigationResult ParseNavigateResult(string? scriptResult)
+    {
+        if (string.IsNullOrWhiteSpace(scriptResult)
+            || string.Equals(scriptResult, "null", StringComparison.Ordinal))
+        {
+            return default;
+        }
+
+        try
+        {
+            var result = JsonSerializer.Deserialize<PreviewDiffNavigationResult>(
+                scriptResult,
+                _jsonOptions);
+            return result with { Ratio = Math.Clamp(result.Ratio, 0, 1) };
+        }
+        catch (JsonException)
+        {
+            return default;
+        }
     }
 
     private static IReadOnlyList<PreviewDiffBlock> DeserializeBlocks(string? scriptResult)
