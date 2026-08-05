@@ -440,8 +440,8 @@ public sealed class RadarRepositoryTests
             new[]
             {
                 MakeCommit("sha-old-low", prNumber: 1, authoredAt: baseTime),
-                MakeCommit("sha-new-high", prNumber: 2, authoredAt: baseTime.AddDays(2)),
-                MakeCommit("sha-middle-unscored", prNumber: 3, authoredAt: baseTime.AddDays(1)),
+                MakeCommit("sha-middle-high", prNumber: 2, authoredAt: baseTime.AddDays(1)),
+                MakeCommit("sha-new-unscored", prNumber: 3, authoredAt: baseTime.AddDays(2)),
             },
             ct);
 
@@ -458,7 +458,7 @@ public sealed class RadarRepositoryTests
                 },
                 new Scoring
                 {
-                    Sha = "sha-new-high",
+                    Sha = "sha-middle-high",
                     Score = 0.92,
                     Category = "feature-update",
                     AudienceJson = "[]",
@@ -476,16 +476,24 @@ public sealed class RadarRepositoryTests
         var lowestScore = await repository.QueryCommitsAsync(
             new CommitQueryFilter { SortOrder = CommitSortOrder.ScoreAscending },
             ct);
+        var highestScoreLimited = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.ScoreDescending, Limit = 1 },
+            ct);
+        var lowestScoreLimited = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.ScoreAscending, Limit = 1 },
+            ct);
 
         Assert.Equal(
-            ["sha-old-low", "sha-middle-unscored", "sha-new-high"],
+            ["sha-old-low", "sha-middle-high", "sha-new-unscored"],
             oldest.Select(static commit => commit.Sha));
         Assert.Equal(
-            ["sha-new-high", "sha-old-low", "sha-middle-unscored"],
+            ["sha-middle-high", "sha-old-low", "sha-new-unscored"],
             highestScore.Select(static commit => commit.Sha));
         Assert.Equal(
-            ["sha-old-low", "sha-new-high", "sha-middle-unscored"],
+            ["sha-old-low", "sha-middle-high", "sha-new-unscored"],
             lowestScore.Select(static commit => commit.Sha));
+        Assert.Equal("sha-middle-high", Assert.Single(highestScoreLimited).Sha);
+        Assert.Equal("sha-old-low", Assert.Single(lowestScoreLimited).Sha);
     }
 
     [Fact]
