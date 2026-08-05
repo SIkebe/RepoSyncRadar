@@ -1898,6 +1898,15 @@ public partial class MainWindow : Window
                 afterCount,
                 request.SourceChangeCount);
             await InitializePreviewDiffNavigationAsync(plan.Changes.Count, generation);
+            if (!IsPreviewDiffOperationCurrent(
+                    _activePreviewDiffRequest,
+                    request,
+                    _previewDiffGeneration,
+                    generation))
+            {
+                return;
+            }
+
             HidePreviewPaneStatus(isBeforePane: true);
             HidePreviewPaneStatus(isBeforePane: false);
         }
@@ -1935,9 +1944,9 @@ public partial class MainWindow : Window
 
     private async Task ApplyPreviewDiffHighlightsAsync(int generation)
     {
+        var request = _activePreviewDiffRequest;
         try
         {
-            var request = _activePreviewDiffRequest;
             if (request is null || generation != _previewDiffGeneration)
             {
                 return;
@@ -1972,26 +1981,49 @@ public partial class MainWindow : Window
                 PreviewDiffPane.After,
                 afterNavigationTargets);
 
-            if (ReferenceEquals(request, _activePreviewDiffRequest) && generation == _previewDiffGeneration)
+            if (!IsPreviewDiffOperationCurrent(
+                    _activePreviewDiffRequest,
+                    request,
+                    _previewDiffGeneration,
+                    generation))
             {
-                OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
-                    request.BeforeLabel,
-                    plan.BeforeChangedIndexes.Count,
-                    request.SourceChangeCount);
-                PreviewDocsHeaderText.Text = BuildDiffHeaderLabel(
-                    request.AfterLabel,
-                    plan.AfterChangedIndexes.Count,
-                    request.SourceChangeCount);
-                await InitializePreviewDiffNavigationAsync(plan.Changes.Count, generation);
-                HidePreviewPaneStatus(isBeforePane: true);
-                HidePreviewPaneStatus(isBeforePane: false);
+                return;
             }
+
+            OfficialDocsHeaderText.Text = BuildDiffHeaderLabel(
+                request.BeforeLabel,
+                plan.BeforeChangedIndexes.Count,
+                request.SourceChangeCount);
+            PreviewDocsHeaderText.Text = BuildDiffHeaderLabel(
+                request.AfterLabel,
+                plan.AfterChangedIndexes.Count,
+                request.SourceChangeCount);
+            await InitializePreviewDiffNavigationAsync(plan.Changes.Count, generation);
+            if (!IsPreviewDiffOperationCurrent(
+                    _activePreviewDiffRequest,
+                    request,
+                    _previewDiffGeneration,
+                    generation))
+            {
+                return;
+            }
+
+            HidePreviewPaneStatus(isBeforePane: true);
+            HidePreviewPaneStatus(isBeforePane: false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             LogPreviewDiffFailed(_logger, ex);
-            ShowPreviewPaneStatus(isBeforePane: true, "差分解析に失敗しました", ex.Message);
-            ShowPreviewPaneStatus(isBeforePane: false, "差分解析に失敗しました", ex.Message);
+            if (request is not null
+                && IsPreviewDiffOperationCurrent(
+                    _activePreviewDiffRequest,
+                    request,
+                    _previewDiffGeneration,
+                    generation))
+            {
+                ShowPreviewPaneStatus(isBeforePane: true, "差分解析に失敗しました", ex.Message);
+                ShowPreviewPaneStatus(isBeforePane: false, "差分解析に失敗しました", ex.Message);
+            }
         }
     }
 
