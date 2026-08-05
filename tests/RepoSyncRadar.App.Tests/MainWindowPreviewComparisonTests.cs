@@ -833,6 +833,15 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public async Task ObservePreviousPreviewDiffNavigationAsync_Allows_Queue_After_Cancellation()
+    {
+        var canceledTask = Task.FromCanceled(new CancellationToken(canceled: true));
+
+        await MainWindow.ObservePreviousPreviewDiffNavigationAsync(canceledTask);
+        await MainWindow.ObservePreviousPreviewDiffNavigationAsync(Task.CompletedTask);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_ApplyPlanScript_Preserves_GitHub_Alert_Layout()
     {
         var script = PreviewDiffHighlighter.BuildApplyPlanScript("[1]", "\"after\"");

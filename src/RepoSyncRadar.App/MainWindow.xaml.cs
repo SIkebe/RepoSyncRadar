@@ -1147,8 +1147,20 @@ public partial class MainWindow : Window
         int generation,
         int operationId)
     {
-        await previousTask;
+        await ObservePreviousPreviewDiffNavigationAsync(previousTask);
         await NavigateToPreviewDiffAsync(targetIndex, generation, operationId);
+    }
+
+    internal static async Task ObservePreviousPreviewDiffNavigationAsync(Task previousTask)
+    {
+        try
+        {
+            await previousTask;
+        }
+        catch (OperationCanceledException)
+        {
+            // A superseded preview must not prevent later navigation requests.
+        }
     }
 
     private async Task NavigateToPreviewDiffAsync(int targetIndex, int generation, int operationId)
