@@ -782,6 +782,124 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PredictivePrewarmFileAsync_Renders_Without_Replacing_Server_And_Is_Consumed_By_Navigation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-file-prewarm.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-file-prewarm");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var sut = BuildSut(
+            runner,
+            bare,
+            "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            contentServer: contentServer,
+            onObjectSourceMaterialized: (path, sha) =>
+            {
+                var markdown = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "# Next page\n\nBefore"
+                    : "# Next page\n\nAfter";
+                File.WriteAllText(Path.Combine(path, "NEXT.md"), markdown);
+            });
+        var fpt = DocsVersionCatalog.All.First(static candidate => candidate.Slug == "fpt");
+
+        await sut.PredictivePrewarmFileAsync(
+            123,
+            "headsha",
+            "NEXT.md",
+            fpt,
+            cancellationToken: ct);
+
+        await contentServer.DidNotReceive().StartAsync(
+            Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<CancellationToken>());
+
+        var progress = new ListProgress();
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123,
+            "headsha",
+            "NEXT.md",
+            progress,
+            fpt,
+            ct);
+
+        Assert.NotNull(link);
+        Assert.Contains(progress.Items, message => message.Contains("先読み済みプレビューを再利用", StringComparison.Ordinal));
+        Assert.DoesNotContain(progress.Items, message => message.Contains("HTML に変換中", StringComparison.Ordinal));
+        await contentServer.Received(1).StartAsync(
+            Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PredictivePrewarmFileAsync_Does_Not_Block_A_Different_File()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-independent-file-prewarm.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-independent-file-prewarm");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var predictedReadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releasePredictedRead = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sut = BuildSut(
+            runner,
+            bare,
+            "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            contentServer: Substitute.For<ILocalPreviewContentServer>(),
+            onObjectSourceMaterialized: (path, sha) =>
+            {
+                var suffix = string.Equals(sha, "parentsha", StringComparison.Ordinal) ? "Before" : "After";
+                File.WriteAllText(Path.Combine(path, "PREDICTED.md"), $"# Predicted\n\n{suffix}");
+                File.WriteAllText(Path.Combine(path, "OTHER.md"), $"# Other\n\n{suffix}");
+            },
+            beforeObjectRead: async (sha, repoPath) =>
+            {
+                if (string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    && string.Equals(repoPath, "PREDICTED.md", StringComparison.Ordinal))
+                {
+                    predictedReadStarted.TrySetResult();
+                    await releasePredictedRead.Task.ConfigureAwait(false);
+                }
+            });
+
+        var prewarmTask = Task.Run(
+            () => sut.PredictivePrewarmFileAsync(
+                123,
+                "headsha",
+                "PREDICTED.md",
+                cancellationToken: ct),
+            CancellationToken.None);
+        await predictedReadStarted.Task.WaitAsync(ct);
+
+        var otherTask = sut.PrepareMarkdownComparisonPreviewAsync(
+            123,
+            "headsha",
+            "OTHER.md",
+            cancellationToken: ct);
+        var completed = await Task.WhenAny(otherTask, Task.Delay(TimeSpan.FromSeconds(2), ct));
+        releasePredictedRead.TrySetResult();
+
+        Assert.Same(otherTask, completed);
+        Assert.NotNull(await otherTask);
+        await prewarmTask;
+    }
+
+    [Fact]
     public async Task PrepareMarkdownComparisonPreviewAsync_Switching_Files_Reuses_Cached_Session()
     {
         // §Step 19.10 (perf): 1/7 → 2/7 のファイル切替で「全体をコンパイルしている?」と
@@ -972,7 +1090,8 @@ public sealed class PreviewCoordinatorTests : IDisposable
         int previewBasePort = 4500,
         PreviewSession? session = null,
         ILocalPreviewContentServer? contentServer = null,
-        Action<string, string>? onObjectSourceMaterialized = null)
+        Action<string, string>? onObjectSourceMaterialized = null,
+        Func<string, string, Task>? beforeObjectRead = null)
     {
         var options = Options.Create(new DocsRepositoryOptions
         {
@@ -1029,6 +1148,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
                 var sha = spec[..separator];
                 var repoPath = spec[(separator + 1)..].TrimStart('/');
+                if (beforeObjectRead is not null)
+                {
+                    beforeObjectRead(sha, repoPath).GetAwaiter().GetResult();
+                }
                 MaterializeObjectSource(sha);
                 var file = Path.Combine(objectSourceRoot, sha, repoPath.Replace('/', Path.DirectorySeparatorChar));
                 return Task.FromResult(File.Exists(file)

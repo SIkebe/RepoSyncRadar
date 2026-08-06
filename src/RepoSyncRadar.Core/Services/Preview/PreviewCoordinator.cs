@@ -85,6 +85,19 @@ public interface IPreviewCoordinator
     Task PredictivePrewarmAsync(int prNumber, string sha, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Predictively renders one Markdown comparison without replacing the pages
+    /// currently hosted by the local preview server. The next regular prepare call
+    /// for the same file and version consumes the cached render.
+    /// </summary>
+    Task PredictivePrewarmFileAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        DocsVersion? version = null,
+        IReadOnlyList<string>? changedFilePaths = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stops the running preview and removes cached Markdown assets plus legacy
     /// worktrees left by older preview implementations. Returns the number of
     /// legacy worktree directories actually removed. Returns 0 when the preview
@@ -165,13 +178,32 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     // commitSha + filePath ごとに、クリックされた Markdown が実際に参照する
     // variables/reusables/page titles だけを読み込んだ DocsLiquidContext を使い回す。
     private readonly ConcurrentDictionary<LiquidContextCacheKey, DocsLiquidContext> _liquidContextCache = new();
+    private readonly ConcurrentDictionary<PreparedPageKey, Lazy<Task<PreparedMarkdownPage?>>> _preparedPageOperations = new();
     private long _markdownPreviewGeneration;
 
     private readonly record struct PreparedSessionKey(int PrNumber, string Sha);
 
     private readonly record struct LiquidContextCacheKey(string CommitSha, string FilePath);
 
+    private readonly record struct PreparedPageKey(
+        int PrNumber,
+        string Sha,
+        string FilePath,
+        string VersionSlug,
+        string ChangedFilePathsKey);
+
     private sealed record PreparedMarkdownSession(string BeforeSha);
+
+    private sealed record PreparedMarkdownPage(
+        string BeforeSha,
+        string RequestedFilePath,
+        string RenderedFilePath,
+        int ReusableReferenceCount,
+        DocsVersion EffectiveVersion,
+        IReadOnlyList<DocsVersion> AffectedVersions,
+        int SourceChangeCount,
+        string BeforeHtml,
+        string AfterHtml);
 
     public PreviewCoordinator(
         DocsWorktreeManager worktree,
@@ -235,6 +267,183 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
+        var changedPaths = changedFilePaths ?? [];
+        var key = BuildPreparedPageKey(prNumber, sha, filePath, version, changedPaths);
+        var prepared = await GetOrPrepareMarkdownPageAsync(
+                key,
+                version,
+                changedPaths,
+                consumePredictiveCache: true,
+                progress,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (prepared is null)
+        {
+            return null;
+        }
+
+        var pages = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["/markdown/before"] = prepared.BeforeHtml,
+            ["/markdown/after"] = prepared.AfterHtml,
+        };
+
+        var (assetRoots, markdownAssetRoot) = await PrepareMarkdownAssetRootsAsync(
+                prepared.BeforeSha,
+                sha,
+                prepared.BeforeHtml,
+                prepared.AfterHtml,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
+        progress?.Report($"Markdown 比較プレビューを起動中… (ポート {port.ToString(CultureInfo.InvariantCulture)})");
+        try
+        {
+            await _contentServer.StartAsync(port, pages, assetRoots, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            DeleteDirectoryBestEffort(markdownAssetRoot);
+            throw;
+        }
+        ReplaceActiveMarkdownAssetRoot(markdownAssetRoot);
+        _session.Activate(port);
+
+        // §Step 19.9/19.10: バージョン切替でもファイル切替でも同じポートで
+        // /markdown/before の内容を差し替える運用なので、URL に version slug と
+        // file path を埋め込まないと WebView2 は「Source が変わっていない」と
+        // 判断して navigation をスキップし、「変更前ページを準備中…」の
+        // オーバーレイから先に進めなくなる。
+        // LocalPreviewContentServer.NormalizeRoute は query を捨てるためルーティングには影響しない。
+        // r はレンダリング世代。同じ version/file の再生成でも WebView2 に別 URL として
+        // 認識させ、古い DOM/HTTP cache の表示を避ける。
+        var renderGeneration = Interlocked.Increment(ref _markdownPreviewGeneration);
+        var query = BuildMarkdownPreviewQuery(
+            prepared.EffectiveVersion,
+            prepared.RequestedFilePath,
+            prepared.RenderedFilePath,
+            renderGeneration);
+        var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before?{query}"));
+        var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after?{query}"));
+        LogMarkdownComparisonReady(_logger, prepared.BeforeSha, sha, prepared.RenderedFilePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
+        return new PreviewComparisonLink(
+            beforeUrl,
+            afterUrl,
+            port,
+            port,
+            prepared.BeforeSha,
+            sha)
+        {
+            CurrentVersion = prepared.EffectiveVersion,
+            AffectedVersions = prepared.AffectedVersions,
+            SourceChangeCount = prepared.SourceChangeCount,
+            RequestedFilePath = prepared.RequestedFilePath,
+            RenderedFilePath = prepared.RenderedFilePath,
+            ReusableReferenceCount = prepared.ReusableReferenceCount,
+        };
+    }
+
+    private static PreparedPageKey BuildPreparedPageKey(
+        int prNumber,
+        string sha,
+        string filePath,
+        DocsVersion? version,
+        IReadOnlyList<string> changedFilePaths)
+    {
+        var changedFilePathsKey = string.Join(
+            '\n',
+            changedFilePaths
+                .Select(NormalizeRepoPathForComparison)
+                .OrderBy(static path => path, StringComparer.Ordinal));
+        return new PreparedPageKey(
+            prNumber,
+            sha.Trim(),
+            NormalizeRepoPathForComparison(filePath),
+            version?.Slug ?? string.Empty,
+            changedFilePathsKey);
+    }
+
+    private async Task<PreparedMarkdownPage?> GetOrPrepareMarkdownPageAsync(
+        PreparedPageKey key,
+        DocsVersion? version,
+        IReadOnlyList<string> changedFilePaths,
+        bool consumePredictiveCache,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        if (!consumePredictiveCache)
+        {
+            RemoveCompletedPreparedPageOperationsExcept(key);
+        }
+
+        var candidate = new Lazy<Task<PreparedMarkdownPage?>>(
+            () => PrepareMarkdownPageCoreAsync(
+                key.PrNumber,
+                key.Sha,
+                key.FilePath,
+                version,
+                changedFilePaths,
+                progress,
+                cancellationToken),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        var operation = _preparedPageOperations.GetOrAdd(key, candidate);
+        var reusedOperation = !ReferenceEquals(operation, candidate);
+        if (consumePredictiveCache && reusedOperation)
+        {
+            progress?.Report($"{key.FilePath} の先読み済みプレビューを再利用します");
+        }
+
+        Task<PreparedMarkdownPage?> task;
+        try
+        {
+            task = operation.Value;
+            _ = task.ContinueWith(
+                completed =>
+                {
+                    if (completed.IsCanceled || completed.IsFaulted)
+                    {
+                        _preparedPageOperations.TryRemove(
+                            new KeyValuePair<PreparedPageKey, Lazy<Task<PreparedMarkdownPage?>>>(key, operation));
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return await task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (consumePredictiveCache)
+            {
+                _preparedPageOperations.TryRemove(
+                    new KeyValuePair<PreparedPageKey, Lazy<Task<PreparedMarkdownPage?>>>(key, operation));
+            }
+        }
+    }
+
+    private void RemoveCompletedPreparedPageOperationsExcept(PreparedPageKey retainedKey)
+    {
+        foreach (var entry in _preparedPageOperations)
+        {
+            if (!entry.Key.Equals(retainedKey)
+                && entry.Value.IsValueCreated
+                && entry.Value.Value.IsCompleted)
+            {
+                _preparedPageOperations.TryRemove(entry);
+            }
+        }
+    }
+
+    private async Task<PreparedMarkdownPage?> PrepareMarkdownPageCoreAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        DocsVersion? version,
+        IReadOnlyList<string> changedFilePaths,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
         var session = await EnsurePreparedSessionAsync(prNumber, sha, progress, cancellationToken).ConfigureAwait(false);
         if (session is null)
         {
@@ -265,14 +474,14 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
         progress?.Report("変更前 Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
         var beforeLiquid = await LoadLiquidContextCachedAsync(
-            session.BeforeSha,
+                session.BeforeSha,
                 renderedFilePath,
                 beforeMarkdown,
                 cancellationToken)
             .ConfigureAwait(false);
         progress?.Report("PR HEAD Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
         var afterLiquid = await LoadLiquidContextCachedAsync(
-            sha,
+                sha,
                 renderedFilePath,
                 afterMarkdown,
                 cancellationToken)
@@ -289,13 +498,12 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         progress?.Report("フロントマターの変更点を解析中…");
         var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
         progress?.Report("Liquid 条件と関連 data ファイルの差分を解析中…");
-        var sourceDiff = MarkdownSourceDiffAnalyzer.Analyze(
-            beforeMarkdown,
-            afterMarkdown);
+        var sourceDiff = MarkdownSourceDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
         var sourceChangeCount = frontmatterChanges.Count
             + sourceDiff.IfversionChanges.Count
             + sourceDiff.RelatedFileChanges.Sum(static file => file.Changes.Count);
 
+        cancellationToken.ThrowIfCancellationRequested();
         progress?.Report("変更前 Markdown を HTML に変換中…");
         var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
             renderedFilePath,
@@ -313,6 +521,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             diffAgainstLiquidContext: afterLiquid,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
 
+        cancellationToken.ThrowIfCancellationRequested();
         progress?.Report("PR HEAD Markdown を HTML に変換中…");
         var afterHtml = MarkdownPreviewRenderer.RenderDocument(
             renderedFilePath,
@@ -330,62 +539,17 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             diffAgainstLiquidContext: beforeLiquid,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
-        var pages = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["/markdown/before"] = beforeHtml,
-            ["/markdown/after"] = afterHtml,
-        };
-
-        var (assetRoots, markdownAssetRoot) = await PrepareMarkdownAssetRootsAsync(
-                session.BeforeSha,
-                sha,
-                beforeHtml,
-                afterHtml,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
-        progress?.Report($"Markdown 比較プレビューを起動中… (ポート {port.ToString(CultureInfo.InvariantCulture)})");
-        try
-        {
-            await _contentServer.StartAsync(port, pages, assetRoots, cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            DeleteDirectoryBestEffort(markdownAssetRoot);
-            throw;
-        }
-        ReplaceActiveMarkdownAssetRoot(markdownAssetRoot);
-        _session.Activate(port);
-
-        // §Step 19.9/19.10: バージョン切替でもファイル切替でも同じポートで
-        // /markdown/before の内容を差し替える運用なので、URL に version slug と
-        // file path を埋め込まないと WebView2 は「Source が変わっていない」と
-        // 判断して navigation をスキップし、「変更前ページを準備中…」の
-        // オーバーレイから先に進めなくなる。
-        // LocalPreviewContentServer.NormalizeRoute は query を捨てるためルーティングには影響しない。
-        // r はレンダリング世代。同じ version/file の再生成でも WebView2 に別 URL として
-        // 認識させ、古い DOM/HTTP cache の表示を避ける。
-        var renderGeneration = Interlocked.Increment(ref _markdownPreviewGeneration);
-        var query = BuildMarkdownPreviewQuery(effectiveVersion, requestedFilePath, renderedFilePath, renderGeneration);
-        var beforeUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/before?{query}"));
-        var afterUrl = new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/markdown/after?{query}"));
-        LogMarkdownComparisonReady(_logger, session.BeforeSha, sha, renderedFilePath, beforeUrl.AbsoluteUri, afterUrl.AbsoluteUri);
-        return new PreviewComparisonLink(
-            beforeUrl,
-            afterUrl,
-            port,
-            port,
+        cancellationToken.ThrowIfCancellationRequested();
+        return new PreparedMarkdownPage(
             session.BeforeSha,
-            sha)
-        {
-            CurrentVersion = effectiveVersion,
-            AffectedVersions = affectedVersions,
-            SourceChangeCount = sourceChangeCount,
-            RequestedFilePath = requestedFilePath,
-            RenderedFilePath = renderedFilePath,
-            ReusableReferenceCount = reusableReferenceCount,
-        };
+            requestedFilePath,
+            renderedFilePath,
+            reusableReferenceCount,
+            effectiveVersion,
+            affectedVersions,
+            sourceChangeCount,
+            beforeHtml,
+            afterHtml);
     }
 
     private static string BuildMarkdownPreviewQuery(
@@ -646,6 +810,47 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
     }
 
+    public async Task PredictivePrewarmFileAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        DocsVersion? version = null,
+        IReadOnlyList<string>? changedFilePaths = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_worktree.IsEnabled
+            || prNumber <= 0
+            || string.IsNullOrWhiteSpace(sha)
+            || string.IsNullOrWhiteSpace(filePath)
+            || !PreviewPathMapper.IsMarkdown(filePath))
+        {
+            return;
+        }
+
+        var changedPaths = changedFilePaths ?? [];
+        var key = BuildPreparedPageKey(prNumber, sha, filePath, version, changedPaths);
+        try
+        {
+            await GetOrPrepareMarkdownPageAsync(
+                    key,
+                    version,
+                    changedPaths,
+                    consumePredictiveCache: false,
+                    progress: null,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            LogPredictiveFilePrewarmCompleted(_logger, prNumber, sha, key.FilePath);
+        }
+        catch (OperationCanceledException)
+        {
+            // The visible preview changed before this speculative render completed.
+        }
+        catch (Exception ex)
+        {
+            LogPredictiveFilePrewarmFailed(_logger, prNumber, sha, key.FilePath, ex);
+        }
+    }
+
     public async Task<int> CleanupCacheAsync(CancellationToken cancellationToken = default)
     {
         if (!_worktree.IsEnabled)
@@ -663,6 +868,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         // の Directory.Exists チェックでは弾けるものの無駄なメモリを抱え続けることになる。
         _preparedSessions.Clear();
         _liquidContextCache.Clear();
+        _preparedPageOperations.Clear();
         return removed;
     }
 
@@ -902,4 +1108,21 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     [LoggerMessage(EventId = 6, Level = LogLevel.Debug,
         Message = "Predictive preview prewarm failed for PR #{PrNumber} (sha {Sha}); the regular click path will retry.")]
     private static partial void LogPredictivePrewarmFailed(ILogger logger, int prNumber, string sha, Exception exception);
+
+    [LoggerMessage(EventId = 7, Level = LogLevel.Debug,
+        Message = "Predictive file preview prewarm completed for PR #{PrNumber} (sha {Sha}), file {FilePath}.")]
+    private static partial void LogPredictiveFilePrewarmCompleted(
+        ILogger logger,
+        int prNumber,
+        string sha,
+        string filePath);
+
+    [LoggerMessage(EventId = 8, Level = LogLevel.Debug,
+        Message = "Predictive file preview prewarm failed for PR #{PrNumber} (sha {Sha}), file {FilePath}; the regular navigation path will retry.")]
+    private static partial void LogPredictiveFilePrewarmFailed(
+        ILogger logger,
+        int prNumber,
+        string sha,
+        string filePath,
+        Exception exception);
 }
