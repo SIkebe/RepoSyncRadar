@@ -136,6 +136,7 @@
   <data name="CommitDetail.PreviewDisabled" xml:space="preserve"><value>Preview is disabled (DocsRepository is not configured)</value></data>
   <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>Preview startup</value></data>
   <data name="CommitDetail.ReusableUsage.Label" xml:space="preserve"><value>Usage page</value></data>
+  <data name="CommitDetail.ReusableUsage.AriaLabel" xml:space="preserve"><value>Usage page for {0}</value></data>
   <data name="CommitDetail.Score" xml:space="preserve"><value>Score</value></data>
   <data name="CommitDetail.ScoreBand.Immediate" xml:space="preserve"><value>Review now</value></data>
   <data name="CommitDetail.ScoreBand.Immediate.Description" xml:space="preserve"><value>0.85-1.00: new APIs, breaking changes, security, or other changes needing immediate review/share.</value></data>

@@ -135,7 +135,9 @@ public sealed class PreviewCoordinatorTests : IDisposable
                     ? "`issue` | `object` | The issue itself."
                     : "`issue` | `object` | The issue itself.\n`label` | `object` | The optional label.";
                 WriteRepoFile(path, "data/reusables/webhooks/issue_properties.md", reusable);
+                WriteRepoFile(path, "data/reusables/webhooks/issue_properties_wrapper.md", "Wrapper: {% data reusables.webhooks.issue_properties %}");
                 WriteRepoFile(path, "content/webhooks/less-relevant.md", "---\ntitle: Less relevant\n---\n\n{% data reusables.webhooks.issue_properties %}");
+                WriteRepoFile(path, "content/webhooks/nested.md", "---\ntitle: Nested usage\n---\n\n{% data reusables.webhooks.issue_properties_wrapper %}");
                 WriteRepoFile(path, "content/webhooks/preferred.md", "---\ntitle: Preferred usage\n---\n\n{% data reusables.webhooks.issue_properties %}");
                 WriteRepoFile(path, "content/webhooks/prefix-only.md", "---\ntitle: Prefix only\n---\n\n{% data reusables.webhooks.issue_properties_metrics %}");
             });
@@ -156,9 +158,9 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.NotNull(link);
         Assert.Equal("data/reusables/webhooks/issue_properties.md", link!.RequestedFilePath);
         Assert.Equal("content/webhooks/preferred.md", link.RenderedFilePath);
-        Assert.Equal(2, link.ReusableReferenceCount);
+        Assert.Equal(3, link.ReusableReferenceCount);
         Assert.Equal(
-            ["content/webhooks/preferred.md", "content/webhooks/less-relevant.md"],
+            ["content/webhooks/preferred.md", "content/webhooks/less-relevant.md", "content/webhooks/nested.md"],
             link.ReusableReferencePaths);
         Assert.DoesNotContain("content/webhooks/prefix-only.md", link.ReusableReferencePaths);
         Assert.Contains("file=data%2Freusables%2Fwebhooks%2Fissue_properties.md", link.AfterUrl.Query, StringComparison.Ordinal);

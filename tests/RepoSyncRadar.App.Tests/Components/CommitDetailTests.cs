@@ -694,6 +694,7 @@ public class CommitDetailTests
         {
             var picker = cut.Find("[data-testid=\"commit-detail-reusable-usage\"]");
             Assert.Equal(2, picker.Children.Length);
+            Assert.Contains(reusablePath, picker.GetAttribute("aria-label"), StringComparison.Ordinal);
             Assert.Equal(referencePaths[0], captured?.FilePath);
             Assert.Contains("(1/2)", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
         });

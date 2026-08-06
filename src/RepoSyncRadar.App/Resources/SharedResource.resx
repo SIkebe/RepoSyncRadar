@@ -136,6 +136,7 @@
   <data name="CommitDetail.PreviewDisabled" xml:space="preserve"><value>プレビュー機能は無効です (DocsRepository 未設定)</value></data>
   <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>プレビュー起動</value></data>
   <data name="CommitDetail.ReusableUsage.Label" xml:space="preserve"><value>使用箇所</value></data>
+  <data name="CommitDetail.ReusableUsage.AriaLabel" xml:space="preserve"><value>{0} の使用箇所</value></data>
   <data name="CommitDetail.Score" xml:space="preserve"><value>スコア</value></data>
   <data name="CommitDetail.ScoreBand.Immediate" xml:space="preserve"><value>すぐ確認</value></data>
   <data name="CommitDetail.ScoreBand.Immediate.Description" xml:space="preserve"><value>0.85-1.00: 新 API・破壊的変更・セキュリティなど、すぐ共有や確認が必要な変更。</value></data>

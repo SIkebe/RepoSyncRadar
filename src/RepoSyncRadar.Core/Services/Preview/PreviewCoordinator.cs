@@ -646,31 +646,14 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return null;
         }
 
-        var needle = "reusables." + reusableKey;
         progress?.Report($"{filePath} の使用箇所を content ページから検索中…");
-        var beforeMatches = await _worktree.FindFilesContainingAsync(
+        var beforeReferences = await FindAffectedContentReferencesAsync(
                 beforeSha,
-                "content",
-                needle,
-                ".md",
-                cancellationToken)
-            .ConfigureAwait(false);
-        var afterMatches = await _worktree.FindFilesContainingAsync(
-                afterSha,
-                "content",
-                needle,
-                ".md",
-                cancellationToken)
-            .ConfigureAwait(false);
-        var beforeReferences = await FilterReusableReferencesAsync(
-                beforeSha,
-                beforeMatches,
                 reusableKey,
                 cancellationToken)
             .ConfigureAwait(false);
-        var afterReferences = await FilterReusableReferencesAsync(
+        var afterReferences = await FindAffectedContentReferencesAsync(
                 afterSha,
-                afterMatches,
                 reusableKey,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -702,6 +685,68 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 normalizedPreferred,
                 StringComparison.Ordinal)) ?? orderedCandidates[0];
         return new ReusablePreviewTarget(selected, orderedCandidates);
+    }
+
+    private async Task<IReadOnlyList<string>> FindAffectedContentReferencesAsync(
+        string sha,
+        string reusableKey,
+        CancellationToken cancellationToken)
+    {
+        var references = new HashSet<string>(StringComparer.Ordinal);
+        var pendingKeys = new Queue<string>();
+        var visitedKeys = new HashSet<string>(StringComparer.Ordinal);
+        pendingKeys.Enqueue(reusableKey);
+
+        while (pendingKeys.Count > 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var currentKey = pendingKeys.Dequeue();
+            if (!visitedKeys.Add(currentKey))
+            {
+                continue;
+            }
+
+            var needle = "reusables." + currentKey;
+            var contentMatches = await _worktree.FindFilesContainingAsync(
+                    sha,
+                    "content",
+                    needle,
+                    ".md",
+                    cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var reference in await FilterReusableReferencesAsync(
+                         sha,
+                         contentMatches,
+                         currentKey,
+                         cancellationToken)
+                     .ConfigureAwait(false))
+            {
+                references.Add(reference);
+            }
+
+            var reusableMatches = await _worktree.FindFilesContainingAsync(
+                    sha,
+                    "data/reusables",
+                    needle,
+                    ".md",
+                    cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var reference in await FilterReusableReferencesAsync(
+                         sha,
+                         reusableMatches,
+                         currentKey,
+                         cancellationToken)
+                     .ConfigureAwait(false))
+            {
+                if (TryBuildReusableKey(reference, out var parentKey)
+                    && !visitedKeys.Contains(parentKey))
+                {
+                    pendingKeys.Enqueue(parentKey);
+                }
+            }
+        }
+
+        return references.ToArray();
     }
 
     private async Task<IReadOnlyList<string>> FilterReusableReferencesAsync(
