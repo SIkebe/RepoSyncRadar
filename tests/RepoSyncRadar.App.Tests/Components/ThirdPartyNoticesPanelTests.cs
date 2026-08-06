@@ -22,9 +22,13 @@ public sealed class ThirdPartyNoticesPanelTests
         var packages = cut.FindAll("[data-testid=\"settings-third-party-package\"]")
             .Select(static node => node.TextContent)
             .ToArray();
+        var versions = cut.FindAll("[data-testid=\"settings-third-party-version\"]")
+            .Select(static node => node.TextContent)
+            .ToArray();
         Assert.Contains("MudBlazor", packages);
-        Assert.Contains("GitHub.Copilot.SDK", packages);
-        Assert.Contains("1.0.9", cut.Markup, StringComparison.Ordinal);
+        var sdkIndex = Array.IndexOf(packages, "GitHub.Copilot.SDK");
+        Assert.NotEqual(-1, sdkIndex);
+        Assert.Equal("1.0.9", versions[sdkIndex]);
         Assert.Contains("Microsoft.Web.WebView2", packages);
         Assert.Contains("BSD-2-Clause", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("MIT", cut.Markup, StringComparison.Ordinal);

@@ -11,6 +11,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// intentionally restrictive — see <c>docs/DESIGN.md §8.1</c> and the Step 11 entry of
 /// <c>docs/IMPLEMENTATION_PLAN.md</c>:
 /// <list type="bullet">
+///   <item><description>For supported promptable requests, <see cref="PermissionRequest.ManagedApprovalRequired"/> takes precedence over automatic approval; deny-only rules remain deny-only.</description></item>
 ///   <item><description><c>custom-tool</c> on the local allow-list is approved without prompting; everything else is prompted (Step 14).</description></item>
 ///   <item><description><c>read</c> is approved without prompting.</description></item>
 ///   <item><description><c>url</c> is approved if the host is on <see cref="UrlAllowList"/>; otherwise the UI is asked.</description></item>
