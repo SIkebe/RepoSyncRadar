@@ -782,6 +782,69 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PredictivePrewarmFileAsync_Renders_Without_Replacing_Server_And_Is_Consumed_By_Navigation()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-file-prewarm.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-file-prewarm");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        var sut = BuildSut(
+            runner,
+            bare,
+            "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            contentServer: contentServer,
+            onObjectSourceMaterialized: (path, sha) =>
+            {
+                var markdown = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "# Next page\n\nBefore"
+                    : "# Next page\n\nAfter";
+                File.WriteAllText(Path.Combine(path, "NEXT.md"), markdown);
+            });
+        var fpt = DocsVersionCatalog.All.First(static candidate => candidate.Slug == "fpt");
+
+        await sut.PredictivePrewarmFileAsync(
+            123,
+            "headsha",
+            "NEXT.md",
+            fpt,
+            cancellationToken: ct);
+
+        await contentServer.DidNotReceive().StartAsync(
+            Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<CancellationToken>());
+
+        var progress = new ListProgress();
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123,
+            "headsha",
+            "NEXT.md",
+            progress,
+            fpt,
+            ct);
+
+        Assert.NotNull(link);
+        Assert.Contains(progress.Items, message => message.Contains("先読み済みプレビューを再利用", StringComparison.Ordinal));
+        Assert.DoesNotContain(progress.Items, message => message.Contains("HTML に変換中", StringComparison.Ordinal));
+        await contentServer.Received(1).StartAsync(
+            Arg.Any<int>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task PrepareMarkdownComparisonPreviewAsync_Switching_Files_Reuses_Cached_Session()
     {
         // §Step 19.10 (perf): 1/7 → 2/7 のファイル切替で「全体をコンパイルしている?」と

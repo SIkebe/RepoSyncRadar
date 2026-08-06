@@ -316,6 +316,8 @@
     private long _previewOperationSerial;
     private PreviewOperation? _previewOperation;
     private CancellationTokenSource? _predictivePrewarmCts;
+    private CancellationTokenSource? _predictiveFilePrewarmCts;
+    private string? _predictiveFilePrewarmPath;
     private string? _historyForSha;
     private IReadOnlyList<CommitHistoryTimelineEntry> _historyEntries = [];
     private bool _historyIsLegacyReviewOnly;
@@ -369,6 +371,7 @@
         _previewOperation?.Cancellation.Dispose();
         _previewOperation = null;
         CancelPredictivePrewarm();
+        CancelPredictiveFilePrewarm();
     }
 
     /// <summary>
@@ -436,6 +439,7 @@
             _historyEntries = [];
             _historyIsLegacyReviewOnly = false;
             CancelPredictivePrewarm();
+            CancelPredictiveFilePrewarm();
             return;
         }
 
@@ -444,6 +448,7 @@
             _activePreviewSha = Commit.Sha;
             _activePreviewPath = null;
             _activeVersion = null;
+            CancelPredictiveFilePrewarm();
             StartPredictivePrewarm(Commit);
         }
 
@@ -799,7 +804,7 @@
     }
 
     private async Task OpenInWebViewAsync(CommitFile file)
-        => await OpenInWebViewAsync(file, version: null);
+        => await OpenInWebViewAsync(file, _activeVersion);
 
     private Task OpenCommitDiffInWebViewAsync(string url)
     {
@@ -810,6 +815,7 @@
         }
 
         navigator.Publish(uri);
+        CancelPredictiveFilePrewarm();
         _activePreviewPath = null;
         _activeVersion = null;
         _previewStatus = L["CommitDetail.OpenedPrInPane", Commit?.PrNumber.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty];
@@ -822,6 +828,10 @@
         if (navigator is null || IsPreviewOperationBusy)
         {
             return;
+        }
+        if (!string.Equals(_predictiveFilePrewarmPath, file.Path, StringComparison.Ordinal))
+        {
+            CancelPredictiveFilePrewarm();
         }
 
         var commit = Commit;
@@ -882,6 +892,7 @@
                         SourceChangeCount: link.SourceChangeCount));
                     _activePreviewPath = file.Path;
                     _activeVersion = link.CurrentVersion;
+                    StartPredictiveFilePrewarm(commit, file, link.CurrentVersion);
                     _previewStatus = string.Equals(renderedPath, file.Path, StringComparison.Ordinal)
                         ? L["CommitDetail.MarkdownComparisonOpened", file.Path]
                         : L["CommitDetail.MarkdownReusableUsageOpened", file.Path, renderedPath];
@@ -1022,6 +1033,7 @@
         {
             return;
         }
+        CancelPredictiveFilePrewarm();
         var operation = StartPreviewOperation(sha: null, busyPath: null, L["CommitDetail.CleanupInProgress"], L["CommitDetail.CleanupCache"]);
         var token = operation.Cancellation.Token;
         operation.PollTask = Task.Run(
@@ -1140,6 +1152,64 @@
         try { _predictivePrewarmCts?.Cancel(); } catch (ObjectDisposedException) { }
         _predictivePrewarmCts?.Dispose();
         _predictivePrewarmCts = null;
+    }
+
+    private void StartPredictiveFilePrewarm(Commit commit, CommitFile currentFile, DocsVersion? version)
+    {
+        CancelPredictiveFilePrewarm();
+        if (commit.PrNumber <= 0
+            || string.IsNullOrWhiteSpace(commit.Sha)
+            || Services.GetService<IPreviewCoordinator>() is not { } coordinator)
+        {
+            return;
+        }
+
+        var previewFiles = commit.Files.Where(IsLocalComparisonPreviewable).ToList();
+        var currentIndex = previewFiles.FindIndex(
+            file => string.Equals(file.Path, currentFile.Path, StringComparison.Ordinal));
+        if (currentIndex < 0 || currentIndex >= previewFiles.Count - 1)
+        {
+            return;
+        }
+
+        var nextFile = previewFiles[currentIndex + 1];
+        var changedFilePaths = IsReusableMarkdownFile(nextFile)
+            ? commit.Files.Select(static file => file.Path).ToArray()
+            : [];
+        var cts = new CancellationTokenSource();
+        _predictiveFilePrewarmCts = cts;
+        _predictiveFilePrewarmPath = nextFile.Path;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var prewarmTask = coordinator.PredictivePrewarmFileAsync(
+                    commit.PrNumber,
+                    commit.Sha,
+                    nextFile.Path,
+                    version,
+                    changedFilePaths,
+                    cts.Token);
+                if (prewarmTask is not null)
+                {
+                    await prewarmTask.ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }, CancellationToken.None);
+    }
+
+    private void CancelPredictiveFilePrewarm()
+    {
+        try { _predictiveFilePrewarmCts?.Cancel(); } catch (ObjectDisposedException) { }
+        _predictiveFilePrewarmCts?.Dispose();
+        _predictiveFilePrewarmCts = null;
+        _predictiveFilePrewarmPath = null;
     }
 
     private Uri? ResolveOfficialTarget(CommitFile file)

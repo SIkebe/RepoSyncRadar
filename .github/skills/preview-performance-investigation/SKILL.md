@@ -108,6 +108,7 @@ dotnet run --project src/RepoSyncRadar.App
 
 - `LocalPreviewContentServer`、WebView2 `Source` 更新、同一URI no-op、query string、route normalization を確認する。
 - Markdown preview URLには content-affecting dimensions を含める。
+- 次ページを先読みする場合は HTML 生成までを副作用のないキャッシュに留め、現在表示中の `LocalPreviewContentServer` の page / asset root を置き換えない。キャッシュは `SHA + path + docs version` で識別し、件数を制限する。
 - HTML生成後にWebView2 navigationが詰まっている場合は docs WebView CDP target も見る。
 
 #### cache cleanup が遅い

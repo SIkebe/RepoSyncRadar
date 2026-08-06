@@ -99,6 +99,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Official `docs.github.com` may already match a Repo sync PR if deployed. Visual comparison should use local preview of parent SHA vs PR HEAD, not production pages.
 - Markdown preview should use existing `PreviewCoordinator`, `DocsWorktreeManager`, `LocalPreviewContentServer`, and `PreviewPortAllocator` patterns instead of ad hoc git/object reading or local HTTP hosting. `NextDevServerProcessCleaner` remains only for cleaning up legacy worktrees that may be locked by old Next dev servers.
 - Startup docs preview prewarm is opt-in via `DocsRepository:PrewarmOnStartup`; the default must not clone/fetch `github/docs` until a preview action or predictive prewarm needs it.
+- After a Markdown comparison opens, pre-render only the next previewable file and keep the speculative HTML cache bounded. Predictive file rendering must not replace the pages or asset roots currently hosted by `LocalPreviewContentServer`.
 
 ### WebView2 Behavior
 
