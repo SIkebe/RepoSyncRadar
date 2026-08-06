@@ -28,11 +28,15 @@ public class RadarPermissionPolicyTests
         return new RadarPermissionPolicy(allowList, prompt, NullLogger<RadarPermissionPolicy>.Instance);
     }
 
-    private static PermissionRequestCustomTool NewCustomTool(string id, string name) => new()
+    private static PermissionRequestCustomTool NewCustomTool(
+        string id,
+        string name,
+        bool? managedApprovalRequired = null) => new()
     {
         ToolCallId = id,
         ToolName = name,
         ToolDescription = "Tool description for test.",
+        ManagedApprovalRequired = managedApprovalRequired,
     };
 
     private static PermissionRequestRead NewRead(string id, string path, bool? managedApprovalRequired = null) => new()
@@ -103,6 +107,21 @@ public class RadarPermissionPolicyTests
 
         Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Managed_ScoreCommit_Is_Prompted_Instead_Of_AutoApproved()
+    {
+        var prompt = Substitute.For<IPermissionPrompt>();
+        prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(true);
+        var policy = CreatePolicy(prompt);
+
+        var result = await policy.HandleAsync(
+            NewCustomTool("tc-managed-triage-write", "radar_score_commit", managedApprovalRequired: true),
+            _invocation);
+
+        Assert.Equal(_approveOnceKind, result.Kind);
+        await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
