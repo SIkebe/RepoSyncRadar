@@ -1262,6 +1262,30 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Whole_Added_Sentence_When_Four_Boilerplate_Tokens_Match()
+    {
+        const string beforeMarkdown = "If the GitHub app displays an authentication prompt, follow the browser instructions to complete setup.";
+        const string afterMarkdown = "If the GitHub app processes billing reports, enterprise owners can export monthly usage data.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">" + afterMarkdown + "</span>",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "If the GitHub app <span class=\"rsr-rendered-diff-added\">processes",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Whole_Inserted_Paragraph_When_It_Ends_With_Autotitle_Link()
     {
         var context = new DocsLiquidContext(

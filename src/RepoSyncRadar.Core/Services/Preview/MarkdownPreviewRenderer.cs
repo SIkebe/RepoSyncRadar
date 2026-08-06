@@ -41,6 +41,30 @@ internal static partial class MarkdownPreviewRenderer
         // preview (the visual regression that motivated Step 19.8).
         .Build();
 
+    private static readonly HashSet<string> _similarityStopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "after",
+        "before",
+        "being",
+        "class",
+        "could",
+        "either",
+        "following",
+        "href",
+        "should",
+        "span",
+        "their",
+        "there",
+        "these",
+        "those",
+        "through",
+        "variables",
+        "which",
+        "while",
+        "would",
+        "your",
+    };
+
     // Liquid block / variable syntax used pervasively in github/docs content.
     // We never attempt to evaluate these — only to neutralise them so Markdig
     // does not render literal `{% ifversion fpt %}` into a <p> tag and the
@@ -3384,10 +3408,12 @@ internal static partial class MarkdownPreviewRenderer
         var currentTokens = SimilarityTokenRegex()
             .Matches(currentContent)
             .Select(static match => match.Value)
+            .Where(IsSignificantSimilarityToken)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var comparisonTokens = SimilarityTokenRegex()
             .Matches(comparisonContent)
             .Select(static match => match.Value)
+            .Where(IsSignificantSimilarityToken)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var shorterCount = Math.Min(currentTokens.Count, comparisonTokens.Count);
         if (shorterCount == 0)
@@ -3396,8 +3422,11 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var sharedCount = currentTokens.Intersect(comparisonTokens).Count();
-        return sharedCount >= 4 && sharedCount * 3 >= shorterCount;
+        return sharedCount >= 4 && sharedCount * 2 >= shorterCount;
     }
+
+    private static bool IsSignificantSimilarityToken(string token)
+        => token.Length >= 4 && !_similarityStopWords.Contains(token);
 
     private static bool IsWhitespaceOnlyCodeLineDiff(string content, string comparisonContent)
         => !string.Equals(content, comparisonContent, StringComparison.Ordinal)
