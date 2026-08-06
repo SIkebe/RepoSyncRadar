@@ -11,6 +11,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// intentionally restrictive — see <c>docs/DESIGN.md §8.1</c> and the Step 11 entry of
 /// <c>docs/IMPLEMENTATION_PLAN.md</c>:
 /// <list type="bullet">
+///   <item><description>For supported promptable requests, <see cref="PermissionRequest.ManagedApprovalRequired"/> takes precedence over automatic approval; deny-only rules remain deny-only.</description></item>
 ///   <item><description><c>custom-tool</c> on the local allow-list is approved without prompting; everything else is prompted (Step 14).</description></item>
 ///   <item><description><c>read</c> is approved without prompting.</description></item>
 ///   <item><description><c>url</c> is approved if the host is on <see cref="UrlAllowList"/>; otherwise the UI is asked.</description></item>
@@ -65,6 +66,16 @@ public sealed partial class RadarPermissionPolicy
         ArgumentNullException.ThrowIfNull(request);
 
         var sessionId = invocation?.SessionId ?? "<unknown>";
+
+        if (request.ManagedApprovalRequired is true
+            && request is PermissionRequestCustomTool
+                or PermissionRequestRead
+                or PermissionRequestUrl
+                or PermissionRequestWrite)
+        {
+            LogPromptingForManagedApproval(_logger, request.Kind, sessionId);
+            return await ConfirmAsync(request).ConfigureAwait(false);
+        }
 
         switch (request)
         {
@@ -154,5 +165,9 @@ public sealed partial class RadarPermissionPolicy
     [LoggerMessage(EventId = 7, Level = LogLevel.Warning,
         Message = "Denying unsupported permission kind {Kind} by rule (session={SessionId})")]
     private static partial void LogDenyingUnknownKind(ILogger logger, string? kind, string sessionId);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information,
+        Message = "Managed policy requires human approval for {Kind}; prompting user (session={SessionId})")]
+    private static partial void LogPromptingForManagedApproval(ILogger logger, string? kind, string sessionId);
 }
 #pragma warning restore GHCP001

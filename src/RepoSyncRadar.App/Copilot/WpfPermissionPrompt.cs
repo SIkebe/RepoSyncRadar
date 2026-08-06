@@ -33,6 +33,7 @@ public sealed class WpfPermissionPrompt : IPermissionPrompt
         ArgumentNullException.ThrowIfNull(request);
 
         if (request is PermissionRequestUrl url
+            && AllowsPersistentUrlApproval(url)
             && CopilotUrlPermissionSettingsUpdater.TryGetPersistableHost(url.Url, out var host))
         {
             return await ConfirmUrlAsync(url, host, cancellationToken).ConfigureAwait(false);
@@ -52,6 +53,9 @@ public sealed class WpfPermissionPrompt : IPermissionPrompt
             return result == MessageBoxResult.Yes;
         }, DispatcherPriority.Normal, cancellationToken).Task.ConfigureAwait(false);
     }
+
+    internal static bool AllowsPersistentUrlApproval(PermissionRequestUrl request)
+        => request.ManagedApprovalRequired is not true;
 
     private async Task<bool> ConfirmUrlAsync(
         PermissionRequestUrl url,
@@ -199,11 +203,14 @@ public sealed class WpfPermissionPrompt : IPermissionPrompt
             MessageBoxResult.OK);
     }
 
-    private static (string Caption, string Message) FormatPrompt(PermissionRequest request) => request switch
+    internal static (string Caption, string Message) FormatPrompt(PermissionRequest request) => request switch
     {
         PermissionRequestCustomTool tool => (
             "RepoSyncRadar — Allow custom tool?",
             $"Copilot wants to run custom tool:\n  {tool.ToolName}\n\n{tool.ToolDescription}\n\nAllow this tool?"),
+        PermissionRequestRead read => (
+            "RepoSyncRadar — Allow file read?",
+            $"Copilot wants to read:\n  {read.Path}\n\nIntent: {read.Intention}\n\nAllow this read?"),
         PermissionRequestWrite write => (
             "RepoSyncRadar — Allow file write?",
             $"Copilot wants to write to:\n  {write.FileName}\n\nIntent: {write.Intention}\n\nAllow this write?"),
