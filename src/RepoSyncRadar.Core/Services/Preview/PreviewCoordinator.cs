@@ -149,7 +149,7 @@ public sealed record PreviewComparisonLink(
 internal sealed record ReusablePreviewTarget(string FilePath, int ReferenceCount);
 
 /// <inheritdoc cref="IPreviewCoordinator" />
-public sealed partial class PreviewCoordinator : IPreviewCoordinator, IDisposable
+public sealed partial class PreviewCoordinator : IPreviewCoordinator
 {
     private const string _markdownBeforeAssetRoute = "/markdown-assets/before";
     private const string _markdownAfterAssetRoute = "/markdown-assets/after";
@@ -178,8 +178,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator, IDisposabl
     // commitSha + filePath ごとに、クリックされた Markdown が実際に参照する
     // variables/reusables/page titles だけを読み込んだ DocsLiquidContext を使い回す。
     private readonly ConcurrentDictionary<LiquidContextCacheKey, DocsLiquidContext> _liquidContextCache = new();
-    private readonly ConcurrentDictionary<PreparedPageKey, PreparedMarkdownPage> _predictivelyPreparedPages = new();
-    private readonly SemaphoreSlim _preparedPageGate = new(1, 1);
+    private readonly ConcurrentDictionary<PreparedPageKey, Lazy<Task<PreparedMarkdownPage?>>> _preparedPageOperations = new();
     private long _markdownPreviewGeneration;
 
     private readonly record struct PreparedSessionKey(int PrNumber, string Sha);
@@ -227,8 +226,6 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator, IDisposabl
         _options = options.Value;
         _logger = logger;
     }
-
-    public void Dispose() => _preparedPageGate.Dispose();
 
     public async Task<PreviewComparisonLink?> PrepareMarkdownComparisonPreviewAsync(
         int prNumber,
@@ -375,45 +372,66 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator, IDisposabl
         IProgress<string>? progress,
         CancellationToken cancellationToken)
     {
-        await _preparedPageGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (!consumePredictiveCache)
+        {
+            RemoveCompletedPreparedPageOperationsExcept(key);
+        }
+
+        var candidate = new Lazy<Task<PreparedMarkdownPage?>>(
+            () => PrepareMarkdownPageCoreAsync(
+                key.PrNumber,
+                key.Sha,
+                key.FilePath,
+                version,
+                changedFilePaths,
+                progress,
+                cancellationToken),
+            LazyThreadSafetyMode.ExecutionAndPublication);
+        var operation = _preparedPageOperations.GetOrAdd(key, candidate);
+        var reusedOperation = !ReferenceEquals(operation, candidate);
+        if (consumePredictiveCache && reusedOperation)
+        {
+            progress?.Report($"{key.FilePath} の先読み済みプレビューを再利用します");
+        }
+
+        Task<PreparedMarkdownPage?> task;
         try
         {
-            PreparedMarkdownPage? cached;
-            var cacheHit = consumePredictiveCache
-                ? _predictivelyPreparedPages.TryRemove(key, out cached)
-                : _predictivelyPreparedPages.TryGetValue(key, out cached);
-            if (cacheHit)
-            {
-                progress?.Report($"{key.FilePath} の先読み済みプレビューを再利用します");
-                return cached;
-            }
-
-            var prepared = await PrepareMarkdownPageCoreAsync(
-                    key.PrNumber,
-                    key.Sha,
-                    key.FilePath,
-                    version,
-                    changedFilePaths,
-                    progress,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (!consumePredictiveCache && prepared is not null)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                foreach (var existing in _predictivelyPreparedPages.Keys)
+            task = operation.Value;
+            _ = task.ContinueWith(
+                completed =>
                 {
-                    if (!existing.Equals(key))
+                    if (completed.IsCanceled || completed.IsFaulted)
                     {
-                        _predictivelyPreparedPages.TryRemove(existing, out _);
+                        _preparedPageOperations.TryRemove(
+                            new KeyValuePair<PreparedPageKey, Lazy<Task<PreparedMarkdownPage?>>>(key, operation));
                     }
-                }
-                _predictivelyPreparedPages[key] = prepared;
-            }
-            return prepared;
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return await task.WaitAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            _preparedPageGate.Release();
+            if (consumePredictiveCache)
+            {
+                _preparedPageOperations.TryRemove(
+                    new KeyValuePair<PreparedPageKey, Lazy<Task<PreparedMarkdownPage?>>>(key, operation));
+            }
+        }
+    }
+
+    private void RemoveCompletedPreparedPageOperationsExcept(PreparedPageKey retainedKey)
+    {
+        foreach (var entry in _preparedPageOperations)
+        {
+            if (!entry.Key.Equals(retainedKey)
+                && entry.Value.IsValueCreated
+                && entry.Value.Value.IsCompleted)
+            {
+                _preparedPageOperations.TryRemove(entry);
+            }
         }
     }
 
@@ -850,7 +868,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator, IDisposabl
         // の Directory.Exists チェックでは弾けるものの無駄なメモリを抱え続けることになる。
         _preparedSessions.Clear();
         _liquidContextCache.Clear();
-        _predictivelyPreparedPages.Clear();
+        _preparedPageOperations.Clear();
         return removed;
     }
 
