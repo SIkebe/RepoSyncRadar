@@ -1262,6 +1262,30 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Marks_Whole_Added_Sentence_When_Four_Boilerplate_Tokens_Match()
+    {
+        const string beforeMarkdown = "If the GitHub app displays an authentication prompt, follow the browser instructions to complete setup.";
+        const string afterMarkdown = "If the GitHub app processes billing reports, enterprise owners can export monthly usage data.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">" + afterMarkdown + "</span>",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "If the GitHub app <span class=\"rsr-rendered-diff-added\">processes",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Whole_Inserted_Paragraph_When_It_Ends_With_Autotitle_Link()
     {
         var context = new DocsLiquidContext(
@@ -2585,6 +2609,98 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Leaves_Shared_Text_Unmarked_In_Heavily_Rewritten_Paragraphs()
+    {
+        const string sharedSuffix = " You can do this in either of the following ways:";
+        const string beforeMarkdown = """
+            By default, autopilot mode applies only to the current task. Once Copilot determines that the task is complete, Copilot CLI automatically switches back to the standard interactive mode. To run another task in autopilot mode, press Shift+Tab and cycle through the available modes until you re-enter autopilot mode, then enter your next prompt.
+
+            If you regularly run several tasks in autopilot mode, you can configure the CLI to stay in autopilot mode after each task completes, by enabling the `stayInAutopilot` setting. You can do this in either of the following ways:
+            """;
+        const string afterMarkdown = """
+            By default, autopilot mode is sticky: once Copilot determines that a task is complete, Copilot CLI remains in autopilot mode, so the next prompt you enter is also handled in autopilot mode. You can switch back to the standard interactive mode at any time by pressing Shift+Tab.
+
+            If you'd rather have Copilot CLI automatically switch back to interactive mode after each task completes, you can disable this behavior by setting `stayInAutopilot` to `false`. You can do this in either of the following ways:
+            """;
+
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/agents/copilot-cli/autopilot.md",
+            afterMarkdown,
+            "ff0cf46",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/agents/copilot-cli/autopilot.md",
+            beforeMarkdown,
+            "bd4da98",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains(
+            "<p>By default, autopilot mode <span class=\"rsr-rendered-diff-added\">is sticky:",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<p>By default, autopilot mode <span class=\"rsr-rendered-diff-removed\">applies only",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(sharedSuffix, afterHtml, StringComparison.Ordinal);
+        Assert.Contains(sharedSuffix, beforeHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<p><span class=\"rsr-rendered-diff-added\">By default, autopilot mode",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<p><span class=\"rsr-rendered-diff-removed\">By default, autopilot mode",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            sharedSuffix + "</span>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            sharedSuffix + "</span>",
+            beforeHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Prefers_Stronger_Content_Matches_When_Changed_List_Items_Are_Reordered()
+    {
+        const string beforeMarkdown = """
+            * GitHub Copilot supports Alpha workflows for repository owners in public repositories.
+            * GitHub Copilot supports Beta workflows for organization owners in private repositories.
+            """;
+        const string afterMarkdown = """
+            * GitHub Copilot supports Beta workflows for enterprise organization owners in private repositories.
+            * GitHub Copilot supports Alpha workflows for repository owners in public and private repositories.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<li>GitHub Copilot supports Beta workflows for <span class=\"rsr-rendered-diff-added\">enterprise </span>organization owners in private repositories.</li>",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<li>GitHub Copilot supports Alpha workflows for repository owners in public <span class=\"rsr-rendered-diff-added\">and private </span>repositories.</li>",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "GitHub Copilot supports <span class=\"rsr-rendered-diff-added\">Beta",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Gap_When_After_Removes_End_Of_Paragraph()
     {
         const string beforeMarkdown = "Metered billing explanations. For more information, see [Billing cycles](/billing/concepts/billing-cycles).";
@@ -2621,6 +2737,39 @@ var value = 1;
 
         Assert.DoesNotContain("&lt;span class=&quot;rsr-rendered-diff-added&quot;&gt;", html, StringComparison.Ordinal);
         Assert.Contains("<code><span class=\"rsr-rendered-diff-added\">/delegate</span></code> Create a PR", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Does_Not_Show_Raw_Closing_Diff_Span_Across_Inline_Code()
+    {
+        const string beforeMarkdown = "* Supported for `bundler`, `composer`, `mix`, `maven`, `npm`, and `pip`.";
+        const string afterMarkdown = "* Supported for `bundler`, `composer`, `mix`, `maven`, `npm`, `pip`, and `uv`.";
+
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/tutorials/secure-your-dependencies/customizing-dependabot-prs.md",
+            afterMarkdown,
+            "b70c56f",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/tutorials/secure-your-dependencies/customizing-dependabot-prs.md",
+            beforeMarkdown,
+            "4eaabd4",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains(
+            "<code><span class=\"rsr-rendered-diff-added\">pip</span></code><span class=\"rsr-rendered-diff-added\">, and </span><code><span class=\"rsr-rendered-diff-added\">uv</span></code>.",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-removed\">and </span><code><span class=\"rsr-rendered-diff-removed\">pip</span></code>.",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", beforeHtml, StringComparison.Ordinal);
     }
 
     [Fact]

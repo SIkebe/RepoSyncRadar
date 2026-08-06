@@ -41,6 +41,30 @@ internal static partial class MarkdownPreviewRenderer
         // preview (the visual regression that motivated Step 19.8).
         .Build();
 
+    private static readonly HashSet<string> _similarityStopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "after",
+        "before",
+        "being",
+        "class",
+        "could",
+        "either",
+        "following",
+        "href",
+        "should",
+        "span",
+        "their",
+        "there",
+        "these",
+        "those",
+        "through",
+        "variables",
+        "which",
+        "while",
+        "would",
+        "your",
+    };
+
     // Liquid block / variable syntax used pervasively in github/docs content.
     // We never attempt to evaluate these — only to neutralise them so Markdig
     // does not render literal `{% ifversion fpt %}` into a <p> tag and the
@@ -98,6 +122,9 @@ internal static partial class MarkdownPreviewRenderer
 
     [GeneratedRegex("""[a-zA-Z_][a-zA-Z0-9_-]*""")]
     private static partial Regex VersionExpressionIdentifierRegex();
+
+    [GeneratedRegex(@"[\p{L}\p{N}_]+", RegexOptions.CultureInvariant)]
+    private static partial Regex SimilarityTokenRegex();
 
     private const string _copilotOcticonSvg = """
         <svg version="1.1" width="16" height="16" viewBox="0 0 16 16" class="octicon octicon-copilot" aria-hidden="true" data-component="Octicon"><path d="M7.998 15.035c-4.562 0-7.873-2.914-7.998-3.749V9.338c.085-.628.677-1.686 1.588-2.065.013-.07.024-.143.036-.218.029-.183.06-.384.126-.612-.201-.508-.254-1.084-.254-1.656 0-.87.128-1.769.693-2.484.579-.733 1.494-1.124 2.724-1.261 1.206-.134 2.262.034 2.944.765.05.053.096.108.139.165.044-.057.094-.112.143-.165.682-.731 1.738-.899 2.944-.765 1.23.137 2.145.528 2.724 1.261.566.715.693 1.614.693 2.484 0 .572-.053 1.148-.254 1.656.066.228.098.429.126.612.012.076.024.148.037.218.924.385 1.522 1.471 1.591 2.095v1.872c0 .766-3.351 3.795-8.002 3.795Zm0-1.485c2.28 0 4.584-1.11 5.002-1.433V7.862l-.023-.116c-.49.21-1.075.291-1.727.291-1.146 0-2.059-.327-2.71-.991A3.222 3.222 0 0 1 8 6.303a3.24 3.24 0 0 1-.544.743c-.65.664-1.563.991-2.71.991-.652 0-1.236-.081-1.727-.291l-.023.116v4.255c.419.323 2.722 1.433 5.002 1.433ZM6.762 2.83c-.193-.206-.637-.413-1.682-.297-1.019.113-1.479.404-1.713.7-.247.312-.369.789-.369 1.554 0 .793.129 1.171.308 1.371.162.181.519.379 1.442.379.853 0 1.339-.235 1.638-.54.315-.322.527-.827.617-1.553.117-.935-.037-1.395-.241-1.614Zm4.155-.297c-1.044-.116-1.488.091-1.681.297-.204.219-.359.679-.242 1.614.091.726.303 1.231.618 1.553.299.305.784.54 1.638.54.922 0 1.28-.198 1.442-.379.179-.2.308-.578.308-1.371 0-.765-.123-1.242-.37-1.554-.233-.296-.693-.587-1.713-.7Z"></path><path d="M6.25 9.037a.75.75 0 0 1 .75.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 .75-.75Zm4.25.75v1.501a.75.75 0 0 1-1.5 0V9.787a.75.75 0 0 1 1.5 0Z"></path></svg>
@@ -2284,7 +2311,11 @@ internal static partial class MarkdownPreviewRenderer
                 }
                 else if (!inCodeFence && !isCodeFence && CanMarkRenderedDiffLine(trimmed))
                 {
-                    marked.Append(MarkRenderedDiffLine(line, markerClass, change.ComparisonLines));
+                    marked.Append(MarkRenderedDiffLine(
+                        line,
+                        markerClass,
+                        change.ComparisonLines,
+                        change.AlignedComparisonLine));
                 }
                 else
                 {
@@ -2370,7 +2401,7 @@ internal static partial class MarkdownPreviewRenderer
             return;
         }
 
-        var bridged = new CurrentLineDiff(index, Array.Empty<string>());
+        var bridged = new CurrentLineDiff(index, Array.Empty<string>(), null);
         var existingIndex = changes.FindIndex(change => change.Index == index);
         if (existingIndex >= 0)
         {
@@ -2778,9 +2809,13 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var candidates = comparisonHunkLines.ToArray();
-        foreach (var index in currentHunkIndexes)
+        var hasPositionalAlignment = currentHunkIndexes.Count == candidates.Length;
+        for (var position = 0; position < currentHunkIndexes.Count; position++)
         {
-            changed.Add(new CurrentLineDiff(index, candidates));
+            changed.Add(new CurrentLineDiff(
+                currentHunkIndexes[position],
+                candidates,
+                hasPositionalAlignment ? candidates[position] : null));
         }
         currentHunkIndexes.Clear();
         comparisonHunkLines.Clear();
@@ -2801,7 +2836,11 @@ internal static partial class MarkdownPreviewRenderer
         return table;
     }
 
-    private static string MarkRenderedDiffLine(string line, string markerClass, string[] comparisonLines)
+    private static string MarkRenderedDiffLine(
+        string line,
+        string markerClass,
+        string[] comparisonLines,
+        string? alignedComparisonLine)
     {
         if (IsMarkdownTableSeparatorRow(line))
         {
@@ -2814,7 +2853,10 @@ internal static partial class MarkdownPreviewRenderer
 
         if (TryGetMarkableRenderedDiffParts(line, out var parts))
         {
-            var comparisonContent = FindComparableRenderedDiffContent(parts, comparisonLines);
+            var comparisonContent = FindComparableRenderedDiffContent(
+                parts,
+                comparisonLines,
+                alignedComparisonLine);
             return parts.Prefix + MarkRenderedDiffContent(parts.Content, markerClass, comparisonContent);
         }
 
@@ -3057,11 +3099,52 @@ internal static partial class MarkdownPreviewRenderer
             return content;
         }
 
-        return content[..changedRange.Start]
-            + "<span class=\"" + markerClass + "\">"
-            + content.Substring(changedRange.Start, changedRange.Length)
-            + "</span>"
-            + content[(changedRange.Start + changedRange.Length)..];
+        return WrapRenderedDiffRangePreservingInlineCode(content, markerClass, changedRange);
+    }
+
+    private static string WrapRenderedDiffRangePreservingInlineCode(
+        string content,
+        string markerClass,
+        InlineChangedRange changedRange)
+    {
+        var marked = new StringBuilder(content.Length + 96);
+        marked.Append(content.AsSpan(0, changedRange.Start));
+        var cursor = changedRange.Start;
+        while (cursor < changedRange.End)
+        {
+            var tickStart = content.IndexOf('`', cursor, changedRange.End - cursor);
+            if (tickStart < 0)
+            {
+                marked.Append(WrapRenderedDiff(content[cursor..changedRange.End], markerClass));
+                break;
+            }
+
+            marked.Append(WrapRenderedDiff(content[cursor..tickStart], markerClass));
+            var tickCount = 1;
+            while (tickStart + tickCount < changedRange.End
+                && content[tickStart + tickCount] == '`')
+            {
+                tickCount++;
+            }
+
+            var tickEnd = FindInlineCodeEnd(content, tickStart);
+            if (tickEnd < 0 || tickEnd > changedRange.End)
+            {
+                marked.Append(content.AsSpan(tickStart, tickCount));
+                cursor = tickStart + tickCount;
+                continue;
+            }
+
+            var codeEnd = tickEnd - tickCount;
+            marked.Append(content.AsSpan(tickStart, tickCount))
+                .Append(WrapRenderedDiff(
+                    content.Substring(tickStart + tickCount, codeEnd - tickStart - tickCount),
+                    markerClass))
+                .Append(content.AsSpan(codeEnd, tickCount));
+            cursor = tickEnd;
+        }
+        marked.Append(content.AsSpan(changedRange.End));
+        return marked.ToString();
     }
 
     private static bool TryMarkRenderedDiffGap(
@@ -3297,8 +3380,20 @@ internal static partial class MarkdownPreviewRenderer
         return cursor;
     }
 
-    private static string? FindComparableRenderedDiffContent(RenderedDiffLineParts currentParts, string[] comparisonLines)
+    private static string? FindComparableRenderedDiffContent(
+        RenderedDiffLineParts currentParts,
+        string[] comparisonLines,
+        string? alignedComparisonLine)
     {
+        string? alignedContent = null;
+        if (alignedComparisonLine is not null
+            && TryGetMarkableRenderedDiffParts(alignedComparisonLine, out var alignedParts)
+            && alignedParts.Kind == currentParts.Kind
+            && HasMeaningfulAlignedSimilarity(currentParts.Content, alignedParts.Content))
+        {
+            alignedContent = alignedParts.Content;
+        }
+
         string? prefixOrSuffixMatch = null;
         var prefixOrSuffixScore = 0;
         string? bestContent = null;
@@ -3345,10 +3440,38 @@ internal static partial class MarkdownPreviewRenderer
         // a small absolute overlap and a meaningful ratio so short real updates
         // like "Old entry" -> "New entry" still get inline marking.
         var minimumScore = Math.Max(4, currentParts.Content.Length / 3);
-        return bestScore >= minimumScore && bestScore * 5 >= currentParts.Content.Length * 3
-            ? bestContent
-            : null;
+        if (bestScore >= minimumScore && bestScore * 5 >= currentParts.Content.Length * 3)
+        {
+            return bestContent;
+        }
+
+        return alignedContent;
     }
+
+    private static bool HasMeaningfulAlignedSimilarity(string currentContent, string comparisonContent)
+    {
+        var currentTokens = SimilarityTokenRegex()
+            .Matches(currentContent)
+            .Select(static match => match.Value)
+            .Where(IsSignificantSimilarityToken)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var comparisonTokens = SimilarityTokenRegex()
+            .Matches(comparisonContent)
+            .Select(static match => match.Value)
+            .Where(IsSignificantSimilarityToken)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var shorterCount = Math.Min(currentTokens.Count, comparisonTokens.Count);
+        if (shorterCount == 0)
+        {
+            return false;
+        }
+
+        var sharedCount = currentTokens.Intersect(comparisonTokens).Count();
+        return sharedCount >= 4 && sharedCount * 2 >= shorterCount;
+    }
+
+    private static bool IsSignificantSimilarityToken(string token)
+        => token.Length >= 4 && !_similarityStopWords.Contains(token);
 
     private static bool IsWhitespaceOnlyCodeLineDiff(string content, string comparisonContent)
         => !string.Equals(content, comparisonContent, StringComparison.Ordinal)
@@ -3366,7 +3489,10 @@ internal static partial class MarkdownPreviewRenderer
 
     private readonly record struct RenderedDiffLineParts(RenderedDiffLineKind Kind, string Prefix, string Content);
 
-    private readonly record struct CurrentLineDiff(int Index, string[] ComparisonLines);
+    private readonly record struct CurrentLineDiff(
+        int Index,
+        string[] ComparisonLines,
+        string? AlignedComparisonLine);
 
     private readonly record struct MarkdownLinkRange(int LabelStart, int LabelEnd, int LinkEnd);
 
