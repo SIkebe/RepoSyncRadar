@@ -33,6 +33,7 @@ public sealed class WpfPermissionPrompt : IPermissionPrompt
         ArgumentNullException.ThrowIfNull(request);
 
         if (request is PermissionRequestUrl url
+            && AllowsPersistentUrlApproval(url)
             && CopilotUrlPermissionSettingsUpdater.TryGetPersistableHost(url.Url, out var host))
         {
             return await ConfirmUrlAsync(url, host, cancellationToken).ConfigureAwait(false);
@@ -52,6 +53,9 @@ public sealed class WpfPermissionPrompt : IPermissionPrompt
             return result == MessageBoxResult.Yes;
         }, DispatcherPriority.Normal, cancellationToken).Task.ConfigureAwait(false);
     }
+
+    internal static bool AllowsPersistentUrlApproval(PermissionRequestUrl request)
+        => request.ManagedApprovalRequired is not true;
 
     private async Task<bool> ConfirmUrlAsync(
         PermissionRequestUrl url,

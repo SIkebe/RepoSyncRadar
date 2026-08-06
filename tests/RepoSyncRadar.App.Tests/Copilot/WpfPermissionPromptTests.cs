@@ -7,6 +7,20 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class WpfPermissionPromptTests
 {
     [Fact]
+    public void AllowsPersistentUrlApproval_ForManagedUrl_ReturnsFalse()
+    {
+        var request = new PermissionRequestUrl
+        {
+            ToolCallId = "tc-managed-url",
+            Url = "https://docs.github.com/en/copilot",
+            Intention = "Read the documentation before summarizing it.",
+            ManagedApprovalRequired = true,
+        };
+
+        Assert.False(WpfPermissionPrompt.AllowsPersistentUrlApproval(request));
+    }
+
+    [Fact]
     public void FormatPrompt_ForManagedRead_ShowsPathAndIntention()
     {
         var request = new PermissionRequestRead
