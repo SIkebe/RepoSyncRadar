@@ -64,7 +64,10 @@ public class RadarPermissionPolicyTests
         CanOfferSessionApproval = false,
     };
 
-    private static PermissionRequestShell NewShell(string id, string command) => new()
+    private static PermissionRequestShell NewShell(
+        string id,
+        string command,
+        bool? managedApprovalRequired = null) => new()
     {
         ToolCallId = id,
         FullCommandText = command,
@@ -74,15 +77,17 @@ public class RadarPermissionPolicyTests
         PossibleUrls = [],
         HasWriteFileRedirection = false,
         CanOfferSessionApproval = false,
+        ManagedApprovalRequired = managedApprovalRequired,
     };
 
-    private static PermissionRequestMcp NewMcp(string id) => new()
+    private static PermissionRequestMcp NewMcp(string id, bool? managedApprovalRequired = null) => new()
     {
         ToolCallId = id,
         ServerName = "third-party",
         ToolName = "do_something",
         ToolTitle = "Third-party tool",
         ReadOnly = false,
+        ManagedApprovalRequired = managedApprovalRequired,
     };
 
     [Fact]
@@ -274,6 +279,20 @@ public class RadarPermissionPolicyTests
     }
 
     [Fact]
+    public async Task Managed_Shell_Remains_DeniedByRules_Without_Prompt()
+    {
+        var prompt = Substitute.For<IPermissionPrompt>();
+        var policy = CreatePolicy(prompt);
+
+        var result = await policy.HandleAsync(
+            NewShell("tc-managed-shell", "rm -rf /", managedApprovalRequired: true),
+            _invocation);
+
+        Assert.Equal(_userNotAvailableKind, result.Kind);
+        await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Unknown_Kind_Is_DeniedByRules()
     {
         var prompt = Substitute.For<IPermissionPrompt>();
@@ -281,6 +300,20 @@ public class RadarPermissionPolicyTests
 
         // PermissionRequestMcp は本アプリでは未対応扱い。今後 MCP を許可するときに別途扱う。
         var result = await policy.HandleAsync(NewMcp("tc-9"), _invocation);
+
+        Assert.Equal(_userNotAvailableKind, result.Kind);
+        await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Managed_Unknown_Kind_Remains_DeniedByRules()
+    {
+        var prompt = Substitute.For<IPermissionPrompt>();
+        var policy = CreatePolicy(prompt);
+
+        var result = await policy.HandleAsync(
+            NewMcp("tc-managed-mcp", managedApprovalRequired: true),
+            _invocation);
 
         Assert.Equal(_userNotAvailableKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
