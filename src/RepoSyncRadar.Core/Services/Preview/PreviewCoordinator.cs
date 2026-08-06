@@ -648,18 +648,30 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
         var needle = "reusables." + reusableKey;
         progress?.Report($"{filePath} の使用箇所を content ページから検索中…");
-        var beforeReferences = await _worktree.FindFilesContainingAsync(
+        var beforeMatches = await _worktree.FindFilesContainingAsync(
                 beforeSha,
                 "content",
                 needle,
                 ".md",
                 cancellationToken)
             .ConfigureAwait(false);
-        var afterReferences = await _worktree.FindFilesContainingAsync(
+        var afterMatches = await _worktree.FindFilesContainingAsync(
                 afterSha,
                 "content",
                 needle,
                 ".md",
+                cancellationToken)
+            .ConfigureAwait(false);
+        var beforeReferences = await FilterReusableReferencesAsync(
+                beforeSha,
+                beforeMatches,
+                reusableKey,
+                cancellationToken)
+            .ConfigureAwait(false);
+        var afterReferences = await FilterReusableReferencesAsync(
+                afterSha,
+                afterMatches,
+                reusableKey,
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -690,6 +702,24 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 normalizedPreferred,
                 StringComparison.Ordinal)) ?? orderedCandidates[0];
         return new ReusablePreviewTarget(selected, orderedCandidates);
+    }
+
+    private async Task<IReadOnlyList<string>> FilterReusableReferencesAsync(
+        string sha,
+        IReadOnlyList<string> candidates,
+        string reusableKey,
+        CancellationToken cancellationToken)
+    {
+        var references = new List<string>(candidates.Count);
+        foreach (var candidate in candidates)
+        {
+            var markdown = await _worktree.ReadFileTextAsync(sha, candidate, cancellationToken).ConfigureAwait(false);
+            if (DocsLiquidContextLoader.ContainsReusableReference(markdown, reusableKey))
+            {
+                references.Add(candidate);
+            }
+        }
+        return references;
     }
 
     private static int GetReusableReferencePriority(

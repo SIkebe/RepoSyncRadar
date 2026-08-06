@@ -1697,6 +1697,13 @@ internal static partial class DocsLiquidContextLoader
         }
     }
 
+    internal static bool ContainsReusableReference(string? source, string reusableKey)
+    {
+        var normalizedKey = NormalizeReusableKey(reusableKey);
+        return normalizedKey.Length > 0
+            && ExtractReusableKeys(source).Contains(normalizedKey, StringComparer.Ordinal);
+    }
+
     private static string NormalizeReusableKey(string key)
     {
         var normalized = key.Trim();

@@ -137,6 +137,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 WriteRepoFile(path, "data/reusables/webhooks/issue_properties.md", reusable);
                 WriteRepoFile(path, "content/webhooks/less-relevant.md", "---\ntitle: Less relevant\n---\n\n{% data reusables.webhooks.issue_properties %}");
                 WriteRepoFile(path, "content/webhooks/preferred.md", "---\ntitle: Preferred usage\n---\n\n{% data reusables.webhooks.issue_properties %}");
+                WriteRepoFile(path, "content/webhooks/prefix-only.md", "---\ntitle: Prefix only\n---\n\n{% data reusables.webhooks.issue_properties_metrics %}");
             });
 
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(
@@ -159,6 +160,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Equal(
             ["content/webhooks/preferred.md", "content/webhooks/less-relevant.md"],
             link.ReusableReferencePaths);
+        Assert.DoesNotContain("content/webhooks/prefix-only.md", link.ReusableReferencePaths);
         Assert.Contains("file=data%2Freusables%2Fwebhooks%2Fissue_properties.md", link.AfterUrl.Query, StringComparison.Ordinal);
         Assert.Contains("rendered=content%2Fwebhooks%2Fpreferred.md", link.AfterUrl.Query, StringComparison.Ordinal);
         Assert.Contains("Preferred usage", capturedPages["/markdown/after"], StringComparison.Ordinal);
