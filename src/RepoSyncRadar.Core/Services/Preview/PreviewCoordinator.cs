@@ -684,9 +684,11 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             .ThenBy(static path => path, StringComparer.Ordinal)
             .ToArray();
         var normalizedPreferred = NormalizeRepoPathForComparison(preferredReferencePath ?? string.Empty);
-        var selected = orderedCandidates.Contains(normalizedPreferred, StringComparer.Ordinal)
-            ? normalizedPreferred
-            : orderedCandidates[0];
+        var selected = orderedCandidates.FirstOrDefault(
+            candidate => string.Equals(
+                NormalizeRepoPathForComparison(candidate),
+                normalizedPreferred,
+                StringComparison.Ordinal)) ?? orderedCandidates[0];
         return new ReusablePreviewTarget(selected, orderedCandidates);
     }
 

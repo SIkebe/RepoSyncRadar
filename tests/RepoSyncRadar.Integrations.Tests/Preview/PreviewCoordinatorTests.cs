@@ -169,7 +169,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             123,
             "headsha",
             "data/reusables/webhooks/issue_properties.md",
-            "content/webhooks/less-relevant.md",
+            "/content\\webhooks\\less-relevant.md",
             progress: null,
             version: null,
             changedFilePaths:
@@ -181,6 +181,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
         Assert.NotNull(alternateLink);
         Assert.Equal("content/webhooks/less-relevant.md", alternateLink!.RenderedFilePath);
+        Assert.Contains(alternateLink.RenderedFilePath, alternateLink.ReusableReferencePaths);
         Assert.Contains("Less relevant", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.DoesNotContain("Preferred usage", capturedPages["/markdown/after"], StringComparison.Ordinal);
     }

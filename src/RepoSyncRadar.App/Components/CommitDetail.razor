@@ -857,10 +857,18 @@
         DocsVersion? version,
         string? renderedFilePath)
     {
+        _ = await TryOpenInWebViewAsync(file, version, renderedFilePath);
+    }
+
+    private async Task<bool> TryOpenInWebViewAsync(
+        CommitFile file,
+        DocsVersion? version,
+        string? renderedFilePath)
+    {
         var navigator = Services.GetService<IPreviewNavigator>();
         if (navigator is null || IsPreviewOperationBusy)
         {
-            return;
+            return false;
         }
         if (!string.Equals(_predictiveFilePrewarmPath, file.Path, StringComparison.Ordinal))
         {
@@ -908,7 +916,7 @@
                 {
                     if (!CanPublishPreview(operation, commit.Sha))
                     {
-                        return;
+                        return false;
                     }
 
                     var previewPosition = GetPreviewPosition(file);
@@ -935,13 +943,13 @@
                     _previewStatus = string.Equals(renderedPath, file.Path, StringComparison.Ordinal)
                         ? L["CommitDetail.MarkdownComparisonOpened", file.Path]
                         : BuildReusableUsageStatus(file.Path, renderedPath, link.ReusableReferencePaths);
-                    return;
+                    return true;
                 }
                 if (CanUpdatePreviewFeedback(operation))
                 {
                     _previewStatus = L["CommitDetail.PreviewDisabled"];
                 }
-                return;
+                return false;
             }
             catch (OperationCanceledException)
             {
@@ -949,7 +957,7 @@
                 {
                     _previewStatus = BuildPreviewCancellationStatus(operation);
                 }
-                return;
+                return false;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -957,7 +965,7 @@
                 {
                     _previewStatus = ex.Message;
                 }
-                return;
+                return false;
             }
             finally
             {
@@ -973,7 +981,7 @@
             _activePreviewPath = file.Path;
             _previewStatus = null;
             _previewStatusIsCleanup = false;
-            return;
+            return true;
         }
 
         if (ResolveOfficialTarget(file) is { } officialTarget)
@@ -982,12 +990,13 @@
             _activePreviewPath = file.Path;
             _previewStatus = null;
             _previewStatusIsCleanup = false;
-            return;
+            return true;
         }
 
         _previewStatus = L["CommitDetail.NoPublishableUrl"];
         _previewStatusIsCleanup = false;
         _previewStatusPath = file.Path;
+        return false;
     }
 
     private string? GetSelectedReusableReference(string filePath)
@@ -1002,7 +1011,23 @@
             return;
         }
 
-        await OpenInWebViewAsync(file, _activeVersion, renderedFilePath);
+        var hadPreviousSelection = _selectedReusableReferenceByFile.TryGetValue(
+            file.Path,
+            out var previousRenderedFilePath);
+        _selectedReusableReferenceByFile[file.Path] = renderedFilePath;
+        if (await TryOpenInWebViewAsync(file, _activeVersion, renderedFilePath))
+        {
+            return;
+        }
+
+        if (hadPreviousSelection)
+        {
+            _selectedReusableReferenceByFile[file.Path] = previousRenderedFilePath!;
+        }
+        else
+        {
+            _selectedReusableReferenceByFile.Remove(file.Path);
+        }
     }
 
     private LocalizedString BuildReusableUsageStatus(
@@ -1015,9 +1040,20 @@
             return L["CommitDetail.MarkdownReusableUsageOpened", requestedFilePath, renderedFilePath];
         }
 
-        var index = Array.FindIndex(
-            referencePaths.ToArray(),
-            path => string.Equals(path, renderedFilePath, StringComparison.Ordinal));
+        var index = -1;
+        for (var candidateIndex = 0; candidateIndex < referencePaths.Count; candidateIndex++)
+        {
+            if (string.Equals(referencePaths[candidateIndex], renderedFilePath, StringComparison.Ordinal))
+            {
+                index = candidateIndex;
+                break;
+            }
+        }
+        if (index < 0)
+        {
+            return L["CommitDetail.MarkdownReusableUsageOpened", requestedFilePath, renderedFilePath];
+        }
+
         return L[
             "CommitDetail.MarkdownReusableUsageOpenedMultiple",
             requestedFilePath,

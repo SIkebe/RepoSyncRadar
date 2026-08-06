@@ -729,7 +729,13 @@ public class CommitDetailTests
                 Arg.Any<CancellationToken>()));
 
         navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next);
-        cut.WaitForAssertion(() => Assert.Equal(adjacentPath, captured?.FilePath));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(adjacentPath, captured?.FilePath);
+            Assert.All(
+                cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]"),
+                button => Assert.False(button.HasAttribute("disabled")));
+        });
         navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous);
         cut.WaitForAssertion(() =>
         {
