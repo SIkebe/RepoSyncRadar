@@ -3385,12 +3385,13 @@ internal static partial class MarkdownPreviewRenderer
         string[] comparisonLines,
         string? alignedComparisonLine)
     {
+        string? alignedContent = null;
         if (alignedComparisonLine is not null
             && TryGetMarkableRenderedDiffParts(alignedComparisonLine, out var alignedParts)
             && alignedParts.Kind == currentParts.Kind
             && HasMeaningfulAlignedSimilarity(currentParts.Content, alignedParts.Content))
         {
-            return alignedParts.Content;
+            alignedContent = alignedParts.Content;
         }
 
         string? prefixOrSuffixMatch = null;
@@ -3439,9 +3440,12 @@ internal static partial class MarkdownPreviewRenderer
         // a small absolute overlap and a meaningful ratio so short real updates
         // like "Old entry" -> "New entry" still get inline marking.
         var minimumScore = Math.Max(4, currentParts.Content.Length / 3);
-        return bestScore >= minimumScore && bestScore * 5 >= currentParts.Content.Length * 3
-            ? bestContent
-            : null;
+        if (bestScore >= minimumScore && bestScore * 5 >= currentParts.Content.Length * 3)
+        {
+            return bestContent;
+        }
+
+        return alignedContent;
     }
 
     private static bool HasMeaningfulAlignedSimilarity(string currentContent, string comparisonContent)

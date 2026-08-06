@@ -2667,6 +2667,40 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Prefers_Stronger_Content_Matches_When_Changed_List_Items_Are_Reordered()
+    {
+        const string beforeMarkdown = """
+            * GitHub Copilot supports Alpha workflows for repository owners in public repositories.
+            * GitHub Copilot supports Beta workflows for organization owners in private repositories.
+            """;
+        const string afterMarkdown = """
+            * GitHub Copilot supports Beta workflows for enterprise organization owners in private repositories.
+            * GitHub Copilot supports Alpha workflows for repository owners in public and private repositories.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<li>GitHub Copilot supports Beta workflows for <span class=\"rsr-rendered-diff-added\">enterprise </span>organization owners in private repositories.</li>",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<li>GitHub Copilot supports Alpha workflows for repository owners in public <span class=\"rsr-rendered-diff-added\">and private </span>repositories.</li>",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "GitHub Copilot supports <span class=\"rsr-rendered-diff-added\">Beta",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Gap_When_After_Removes_End_Of_Paragraph()
     {
         const string beforeMarkdown = "Metered billing explanations. For more information, see [Billing cycles](/billing/concepts/billing-cycles).";
