@@ -444,7 +444,8 @@
 
         var targetFile = previewFiles[targetIndex];
         var version = _activeVersion;
-        _ = InvokeAsync(async () => await OpenInWebViewAsync(targetFile, version, renderedFilePath: null));
+        _selectedReusableReferenceByFile.TryGetValue(targetFile.Path, out var renderedFilePath);
+        _ = InvokeAsync(async () => await OpenInWebViewAsync(targetFile, version, renderedFilePath));
     }
 
     protected override async Task OnParametersSetAsync()
@@ -830,7 +831,10 @@
     }
 
     private async Task OpenInWebViewAsync(CommitFile file)
-        => await OpenInWebViewAsync(file, _activeVersion, renderedFilePath: null);
+    {
+        _selectedReusableReferenceByFile.TryGetValue(file.Path, out var renderedFilePath);
+        await OpenInWebViewAsync(file, _activeVersion, renderedFilePath);
+    }
 
     private Task OpenCommitDiffInWebViewAsync(string url)
     {

@@ -1369,6 +1369,7 @@ html, body {
 .settings-section-nav-button:focus-visible,
 .preview-cancel:focus-visible,
 .radar-commit-detail .file-row .open-in-webview:focus-visible,
+.radar-commit-detail .reusable-usage-picker select:focus-visible,
 .radar-commit-detail .commit-pr-external-link:focus-visible,
 .radar-commit-detail .commit-pr-link:focus-visible,
 .local-settings-field input:focus-visible,
@@ -2949,6 +2950,7 @@ html, body {
 .radar-theme-dark .settings-section-nav-button:focus-visible,
 .radar-theme-dark .settings-theme-option:focus-visible,
 .radar-theme-dark .radar-commit-detail .file-row .open-in-webview:focus-visible,
+.radar-theme-dark .radar-commit-detail .reusable-usage-picker select:focus-visible,
 .radar-theme-dark .preview-cancel:focus-visible {
     outline: 2px solid var(--radar-accent-border);
     outline-offset: 2px;

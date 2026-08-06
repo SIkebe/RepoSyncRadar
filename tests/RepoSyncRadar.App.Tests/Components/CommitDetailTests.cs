@@ -629,15 +629,18 @@ public class CommitDetailTests
     }
 
     [Fact]
-    public void ReusableUsageSelector_Switches_Between_All_Reference_Pages()
+    public async Task ReusableUsageSelector_Switches_Between_All_Reference_Pages()
     {
         const string reusablePath = "data/reusables/actions/example.md";
+        const string adjacentPath = "content/actions/reference/adjacent.md";
         var referencePaths = new[]
         {
             "content/actions/reference/example.md",
             "content/actions/how-tos/example.md",
         };
-        var commit = MakeCommit((reusablePath, 1, 1));
+        var commit = MakeCommit(
+            (reusablePath, 1, 1),
+            (adjacentPath, 1, 0));
         var resolver = Substitute.For<IPathToUrlResolver>();
         resolver
             .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -663,6 +666,18 @@ public class CommitDetailTests
                     ReusableReferencePaths = referencePaths,
                 });
             });
+        coordinator.PrepareMarkdownComparisonPreviewAsync(
+                commit.PrNumber,
+                commit.Sha,
+                adjacentPath,
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<PreviewComparisonLink?>(MakeComparisonLinkFor(commit, adjacentPath) with
+            {
+                RequestedFilePath = adjacentPath,
+                RenderedFilePath = adjacentPath,
+            }));
         var navigator = new PreviewNavigator();
         PreviewComparisonRequest? captured = null;
         navigator.NavigationRequested += (_, request) => captured = GetComparisonRequest(request);
@@ -699,6 +714,36 @@ public class CommitDetailTests
             Arg.Any<DocsVersion?>(),
             Arg.Any<IReadOnlyList<string>>(),
             Arg.Any<CancellationToken>());
+
+        await cut.InvokeAsync(
+            () => cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]")[0].Click());
+        cut.WaitForAssertion(() =>
+            _ = coordinator.Received(2).PrepareMarkdownReusableComparisonPreviewAsync(
+                commit.PrNumber,
+                commit.Sha,
+                reusablePath,
+                referencePaths[1],
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<CancellationToken>()));
+
+        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next);
+        cut.WaitForAssertion(() => Assert.Equal(adjacentPath, captured?.FilePath));
+        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous);
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(referencePaths[1], captured?.FilePath);
+            _ = coordinator.Received(3).PrepareMarkdownReusableComparisonPreviewAsync(
+                commit.PrNumber,
+                commit.Sha,
+                reusablePath,
+                referencePaths[1],
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<CancellationToken>());
+        });
     }
 
     [Fact]
