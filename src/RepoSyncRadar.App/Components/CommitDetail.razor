@@ -1014,8 +1014,15 @@
         var hadPreviousSelection = _selectedReusableReferenceByFile.TryGetValue(
             file.Path,
             out var previousRenderedFilePath);
+        var previewSha = Commit?.Sha;
         _selectedReusableReferenceByFile[file.Path] = renderedFilePath;
         if (await TryOpenInWebViewAsync(file, _activeVersion, renderedFilePath))
+        {
+            return;
+        }
+        if (!string.Equals(Commit?.Sha, previewSha, StringComparison.Ordinal)
+            || !_selectedReusableReferenceByFile.TryGetValue(file.Path, out var currentRenderedFilePath)
+            || !string.Equals(currentRenderedFilePath, renderedFilePath, StringComparison.Ordinal))
         {
             return;
         }
