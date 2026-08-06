@@ -3099,11 +3099,52 @@ internal static partial class MarkdownPreviewRenderer
             return content;
         }
 
-        return content[..changedRange.Start]
-            + "<span class=\"" + markerClass + "\">"
-            + content.Substring(changedRange.Start, changedRange.Length)
-            + "</span>"
-            + content[(changedRange.Start + changedRange.Length)..];
+        return WrapRenderedDiffRangePreservingInlineCode(content, markerClass, changedRange);
+    }
+
+    private static string WrapRenderedDiffRangePreservingInlineCode(
+        string content,
+        string markerClass,
+        InlineChangedRange changedRange)
+    {
+        var marked = new StringBuilder(content.Length + 96);
+        marked.Append(content.AsSpan(0, changedRange.Start));
+        var cursor = changedRange.Start;
+        while (cursor < changedRange.End)
+        {
+            var tickStart = content.IndexOf('`', cursor, changedRange.End - cursor);
+            if (tickStart < 0)
+            {
+                marked.Append(WrapRenderedDiff(content[cursor..changedRange.End], markerClass));
+                break;
+            }
+
+            marked.Append(WrapRenderedDiff(content[cursor..tickStart], markerClass));
+            var tickCount = 1;
+            while (tickStart + tickCount < changedRange.End
+                && content[tickStart + tickCount] == '`')
+            {
+                tickCount++;
+            }
+
+            var tickEnd = FindInlineCodeEnd(content, tickStart);
+            if (tickEnd < 0 || tickEnd > changedRange.End)
+            {
+                marked.Append(content.AsSpan(tickStart, tickCount));
+                cursor = tickStart + tickCount;
+                continue;
+            }
+
+            var codeEnd = tickEnd - tickCount;
+            marked.Append(content.AsSpan(tickStart, tickCount))
+                .Append(WrapRenderedDiff(
+                    content.Substring(tickStart + tickCount, codeEnd - tickStart - tickCount),
+                    markerClass))
+                .Append(content.AsSpan(codeEnd, tickCount));
+            cursor = tickEnd;
+        }
+        marked.Append(content.AsSpan(changedRange.End));
+        return marked.ToString();
     }
 
     private static bool TryMarkRenderedDiffGap(

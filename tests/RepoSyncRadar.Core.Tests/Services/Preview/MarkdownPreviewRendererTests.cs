@@ -2706,6 +2706,39 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Does_Not_Show_Raw_Closing_Diff_Span_Across_Inline_Code()
+    {
+        const string beforeMarkdown = "* Supported for `bundler`, `composer`, `mix`, `maven`, `npm`, and `pip`.";
+        const string afterMarkdown = "* Supported for `bundler`, `composer`, `mix`, `maven`, `npm`, `pip`, and `uv`.";
+
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/tutorials/secure-your-dependencies/customizing-dependabot-prs.md",
+            afterMarkdown,
+            "b70c56f",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/tutorials/secure-your-dependencies/customizing-dependabot-prs.md",
+            beforeMarkdown,
+            "4eaabd4",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains(
+            "<code><span class=\"rsr-rendered-diff-added\">pip</span></code><span class=\"rsr-rendered-diff-added\">, and </span><code><span class=\"rsr-rendered-diff-added\">uv</span></code>.",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-removed\">and </span><code><span class=\"rsr-rendered-diff-removed\">pip</span></code>.",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", beforeHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_Added_H3_Heading_When_Diff_Marked()
     {
         const string beforeMarkdown = """
