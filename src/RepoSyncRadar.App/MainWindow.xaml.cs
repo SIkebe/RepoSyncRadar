@@ -2642,6 +2642,7 @@ public partial class MainWindow : Window
     const anchorOffsetPx = {{anchorOffsetLiteral}};
     const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
     const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
+    const getScrollTop = () => window.scrollY || root.scrollTop || 0;
 
     window[stateKey] = window[stateKey] || {};
     window[stateKey].suppressUntil = Date.now() + 1000;
@@ -2700,7 +2701,7 @@ public partial class MainWindow : Window
             if (computeFingerprint(el) === anchorFingerprint) {
                 const targetTop = el.getBoundingClientRect().top;
                 const delta = targetTop - anchorOffsetPx;
-                const maxDelta = 120;
+                const maxDelta = Math.max(120, Math.min(900, window.innerHeight * 0.75));
                 const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, delta));
                 if (Math.abs(clampedDelta) > 0.5) {
                     window.scrollBy({ left: 0, top: clampedDelta, behavior: 'auto' });
@@ -2714,6 +2715,7 @@ public partial class MainWindow : Window
         const maxScrollTop = Math.max(0, root.scrollHeight - window.innerHeight);
         window.scrollTo({ left: window.scrollX || root.scrollLeft || 0, top: maxScrollTop * ratio, behavior: 'auto' });
     }
+    window[stateKey].lastScrollTop = getScrollTop();
     return true;
 })();
 """;

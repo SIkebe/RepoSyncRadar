@@ -629,6 +629,79 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void ReusableUsageSelector_Switches_Between_All_Reference_Pages()
+    {
+        const string reusablePath = "data/reusables/actions/example.md";
+        var referencePaths = new[]
+        {
+            "content/actions/reference/example.md",
+            "content/actions/how-tos/example.md",
+        };
+        var commit = MakeCommit((reusablePath, 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>([]));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareMarkdownReusableComparisonPreviewAsync(
+                commit.PrNumber,
+                commit.Sha,
+                reusablePath,
+                Arg.Any<string?>(),
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<DocsVersion?>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var renderedPath = call.ArgAt<string?>(3) ?? referencePaths[0];
+                return Task.FromResult<PreviewComparisonLink?>(MakeComparisonLinkFor(commit, renderedPath) with
+                {
+                    RequestedFilePath = reusablePath,
+                    RenderedFilePath = renderedPath,
+                    ReusableReferenceCount = referencePaths.Length,
+                    ReusableReferencePaths = referencePaths,
+                });
+            });
+        var navigator = new PreviewNavigator();
+        PreviewComparisonRequest? captured = null;
+        navigator.NavigationRequested += (_, request) => captured = GetComparisonRequest(request);
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator,
+            new PreviewSession(),
+            coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            var picker = cut.Find("[data-testid=\"commit-detail-reusable-usage\"]");
+            Assert.Equal(2, picker.Children.Length);
+            Assert.Equal(referencePaths[0], captured?.FilePath);
+            Assert.Contains("(1/2)", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
+        });
+
+        cut.Find("[data-testid=\"commit-detail-reusable-usage\"]").Change(referencePaths[1]);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(referencePaths[1], captured?.FilePath);
+            Assert.Contains("(2/2)", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
+        });
+        _ = coordinator.Received(1).PrepareMarkdownReusableComparisonPreviewAsync(
+            commit.PrNumber,
+            commit.Sha,
+            reusablePath,
+            referencePaths[1],
+            Arg.Any<IProgress<string>?>(),
+            Arg.Any<DocsVersion?>(),
+            Arg.Any<IReadOnlyList<string>>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public void OpenInWebView_Shows_Progress_And_Cancel_While_Local_Preview_Starts()
     {
         var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));

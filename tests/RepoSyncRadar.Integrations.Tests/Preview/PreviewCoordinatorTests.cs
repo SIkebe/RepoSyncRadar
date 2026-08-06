@@ -156,11 +156,33 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Equal("data/reusables/webhooks/issue_properties.md", link!.RequestedFilePath);
         Assert.Equal("content/webhooks/preferred.md", link.RenderedFilePath);
         Assert.Equal(2, link.ReusableReferenceCount);
+        Assert.Equal(
+            ["content/webhooks/preferred.md", "content/webhooks/less-relevant.md"],
+            link.ReusableReferencePaths);
         Assert.Contains("file=data%2Freusables%2Fwebhooks%2Fissue_properties.md", link.AfterUrl.Query, StringComparison.Ordinal);
         Assert.Contains("rendered=content%2Fwebhooks%2Fpreferred.md", link.AfterUrl.Query, StringComparison.Ordinal);
         Assert.Contains("Preferred usage", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.Contains("The optional label", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.DoesNotContain("Less relevant", capturedPages["/markdown/after"], StringComparison.Ordinal);
+
+        var alternateLink = await sut.PrepareMarkdownReusableComparisonPreviewAsync(
+            123,
+            "headsha",
+            "data/reusables/webhooks/issue_properties.md",
+            "content/webhooks/less-relevant.md",
+            progress: null,
+            version: null,
+            changedFilePaths:
+            [
+                "data/reusables/webhooks/issue_properties.md",
+                "content/webhooks/preferred.md",
+            ],
+            cancellationToken: ct);
+
+        Assert.NotNull(alternateLink);
+        Assert.Equal("content/webhooks/less-relevant.md", alternateLink!.RenderedFilePath);
+        Assert.Contains("Less relevant", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.DoesNotContain("Preferred usage", capturedPages["/markdown/after"], StringComparison.Ordinal);
     }
 
     [Fact]

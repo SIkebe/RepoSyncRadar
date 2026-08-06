@@ -54,6 +54,16 @@ public interface IPreviewCoordinator
         IReadOnlyList<string> changedFilePaths,
         CancellationToken cancellationToken = default);
 
+    Task<PreviewComparisonLink?> PrepareMarkdownReusableComparisonPreviewAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        string? renderedFilePath,
+        IProgress<string>? progress,
+        DocsVersion? version,
+        IReadOnlyList<string> changedFilePaths,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Stops the running preview server (if any) and clears the active session.</summary>
     Task StopAsync(CancellationToken cancellationToken = default);
 
@@ -144,9 +154,14 @@ public sealed record PreviewComparisonLink(
 
     /// <summary>reusable の参照元候補数。通常 Markdown プレビューでは 0。</summary>
     public int ReusableReferenceCount { get; init; }
+
+    /// <summary>reusable を展開して確認できる参照元 content ページ。</summary>
+    public IReadOnlyList<string> ReusableReferencePaths { get; init; } = [];
 }
 
-internal sealed record ReusablePreviewTarget(string FilePath, int ReferenceCount);
+internal sealed record ReusablePreviewTarget(
+    string FilePath,
+    IReadOnlyList<string> ReferencePaths);
 
 /// <inheritdoc cref="IPreviewCoordinator" />
 public sealed partial class PreviewCoordinator : IPreviewCoordinator
@@ -189,6 +204,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         int PrNumber,
         string Sha,
         string FilePath,
+        string ReusableRenderedFilePath,
         string VersionSlug,
         string ChangedFilePathsKey);
 
@@ -198,7 +214,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         string BeforeSha,
         string RequestedFilePath,
         string RenderedFilePath,
-        int ReusableReferenceCount,
+        IReadOnlyList<string> ReusableReferencePaths,
         DocsVersion EffectiveVersion,
         IReadOnlyList<DocsVersion> AffectedVersions,
         int SourceChangeCount,
@@ -252,6 +268,26 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         DocsVersion? version,
         IReadOnlyList<string> changedFilePaths,
         CancellationToken cancellationToken = default)
+        => await PrepareMarkdownReusableComparisonPreviewAsync(
+                prNumber,
+                sha,
+                filePath,
+                renderedFilePath: null,
+                progress,
+                version,
+                changedFilePaths,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+    public async Task<PreviewComparisonLink?> PrepareMarkdownReusableComparisonPreviewAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        string? renderedFilePath,
+        IProgress<string>? progress,
+        DocsVersion? version,
+        IReadOnlyList<string> changedFilePaths,
+        CancellationToken cancellationToken = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(prNumber);
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
@@ -268,7 +304,13 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
 
         var changedPaths = changedFilePaths ?? [];
-        var key = BuildPreparedPageKey(prNumber, sha, filePath, version, changedPaths);
+        var key = BuildPreparedPageKey(
+            prNumber,
+            sha,
+            filePath,
+            renderedFilePath,
+            version,
+            changedPaths);
         var prepared = await GetOrPrepareMarkdownPageAsync(
                 key,
                 version,
@@ -340,7 +382,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             SourceChangeCount = prepared.SourceChangeCount,
             RequestedFilePath = prepared.RequestedFilePath,
             RenderedFilePath = prepared.RenderedFilePath,
-            ReusableReferenceCount = prepared.ReusableReferenceCount,
+            ReusableReferenceCount = prepared.ReusableReferencePaths.Count,
+            ReusableReferencePaths = prepared.ReusableReferencePaths,
         };
     }
 
@@ -348,6 +391,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         int prNumber,
         string sha,
         string filePath,
+        string? reusableRenderedFilePath,
         DocsVersion? version,
         IReadOnlyList<string> changedFilePaths)
     {
@@ -360,6 +404,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             prNumber,
             sha.Trim(),
             NormalizeRepoPathForComparison(filePath),
+            NormalizeRepoPathForComparison(reusableRenderedFilePath ?? string.Empty),
             version?.Slug ?? string.Empty,
             changedFilePathsKey);
     }
@@ -382,6 +427,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 key.PrNumber,
                 key.Sha,
                 key.FilePath,
+                key.ReusableRenderedFilePath,
                 version,
                 changedFilePaths,
                 progress,
@@ -439,6 +485,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         int prNumber,
         string sha,
         string filePath,
+        string? reusableRenderedFilePath,
         DocsVersion? version,
         IReadOnlyList<string> changedFilePaths,
         IProgress<string>? progress,
@@ -452,18 +499,19 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
         var requestedFilePath = filePath.Trim();
         var renderedFilePath = requestedFilePath;
-        var reusableReferenceCount = 0;
+        IReadOnlyList<string> reusableReferencePaths = [];
         if (await TryResolveReusablePreviewTargetAsync(
                 session.BeforeSha,
                 sha,
                 requestedFilePath,
+                reusableRenderedFilePath,
                 changedFilePaths,
                 progress,
                 cancellationToken)
             .ConfigureAwait(false) is { } reusableTarget)
         {
             renderedFilePath = reusableTarget.FilePath;
-            reusableReferenceCount = reusableTarget.ReferenceCount;
+            reusableReferencePaths = reusableTarget.ReferencePaths;
             progress?.Report($"{requestedFilePath} は使用箇所 {renderedFilePath} でプレビューします");
         }
 
@@ -544,7 +592,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             session.BeforeSha,
             requestedFilePath,
             renderedFilePath,
-            reusableReferenceCount,
+            reusableReferencePaths,
             effectiveVersion,
             affectedVersions,
             sourceChangeCount,
@@ -588,6 +636,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         string beforeSha,
         string afterSha,
         string filePath,
+        string? preferredReferencePath,
         IReadOnlyList<string>? changedFilePaths,
         IProgress<string>? progress,
         CancellationToken cancellationToken)
@@ -630,11 +679,15 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             : [];
         var beforeSet = new HashSet<string>(beforeReferences, StringComparer.Ordinal);
         var afterSet = new HashSet<string>(afterReferences, StringComparer.Ordinal);
-        var selected = candidates
+        var orderedCandidates = candidates
             .OrderBy(path => GetReusableReferencePriority(path, changed, beforeSet, afterSet))
             .ThenBy(static path => path, StringComparer.Ordinal)
-            .First();
-        return new ReusablePreviewTarget(selected, candidates.Length);
+            .ToArray();
+        var normalizedPreferred = NormalizeRepoPathForComparison(preferredReferencePath ?? string.Empty);
+        var selected = orderedCandidates.Contains(normalizedPreferred, StringComparer.Ordinal)
+            ? normalizedPreferred
+            : orderedCandidates[0];
+        return new ReusablePreviewTarget(selected, orderedCandidates);
     }
 
     private static int GetReusableReferencePriority(
@@ -828,7 +881,13 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
 
         var changedPaths = changedFilePaths ?? [];
-        var key = BuildPreparedPageKey(prNumber, sha, filePath, version, changedPaths);
+        var key = BuildPreparedPageKey(
+            prNumber,
+            sha,
+            filePath,
+            reusableRenderedFilePath: null,
+            version,
+            changedPaths);
         try
         {
             await GetOrPrepareMarkdownPageAsync(
