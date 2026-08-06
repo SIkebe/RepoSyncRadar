@@ -2585,6 +2585,64 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Leaves_Shared_Text_Unmarked_In_Heavily_Rewritten_Paragraphs()
+    {
+        const string sharedSuffix = " You can do this in either of the following ways:";
+        const string beforeMarkdown = """
+            By default, autopilot mode applies only to the current task. Once Copilot determines that the task is complete, Copilot CLI automatically switches back to the standard interactive mode. To run another task in autopilot mode, press Shift+Tab and cycle through the available modes until you re-enter autopilot mode, then enter your next prompt.
+
+            If you regularly run several tasks in autopilot mode, you can configure the CLI to stay in autopilot mode after each task completes, by enabling the `stayInAutopilot` setting. You can do this in either of the following ways:
+            """;
+        const string afterMarkdown = """
+            By default, autopilot mode is sticky: once Copilot determines that a task is complete, Copilot CLI remains in autopilot mode, so the next prompt you enter is also handled in autopilot mode. You can switch back to the standard interactive mode at any time by pressing Shift+Tab.
+
+            If you'd rather have Copilot CLI automatically switch back to interactive mode after each task completes, you can disable this behavior by setting `stayInAutopilot` to `false`. You can do this in either of the following ways:
+            """;
+
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/agents/copilot-cli/autopilot.md",
+            afterMarkdown,
+            "ff0cf46",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/agents/copilot-cli/autopilot.md",
+            beforeMarkdown,
+            "bd4da98",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains(
+            "<p>By default, autopilot mode <span class=\"rsr-rendered-diff-added\">is sticky:",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<p>By default, autopilot mode <span class=\"rsr-rendered-diff-removed\">applies only",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(sharedSuffix, afterHtml, StringComparison.Ordinal);
+        Assert.Contains(sharedSuffix, beforeHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<p><span class=\"rsr-rendered-diff-added\">By default, autopilot mode",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<p><span class=\"rsr-rendered-diff-removed\">By default, autopilot mode",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            sharedSuffix + "</span>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            sharedSuffix + "</span>",
+            beforeHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Gap_When_After_Removes_End_Of_Paragraph()
     {
         const string beforeMarkdown = "Metered billing explanations. For more information, see [Billing cycles](/billing/concepts/billing-cycles).";
