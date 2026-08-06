@@ -66,6 +66,16 @@ public sealed partial class RadarPermissionPolicy
 
         var sessionId = invocation?.SessionId ?? "<unknown>";
 
+        if (request.ManagedApprovalRequired is true
+            && request is PermissionRequestCustomTool
+                or PermissionRequestRead
+                or PermissionRequestUrl
+                or PermissionRequestWrite)
+        {
+            LogPromptingForManagedApproval(_logger, request.Kind, sessionId);
+            return await ConfirmAsync(request).ConfigureAwait(false);
+        }
+
         switch (request)
         {
             case PermissionRequestCustomTool customTool:
@@ -154,5 +164,9 @@ public sealed partial class RadarPermissionPolicy
     [LoggerMessage(EventId = 7, Level = LogLevel.Warning,
         Message = "Denying unsupported permission kind {Kind} by rule (session={SessionId})")]
     private static partial void LogDenyingUnknownKind(ILogger logger, string? kind, string sessionId);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Information,
+        Message = "Managed policy requires human approval for {Kind}; prompting user (session={SessionId})")]
+    private static partial void LogPromptingForManagedApproval(ILogger logger, string? kind, string sessionId);
 }
 #pragma warning restore GHCP001

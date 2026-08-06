@@ -35,18 +35,20 @@ public class RadarPermissionPolicyTests
         ToolDescription = "Tool description for test.",
     };
 
-    private static PermissionRequestRead NewRead(string id, string path) => new()
+    private static PermissionRequestRead NewRead(string id, string path, bool? managedApprovalRequired = null) => new()
     {
         ToolCallId = id,
         Path = path,
         Intention = "Reading a fixture file for the test.",
+        ManagedApprovalRequired = managedApprovalRequired,
     };
 
-    private static PermissionRequestUrl NewUrl(string id, string url) => new()
+    private static PermissionRequestUrl NewUrl(string id, string url, bool? managedApprovalRequired = null) => new()
     {
         ToolCallId = id,
         Url = url,
         Intention = "Fetching the URL for the test.",
+        ManagedApprovalRequired = managedApprovalRequired,
     };
 
     private static PermissionRequestWrite NewWrite(string id, string fileName) => new()
@@ -130,6 +132,38 @@ public class RadarPermissionPolicyTests
     }
 
     [Fact]
+    public async Task Managed_Read_Is_Prompted_Instead_Of_AutoApproved()
+    {
+        var prompt = Substitute.For<IPermissionPrompt>();
+        prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(true);
+        var policy = CreatePolicy(prompt);
+
+        var result = await policy.HandleAsync(
+            NewRead("tc-managed-read", "/some/file.md", managedApprovalRequired: true),
+            _invocation);
+
+        Assert.Equal(_approveOnceKind, result.Kind);
+        await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Managed_Settings_Do_Not_Force_Prompt_For_Unflagged_Read()
+    {
+        var prompt = Substitute.For<IPermissionPrompt>();
+        var policy = CreatePolicy(prompt);
+        var invocation = new PermissionInvocation
+        {
+            SessionId = "session-managed",
+            ManagedSettingsEnabled = true,
+        };
+
+        var result = await policy.HandleAsync(NewRead("tc-managed-session", "/some/file.md"), invocation);
+
+        Assert.Equal(_approveOnceKind, result.Kind);
+        await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Url_AllowListed_Is_Approved_Without_Prompt()
     {
         var prompt = Substitute.For<IPermissionPrompt>();
@@ -139,6 +173,21 @@ public class RadarPermissionPolicyTests
 
         Assert.Equal(_approveOnceKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Managed_AllowListedUrl_Is_Prompted_Instead_Of_AutoApproved()
+    {
+        var prompt = Substitute.For<IPermissionPrompt>();
+        prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(true);
+        var policy = CreatePolicy(prompt);
+
+        var result = await policy.HandleAsync(
+            NewUrl("tc-managed-url", "https://docs.github.com/en/actions", managedApprovalRequired: true),
+            _invocation);
+
+        Assert.Equal(_approveOnceKind, result.Kind);
+        await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

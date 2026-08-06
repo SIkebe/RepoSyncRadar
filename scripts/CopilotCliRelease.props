@@ -1,10 +1,10 @@
 <Project>
 
-  <!-- SHA-256 values published in the official v1.0.76-5 SHA256SUMS.txt. -->
+  <!-- SHA-256 values published in the official v1.0.78 SHA256SUMS.txt. -->
   <PropertyGroup>
-    <CopilotCliReleaseVersion>1.0.76-5</CopilotCliReleaseVersion>
-    <CopilotCliWin32X64Sha256>f66d8f5a7c359cdc4c13a5de6efe6e41e0384a82e6bb1217dbda7138e191e895</CopilotCliWin32X64Sha256>
-    <CopilotCliWin32Arm64Sha256>e6d025492a59152f61e3ec50dfbd1605afa5152e144ecbe8eb0905d942a09968</CopilotCliWin32Arm64Sha256>
+    <CopilotCliReleaseVersion>1.0.78</CopilotCliReleaseVersion>
+    <CopilotCliWin32X64Sha256>fd54bb8d245b05f04dfaff68d6259604e6717add5949f41f83f7f4bf2bc6fbe5</CopilotCliWin32X64Sha256>
+    <CopilotCliWin32Arm64Sha256>36ea8e4ce8616cdd5aaa2bffe3754ada253e03a26f3a5c669a4f9dac968e4890</CopilotCliWin32Arm64Sha256>
   </PropertyGroup>
 
 </Project>
