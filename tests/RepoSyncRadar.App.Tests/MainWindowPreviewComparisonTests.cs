@@ -476,9 +476,13 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==", script, StringComparison.Ordinal);
         Assert.Contains("120.5", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollBy", script, StringComparison.Ordinal); // anchor branch uses scrollBy(delta)
-        Assert.Contains("const maxDelta = 120;", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "const maxDelta = Math.max(120, Math.min(900, window.innerHeight * 0.75));",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("top: clampedDelta", script, StringComparison.Ordinal);
         Assert.Contains("const scrollDirection = \"down\"", script, StringComparison.Ordinal);
+        Assert.Contains("window[stateKey].lastScrollTop = getScrollTop()", script, StringComparison.Ordinal);
         // Ratio fallback remains available for legacy ratio-only messages, but
         // anchor-bearing messages should not jump by ratio when the peer lacks
         // the changed block.

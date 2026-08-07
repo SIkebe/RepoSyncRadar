@@ -218,6 +218,24 @@
                                     title="@BuildPreviewTitle(file, previewTarget)"
                                     @onclick="() => OpenInWebViewAsync(file)">@BuildPreviewButtonLabel(file)</button>
                         }
+                        @if (_reusableReferencePathsByFile.TryGetValue(file.Path, out var referencePaths)
+                             && referencePaths.Count > 1)
+                        {
+                            <label class="reusable-usage-picker">
+                                <span>@L["CommitDetail.ReusableUsage.Label"]</span>
+                                <select data-testid="commit-detail-reusable-usage"
+                                        data-path="@file.Path"
+                                        aria-label="@L["CommitDetail.ReusableUsage.AriaLabel", file.Path]"
+                                        disabled="@IsPreviewOperationBusy"
+                                        value="@GetSelectedReusableReference(file.Path)"
+                                        @onchange="args => ChangeReusableUsageAsync(file, args)">
+                                    @foreach (var referencePath in referencePaths)
+                                    {
+                                        <option value="@referencePath">@referencePath</option>
+                                    }
+                                </select>
+                            </label>
+                        }
                         <label class="file-viewed-toggle" title="@BuildViewedTitle(file)">
                             <input type="checkbox"
                                    data-testid="commit-detail-file-viewed"
@@ -294,6 +312,10 @@
     [Parameter] public string Language { get; set; } = "en";
 
     private readonly Dictionary<string, IReadOnlyList<string>> _urlsByPath =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<string>> _reusableReferencePathsByFile =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _selectedReusableReferenceByFile =
         new(StringComparer.Ordinal);
 
     private string? _resolvedForSha;
@@ -394,7 +416,8 @@
         {
             return;
         }
-        _ = InvokeAsync(async () => await OpenInWebViewAsync(file, version));
+        _selectedReusableReferenceByFile.TryGetValue(file.Path, out var renderedFilePath);
+        _ = InvokeAsync(async () => await OpenInWebViewAsync(file, version, renderedFilePath));
     }
 
     private void OnFileNavigationRequested(object? sender, PreviewFileNavigationDirection direction)
@@ -422,7 +445,8 @@
 
         var targetFile = previewFiles[targetIndex];
         var version = _activeVersion;
-        _ = InvokeAsync(async () => await OpenInWebViewAsync(targetFile, version));
+        _selectedReusableReferenceByFile.TryGetValue(targetFile.Path, out var renderedFilePath);
+        _ = InvokeAsync(async () => await OpenInWebViewAsync(targetFile, version, renderedFilePath));
     }
 
     protected override async Task OnParametersSetAsync()
@@ -430,6 +454,8 @@
         if (Commit is null)
         {
             _urlsByPath.Clear();
+            _reusableReferencePathsByFile.Clear();
+            _selectedReusableReferenceByFile.Clear();
             _resolvedForSha = null;
             _activePreviewSha = null;
             CancelCurrentPreviewOperation();
@@ -448,6 +474,8 @@
             _activePreviewSha = Commit.Sha;
             _activePreviewPath = null;
             _activeVersion = null;
+            _reusableReferencePathsByFile.Clear();
+            _selectedReusableReferenceByFile.Clear();
             CancelPredictiveFilePrewarm();
             StartPredictivePrewarm(Commit);
         }
@@ -804,7 +832,10 @@
     }
 
     private async Task OpenInWebViewAsync(CommitFile file)
-        => await OpenInWebViewAsync(file, _activeVersion);
+    {
+        _selectedReusableReferenceByFile.TryGetValue(file.Path, out var renderedFilePath);
+        await OpenInWebViewAsync(file, _activeVersion, renderedFilePath);
+    }
 
     private Task OpenCommitDiffInWebViewAsync(string url)
     {
@@ -822,12 +853,23 @@
         return Task.CompletedTask;
     }
 
-    private async Task OpenInWebViewAsync(CommitFile file, DocsVersion? version)
+    private async Task OpenInWebViewAsync(
+        CommitFile file,
+        DocsVersion? version,
+        string? renderedFilePath)
+    {
+        _ = await TryOpenInWebViewAsync(file, version, renderedFilePath);
+    }
+
+    private async Task<bool> TryOpenInWebViewAsync(
+        CommitFile file,
+        DocsVersion? version,
+        string? renderedFilePath)
     {
         var navigator = Services.GetService<IPreviewNavigator>();
         if (navigator is null || IsPreviewOperationBusy)
         {
-            return;
+            return false;
         }
         if (!string.Equals(_predictiveFilePrewarmPath, file.Path, StringComparison.Ordinal))
         {
@@ -855,10 +897,11 @@
                     });
                 });
                 var link = IsReusableMarkdownFile(file)
-                    ? await markdownCoordinator.PrepareMarkdownComparisonPreviewAsync(
+                    ? await markdownCoordinator.PrepareMarkdownReusableComparisonPreviewAsync(
                         commit.PrNumber,
                         commit.Sha,
                         file.Path,
+                        renderedFilePath,
                         progress,
                         version,
                         commit.Files.Select(static changed => changed.Path).ToArray(),
@@ -874,11 +917,16 @@
                 {
                     if (!CanPublishPreview(operation, commit.Sha))
                     {
-                        return;
+                        return false;
                     }
 
                     var previewPosition = GetPreviewPosition(file);
                     var renderedPath = link.RenderedFilePath ?? file.Path;
+                    if (link.ReusableReferencePaths.Count > 0)
+                    {
+                        _reusableReferencePathsByFile[file.Path] = link.ReusableReferencePaths;
+                        _selectedReusableReferenceByFile[file.Path] = renderedPath;
+                    }
                     navigator.PublishComparison(new PreviewComparisonRequest(
                         link.BeforeUrl,
                         link.AfterUrl,
@@ -895,14 +943,14 @@
                     StartPredictiveFilePrewarm(commit, file, link.CurrentVersion);
                     _previewStatus = string.Equals(renderedPath, file.Path, StringComparison.Ordinal)
                         ? L["CommitDetail.MarkdownComparisonOpened", file.Path]
-                        : L["CommitDetail.MarkdownReusableUsageOpened", file.Path, renderedPath];
-                    return;
+                        : BuildReusableUsageStatus(file.Path, renderedPath, link.ReusableReferencePaths);
+                    return true;
                 }
                 if (CanUpdatePreviewFeedback(operation))
                 {
                     _previewStatus = L["CommitDetail.PreviewDisabled"];
                 }
-                return;
+                return false;
             }
             catch (OperationCanceledException)
             {
@@ -910,7 +958,7 @@
                 {
                     _previewStatus = BuildPreviewCancellationStatus(operation);
                 }
-                return;
+                return false;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -918,7 +966,7 @@
                 {
                     _previewStatus = ex.Message;
                 }
-                return;
+                return false;
             }
             finally
             {
@@ -934,7 +982,7 @@
             _activePreviewPath = file.Path;
             _previewStatus = null;
             _previewStatusIsCleanup = false;
-            return;
+            return true;
         }
 
         if (ResolveOfficialTarget(file) is { } officialTarget)
@@ -943,12 +991,83 @@
             _activePreviewPath = file.Path;
             _previewStatus = null;
             _previewStatusIsCleanup = false;
-            return;
+            return true;
         }
 
         _previewStatus = L["CommitDetail.NoPublishableUrl"];
         _previewStatusIsCleanup = false;
         _previewStatusPath = file.Path;
+        return false;
+    }
+
+    private string? GetSelectedReusableReference(string filePath)
+        => _selectedReusableReferenceByFile.GetValueOrDefault(filePath);
+
+    private async Task ChangeReusableUsageAsync(CommitFile file, ChangeEventArgs args)
+    {
+        if (args.Value is not string renderedFilePath
+            || !_reusableReferencePathsByFile.TryGetValue(file.Path, out var referencePaths)
+            || !referencePaths.Contains(renderedFilePath, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        var hadPreviousSelection = _selectedReusableReferenceByFile.TryGetValue(
+            file.Path,
+            out var previousRenderedFilePath);
+        var previewSha = Commit?.Sha;
+        _selectedReusableReferenceByFile[file.Path] = renderedFilePath;
+        if (await TryOpenInWebViewAsync(file, _activeVersion, renderedFilePath))
+        {
+            return;
+        }
+        if (!string.Equals(Commit?.Sha, previewSha, StringComparison.Ordinal)
+            || !_selectedReusableReferenceByFile.TryGetValue(file.Path, out var currentRenderedFilePath)
+            || !string.Equals(currentRenderedFilePath, renderedFilePath, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (hadPreviousSelection)
+        {
+            _selectedReusableReferenceByFile[file.Path] = previousRenderedFilePath!;
+        }
+        else
+        {
+            _selectedReusableReferenceByFile.Remove(file.Path);
+        }
+    }
+
+    private LocalizedString BuildReusableUsageStatus(
+        string requestedFilePath,
+        string renderedFilePath,
+        IReadOnlyList<string> referencePaths)
+    {
+        if (referencePaths.Count <= 1)
+        {
+            return L["CommitDetail.MarkdownReusableUsageOpened", requestedFilePath, renderedFilePath];
+        }
+
+        var index = -1;
+        for (var candidateIndex = 0; candidateIndex < referencePaths.Count; candidateIndex++)
+        {
+            if (string.Equals(referencePaths[candidateIndex], renderedFilePath, StringComparison.Ordinal))
+            {
+                index = candidateIndex;
+                break;
+            }
+        }
+        if (index < 0)
+        {
+            return L["CommitDetail.MarkdownReusableUsageOpened", requestedFilePath, renderedFilePath];
+        }
+
+        return L[
+            "CommitDetail.MarkdownReusableUsageOpenedMultiple",
+            requestedFilePath,
+            renderedFilePath,
+            index + 1,
+            referencePaths.Count];
     }
 
     private PreviewOperation StartPreviewOperation(string? sha, string? busyPath, string status, string cancellationSubject)

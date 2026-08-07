@@ -1177,6 +1177,26 @@ html, body {
     min-width: 0;
 }
 
+.radar-commit-detail .reusable-usage-picker {
+    align-items: center;
+    color: #57606a;
+    display: inline-flex;
+    font-size: 0.78rem;
+    font-weight: 600;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.radar-commit-detail .reusable-usage-picker select {
+    background: #fff;
+    border: 1px solid #8c959f;
+    border-radius: 3px;
+    color: #24292f;
+    font: inherit;
+    max-width: min(32rem, 100%);
+    padding: 0.12rem 0.35rem;
+}
+
 .radar-commit-detail .file-row .open-in-webview {
     align-self: flex-start;
     padding: 0.15rem 0.55rem;
@@ -1349,6 +1369,7 @@ html, body {
 .settings-section-nav-button:focus-visible,
 .preview-cancel:focus-visible,
 .radar-commit-detail .file-row .open-in-webview:focus-visible,
+.radar-commit-detail .reusable-usage-picker select:focus-visible,
 .radar-commit-detail .commit-pr-external-link:focus-visible,
 .radar-commit-detail .commit-pr-link:focus-visible,
 .local-settings-field input:focus-visible,
@@ -2687,6 +2708,7 @@ html, body {
 .radar-theme-dark .radar-commit-detail .scoring-note dt,
 .radar-theme-dark .radar-commit-detail .file-row .stats,
 .radar-theme-dark .radar-commit-detail .preview-status,
+.radar-theme-dark .radar-commit-detail .reusable-usage-picker,
 .radar-theme-dark .radar-commit-detail .files-heading-count,
 .radar-theme-dark .radar-commit-detail .history-count,
 .radar-theme-dark .radar-commit-detail .history-entry time,
@@ -2898,6 +2920,12 @@ html, body {
     font-weight: 700;
 }
 
+.radar-theme-dark .radar-commit-detail .reusable-usage-picker select {
+    background: var(--radar-panel-bg);
+    border-color: var(--radar-panel-border);
+    color: var(--radar-text);
+}
+
 .radar-theme-dark .radar-commit-detail .file-row .open-in-webview:hover:not(:disabled) {
     background: var(--radar-accent-hover-bg) !important;
     color: #fff !important;
@@ -2922,6 +2950,7 @@ html, body {
 .radar-theme-dark .settings-section-nav-button:focus-visible,
 .radar-theme-dark .settings-theme-option:focus-visible,
 .radar-theme-dark .radar-commit-detail .file-row .open-in-webview:focus-visible,
+.radar-theme-dark .radar-commit-detail .reusable-usage-picker select:focus-visible,
 .radar-theme-dark .preview-cancel:focus-visible {
     outline: 2px solid var(--radar-accent-border);
     outline-offset: 2px;

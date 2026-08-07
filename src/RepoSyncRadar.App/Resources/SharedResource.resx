@@ -117,6 +117,7 @@
   <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>{0} のローカルプレビューを準備中…</value></data>
   <data name="CommitDetail.MarkdownComparisonOpened" xml:space="preserve"><value>{0} を Markdown として変更前 / PR HEAD で比較表示しました</value></data>
   <data name="CommitDetail.MarkdownReusableUsageOpened" xml:space="preserve"><value>{0} を使用箇所 {1} で比較表示しました</value></data>
+  <data name="CommitDetail.MarkdownReusableUsageOpenedMultiple" xml:space="preserve"><value>{0} を使用箇所 {1} で比較表示しました ({2}/{3})</value></data>
   <data name="CommitDetail.MarkdownPreviewPreparing" xml:space="preserve"><value>{0} を Markdown として比較準備中…</value></data>
   <data name="CommitDetail.NoPreviewableFiles" xml:space="preserve"><value>比較可能なファイルなし</value></data>
   <data name="CommitDetail.NoPublishableUrl" xml:space="preserve"><value>このファイルは公開ドキュメント URL に対応していません</value></data>
@@ -134,6 +135,8 @@
   <data name="CommitDetail.PreviewTitle.Official" xml:space="preserve"><value>公式ドキュメントを WebView2 で開きます</value></data>
   <data name="CommitDetail.PreviewDisabled" xml:space="preserve"><value>プレビュー機能は無効です (DocsRepository 未設定)</value></data>
   <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>プレビュー起動</value></data>
+  <data name="CommitDetail.ReusableUsage.Label" xml:space="preserve"><value>使用箇所</value></data>
+  <data name="CommitDetail.ReusableUsage.AriaLabel" xml:space="preserve"><value>{0} の使用箇所</value></data>
   <data name="CommitDetail.Score" xml:space="preserve"><value>スコア</value></data>
   <data name="CommitDetail.ScoreBand.Immediate" xml:space="preserve"><value>すぐ確認</value></data>
   <data name="CommitDetail.ScoreBand.Immediate.Description" xml:space="preserve"><value>0.85-1.00: 新 API・破壊的変更・セキュリティなど、すぐ共有や確認が必要な変更。</value></data>
