@@ -2991,7 +2991,8 @@ internal static partial class MarkdownPreviewRenderer
         var trimmedStartLength = line.Length - line.TrimStart().Length;
         var leading = line[..trimmedStartLength];
         var content = line[trimmedStartLength..];
-        if (content.StartsWith('>'))
+        if (content.StartsWith("> ", StringComparison.Ordinal)
+            || content.StartsWith(">[!", StringComparison.Ordinal))
         {
             var quotePrefixLength = content.Length > 1 && content[1] == ' ' ? 2 : 1;
             var quotePrefix = content[..quotePrefixLength];
