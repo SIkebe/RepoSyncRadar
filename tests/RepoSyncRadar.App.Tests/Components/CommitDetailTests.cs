@@ -719,6 +719,7 @@ public class CommitDetailTests
         await cut.InvokeAsync(
             () => cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]")[0].Click());
         cut.WaitForAssertion(() =>
+        {
             _ = coordinator.Received(2).PrepareMarkdownReusableComparisonPreviewAsync(
                 commit.PrNumber,
                 commit.Sha,
@@ -727,15 +728,16 @@ public class CommitDetailTests
                 Arg.Any<IProgress<string>?>(),
                 Arg.Any<DocsVersion?>(),
                 Arg.Any<IReadOnlyList<string>>(),
-                Arg.Any<CancellationToken>()));
+                Arg.Any<CancellationToken>());
+            Assert.All(
+                cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]"),
+                button => Assert.False(button.HasAttribute("disabled")));
+        });
 
         navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next);
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(adjacentPath, captured?.FilePath);
-            Assert.All(
-                cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]"),
-                button => Assert.False(button.HasAttribute("disabled")));
         });
         navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous);
         cut.WaitForAssertion(() =>
