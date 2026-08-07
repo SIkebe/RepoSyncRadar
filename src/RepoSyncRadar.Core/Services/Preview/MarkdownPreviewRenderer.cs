@@ -2991,9 +2991,12 @@ internal static partial class MarkdownPreviewRenderer
         var trimmedStartLength = line.Length - line.TrimStart().Length;
         var leading = line[..trimmedStartLength];
         var content = line[trimmedStartLength..];
-        if (content.StartsWith("> ", StringComparison.Ordinal))
+        if (content.StartsWith("> ", StringComparison.Ordinal)
+            || content.StartsWith(">[!", StringComparison.Ordinal))
         {
-            var quoted = content[2..];
+            var quotePrefixLength = content.Length > 1 && content[1] == ' ' ? 2 : 1;
+            var quotePrefix = content[..quotePrefixLength];
+            var quoted = content[quotePrefixLength..];
             if (TrySplitGitHubAlertQuotedLine(quoted, out var alertMarkerPrefix, out var alertInlineContent))
             {
                 if (alertInlineContent.Length == 0)
@@ -3004,7 +3007,7 @@ internal static partial class MarkdownPreviewRenderer
 
                 parts = new RenderedDiffLineParts(
                     RenderedDiffLineKind.Quote,
-                    leading + "> " + alertMarkerPrefix,
+                    leading + quotePrefix + alertMarkerPrefix,
                     alertInlineContent);
                 return true;
             }
@@ -3018,11 +3021,11 @@ internal static partial class MarkdownPreviewRenderer
             {
                 parts = new RenderedDiffLineParts(
                     RenderedDiffLineKind.QuoteListItem,
-                    leading + "> " + quoted[..quotedListMarkerLength],
+                    leading + quotePrefix + quoted[..quotedListMarkerLength],
                     quoted[quotedListMarkerLength..]);
                 return true;
             }
-            parts = new RenderedDiffLineParts(RenderedDiffLineKind.Quote, leading + "> ", quoted);
+            parts = new RenderedDiffLineParts(RenderedDiffLineKind.Quote, leading + quotePrefix, quoted);
             return true;
         }
         if (string.Equals(content, ">", StringComparison.Ordinal))
