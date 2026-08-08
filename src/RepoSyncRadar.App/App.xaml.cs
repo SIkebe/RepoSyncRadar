@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -9,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using MudBlazor.Services;
 using RepoSyncRadar.App.Settings;
@@ -39,6 +41,9 @@ public partial class App : Application
 
     private IHost? _host;
     private int _renderThreadFailureHandlingStarted;
+    private bool _shutdownStarted;
+    private bool _shutdownCompleted;
+    private CancellationTokenRegistration _hostStoppingRegistration;
 
     /// <summary>The composed DI container, shared with the BlazorWebView.</summary>
     public IServiceProvider Services => _host?.Services
@@ -75,6 +80,11 @@ public partial class App : Application
 
         var main = new MainWindow(Services);
         MainWindow = main;
+        main.Closing += OnMainWindowClosing;
+        _hostStoppingRegistration = RegisterHostShutdown(
+            action => _ = Dispatcher.BeginInvoke(action),
+            main.Close,
+            _host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping);
         main.Show();
 
         // Eager startup sign-in. Fire-and-forget so the WPF message pump keeps running
@@ -451,16 +461,133 @@ public partial class App : Application
     private static bool IsEnglishUiCulture()
         => CultureInfo.CurrentUICulture.Name.StartsWith("en", StringComparison.OrdinalIgnoreCase);
 
-    protected override async void OnExit(ExitEventArgs e)
+    protected override void OnExit(ExitEventArgs e)
     {
-        if (_host is not null)
+        try
         {
-            await _host.StopAsync(TimeSpan.FromSeconds(5));
-            _host.Dispose();
+            _hostStoppingRegistration.Dispose();
+            if (_host is not null)
+            {
+                var host = _host;
+                var logger = host.Services.GetService<ILogger<App>>();
+                _host = null;
+                StopHost(host, TimeSpan.FromSeconds(5), logger);
+            }
+        }
+        finally
+        {
+            base.OnExit(e);
+        }
+    }
+
+    internal static CancellationTokenRegistration RegisterHostShutdown(
+        Action<Action> dispatch,
+        Action requestClose,
+        CancellationToken applicationStopping)
+    {
+        ArgumentNullException.ThrowIfNull(dispatch);
+        ArgumentNullException.ThrowIfNull(requestClose);
+        return applicationStopping.Register(() => dispatch(requestClose));
+    }
+
+    private async void OnMainWindowClosing(object? sender, CancelEventArgs e)
+    {
+        if (_shutdownCompleted || _host is null)
+        {
+            return;
         }
 
-        base.OnExit(e);
+        e.Cancel = true;
+        if (_shutdownStarted)
+        {
+            return;
+        }
+
+        _shutdownStarted = true;
+        var mainWindow = (Window)sender!;
+        var host = _host;
+        var logger = host.Services.GetService<ILogger<App>>() ?? NullLogger<App>.Instance;
+        try
+        {
+            await ShutdownHostAsync(host, TimeSpan.FromSeconds(5), logger)
+                .WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        catch (Exception ex)
+        {
+            LogHostShutdownFailed(logger, ex);
+        }
+        finally
+        {
+            _host = null;
+            _shutdownCompleted = true;
+            mainWindow.Closing -= OnMainWindowClosing;
+            mainWindow.Close();
+        }
     }
+
+    internal static async Task ShutdownHostAsync(IHost host, TimeSpan timeout, ILogger? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        logger ??= NullLogger.Instance;
+        try
+        {
+            LogHostStopping(logger);
+            await host.StopAsync(timeout).ConfigureAwait(false);
+            LogHostStopped(logger);
+        }
+        finally
+        {
+            LogHostDisposing(logger);
+            if (host is IAsyncDisposable asyncDisposable)
+            {
+                await asyncDisposable.DisposeAsync().ConfigureAwait(false);
+            }
+            else
+            {
+                host.Dispose();
+            }
+            LogHostDisposed(logger);
+        }
+    }
+
+    internal static void StopHost(IHost host, TimeSpan timeout, ILogger? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        logger ??= NullLogger.Instance;
+        try
+        {
+            LogHostStopping(logger);
+            Task.Run(() => host.StopAsync(timeout))
+                .WaitAsync(timeout + TimeSpan.FromSeconds(1))
+                .GetAwaiter()
+                .GetResult();
+            LogHostStopped(logger);
+        }
+        catch (Exception ex)
+        {
+            LogHostShutdownFailed(logger, ex);
+        }
+    }
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Information,
+        Message = "Application host is stopping.")]
+    private static partial void LogHostStopping(ILogger logger);
+
+    [LoggerMessage(EventId = 17, Level = LogLevel.Information,
+        Message = "Application host stopped.")]
+    private static partial void LogHostStopped(ILogger logger);
+
+    [LoggerMessage(EventId = 18, Level = LogLevel.Information,
+        Message = "Application host is disposing.")]
+    private static partial void LogHostDisposing(ILogger logger);
+
+    [LoggerMessage(EventId = 19, Level = LogLevel.Information,
+        Message = "Application host disposed.")]
+    private static partial void LogHostDisposed(ILogger logger);
+
+    [LoggerMessage(EventId = 20, Level = LogLevel.Error,
+        Message = "Application host shutdown did not complete cleanly; process exit will release remaining resources.")]
+    private static partial void LogHostShutdownFailed(ILogger logger, Exception exception);
 
     /// <summary>
     /// Applies any pending EF Core migrations against the local SQLite store. Runs once
