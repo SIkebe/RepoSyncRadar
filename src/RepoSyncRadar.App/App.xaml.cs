@@ -43,6 +43,7 @@ public partial class App : Application
     private int _renderThreadFailureHandlingStarted;
     private bool _shutdownStarted;
     private bool _shutdownCompleted;
+    private CancellationTokenRegistration _hostStoppingRegistration;
 
     /// <summary>The composed DI container, shared with the BlazorWebView.</summary>
     public IServiceProvider Services => _host?.Services
@@ -80,6 +81,10 @@ public partial class App : Application
         var main = new MainWindow(Services);
         MainWindow = main;
         main.Closing += OnMainWindowClosing;
+        _hostStoppingRegistration = RegisterHostShutdown(
+            action => _ = Dispatcher.BeginInvoke(action),
+            main.Close,
+            _host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping);
         main.Show();
 
         // Eager startup sign-in. Fire-and-forget so the WPF message pump keeps running
@@ -460,6 +465,7 @@ public partial class App : Application
     {
         try
         {
+            _hostStoppingRegistration.Dispose();
             if (_host is not null)
             {
                 var host = _host;
@@ -472,6 +478,16 @@ public partial class App : Application
         {
             base.OnExit(e);
         }
+    }
+
+    internal static CancellationTokenRegistration RegisterHostShutdown(
+        Action<Action> dispatch,
+        Action requestClose,
+        CancellationToken applicationStopping)
+    {
+        ArgumentNullException.ThrowIfNull(dispatch);
+        ArgumentNullException.ThrowIfNull(requestClose);
+        return applicationStopping.Register(() => dispatch(requestClose));
     }
 
     private async void OnMainWindowClosing(object? sender, CancelEventArgs e)
