@@ -326,6 +326,34 @@ public sealed class DocsLiquidContextLoaderTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadForMarkdownAsync_Loads_Autotitle_Target_After_Conditional_Version_Prefix()
+    {
+        WriteContentFile(
+            Path.Combine(
+                "migrations",
+                "using-github-enterprise-importer",
+                "migrate-from-gitlab",
+                "index.md"),
+            """
+            ---
+            title: Migrating from GitLab to GitHub
+            ---
+
+            Target.
+            """);
+
+        var context = await DocsLiquidContextLoader.LoadForMarkdownAsync(
+            _root,
+            "content/migrations/overview/migration-paths-to-github.md",
+            "[AUTOTITLE]({% ifversion ghes %}/free-pro-team@latest{% endif %}/migrations/using-github-enterprise-importer/migrate-from-gitlab)",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            "Migrating from GitLab to GitHub",
+            context.PageTitles["migrations/using-github-enterprise-importer/migrate-from-gitlab"]);
+    }
+
+    [Fact]
     public async Task LoadForMarkdownAsync_Falls_Back_To_Redirect_Autotitle_Scan()
     {
         WriteContentFile(

@@ -52,6 +52,9 @@ internal static partial class DocsLiquidContextLoader
     [GeneratedRegex(@"\[AUTOTITLE\]\((?<href>[^)]+)\)", RegexOptions.IgnoreCase)]
     private static partial Regex AutotitleLinkRegex();
 
+    [GeneratedRegex(@"^\s*\{%-?\s*ifversion\b.*?%\}\s*/[^/\s)]*@[^/\s)]*\s*\{%-?\s*endif\s*-?%\}", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex ConditionalDocsVersionPrefixRegex();
+
     [GeneratedRegex(@"\{%-?\s*for\s+[A-Za-z_][A-Za-z0-9_]*\s+in\s+(?<expr>[A-Za-z0-9_.\-/_]+)\s*-?%\}", RegexOptions.IgnoreCase)]
     private static partial Regex DataSequenceReferenceRegex();
 
@@ -280,6 +283,7 @@ internal static partial class DocsLiquidContextLoader
         foreach (Match match in AutotitleLinkRegex().Matches(source))
         {
             var href = match.Groups["href"].Value.Trim();
+            href = ConditionalDocsVersionPrefixRegex().Replace(href, string.Empty);
             var space = href.IndexOfAny([' ', '\t', '\r', '\n']);
             if (space >= 0)
             {
