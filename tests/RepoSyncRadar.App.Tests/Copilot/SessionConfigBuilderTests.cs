@@ -52,6 +52,12 @@ public class SessionConfigBuilderTests
         Assert.True(config.CustomAgentsLocalOnly);
         Assert.False(config.CoauthorEnabled);
         Assert.False(config.ManageScheduleEnabled);
+        Assert.NotNull(config.ManagedSettings);
+        Assert.NotNull(config.ManagedSettings!.Permissions);
+        Assert.Equal(
+            DisableBypassPermissionsMode.Disable,
+            config.ManagedSettings.Permissions!.DisableBypassPermissionsMode);
+        Assert.Equal(["shell"], config.ManagedSettings.Permissions.Deny);
         Assert.Equal(McpOAuthTokenStorageMode.InMemory, config.McpOAuthTokenStorage);
         Assert.NotNull(config.OnMcpAuthRequest);
         var mcpAuthResult = await config.OnMcpAuthRequest!(new McpAuthContext());

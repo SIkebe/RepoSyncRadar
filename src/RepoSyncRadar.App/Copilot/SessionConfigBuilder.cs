@@ -53,6 +53,14 @@ internal static class SessionConfigBuilder
             CustomAgentsLocalOnly = true,
             CoauthorEnabled = false,
             ManageScheduleEnabled = false,
+            ManagedSettings = new ManagedSettings
+            {
+                Permissions = new ManagedSettingsPermissions
+                {
+                    DisableBypassPermissionsMode = DisableBypassPermissionsMode.Disable,
+                    Deny = ["shell"],
+                },
+            },
             McpOAuthTokenStorage = McpOAuthTokenStorageMode.InMemory,
             // RepoSyncRadar does not broker third-party MCP OAuth tokens. Fail closed if
             // an OAuth-protected MCP server is introduced before a user-visible flow exists.
