@@ -58,7 +58,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 - The app must read Copilot SDK final assistant text from `response?.Data?.Content`, not `response?.ToString()`.
 - For Copilot tool metadata such as `skip_permission` and `defer`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { ... }, ...)` over magic-string `AdditionalProperties`. Keep RepoSyncRadar's small radar tool set pre-loaded with `CopilotToolDefer.Never`.
-- Restrict sessions to the registered radar tools and explicitly disable tool search, ambient custom instructions, org-level custom agents, coauthor trailers, scheduler integration, experimental mode, session memory, and the cross-session store unless a feature deliberately needs them.
+- Restrict sessions to the registered radar tools and explicitly disable tool search, ambient custom instructions, org-level custom agents, coauthor trailers, scheduler integration, experimental mode, session memory, and the cross-session store unless a feature deliberately needs them. Inject managed permission settings that disable bypass-permissions mode and deny shell access as defense in depth.
 - Keep experimental API warning suppressions local to the integration that requires them.
 - Treat SDK capabilities as unavailable until confirmed in the installed package's public API. Do not rely on runtime internals or prompt-only structured-output guarantees.
 - Keep `scripts/CopilotCliRelease.props` synchronized with the SDK package's `CopilotCliVersion`. If the package download target cannot resolve that CLI, use official GitHub Release assets with published SHA-256 verification.
