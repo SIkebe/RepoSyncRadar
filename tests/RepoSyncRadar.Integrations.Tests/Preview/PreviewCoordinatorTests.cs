@@ -364,7 +364,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
-    public async Task PrepareMarkdownComparisonPreviewAsync_Rewrites_Autotitle_From_Worktree_Page_Titles()
+    public async Task PrepareMarkdownComparisonPreviewAsync_Rewrites_Autotitle_After_Conditional_Version_Prefix()
     {
         var ct = TestContext.Current.CancellationToken;
         var bare = Path.Combine(_tempRoot, "bare-autotitle.git");
@@ -391,7 +391,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
                 return Task.CompletedTask;
             });
-        var sourcePath = "content/code-security/how-tos/secure-at-scale/apply-security-configuration.md";
+        var sourcePath = "content/migrations/overview/migration-paths-to-github.md";
         var sut = BuildSut(
             runner,
             bareCloneDir: bare,
@@ -401,24 +401,31 @@ public sealed class PreviewCoordinatorTests : IDisposable
             contentServer: contentServer,
             onObjectSourceMaterialized: (path, sha) =>
             {
-                var contentRoot = Path.Combine(path, "content", "code-security", "how-tos", "secure-at-scale");
-                Directory.CreateDirectory(contentRoot);
+                var sourceRoot = Path.Combine(path, "content", "migrations", "overview");
+                Directory.CreateDirectory(sourceRoot);
+                var targetRoot = Path.Combine(
+                    path,
+                    "content",
+                    "migrations",
+                    "using-github-enterprise-importer",
+                    "migrate-from-gitlab");
+                Directory.CreateDirectory(targetRoot);
                 var targetTitle = string.Equals(sha, "parentsha", StringComparison.Ordinal)
-                    ? "Configuring organization security"
-                    : "Applying security configurations in your organization";
+                    ? "Migrating from GitLab"
+                    : "Migrating from GitLab to GitHub";
                 File.WriteAllText(
-                    Path.Combine(contentRoot, "configure-organization-security.md"),
+                    Path.Combine(targetRoot, "index.md"),
                     $"---\ntitle: {targetTitle}\n---\n\nTarget page");
                 File.WriteAllText(
-                    Path.Combine(contentRoot, "apply-security-configuration.md"),
-                    "---\ntitle: Source\n---\n\nSee [AUTOTITLE](/code-security/how-tos/secure-at-scale/configure-organization-security).");
+                    Path.Combine(sourceRoot, "migration-paths-to-github.md"),
+                    "---\ntitle: Migration paths to GitHub\n---\n\n**More information:** [AUTOTITLE]({% ifversion ghes %}/free-pro-team@latest{% endif %}/migrations/using-github-enterprise-importer/migrate-from-gitlab)");
             });
 
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", sourcePath, cancellationToken: ct);
 
         Assert.NotNull(link);
-        Assert.Contains(">Configuring organization security</a>", capturedPages["/markdown/before"], StringComparison.Ordinal);
-        Assert.Contains(">Applying security configurations in your organization</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains(">Migrating from GitLab</a>", capturedPages["/markdown/before"], StringComparison.Ordinal);
+        Assert.Contains(">Migrating from GitLab to GitHub</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.DoesNotContain(">AUTOTITLE</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
     }
 
