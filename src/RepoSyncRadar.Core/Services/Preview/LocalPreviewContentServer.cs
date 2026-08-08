@@ -199,6 +199,11 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
                 return;
             }
 
+            if (!await ReadRequestHeadersAsync(reader, cancellationToken).ConfigureAwait(false))
+            {
+                return;
+            }
+
             var parts = requestLine.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 2)
             {
@@ -248,6 +253,21 @@ public sealed partial class LocalPreviewContentServer : ILocalPreviewContentServ
         {
             LogRequestFailed(_logger, ex.Message);
         }
+    }
+
+    private static async Task<bool> ReadRequestHeadersAsync(
+        StreamReader reader,
+        CancellationToken cancellationToken)
+    {
+        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } headerLine)
+        {
+            if (headerLine.Length == 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryResolveAssetPath(string route, out string assetPath)

@@ -41,6 +41,37 @@ public sealed class LocalPreviewContentServerTests
     }
 
     [Fact]
+    public async Task StartAsync_Waits_For_Complete_Request_Headers_Before_Responding()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var server = new LocalPreviewContentServer(NullLogger<LocalPreviewContentServer>.Instance);
+        var port = GetFreeLoopbackPort();
+        using var client = new TcpClient();
+
+        await server.StartAsync(
+            port,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/markdown/before"] = "<html><body>page</body></html>",
+            },
+            ct);
+        await client.ConnectAsync(IPAddress.Loopback, port, ct);
+        var stream = client.GetStream();
+        await stream.WriteAsync(
+            "GET /markdown/before HTTP/1.1\r\nHost: 127.0.0.1\r\n"u8.ToArray(),
+            ct);
+
+        await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
+        Assert.False(stream.DataAvailable);
+
+        await stream.WriteAsync("\r\n"u8.ToArray(), ct);
+        using var reader = new StreamReader(stream);
+        var response = await reader.ReadToEndAsync(ct);
+        Assert.StartsWith("HTTP/1.1 200 OK", response, StringComparison.Ordinal);
+        Assert.Contains("<html><body>page</body></html>", response, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StartAsync_Serves_Asset_Root_Files_With_Content_Type()
     {
         var ct = TestContext.Current.CancellationToken;
