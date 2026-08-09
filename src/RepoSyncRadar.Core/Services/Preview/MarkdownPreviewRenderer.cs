@@ -3080,11 +3080,6 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var contentStart = markerEnd + 2;
-        if (contentStart < content.Length && !char.IsWhiteSpace(content[contentStart]))
-        {
-            return 0;
-        }
-
         while (contentStart < content.Length && char.IsWhiteSpace(content[contentStart]))
         {
             contentStart++;

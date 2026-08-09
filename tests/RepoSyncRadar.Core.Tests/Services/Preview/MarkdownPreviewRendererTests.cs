@@ -2639,6 +2639,32 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Preserves_Footnote_Definitions_Without_Whitespace_After_Colon()
+    {
+        const string markdown = """
+            Text with a footnote.[^note]
+
+            [^note]:Footnote text without leading whitespace.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: "Text without a footnote.",
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("class=\"footnote-ref\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"footnotes\"", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">Footnote text without leading whitespace.</span>",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("[^note]:", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Only_Changed_Text_In_Updated_Paragraph()
     {
         const string unchangedPrefix = "Optionally, you can require review or approval from specific teams when a pull request changes certain files or directories. You can specify up to 15 different teams, and for each team you can require a certain number of approvals from team members.";
