@@ -1222,6 +1222,7 @@ public class CommitDetailTests
         var fpt = DocsVersionCatalog.All.First(static version => version.Slug == "fpt");
         var navigator = new PreviewNavigator();
         var coordinator = Substitute.For<IPreviewCoordinator>();
+        var prewarmStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
                 Arg.Any<string>(),
@@ -1242,21 +1243,26 @@ public class CommitDetailTests
                 Arg.Any<DocsVersion?>(),
                 Arg.Any<IReadOnlyList<string>?>(),
                 Arg.Any<CancellationToken>())
-            .Returns(Task.CompletedTask);
+            .Returns(_ =>
+            {
+                prewarmStarted.TrySetResult();
+                return Task.CompletedTask;
+            });
 
         using var cut = RenderDetailWith(commit, resolver, navigator, new PreviewSession(), coordinator);
         await cut.InvokeAsync(
             () => cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]")[0].Click());
 
-        cut.WaitForAssertion(() =>
-            coordinator.Received(1).PredictivePrewarmFileAsync(
-                commit.PrNumber,
-                commit.Sha,
-                "content/copilot/second.md",
-                fpt,
-                Arg.Is<IReadOnlyList<string>>(static paths => paths.Count == 0),
-                Arg.Any<CancellationToken>()),
-            TimeSpan.FromSeconds(3));
+        await prewarmStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(15),
+            Xunit.TestContext.Current.CancellationToken);
+        await coordinator.Received(1).PredictivePrewarmFileAsync(
+            commit.PrNumber,
+            commit.Sha,
+            "content/copilot/second.md",
+            fpt,
+            Arg.Is<IReadOnlyList<string>>(static paths => paths.Count == 0),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
