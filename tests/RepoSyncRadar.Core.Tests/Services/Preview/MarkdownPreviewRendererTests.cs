@@ -2610,6 +2610,61 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Preserves_Added_Footnote_Definitions_When_Diff_Marked()
+    {
+        const string beforeMarkdown = """
+            Claude Sonnet 4.6 remains available to individual Copilot subscribers.
+            """;
+        const string afterMarkdown = """
+            Claude Sonnet 4.6 remains available to individual Copilot subscribers.[^claude-sonnet-46-annual]
+
+            [^claude-sonnet-46-annual]: Claude Sonnet 4.6 remains available to individual Copilot subscribers on annual plans.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/reference/ai-models/supported-models.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("class=\"footnote-ref\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"footnotes\"", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">Claude Sonnet 4.6 remains available to individual Copilot subscribers on annual plans.</span>",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("[^claude-sonnet-46-annual]:", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Preserves_Footnote_Definitions_Without_Whitespace_After_Colon()
+    {
+        const string markdown = """
+            Text with a footnote.[^note]
+
+            [^note]:Footnote text without leading whitespace.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: "Text without a footnote.",
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("class=\"footnote-ref\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"footnotes\"", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">Footnote text without leading whitespace.</span>",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("[^note]:", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Only_Changed_Text_In_Updated_Paragraph()
     {
         const string unchangedPrefix = "Optionally, you can require review or approval from specific teams when a pull request changes certain files or directories. You can specify up to 15 different teams, and for each team you can require a certain number of approvals from team members.";

@@ -3034,6 +3034,16 @@ internal static partial class MarkdownPreviewRenderer
             return false;
         }
 
+        var footnoteMarkerLength = GetMarkdownFootnoteDefinitionMarkerLength(content);
+        if (footnoteMarkerLength > 0)
+        {
+            parts = new RenderedDiffLineParts(
+                RenderedDiffLineKind.FootnoteDefinition,
+                leading + content[..footnoteMarkerLength],
+                content[footnoteMarkerLength..]);
+            return true;
+        }
+
         var headingMarkerLength = GetMarkdownHeadingMarkerLength(content);
         if (headingMarkerLength > 0)
         {
@@ -3054,6 +3064,27 @@ internal static partial class MarkdownPreviewRenderer
         }
         parts = new RenderedDiffLineParts(RenderedDiffLineKind.Paragraph, leading, content);
         return true;
+    }
+
+    private static int GetMarkdownFootnoteDefinitionMarkerLength(string content)
+    {
+        if (!content.StartsWith("[^", StringComparison.Ordinal))
+        {
+            return 0;
+        }
+
+        var markerEnd = content.IndexOf("]:", 2, StringComparison.Ordinal);
+        if (markerEnd <= 2)
+        {
+            return 0;
+        }
+
+        var contentStart = markerEnd + 2;
+        while (contentStart < content.Length && char.IsWhiteSpace(content[contentStart]))
+        {
+            contentStart++;
+        }
+        return contentStart;
     }
 
     private static int GetMarkdownListMarkerLength(string content)
@@ -3506,6 +3537,7 @@ internal static partial class MarkdownPreviewRenderer
         ListItem,
         QuoteListItem,
         Quote,
+        FootnoteDefinition,
     }
 
     private static bool IsGitHubAlertMarker(string value)
