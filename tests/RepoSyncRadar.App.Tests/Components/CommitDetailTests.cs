@@ -1208,7 +1208,7 @@ public class CommitDetailTests
     }
 
     [Fact]
-    public void OpenInWebView_Predictively_Prewarms_Next_Previewable_File()
+    public async Task OpenInWebView_Predictively_Prewarms_Next_Previewable_File()
     {
         var commit = MakeCommit(
             ("content/copilot/first.md", 1, 0),
@@ -1245,7 +1245,8 @@ public class CommitDetailTests
             .Returns(Task.CompletedTask);
 
         using var cut = RenderDetailWith(commit, resolver, navigator, new PreviewSession(), coordinator);
-        cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]")[0].Click();
+        await cut.InvokeAsync(
+            () => cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]")[0].Click());
 
         cut.WaitForAssertion(() =>
             coordinator.Received(1).PredictivePrewarmFileAsync(
