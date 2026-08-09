@@ -2534,7 +2534,8 @@ html, body {
 
     .radar-sidebar-resizer::before,
     .review-ignore-panel summary,
-    .review-ignore-chevron {
+    .review-ignore-chevron,
+    .radar-commit-detail .reusable-usage-picker select::picker-icon {
         transition: none;
     }
 }
@@ -3002,6 +3003,7 @@ html, body {
 .radar-theme-dark .radar-commit-detail .reusable-usage-picker {
     background: var(--radar-panel-alt-bg);
     border-color: var(--radar-border);
+    color: var(--radar-muted-fg);
 }
 
 .radar-theme-dark .radar-commit-detail .reusable-usage-picker select:hover:not(:disabled) {

@@ -69,6 +69,16 @@ public sealed partial class AppCssContrastTests
     }
 
     [Fact]
+    public void DarkTheme_ReusableUsagePicker_Uses_ThemeAware_LabelColor()
+    {
+        var pickerBlock = GetExactRuleBlock(
+            ReadAppCss(),
+            ".radar-theme-dark .radar-commit-detail .reusable-usage-picker");
+
+        Assert.Contains("color: var(--radar-muted-fg)", pickerBlock, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AppHeader_Uses_Theme_Surface_Tokens()
     {
         var headerBlock = GetRuleBlock(ReadAppCss(), ".app-header");
@@ -146,6 +156,9 @@ public sealed partial class AppCssContrastTests
             css);
         Assert.Matches(
             @"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.radar-sidebar-resizer::before",
+            css);
+        Assert.Matches(
+            @"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.reusable-usage-picker select::picker-icon\s*\{[^}]*transition:\s*none",
             css);
         Assert.Matches(
             @"@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?transition:\s*none",
