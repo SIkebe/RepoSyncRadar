@@ -695,6 +695,7 @@ public class CommitDetailTests
             var picker = cut.Find("[data-testid=\"commit-detail-reusable-usage\"]");
             Assert.Equal(2, picker.Children.Length);
             Assert.Contains(reusablePath, picker.GetAttribute("aria-label"), StringComparison.Ordinal);
+            Assert.Equal(referencePaths[0], picker.GetAttribute("title"));
             Assert.Equal(referencePaths[0], captured?.FilePath);
             Assert.Contains("(1/2)", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
         });
@@ -703,6 +704,9 @@ public class CommitDetailTests
 
         cut.WaitForAssertion(() =>
         {
+            Assert.Equal(
+                referencePaths[1],
+                cut.Find("[data-testid=\"commit-detail-reusable-usage\"]").GetAttribute("title"));
             Assert.Equal(referencePaths[1], captured?.FilePath);
             Assert.Contains("(2/2)", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
         });

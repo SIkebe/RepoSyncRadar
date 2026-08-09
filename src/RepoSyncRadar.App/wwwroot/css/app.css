@@ -1179,22 +1179,93 @@ html, body {
 
 .radar-commit-detail .reusable-usage-picker {
     align-items: center;
+    background: #f6f8fa;
+    border: 1px solid #d8dee4;
+    border-radius: 5px;
     color: #57606a;
     display: inline-flex;
+    flex: 1 1 22rem;
     font-size: 0.78rem;
     font-weight: 600;
-    gap: 0.3rem;
+    gap: 0.4rem;
+    max-width: 38rem;
     min-width: 0;
+    padding: 0.18rem 0.22rem 0.18rem 0.5rem;
+}
+
+.radar-commit-detail .reusable-usage-picker > span {
+    flex: 0 0 auto;
+    white-space: nowrap;
 }
 
 .radar-commit-detail .reusable-usage-picker select {
     background: #fff;
-    border: 1px solid #8c959f;
-    border-radius: 3px;
+    border: 1px solid #b6bec8;
+    border-radius: 4px;
     color: #24292f;
+    cursor: pointer;
+    flex: 1 1 auto;
     font: inherit;
-    max-width: min(32rem, 100%);
-    padding: 0.12rem 0.35rem;
+    font-weight: 600;
+    min-height: 1.75rem;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0.22rem 0.45rem;
+    text-overflow: ellipsis;
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+    width: 100%;
+}
+
+.radar-commit-detail .reusable-usage-picker select:hover:not(:disabled) {
+    background: #f8fbff;
+    border-color: #2f6fd0;
+}
+
+.radar-commit-detail .reusable-usage-picker select:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+@supports (appearance: base-select) {
+    .radar-commit-detail .reusable-usage-picker select,
+    .radar-commit-detail .reusable-usage-picker select::picker(select) {
+        appearance: base-select;
+    }
+
+    .radar-commit-detail .reusable-usage-picker select::picker(select) {
+        background: #fff;
+        border: 1px solid #8c959f;
+        border-radius: 6px;
+        box-shadow: 0 8px 24px rgba(31, 35, 40, 0.16);
+        color: #24292f;
+        margin-block-start: 0.25rem;
+        max-width: min(42rem, calc(100vw - 2rem));
+        padding: 0.25rem;
+    }
+
+    .radar-commit-detail .reusable-usage-picker select::picker-icon {
+        color: #57606a;
+        transition: rotate 120ms ease;
+    }
+
+    .radar-commit-detail .reusable-usage-picker select:open::picker-icon {
+        rotate: 180deg;
+    }
+
+    .radar-commit-detail .reusable-usage-picker option {
+        border-radius: 4px;
+        cursor: pointer;
+        padding: 0.45rem 0.55rem;
+    }
+
+    .radar-commit-detail .reusable-usage-picker option:hover,
+    .radar-commit-detail .reusable-usage-picker option:checked {
+        background: #eaf3ff;
+    }
+
+    .radar-commit-detail .reusable-usage-picker option::checkmark {
+        color: #0969da;
+    }
 }
 
 .radar-commit-detail .file-row .open-in-webview {
@@ -2463,7 +2534,8 @@ html, body {
 
     .radar-sidebar-resizer::before,
     .review-ignore-panel summary,
-    .review-ignore-chevron {
+    .review-ignore-chevron,
+    .radar-commit-detail .reusable-usage-picker select::picker-icon {
         transition: none;
     }
 }
@@ -2519,6 +2591,8 @@ html, body {
     }
 
     .commit-search-input,
+    .radar-commit-detail .reusable-usage-picker,
+    .radar-commit-detail .reusable-usage-picker select,
     .local-settings-field input,
     .local-settings-field textarea,
     .local-settings-field select,
@@ -2922,8 +2996,40 @@ html, body {
 
 .radar-theme-dark .radar-commit-detail .reusable-usage-picker select {
     background: var(--radar-panel-bg);
-    border-color: var(--radar-panel-border);
-    color: var(--radar-text);
+    border-color: var(--radar-border);
+    color: var(--radar-fg);
+}
+
+.radar-theme-dark .radar-commit-detail .reusable-usage-picker {
+    background: var(--radar-panel-alt-bg);
+    border-color: var(--radar-border);
+    color: var(--radar-muted-fg);
+}
+
+.radar-theme-dark .radar-commit-detail .reusable-usage-picker select:hover:not(:disabled) {
+    background: var(--radar-accent-bg);
+    border-color: var(--radar-accent-border);
+}
+
+@supports (appearance: base-select) {
+    .radar-theme-dark .radar-commit-detail .reusable-usage-picker select::picker(select) {
+        background: var(--radar-panel-bg);
+        border-color: var(--radar-border);
+        color: var(--radar-fg);
+    }
+
+    .radar-theme-dark .radar-commit-detail .reusable-usage-picker select::picker-icon {
+        color: var(--radar-muted-fg);
+    }
+
+    .radar-theme-dark .radar-commit-detail .reusable-usage-picker option:hover,
+    .radar-theme-dark .radar-commit-detail .reusable-usage-picker option:checked {
+        background: var(--radar-accent-bg);
+    }
+
+    .radar-theme-dark .radar-commit-detail .reusable-usage-picker option::checkmark {
+        color: var(--radar-accent-border);
+    }
 }
 
 .radar-theme-dark .radar-commit-detail .file-row .open-in-webview:hover:not(:disabled) {

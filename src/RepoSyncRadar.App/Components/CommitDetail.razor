@@ -226,6 +226,7 @@
                                 <select data-testid="commit-detail-reusable-usage"
                                         data-path="@file.Path"
                                         aria-label="@L["CommitDetail.ReusableUsage.AriaLabel", file.Path]"
+                                        title="@GetSelectedReusableReference(file.Path)"
                                         disabled="@IsPreviewOperationBusy"
                                         value="@GetSelectedReusableReference(file.Path)"
                                         @onchange="args => ChangeReusableUsageAsync(file, args)">
