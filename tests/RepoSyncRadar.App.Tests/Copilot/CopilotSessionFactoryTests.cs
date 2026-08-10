@@ -65,6 +65,21 @@ public sealed class CopilotSessionFactoryTests
     }
 
     [Fact]
+    public void ConfigureFallbackModel_Clears_ModelSpecific_ReasoningEffort()
+    {
+        var config = new SessionConfig
+        {
+            Model = "gpt-5.6-luna",
+            ReasoningEffort = "max",
+        };
+
+        CopilotSessionFactory.ConfigureFallbackModel(config, "gpt-5-mini");
+
+        Assert.Equal("gpt-5-mini", config.Model);
+        Assert.Null(config.ReasoningEffort);
+    }
+
+    [Fact]
     public void BuildClientOptions_Wires_Sdk_Diagnostics_And_Telemetry()
     {
         var copilot = new CopilotOptions

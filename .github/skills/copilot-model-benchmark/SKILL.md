@@ -196,13 +196,13 @@ source/testを読み、モデルの自己評価に依存せず100点で採点す
 
 ## 今回の静的コード理解ベンチマーク基準
 
-2026-08-10、RepoSyncRadarのMorning Triageを各3run、`high` / default contextで比較した基準値。数値は中央値、括弧内はmin-max:
+2026-08-10、RepoSyncRadarのMorning Triageを各3run、`high` / default contextで比較した基準値。実行時HEADは`2720f8b0ebc36f67836790abe3cb1ef97b1ea0c7`、Copilot CLIは`1.0.79-9`。worktreeにはこのPRのmodel・設定・Skill変更が未コミットで存在した。数値は中央値、括弧内はmin-max:
 
-| Model | Success | Quality | AI Credits | Input | Output | Reasoning | Elapsed |
-| --- | :-: | ---: | ---: | ---: | ---: | ---: | ---: |
-| GPT-5.6 Sol | 3/3 | 96 (95-98) | 76.4 (74.2-90.5) | 357.3k (326.8-551.7k) | 4.9k (4.8-5.0k) | 1.6k (1.4-1.7k) | 2m50s (2m36s-3m01s) |
-| GPT-5.6 Luna | 3/3 | 94 (92-94) | 4.71 (4.27-5.56) | 727.7k (543.0-935.0k) | 7.5k (6.7-8.9k) | 3.8k (3.0-4.0k) | 2m44s (2m13s-2m45s) |
-| GPT-5.6 Terra | 3/3 | 89 (88-91) | 43.9 (34.6-62.4) | 628.1k (412.5k-1.1m) | 6.2k (4.8-7.7k) | 1.7k (1.6-2.1k) | 2m41s (2m31s-3m41s) |
+| Model | Success | Quality | AI Credits | Input | Cached | Cache write | Output | Reasoning | Elapsed |
+| --- | :-: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| GPT-5.6 Sol | 3/3 | 96 (95-98) | 76.4 (74.2-90.5) | 357.3k (326.8-551.7k) | 281.4k (251.4-467.6k) | 75.9k (75.4-84.1k) | 4.9k (4.8-5.0k) | 1.6k (1.4-1.7k) | 2m50s (2m36s-3m01s) |
+| GPT-5.6 Luna | 3/3 | 94 (92-94) | 4.71 (4.27-5.56) | 727.7k (543.0-935.0k) | 621.0k (443.6-821.2k) | 106.6k (99.3-113.7k) | 7.5k (6.7-8.9k) | 3.8k (3.0-4.0k) | 2m44s (2m13s-2m45s) |
+| GPT-5.6 Terra | 3/3 | 89 (88-91) | 43.9 (34.6-62.4) | 628.1k (412.5k-1.1m) | 524.0k (323.1-971.9k) | 104.0k (89.4-135.0k) | 6.2k (4.8-7.7k) | 1.7k (1.6-2.1k) | 2m41s (2m31s-3m41s) |
 
 固定ルーブリックのjudgeはClaude Opus 5 / high。Solは制御フローと例外処理の精度が最も高く、Lunaは2点差でAI Credits中央値が約16分の1、TerraはLunaより低品質かつ約9倍のAI Creditsだった。この結果では既定をLuna / high、高難度用途をSol / highとする。
 
