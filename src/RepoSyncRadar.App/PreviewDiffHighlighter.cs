@@ -626,6 +626,72 @@ td.rsr-preview-diff-alignment-gap {
     element.style.height = `${height.toFixed(2)}px`;
     return element;
   };
+  const insertGapBefore = (anchor, gap, desiredHeight) => {
+    const anchorTopBefore = anchor.getBoundingClientRect().top;
+    anchor.parentNode.insertBefore(gap, anchor);
+    let marginBlockEnd = 0;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const actualDisplacement = anchor.getBoundingClientRect().top - anchorTopBefore;
+      const correction = desiredHeight - actualDisplacement;
+      if (Math.abs(correction) <= 0.1) {
+        break;
+      }
+      marginBlockEnd += correction;
+      gap.style.setProperty(
+        'margin-block-end',
+        `${marginBlockEnd.toFixed(2)}px`,
+        'important');
+    }
+  };
+  const getTableColumnCount = (table) => {
+    const rows = Array.from(table?.rows || []);
+    const activeRowSpans = [];
+    let widestColumnCount = 1;
+    rows.forEach((tableRow, rowIndex) => {
+      const sectionEndRowIndex = rows.reduce(
+        (endIndex, candidate, candidateIndex) =>
+          candidate.parentElement === tableRow.parentElement ? candidateIndex : endIndex,
+        rowIndex);
+      let columnIndex = 0;
+      Array.from(tableRow.cells).forEach((cell) => {
+        const colSpan = Math.max(1, cell.colSpan || 1);
+        let fits = false;
+        while (!fits) {
+          while ((activeRowSpans[columnIndex] || 0) > 0) {
+            columnIndex++;
+          }
+          fits = true;
+          for (let offset = 0; offset < colSpan; offset++) {
+            if ((activeRowSpans[columnIndex + offset] || 0) > 0) {
+              columnIndex += offset + 1;
+              fits = false;
+              break;
+            }
+          }
+        }
+        const effectiveRowSpan = cell.rowSpan === 0
+          ? sectionEndRowIndex - rowIndex + 1
+          : Math.max(1, cell.rowSpan);
+        for (let offset = 0; offset < colSpan; offset++) {
+          activeRowSpans[columnIndex + offset] = Math.max(
+            activeRowSpans[columnIndex + offset] || 0,
+            effectiveRowSpan);
+        }
+        columnIndex += colSpan;
+      });
+      const occupiedColumnCount = activeRowSpans.reduce(
+        (count, remainingRows, index) => remainingRows > 0 ? index + 1 : count,
+        0);
+      widestColumnCount = Math.max(
+        widestColumnCount,
+        columnIndex,
+        occupiedColumnCount);
+      for (let index = 0; index < activeRowSpans.length; index++) {
+        activeRowSpans[index] = Math.max(0, (activeRowSpans[index] || 0) - 1);
+      }
+    });
+    return widestColumnCount;
+  };
   const gaps = {{gapsJson}};
   gaps.forEach((gap) => {
     const height = Math.max(1, Number(gap.height) || 0);
@@ -640,19 +706,13 @@ td.rsr-preview-diff-alignment-gap {
       gapRow.setAttribute('role', 'presentation');
       const gapCell = createGap(height, gap.navigationIndex, 'td');
       const table = row.closest('table');
-      const columnCount = Math.max(
-        1,
-        ...Array.from(table?.rows || []).map((tableRow) =>
-          Array.from(tableRow.cells).reduce(
-            (count, cell) => count + Math.max(1, cell.colSpan || 1),
-            0)));
-      gapCell.colSpan = columnCount;
+      gapCell.colSpan = getTableColumnCount(table);
       gapRow.appendChild(gapCell);
       row.parentNode.insertBefore(gapRow, row);
       return;
     }
     if (anchor?.parentNode) {
-      anchor.parentNode.insertBefore(createGap(height, gap.navigationIndex), anchor);
+      insertGapBefore(anchor, createGap(height, gap.navigationIndex), height);
       return;
     }
     root.appendChild(createGap(height, gap.navigationIndex));

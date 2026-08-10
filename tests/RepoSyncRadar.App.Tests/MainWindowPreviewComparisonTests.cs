@@ -722,9 +722,9 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("display: table-cell", applyScript, StringComparison.Ordinal);
         Assert.Contains("rsr-preview-diff-alignment-gap-row", applyScript, StringComparison.Ordinal);
         Assert.Contains("gapRow.className = 'rsr-preview-diff-alignment-gap-row'", applyScript, StringComparison.Ordinal);
-        Assert.Contains("Array.from(table?.rows || [])", applyScript, StringComparison.Ordinal);
-        Assert.Contains("count + Math.max(1, cell.colSpan || 1)", applyScript, StringComparison.Ordinal);
-        Assert.Contains("gapCell.colSpan = columnCount", applyScript, StringComparison.Ordinal);
+        Assert.Contains("const activeRowSpans = []", applyScript, StringComparison.Ordinal);
+        Assert.Contains("activeRowSpans[columnIndex + offset]", applyScript, StringComparison.Ordinal);
+        Assert.Contains("gapCell.colSpan = getTableColumnCount(table)", applyScript, StringComparison.Ordinal);
         Assert.Contains("aria-hidden", applyScript, StringComparison.Ordinal);
         Assert.Contains("role", applyScript, StringComparison.Ordinal);
         Assert.Contains("data-rsr-diff-navigation-index", applyScript, StringComparison.Ordinal);
@@ -732,6 +732,8 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const preservedScrollTop = 0", applyScript, StringComparison.Ordinal);
         Assert.Contains("window.scrollTo", applyScript, StringComparison.Ordinal);
         Assert.Contains("__repoSyncRadarDiffNavigation?.refresh?.()", applyScript, StringComparison.Ordinal);
+        Assert.Contains("const actualDisplacement =", applyScript, StringComparison.Ordinal);
+        Assert.Contains("'margin-block-end'", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("anchor?.closest('.ghd-", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("createGap(height, gap.navigationIndex, 'li')", applyScript, StringComparison.Ordinal);
     }
