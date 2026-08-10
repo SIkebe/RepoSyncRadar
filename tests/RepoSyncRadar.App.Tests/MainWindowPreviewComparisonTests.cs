@@ -315,19 +315,19 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Theory]
-    [InlineData("rsr-preview-scroll:before:0.25", true, 0.25)]
-    [InlineData("rsr-preview-scroll:after:1.5", false, 1)]
+    [InlineData("rsr-preview-scroll:before:0", true, 0)]
+    [InlineData("rsr-preview-scroll:after:1520.75", false, 1520.75)]
     [InlineData("rsr-preview-scroll:before:-0.2", true, 0)]
-    public void TryParsePreviewScrollMessage_Parses_Pane_And_Clamps_Ratio(
+    public void TryParsePreviewScrollMessage_Parses_Pane_And_Clamps_ScrollTop(
         string message,
         bool expectedBeforePane,
-        double expectedRatio)
+        double expectedScrollTop)
     {
-        var parsed = MainWindow.TryParsePreviewScrollMessage(message, out var pane, out var ratio);
+        var parsed = MainWindow.TryParsePreviewScrollMessage(message, out var pane, out var scrollTop);
 
         Assert.True(parsed);
         Assert.Equal(expectedBeforePane, pane == PreviewDiffPane.Before);
-        Assert.Equal(expectedRatio, ratio, precision: 6);
+        Assert.Equal(expectedScrollTop, scrollTop, precision: 6);
     }
 
     [Theory]
@@ -336,8 +336,7 @@ public sealed class MainWindowPreviewComparisonTests
     [InlineData("rsr-preview-scroll:left:0.5")]
     [InlineData("rsr-preview-scroll:before:not-a-number")]
     [InlineData("unrelated:before:0.5")]
-    [InlineData("rsr-preview-scroll:before:0.5:120")] // 4-part is malformed: must be 3, 5, or 6
-    [InlineData("rsr-preview-scroll:before:0.5:120:YWJj:sideways")]
+    [InlineData("rsr-preview-scroll:before:0.5:120")]
     public void TryParsePreviewScrollMessage_Rejects_Invalid_Messages(string? message)
     {
         var parsed = MainWindow.TryParsePreviewScrollMessage(message, out _, out _);
@@ -346,65 +345,7 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
-    public void TryParsePreviewScrollMessage_Parses_Scroll_Direction()
-    {
-        var message = "rsr-preview-scroll:after:0.42:delta:180.5:down";
-
-        var parsed = MainWindow.TryParsePreviewScrollMessage(
-            message,
-            out var pane,
-            out var ratio,
-            out var anchorOffsetPx,
-            out var anchorFingerprint,
-            out var scrollDeltaPx,
-            out var direction);
-
-        Assert.True(parsed);
-        Assert.Equal(PreviewDiffPane.After, pane);
-        Assert.Equal(0.42, ratio, precision: 6);
-        Assert.True(double.IsNaN(anchorOffsetPx));
-        Assert.Null(anchorFingerprint);
-        Assert.Equal(180.5, scrollDeltaPx, precision: 6);
-        Assert.Equal(PreviewScrollDirection.Down, direction);
-    }
-
-    [Fact]
-    public void TryParsePreviewScrollMessage_Parses_Anchor_Fingerprint_And_Offset()
-    {
-        const string fingerprint = "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA=="; // base64("Setting up GitHub Copilot")
-        var message = $"rsr-preview-scroll:after:0.42:120.5:{fingerprint}";
-
-        var parsed = MainWindow.TryParsePreviewScrollMessage(
-            message,
-            out var pane,
-            out var ratio,
-            out var anchorOffsetPx,
-            out var anchorFingerprint);
-
-        Assert.True(parsed);
-        Assert.Equal(PreviewDiffPane.After, pane);
-        Assert.Equal(0.42, ratio, precision: 6);
-        Assert.Equal(120.5, anchorOffsetPx, precision: 6);
-        Assert.Equal(fingerprint, anchorFingerprint);
-    }
-
-    [Fact]
-    public void TryParsePreviewScrollMessage_Anchor_Outputs_Default_To_Empty_For_Legacy_Messages()
-    {
-        var parsed = MainWindow.TryParsePreviewScrollMessage(
-            "rsr-preview-scroll:before:0.25",
-            out _,
-            out _,
-            out var anchorOffsetPx,
-            out var anchorFingerprint);
-
-        Assert.True(parsed);
-        Assert.True(double.IsNaN(anchorOffsetPx));
-        Assert.Null(anchorFingerprint);
-    }
-
-    [Fact]
-    public void BuildInstallSynchronizedScrollScript_Posts_Anchored_Scroll_Message()
+    public void BuildInstallSynchronizedScrollScript_Posts_Absolute_ScrollTop()
     {
         var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.Before);
 
@@ -413,81 +354,25 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("window.addEventListener('scroll'", script, StringComparison.Ordinal);
         Assert.Contains("requestAnimationFrame", script, StringComparison.Ordinal);
         Assert.Contains("lastScrollTop", script, StringComparison.Ordinal);
-        Assert.Contains("delta.toFixed(2)", script, StringComparison.Ordinal);
-        Assert.Contains("rsr-preview-scroll:${pane}:${ratio}:delta", script, StringComparison.Ordinal);
+        Assert.Contains("currentTop.toFixed(2)", script, StringComparison.Ordinal);
+        Assert.Contains("rsr-preview-scroll:${pane}:${currentTop.toFixed(2)}", script, StringComparison.Ordinal);
         Assert.Contains("event.key !== 'F7'", script, StringComparison.Ordinal);
         Assert.Contains("rsr-preview-diff-navigation:${direction}", script, StringComparison.Ordinal);
         Assert.Contains("window.addEventListener('keydown', keyHandler, true)", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("rsr-preview-scroll:${pane}:${ratio}`", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("scheduleCorrection", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("computeFingerprint", script, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void BuildInstallSynchronizedScrollScript_Schedules_Gentle_Anchor_Correction()
+    public void BuildApplySynchronizedScrollScript_Uses_Absolute_ScrollTop_And_Suppresses_Feedback()
     {
-        var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.After);
+        var script = MainWindow.BuildApplySynchronizedScrollScript(1520.75);
 
-        // Wheel motion is synchronized immediately by delta, then a debounced
-        // correction nudges visible shared content back into alignment. Changed
-        // blocks are excluded so inserted-only regions do not snap sections.
-        Assert.Contains("scheduleCorrection", script, StringComparison.Ordinal);
-        Assert.Contains("window.setTimeout", script, StringComparison.Ordinal);
-        Assert.Contains("}, 220)", script, StringComparison.Ordinal);
-        Assert.Contains("rsr-rendered-diff-added", script, StringComparison.Ordinal);
-        Assert.Contains("!el.matches(renderedDiffSelector)", script, StringComparison.Ordinal);
-        Assert.Contains("anchor.rect.top.toFixed(2)", script, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BuildApplySynchronizedScrollScript_Uses_Delta_When_Provided()
-    {
-        var script = MainWindow.BuildApplySynchronizedScrollScript(
-            ratio: 0.5,
-            anchorOffsetPx: null,
-            anchorFingerprintBase64: null,
-            scrollDeltaPx: -220.25,
-            scrollDirection: PreviewScrollDirection.Up);
-
-        Assert.Contains("const scrollDeltaPx = -220.25", script, StringComparison.Ordinal);
-        Assert.Contains("const scrollDirection = \"up\"", script, StringComparison.Ordinal);
-        Assert.Contains("const maxDelta = 900;", script, StringComparison.Ordinal);
-        Assert.Contains("window.scrollBy({ left: 0, top: clampedDelta", script, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BuildApplySynchronizedScrollScript_Clamps_Ratio_And_Suppresses_Feedback()
-    {
-        var script = MainWindow.BuildApplySynchronizedScrollScript(2.4);
-
-        Assert.Contains("const ratio = 1", script, StringComparison.Ordinal);
+        Assert.Contains("const scrollTop = 1520.75", script, StringComparison.Ordinal);
         Assert.Contains("suppressUntil", script, StringComparison.Ordinal);
         Assert.Contains("Date.now() + 1000", script, StringComparison.Ordinal);
-        Assert.Contains("window.scrollTo", script, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BuildApplySynchronizedScrollScript_Uses_Anchor_When_Provided()
-    {
-        var script = MainWindow.BuildApplySynchronizedScrollScript(
-            ratio: 0.5,
-            anchorOffsetPx: 120.5,
-            anchorFingerprintBase64: "U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==",
-            scrollDirection: PreviewScrollDirection.Down);
-
-        Assert.Contains("U2V0dGluZyB1cCBHaXRIdWIgQ29waWxvdA==", script, StringComparison.Ordinal);
-        Assert.Contains("120.5", script, StringComparison.Ordinal);
-        Assert.Contains("window.scrollBy", script, StringComparison.Ordinal); // anchor branch uses scrollBy(delta)
-        Assert.Contains(
-            "const maxDelta = Math.max(120, Math.min(900, window.innerHeight * 0.75));",
-            script,
-            StringComparison.Ordinal);
-        Assert.Contains("top: clampedDelta", script, StringComparison.Ordinal);
-        Assert.Contains("const scrollDirection = \"down\"", script, StringComparison.Ordinal);
+        Assert.Contains("top: Math.min(scrollTop, maxScrollTop)", script, StringComparison.Ordinal);
         Assert.Contains("window[stateKey].lastScrollTop = getScrollTop()", script, StringComparison.Ordinal);
-        // Ratio fallback remains available for legacy ratio-only messages, but
-        // anchor-bearing messages should not jump by ratio when the peer lacks
-        // the changed block.
-        Assert.Contains("const ratio = 0.5", script, StringComparison.Ordinal);
-        Assert.Contains("if (!scrolled && !anchorFingerprint)", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -664,6 +549,8 @@ public sealed class MainWindowPreviewComparisonTests
         var change = Assert.Single(plan.Changes);
         Assert.Equal(_indexOne, change.BeforeIndexes);
         Assert.Equal(_indexOne, change.AfterIndexes);
+        Assert.Equal(2, change.BeforeAnchorIndex);
+        Assert.Equal(2, change.AfterAnchorIndex);
     }
 
     [Fact]
@@ -716,8 +603,63 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(2, plan.Changes.Count);
         Assert.Empty(plan.Changes[0].BeforeIndexes);
         Assert.Equal(_indexOne, plan.Changes[0].AfterIndexes);
+        Assert.Equal(1, plan.Changes[0].BeforeAnchorIndex);
+        Assert.Equal(2, plan.Changes[0].AfterAnchorIndex);
         Assert.Equal([2], plan.Changes[1].BeforeIndexes);
         Assert.Equal([3], plan.Changes[1].AfterIndexes);
+        Assert.Equal(3, plan.Changes[1].BeforeAnchorIndex);
+        Assert.Equal(4, plan.Changes[1].AfterAnchorIndex);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildAlignmentGapPlan_Fills_Shorter_Pane_At_Each_Hunk()
+    {
+        var changes = new[]
+        {
+            new PreviewDiffChange([], [1], 1, 2),
+            new PreviewDiffChange([2], [3], 3, 4),
+        };
+
+        var gaps = PreviewDiffHighlighter.BuildAlignmentGapPlan(
+            changes,
+            [120, 340],
+            [200, 420]);
+
+        var beforeGap = Assert.Single(gaps.Before);
+        Assert.Equal(0, beforeGap.NavigationIndex);
+        Assert.Equal(1, beforeGap.AnchorIndex);
+        Assert.Equal(80, beforeGap.Height, precision: 3);
+        Assert.Empty(gaps.After);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_AlignmentScripts_Measure_Anchors_And_Draw_Striped_Gaps()
+    {
+        var measureScript = PreviewDiffHighlighter.BuildMeasureAlignmentAnchorsScript("[1,null]");
+        var applyScript = PreviewDiffHighlighter.BuildApplyAlignmentGapsScript(
+            """[{"anchorIndex":1,"height":80,"navigationIndex":0}]""");
+
+        Assert.Contains("rsr-preview-diff-alignment-gap", measureScript, StringComparison.Ordinal);
+        Assert.Contains("style.setProperty('display', 'none', 'important')", measureScript, StringComparison.Ordinal);
+        Assert.Contains("style.removeProperty('display')", measureScript, StringComparison.Ordinal);
+        Assert.Contains("scrollTop", measureScript, StringComparison.Ordinal);
+        Assert.Contains("offsets", measureScript, StringComparison.Ordinal);
+        Assert.Contains("getBoundingClientRect().top + window.scrollY", measureScript, StringComparison.Ordinal);
+        Assert.Contains("root.getBoundingClientRect().bottom + window.scrollY", measureScript, StringComparison.Ordinal);
+        Assert.Contains(": null", measureScript, StringComparison.Ordinal);
+        Assert.Contains("repeating-linear-gradient", applyScript, StringComparison.Ordinal);
+        Assert.Contains("td.rsr-preview-diff-alignment-gap", applyScript, StringComparison.Ordinal);
+        Assert.Contains("display: table-cell", applyScript, StringComparison.Ordinal);
+        Assert.Contains("rsr-preview-diff-alignment-gap-row", applyScript, StringComparison.Ordinal);
+        Assert.Contains("gapRow.className = 'rsr-preview-diff-alignment-gap-row'", applyScript, StringComparison.Ordinal);
+        Assert.Contains("aria-hidden", applyScript, StringComparison.Ordinal);
+        Assert.Contains("role", applyScript, StringComparison.Ordinal);
+        Assert.Contains("data-rsr-diff-navigation-index", applyScript, StringComparison.Ordinal);
+        Assert.Contains("height.toFixed(2)", applyScript, StringComparison.Ordinal);
+        Assert.Contains("const preservedScrollTop = 0", applyScript, StringComparison.Ordinal);
+        Assert.Contains("window.scrollTo", applyScript, StringComparison.Ordinal);
+        Assert.Contains("__repoSyncRadarDiffNavigation?.refresh?.()", applyScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("createGap(height, gap.navigationIndex, 'li')", applyScript, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -730,6 +672,10 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("right: 24px", script, StringComparison.Ordinal);
         Assert.Contains("width: 10px", script, StringComparison.Ordinal);
         Assert.Contains("const markerGroups = new Map()", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "document.querySelectorAll('.rsr-preview-diff-block,[data-rsr-diff-navigation-index]')",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("`hunk-${navigationIndex}`", script, StringComparison.Ordinal);
         Assert.Contains("Math.min(...rects.map((rect) => rect.top))", script, StringComparison.Ordinal);
         Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
@@ -738,6 +684,10 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("markerTop.toFixed(1)", script, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", script, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "window.__repoSyncRadarDiffScrollbar = { scheduleBuild: buildMarkers }",
+            script,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -918,12 +868,17 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("Math.min(...rects.map((rect) => rect.left))", script, StringComparison.Ordinal);
         Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
         Assert.Contains("new ResizeObserver(positionOverlay)", script, StringComparison.Ordinal);
+        Assert.Contains("const refreshTargets = () =>", script, StringComparison.Ordinal);
+        Assert.Contains("window.__repoSyncRadarDiffNavigation = {", script, StringComparison.Ordinal);
+        Assert.Contains("refresh: refreshTargets", script, StringComparison.Ordinal);
         Assert.Contains("resizeObserver.observe(document.body)", script, StringComparison.Ordinal);
         Assert.DoesNotContain(
             "targets.forEach((target) => target.classList.add('rsr-preview-diff-active'))",
             script,
             StringComparison.Ordinal);
-        Assert.Contains("targetTop - (window.innerHeight - targetRect.height) / 2", script, StringComparison.Ordinal);
+        Assert.Contains("Math.min(...targetRects.map((rect) => rect.top))", script, StringComparison.Ordinal);
+        Assert.Contains("Math.max(...targetRects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
+        Assert.Contains("targetTop - (window.innerHeight - targetHeight) / 2", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollTo({ top: centeredScrollTop, behavior: 'auto' })", script, StringComparison.Ordinal);
         Assert.Contains("__repoSyncRadarPreviewScrollSync", script, StringComparison.Ordinal);
         Assert.Contains("return { found: true, ratio }", script, StringComparison.Ordinal);

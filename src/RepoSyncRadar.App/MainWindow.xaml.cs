@@ -63,13 +63,6 @@ internal enum WebViewHistoryNavigationDirection
     Forward,
 }
 
-internal enum PreviewScrollDirection
-{
-    Unknown,
-    Up,
-    Down,
-}
-
 internal enum PreviewDiffNavigationDirection
 {
     Previous = -1,
@@ -148,6 +141,7 @@ public partial class MainWindow : Window
     private static readonly GridLength _collapsedWorkbenchColumnWidth = new(1);
     private static readonly GridLength _collapsedSplitterColumnWidth = new(0);
     private static readonly TimeSpan _previewFocusLayoutShieldDuration = TimeSpan.FromMilliseconds(120);
+    private static readonly TimeSpan _previewAlignmentDebounce = TimeSpan.FromMilliseconds(150);
 
     private readonly UrlAllowList _allowList;
     private readonly PreviewSession _previewSession;
@@ -166,6 +160,7 @@ public partial class MainWindow : Window
     private int _requestedPreviewDiffIndex = -1;
     private int _previewDiffNavigationOperationId;
     private int _previewDiffCount;
+    private PreviewDiffPlan? _activePreviewDiffPlan;
     private Task _previewDiffNavigationTask = Task.CompletedTask;
     private bool _beforePreviewDiffReady;
     private bool _afterPreviewDiffReady;
@@ -182,6 +177,7 @@ public partial class MainWindow : Window
     private bool _previewFocusModeChangeScheduled;
     private DocsThemeMode _docsTheme = DocsThemeMode.Dark;
     private readonly DispatcherTimer _previewFocusLayoutShieldTimer;
+    private readonly DispatcherTimer _previewAlignmentTimer;
     private HwndSource? _windowHwndSource;
     private string? _docsThemeDocumentScriptId;
     private string? _previewThemeDocumentScriptId;
@@ -207,6 +203,11 @@ public partial class MainWindow : Window
             Interval = _previewFocusLayoutShieldDuration,
         };
         _previewFocusLayoutShieldTimer.Tick += OnPreviewFocusLayoutShieldTimerTick;
+        _previewAlignmentTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = _previewAlignmentDebounce,
+        };
+        _previewAlignmentTimer.Tick += OnPreviewAlignmentTimerTick;
 
         _userSettingsStore = services.GetRequiredService<IAppUserSettingsStore>();
         _docsTheme = _userSettingsStore.Current.DefaultDocsTheme;
@@ -258,6 +259,8 @@ public partial class MainWindow : Window
             }
             _previewFocusLayoutShieldTimer.Stop();
             _previewFocusLayoutShieldTimer.Tick -= OnPreviewFocusLayoutShieldTimerTick;
+            _previewAlignmentTimer.Stop();
+            _previewAlignmentTimer.Tick -= OnPreviewAlignmentTimerTick;
         };
         _logger = services.GetRequiredService<ILoggerFactory>().CreateLogger<MainWindow>();
 
@@ -1209,28 +1212,6 @@ public partial class MainWindow : Window
             _currentPreviewDiffIndex = targetIndex;
             _requestedPreviewDiffIndex = targetIndex;
             UpdatePreviewDiffNavigationControls();
-            if (beforeResult.Found && !afterResult.Found)
-            {
-                await ApplySynchronizedScrollAsync(
-                    PreviewView,
-                    beforeResult.Ratio,
-                    double.NaN,
-                    null,
-                    double.NaN,
-                    PreviewScrollDirection.Unknown,
-                    generation);
-            }
-            else if (!beforeResult.Found && afterResult.Found)
-            {
-                await ApplySynchronizedScrollAsync(
-                    DocsView,
-                    afterResult.Ratio,
-                    double.NaN,
-                    null,
-                    double.NaN,
-                    PreviewScrollDirection.Unknown,
-                    generation);
-            }
         }
 
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1310,6 +1291,7 @@ public partial class MainWindow : Window
     private void StartPreviewDiffTracking(PreviewComparisonRequest request)
     {
         _activePreviewDiffRequest = request;
+        _activePreviewDiffPlan = null;
         _previewDiffGeneration++;
         ResetPreviewDiffNavigation();
         _beforePreviewDiffReady = false;
@@ -1321,6 +1303,7 @@ public partial class MainWindow : Window
     private void StopPreviewDiffTracking()
     {
         _activePreviewDiffRequest = null;
+        _activePreviewDiffPlan = null;
         _previewDiffGeneration++;
         ResetPreviewDiffNavigation();
         _beforePreviewDiffReady = false;
@@ -1652,11 +1635,7 @@ public partial class MainWindow : Window
         if (!TryParsePreviewScrollMessage(
                 message,
                 out var sourcePane,
-                out var ratio,
-                out var anchorOffsetPx,
-                out var anchorFingerprint,
-                out var scrollDeltaPx,
-                out var scrollDirection))
+                out var scrollTop))
         {
             return;
         }
@@ -1674,11 +1653,7 @@ public partial class MainWindow : Window
         var targetView = sourcePane == PreviewDiffPane.Before ? PreviewView : DocsView;
         _ = ApplySynchronizedScrollAsync(
             targetView,
-            ratio,
-            anchorOffsetPx,
-            anchorFingerprint,
-            scrollDeltaPx,
-            scrollDirection,
+            scrollTop,
             _previewDiffGeneration);
     }
 
@@ -1824,11 +1799,7 @@ public partial class MainWindow : Window
 
     private async Task ApplySynchronizedScrollAsync(
         WebView2CompositionControl targetView,
-        double ratio,
-        double anchorOffsetPx,
-        string? anchorFingerprint,
-        double scrollDeltaPx,
-        PreviewScrollDirection scrollDirection,
+        double scrollTop,
         int generation)
     {
         try
@@ -1840,12 +1811,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var script = BuildApplySynchronizedScrollScript(
-                ratio,
-                double.IsNaN(anchorOffsetPx) ? null : anchorOffsetPx,
-                anchorFingerprint,
-                double.IsNaN(scrollDeltaPx) ? null : scrollDeltaPx,
-                scrollDirection);
+            var script = BuildApplySynchronizedScrollScript(scrollTop);
             await targetView.ExecuteScriptAsync(script);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1881,6 +1847,7 @@ public partial class MainWindow : Window
             }
 
             var plan = PreviewDiffHighlighter.BuildPlan(blocks[0], blocks[1]);
+            _activePreviewDiffPlan = plan;
             var beforeNavigationTargets = plan.Changes
                 .SelectMany(
                     static (change, navigationIndex) => change.BeforeIndexes.Select(
@@ -1898,6 +1865,15 @@ public partial class MainWindow : Window
                 PreviewDiffHighlighter.ApplyRenderedNavigationPlanAsync(
                     PreviewView,
                     afterNavigationTargets));
+            await PreviewDiffHighlighter.ApplyAlignmentGapsAsync(
+                DocsView,
+                PreviewView,
+                plan.Changes,
+                () => IsPreviewDiffOperationCurrent(
+                    _activePreviewDiffRequest,
+                    request,
+                    _previewDiffGeneration,
+                    generation));
             if (!IsPreviewDiffOperationCurrent(
                     _activePreviewDiffRequest,
                     request,
@@ -1980,6 +1956,7 @@ public partial class MainWindow : Window
             }
 
             var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+            _activePreviewDiffPlan = plan;
             var beforeNavigationTargets = plan.Changes
                 .SelectMany(
                     static (change, navigationIndex) => change.BeforeIndexes.Select(
@@ -2000,6 +1977,15 @@ public partial class MainWindow : Window
                 plan.AfterChangedIndexes,
                 PreviewDiffPane.After,
                 afterNavigationTargets);
+            await PreviewDiffHighlighter.ApplyAlignmentGapsAsync(
+                DocsView,
+                PreviewView,
+                plan.Changes,
+                () => IsPreviewDiffOperationCurrent(
+                    _activePreviewDiffRequest,
+                    request,
+                    _previewDiffGeneration,
+                    generation));
 
             if (!IsPreviewDiffOperationCurrent(
                     _activePreviewDiffRequest,
@@ -2063,6 +2049,47 @@ public partial class MainWindow : Window
         PreviewDocsSplitterColumn.Width = new GridLength(5);
         OfficialDocsColumn.Width = new GridLength(1, GridUnitType.Star);
         PreviewDocsColumn.Width = new GridLength(1, GridUnitType.Star);
+    }
+
+    private void OnPreviewPaneSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_activePreviewDiffPlan is null || !_beforePreviewDiffReady || !_afterPreviewDiffReady)
+        {
+            return;
+        }
+
+        _previewAlignmentTimer.Stop();
+        _previewAlignmentTimer.Start();
+    }
+
+    private async void OnPreviewAlignmentTimerTick(object? sender, EventArgs e)
+    {
+        _previewAlignmentTimer.Stop();
+        var plan = _activePreviewDiffPlan;
+        var generation = _previewDiffGeneration;
+        if (plan is null || !_beforePreviewDiffReady || !_afterPreviewDiffReady)
+        {
+            return;
+        }
+        try
+        {
+            if (!ReferenceEquals(plan, _activePreviewDiffPlan)
+                || generation != _previewDiffGeneration)
+            {
+                return;
+            }
+
+            await PreviewDiffHighlighter.ApplyAlignmentGapsAsync(
+                DocsView,
+                PreviewView,
+                plan.Changes,
+                () => ReferenceEquals(plan, _activePreviewDiffPlan)
+                    && generation == _previewDiffGeneration);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPreviewDiffNavigationFailed(_logger, ex);
+        }
     }
 
     private void ShowOfficialOnlyMode()
@@ -2409,9 +2436,9 @@ public partial class MainWindow : Window
 
         internal static string BuildInstallSynchronizedScrollScript(PreviewDiffPane pane)
         {
-                var paneName = pane == PreviewDiffPane.Before ? "before" : "after";
-                var paneJson = JsonSerializer.Serialize(paneName);
-                return $$"""
+            var paneName = pane == PreviewDiffPane.Before ? "before" : "after";
+            var paneJson = JsonSerializer.Serialize(paneName);
+            return $$"""
 (() => {
     const pane = {{paneJson}};
     const stateKey = '__repoSyncRadarPreviewScrollSync';
@@ -2422,100 +2449,10 @@ public partial class MainWindow : Window
     if (existing && existing.keyHandler) {
         window.removeEventListener('keydown', existing.keyHandler, true);
     }
-    if (existing && existing.correctionTimer) {
-        window.clearTimeout(existing.correctionTimer);
-    }
-
-    const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
-    const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
-    const renderedDiffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed,.rsr-preview-diff-block';
-
-    const getMaxScrollTop = () => {
-        const root = document.scrollingElement || document.documentElement || document.body;
-        if (!root) {
-            return 0;
-        }
-        return Math.max(0, root.scrollHeight - window.innerHeight);
-    };
-
-    const getScrollRatio = () => {
-        const root = document.scrollingElement || document.documentElement || document.body;
-        const maxScrollTop = getMaxScrollTop();
-        const currentTop = window.scrollY || root?.scrollTop || 0;
-        if (maxScrollTop <= 0) {
-            return 0;
-        }
-        return Math.max(0, Math.min(1, currentTop / maxScrollTop));
-    };
 
     const getScrollTop = () => {
         const root = document.scrollingElement || document.documentElement || document.body;
         return window.scrollY || root?.scrollTop || 0;
-    };
-
-    const findCandidateBlocks = () => {
-        const stamped = document.querySelectorAll('[data-rsr-diff-index]');
-        const blocks = stamped.length > 0
-            ? Array.from(stamped)
-            : (() => {
-                const articleRoot =
-                    document.querySelector('main article') ||
-                    document.querySelector('article') ||
-                    document.querySelector('[data-testid="article-body"]') ||
-                    document.querySelector('main') ||
-                    document.body;
-                if (!articleRoot) {
-                    return [];
-                }
-                return Array.from(articleRoot.querySelectorAll(leafSelector))
-                    .filter((el) => !el.closest(blockedAncestorSelector))
-                    .filter((el) => {
-                        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-                        return text.length >= 4 && !el.querySelector(leafSelector);
-                    });
-            })();
-        return blocks.filter((el) => !el.matches(renderedDiffSelector) && !el.querySelector(renderedDiffSelector));
-    };
-
-    const computeFingerprint = (el) => {
-        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-        if (text.length < 4) {
-            return '';
-        }
-        const slice = text.slice(0, 96);
-        try {
-            return btoa(unescape(encodeURIComponent(slice)));
-        } catch (_) {
-            return '';
-        }
-    };
-
-    const pickVisibleCorrectionAnchor = () => {
-        for (const el of findCandidateBlocks()) {
-            const rect = el.getBoundingClientRect();
-            if (rect.bottom > 0 && rect.top < window.innerHeight) {
-                return { el, rect };
-            }
-        }
-        return null;
-    };
-
-    const scheduleCorrection = (ratio, direction) => {
-        if (window[stateKey]?.correctionTimer) {
-            window.clearTimeout(window[stateKey].correctionTimer);
-        }
-        window[stateKey].correctionTimer = window.setTimeout(() => {
-            if (Date.now() < (window[stateKey]?.suppressUntil || 0)) {
-                return;
-            }
-            const anchor = pickVisibleCorrectionAnchor();
-            const fingerprint = anchor ? computeFingerprint(anchor.el) : '';
-            if (!anchor || !fingerprint) {
-                return;
-            }
-            window.chrome?.webview?.postMessage(
-                `rsr-preview-scroll:${pane}:${ratio}:${anchor.rect.top.toFixed(2)}:${fingerprint}:${direction}`);
-        }, 220);
     };
 
     let frame = 0;
@@ -2530,20 +2467,12 @@ public partial class MainWindow : Window
             }
             const currentTop = getScrollTop();
             const previousTop = window[stateKey]?.lastScrollTop ?? currentTop;
-            const direction = currentTop > previousTop + 0.5
-                ? 'down'
-                : currentTop < previousTop - 0.5
-                    ? 'up'
-                    : '';
             window[stateKey].lastScrollTop = currentTop;
-            if (!direction) {
+            if (Math.abs(currentTop - previousTop) <= 0.5) {
                 return;
             }
-            const delta = currentTop - previousTop;
-            const ratio = getScrollRatio().toFixed(6);
             window.chrome?.webview?.postMessage(
-                `rsr-preview-scroll:${pane}:${ratio}:delta:${delta.toFixed(2)}:${direction}`);
-            scheduleCorrection(ratio, direction);
+                `rsr-preview-scroll:${pane}:${currentTop.toFixed(2)}`);
         });
     };
 
@@ -2564,7 +2493,6 @@ public partial class MainWindow : Window
         keyHandler,
         suppressUntil: existing?.suppressUntil || 0,
         lastScrollTop: existing?.lastScrollTop ?? getScrollTop(),
-        correctionTimer: 0,
     };
     window.addEventListener('scroll', handler, { passive: true });
     window.addEventListener('keydown', keyHandler, true);
@@ -2601,120 +2529,27 @@ public partial class MainWindow : Window
 })();
 """;
 
-        internal static string BuildApplySynchronizedScrollScript(double ratio)
-            => BuildApplySynchronizedScrollScript(ratio, anchorOffsetPx: null, anchorFingerprintBase64: null);
-
-        internal static string BuildApplySynchronizedScrollScript(
-            double ratio,
-            double? anchorOffsetPx,
-            string? anchorFingerprintBase64,
-            double? scrollDeltaPx = null,
-            PreviewScrollDirection scrollDirection = PreviewScrollDirection.Unknown)
+        internal static string BuildApplySynchronizedScrollScript(double scrollTop)
         {
-                var clampedRatio = Math.Clamp(ratio, 0, 1).ToString("R", CultureInfo.InvariantCulture);
-                var hasAnchor = !string.IsNullOrEmpty(anchorFingerprintBase64)
-                    && anchorOffsetPx is { } px && double.IsFinite(px);
-                var hasDelta = scrollDeltaPx is { } deltaPx && double.IsFinite(deltaPx);
-                var anchorJson = JsonSerializer.Serialize(hasAnchor ? anchorFingerprintBase64 : string.Empty);
-                var directionJson = JsonSerializer.Serialize(scrollDirection switch
-                {
-                    PreviewScrollDirection.Down => "down",
-                    PreviewScrollDirection.Up => "up",
-                    _ => string.Empty,
-                });
-                var deltaLiteral = hasDelta
-                    ? scrollDeltaPx!.Value.ToString("R", CultureInfo.InvariantCulture)
-                    : "0";
-                var anchorOffsetLiteral = hasAnchor
-                    ? anchorOffsetPx!.Value.ToString("R", CultureInfo.InvariantCulture)
-                    : "0";
-                return $$"""
+            var scrollTopLiteral = Math.Max(0, scrollTop).ToString("R", CultureInfo.InvariantCulture);
+            return $$"""
 (() => {
     const stateKey = '__repoSyncRadarPreviewScrollSync';
     const root = document.scrollingElement || document.documentElement || document.body;
     if (!root) {
         return false;
     }
-    const ratio = {{clampedRatio}};
-    const anchorFingerprint = {{anchorJson}};
-    const scrollDirection = {{directionJson}};
-    const scrollDeltaPx = {{deltaLiteral}};
-    const anchorOffsetPx = {{anchorOffsetLiteral}};
-    const leafSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th';
-    const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
+    const scrollTop = {{scrollTopLiteral}};
     const getScrollTop = () => window.scrollY || root.scrollTop || 0;
 
     window[stateKey] = window[stateKey] || {};
     window[stateKey].suppressUntil = Date.now() + 1000;
-
-    const findCandidateBlocks = () => {
-        const stamped = document.querySelectorAll('[data-rsr-diff-index]');
-        if (stamped.length > 0) {
-            return Array.from(stamped);
-        }
-        const articleRoot =
-            document.querySelector('main article') ||
-            document.querySelector('article') ||
-            document.querySelector('[data-testid="article-body"]') ||
-            document.querySelector('main') ||
-            document.body;
-        if (!articleRoot) {
-            return [];
-        }
-        return Array.from(articleRoot.querySelectorAll(leafSelector))
-            .filter((el) => !el.closest(blockedAncestorSelector))
-            .filter((el) => {
-                const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-                return text.length >= 4 && !el.querySelector(leafSelector);
-            });
-    };
-
-    const computeFingerprint = (el) => {
-        const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
-        if (text.length < 4) {
-            return '';
-        }
-        const slice = text.slice(0, 96);
-        try {
-            return btoa(unescape(encodeURIComponent(slice)));
-        } catch (_) {
-            return '';
-        }
-    };
-
-    let scrolled = false;
-    if (scrollDeltaPx !== 0) {
-        const maxDelta = 900;
-        const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, scrollDeltaPx));
-        const directionAllowsDelta = scrollDirection === 'down'
-            ? clampedDelta > 0
-            : scrollDirection === 'up'
-                ? clampedDelta < 0
-                : true;
-        if (directionAllowsDelta && Math.abs(clampedDelta) > 0.5) {
-            window.scrollBy({ left: 0, top: clampedDelta, behavior: 'auto' });
-        }
-        scrolled = true;
-    }
-    if (anchorFingerprint) {
-        for (const el of findCandidateBlocks()) {
-            if (computeFingerprint(el) === anchorFingerprint) {
-                const targetTop = el.getBoundingClientRect().top;
-                const delta = targetTop - anchorOffsetPx;
-                const maxDelta = Math.max(120, Math.min(900, window.innerHeight * 0.75));
-                const clampedDelta = Math.max(-maxDelta, Math.min(maxDelta, delta));
-                if (Math.abs(clampedDelta) > 0.5) {
-                    window.scrollBy({ left: 0, top: clampedDelta, behavior: 'auto' });
-                }
-                scrolled = true;
-                break;
-            }
-        }
-    }
-    if (!scrolled && !anchorFingerprint) {
-        const maxScrollTop = Math.max(0, root.scrollHeight - window.innerHeight);
-        window.scrollTo({ left: window.scrollX || root.scrollLeft || 0, top: maxScrollTop * ratio, behavior: 'auto' });
-    }
+    const maxScrollTop = Math.max(0, root.scrollHeight - window.innerHeight);
+    window.scrollTo({
+        left: window.scrollX || root.scrollLeft || 0,
+        top: Math.min(scrollTop, maxScrollTop),
+        behavior: 'auto'
+    });
     window[stateKey].lastScrollTop = getScrollTop();
     return true;
 })();
@@ -2722,10 +2557,40 @@ public partial class MainWindow : Window
         }
 
         internal static bool TryParsePreviewScrollMessage(
-                string? message,
-                out PreviewDiffPane pane,
-                out double ratio)
-            => TryParsePreviewScrollMessage(message, out pane, out ratio, out _, out _, out _, out _);
+            string? message,
+            out PreviewDiffPane pane,
+            out double scrollTop)
+        {
+            pane = default;
+            scrollTop = 0;
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return false;
+            }
+
+            var parts = message.Split(':');
+            if (parts.Length != 3
+                || !string.Equals(parts[0], "rsr-preview-scroll", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            pane = parts[1] switch
+            {
+                "before" => PreviewDiffPane.Before,
+                "after" => PreviewDiffPane.After,
+                _ => default,
+            };
+            if (parts[1] is not ("before" or "after")
+                || !double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedScrollTop)
+                || !double.IsFinite(parsedScrollTop))
+            {
+                return false;
+            }
+
+            scrollTop = Math.Max(0, parsedScrollTop);
+            return true;
+        }
 
         internal static bool TryParsePreviewVersionMessage(string? message, out DocsVersion version)
         {
@@ -2910,107 +2775,6 @@ public partial class MainWindow : Window
 
         private static int HiWord(IntPtr value)
             => unchecked((ushort)(((long)value >> 16) & 0xFFFF));
-
-        internal static bool TryParsePreviewScrollMessage(
-                string? message,
-                out PreviewDiffPane pane,
-                out double ratio,
-                out double anchorOffsetPx,
-                out string? anchorFingerprint)
-            => TryParsePreviewScrollMessage(
-                message,
-                out pane,
-                out ratio,
-                out anchorOffsetPx,
-                out anchorFingerprint,
-                out _,
-                out _);
-
-        internal static bool TryParsePreviewScrollMessage(
-                string? message,
-                out PreviewDiffPane pane,
-                out double ratio,
-                out double anchorOffsetPx,
-                out string? anchorFingerprint,
-                out double scrollDeltaPx,
-                out PreviewScrollDirection scrollDirection)
-        {
-                pane = default;
-                ratio = 0;
-                anchorOffsetPx = double.NaN;
-                anchorFingerprint = null;
-                scrollDeltaPx = double.NaN;
-                scrollDirection = PreviewScrollDirection.Unknown;
-                if (string.IsNullOrWhiteSpace(message))
-                {
-                        return false;
-                }
-
-                var parts = message.Split(':');
-                // 3-part: legacy ratio-only.
-                // 5-part: ratio + anchor (offset, base64 fingerprint).
-                // 6-part: ratio + either anchor or delta payload + source scroll direction.
-                if ((parts.Length != 3 && parts.Length != 5 && parts.Length != 6)
-                        || !string.Equals(parts[0], "rsr-preview-scroll", StringComparison.Ordinal))
-                {
-                        return false;
-                }
-
-                pane = parts[1] switch
-                {
-                        "before" => PreviewDiffPane.Before,
-                        "after" => PreviewDiffPane.After,
-                        _ => default,
-                };
-                if (parts[1] is not ("before" or "after"))
-                {
-                        return false;
-                }
-
-                if (!double.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedRatio)
-                        || !double.IsFinite(parsedRatio))
-                {
-                        return false;
-                }
-
-                ratio = Math.Clamp(parsedRatio, 0, 1);
-
-                if (parts.Length is 5 or 6)
-                {
-                    if (string.Equals(parts[3], "delta", StringComparison.Ordinal))
-                    {
-                        if (!double.TryParse(parts[4], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedDelta)
-                            || !double.IsFinite(parsedDelta))
-                        {
-                            return false;
-                        }
-                        scrollDeltaPx = parsedDelta;
-                    }
-                    else if (double.TryParse(parts[3], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedOffset)
-                                && double.IsFinite(parsedOffset)
-                                && !string.IsNullOrEmpty(parts[4]))
-                        {
-                                anchorOffsetPx = parsedOffset;
-                                anchorFingerprint = parts[4];
-                        }
-                }
-
-                if (parts.Length == 6)
-                {
-                    scrollDirection = parts[5] switch
-                    {
-                        "down" => PreviewScrollDirection.Down,
-                        "up" => PreviewScrollDirection.Up,
-                        _ => PreviewScrollDirection.Unknown,
-                    };
-                    if (scrollDirection == PreviewScrollDirection.Unknown)
-                    {
-                        return false;
-                    }
-                }
-
-                return true;
-        }
 
     internal static GridLength ResolveWorkbenchColumnRestoreWidth(GridLength? savedWidth)
     {

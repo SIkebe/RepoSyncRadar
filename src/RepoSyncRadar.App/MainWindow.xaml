@@ -274,8 +274,10 @@
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1"
-            Grid.Column="0">
+      <Grid x:Name="DocsViewHost"
+            Grid.Row="1"
+            Grid.Column="0"
+            SizeChanged="OnPreviewPaneSizeChanged">
         <wv2:WebView2CompositionControl x:Name="DocsView" />
         <Border x:Name="DocsPreviewStatusOverlay"
                 Panel.ZIndex="1"
@@ -309,6 +311,7 @@
       <Grid Grid.Row="1"
             Grid.Column="2"
             x:Name="PreviewViewHost"
+            SizeChanged="OnPreviewPaneSizeChanged"
             Visibility="Collapsed">
         <wv2:WebView2CompositionControl x:Name="PreviewView" />
         <Border x:Name="PreviewStatusOverlay"
