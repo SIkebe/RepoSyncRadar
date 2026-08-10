@@ -27,7 +27,7 @@ RepoSyncRadar が GitHub Copilot SDK セッションで使うモデルまたは 
    - modelへ公開するtoolは`view`、`glob`、`grep`、`lsp`だけに限定し、`skill`、subagent、web、shell、write toolを公開しない。
    - `--deny-tool=write --deny-tool='shell(*)' --disable-builtin-mcps` を指定する。
    - `copilot mcp list --json`でuser、workspace、plugin由来の全MCP server名を取得し、それぞれを`--disable-mcp-server`で無効化する。列挙に失敗した場合はベンチマークを実行しない。
-   - ベンチマーク結果をリポジトリへ保存しない。
+   - raw prompt、model出力、timing、session artifactはリポジトリへ保存しない。機密情報を含まない成功率、中央値、範囲、provenanceのaggregate baselineは、このSkillの比較基準として保存してよい。
 
 3. **実際のコード理解を測る。**
    - 単純な知識問題ではなく、複数ファイルにまたがる呼び出し経路、状態遷移、例外処理、テスト範囲を調べさせる。
