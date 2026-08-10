@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -36,6 +37,7 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
 {
     private const int _gitHubMaxPageSize = 100;
     private const string _diffMediaType = "application/vnd.github.v3.diff";
+    private const string _jsonMediaType = "application/vnd.github+json";
 
     private readonly IGitHubClient _github;
     private readonly IGitHubAccessTokenProvider _tokenProvider;
@@ -109,25 +111,43 @@ public sealed class DocsGitHubClient : IDocsGitHubClient
         ArgumentException.ThrowIfNullOrWhiteSpace(sha);
         await EnsureAuthenticatedAsync(cancellationToken).ConfigureAwait(false);
 
-        cancellationToken.ThrowIfCancellationRequested();
-        var commit = await _github.Repository.Commit.Get(_options.Owner, _options.Repo, sha).ConfigureAwait(false);
-        if (commit.Files is null)
+        var uri = new Uri($"repos/{_options.Owner}/{_options.Repo}/commits/{sha}", UriKind.Relative);
+        var files = new List<DomainCommitFile>();
+        for (var page = 1; ; page++)
         {
-            return Array.Empty<DomainCommitFile>();
+            cancellationToken.ThrowIfCancellationRequested();
+            var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["per_page"] = _gitHubMaxPageSize.ToString(CultureInfo.InvariantCulture),
+                ["page"] = page.ToString(CultureInfo.InvariantCulture),
+            };
+            var response = await _github.Connection
+                .Get<GitHubCommit>(uri, parameters, _jsonMediaType, cancellationToken)
+                .ConfigureAwait(false);
+            var pageFiles = response.Body?.Files;
+            if (pageFiles is null)
+            {
+                break;
+            }
+
+            foreach (var file in pageFiles)
+            {
+                files.Add(new DomainCommitFile
+                {
+                    Sha = sha,
+                    Path = file.Filename ?? string.Empty,
+                    Status = file.Status ?? string.Empty,
+                    Additions = file.Additions,
+                    Deletions = file.Deletions,
+                });
+            }
+
+            if (pageFiles.Count < _gitHubMaxPageSize)
+            {
+                break;
+            }
         }
 
-        var files = new List<DomainCommitFile>(commit.Files.Count);
-        foreach (var file in commit.Files)
-        {
-            files.Add(new DomainCommitFile
-            {
-                Sha = sha,
-                Path = file.Filename ?? string.Empty,
-                Status = file.Status ?? string.Empty,
-                Additions = file.Additions,
-                Deletions = file.Deletions,
-            });
-        }
         return files;
     }
 

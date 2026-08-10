@@ -264,6 +264,46 @@ public class DocsGitHubClientTests
     }
 
     [Fact]
+    public async Task GetCommitFilesAsync_Paginates_All_Changed_Files()
+    {
+        var (client, github, _, _) = CreateClient();
+        var ct = TestContext.Current.CancellationToken;
+        var firstPage = Enumerable.Range(1, 100)
+            .Select(i => MakeGitHubCommitFile($"content/ignored/{i}.md"))
+            .ToArray();
+        var secondPage = new[]
+        {
+            MakeGitHubCommitFile("content/review-me.md", status: "added", additions: 2),
+        };
+        var firstResponse = Substitute.For<IApiResponse<GitHubCommit>>();
+        firstResponse.Body.Returns(MakeGitHubCommit(firstPage));
+        var secondResponse = Substitute.For<IApiResponse<GitHubCommit>>();
+        secondResponse.Body.Returns(MakeGitHubCommit(secondPage));
+        github.Connection.Get<GitHubCommit>(
+                Arg.Any<Uri>(),
+                Arg.Is<IDictionary<string, string>>(parameters => parameters["page"] == "1"),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(firstResponse);
+        github.Connection.Get<GitHubCommit>(
+                Arg.Any<Uri>(),
+                Arg.Is<IDictionary<string, string>>(parameters => parameters["page"] == "2"),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(secondResponse);
+
+        var files = await client.GetCommitFilesAsync("deadbeef", ct);
+
+        Assert.Equal(101, files.Count);
+        Assert.Equal("content/review-me.md", files[^1].Path);
+        await github.Connection.Received(2).Get<GitHubCommit>(
+            Arg.Is<Uri>(uri => uri.ToString() == $"repos/{_owner}/{_repo}/commits/deadbeef"),
+            Arg.Is<IDictionary<string, string>>(parameters => parameters["per_page"] == "100"),
+            "application/vnd.github+json",
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task GetUnifiedDiffAsync_Sets_Accept_Header()
     {
         var (client, github, _, _) = CreateClient();
@@ -424,6 +464,31 @@ public class DocsGitHubClientTests
             sha: sha,
             url: string.Empty);
     }
+
+    private static GitHubCommit MakeGitHubCommit(IReadOnlyList<GitHubCommitFile> files)
+    {
+        var commit = new GitHubCommit();
+        typeof(GitHubCommit).GetProperty(nameof(GitHubCommit.Files))!.SetValue(commit, files);
+        return commit;
+    }
+
+    private static GitHubCommitFile MakeGitHubCommitFile(
+        string filename,
+        string status = "modified",
+        int additions = 1,
+        int deletions = 0)
+        => new(
+            filename,
+            additions,
+            deletions,
+            additions + deletions,
+            status,
+            blobUrl: string.Empty,
+            contentsUrl: string.Empty,
+            rawUrl: string.Empty,
+            sha: string.Empty,
+            patch: string.Empty,
+            previousFileName: string.Empty);
 
     /// <summary>
     /// Minimal <see cref="ILogger{TCategoryName}"/> capture that lets a test assert against
