@@ -17,9 +17,9 @@ namespace RepoSyncRadar.App.E2E.Tests;
 [Collection(E2ETests.Name)]
 public sealed class DocsViewE2ETests
 {
-    private readonly AppHostFixture _fixture;
+    private readonly SeededAppHostFixture _fixture;
 
-    public DocsViewE2ETests(AppHostFixture fixture)
+    public DocsViewE2ETests(SeededAppHostFixture fixture)
     {
         _fixture = fixture;
     }

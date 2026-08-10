@@ -1,8 +1,6 @@
 using Xunit;
 
-// E2E tests launch the WPF app as a child process. Running two app instances
-// concurrently risks WebView2 user-data folder lock contention and CDP port
-// races. SeededAppHostFixture and AppHostFixture each spawn their own process,
-// so we serialize the entire assembly. Within a collection xUnit already runs
-// tests sequentially; this attribute extends that guarantee across collections.
+// E2E tests share one WPF app child process. Keep assembly-wide parallelization
+// disabled so any future E2E collection cannot race that process for WebView2
+// state or CDP ports.
 [assembly: CollectionBehavior(DisableTestParallelization = true)]

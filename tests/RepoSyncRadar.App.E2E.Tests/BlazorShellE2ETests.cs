@@ -20,9 +20,9 @@ public sealed class BlazorShellE2ETests
     private static readonly string[] _statusKeys =
         ["Unseen", "Adopted", "Later", "Rejected", "Archived"];
 
-    private readonly AppHostFixture _fixture;
+    private readonly SeededAppHostFixture _fixture;
 
-    public BlazorShellE2ETests(AppHostFixture fixture)
+    public BlazorShellE2ETests(SeededAppHostFixture fixture)
     {
         _fixture = fixture;
     }
@@ -45,13 +45,10 @@ public sealed class BlazorShellE2ETests
         }
 
         // CommitList / CommitDetail run their own async reload separately from
-        // Sidebar. This mount test should verify that the list settles, not that
-        // the shared app host remains empty for the whole run: a concurrent or
-        // inherited Triage can legitimately populate the temp DB before this
-        // assertion observes it.
+        // Sidebar. This mount test verifies that both settle without requiring
+        // the shared host to remain unselected after another E2E test used it.
         await WaitForCommitListSettledAsync(page);
-        await page.Locator("[data-testid='commit-detail-empty']")
-            .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
+        await WaitForCommitDetailSettledAsync(page);
     }
 
     [Fact]
@@ -129,6 +126,21 @@ public sealed class BlazorShellE2ETests
                 return !root.querySelector('[data-testid="commit-list-loading"]')
                     && (root.querySelector('[data-testid="commit-list-empty"]')
                         || root.querySelector('[data-testid="commit-row"]'));
+            }
+            """,
+            null,
+            new() { Timeout = 15000 });
+    }
+
+    private static async Task WaitForCommitDetailSettledAsync(IPage page)
+    {
+        await page.WaitForFunctionAsync(
+            """
+            () => {
+                const root = document.querySelector('[data-testid="commit-detail"]');
+                return root
+                    && (root.querySelector('[data-testid="commit-detail-empty"]')
+                        || root.querySelector('[data-testid="commit-detail-sha"]'));
             }
             """,
             null,
