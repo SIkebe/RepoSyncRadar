@@ -732,6 +732,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const preservedScrollTop = 0", applyScript, StringComparison.Ordinal);
         Assert.Contains("window.scrollTo", applyScript, StringComparison.Ordinal);
         Assert.Contains("__repoSyncRadarDiffNavigation?.refresh?.()", applyScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("anchor?.closest('.ghd-", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("createGap(height, gap.navigationIndex, 'li')", applyScript, StringComparison.Ordinal);
     }
 
@@ -769,7 +770,9 @@ public sealed class MainWindowPreviewComparisonTests
         var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
 
         Assert.Contains(".ghd-markdown-alert", script, StringComparison.Ordinal);
-        Assert.Contains("element.classList.contains('ghd-markdown-alert')", script, StringComparison.Ordinal);
+        Assert.Contains(".ghd-alert,.ghd-tool,.ghd-code-tabs", script, StringComparison.Ordinal);
+        Assert.Contains("element.matches(structuralContainerSelector)", script, StringComparison.Ordinal);
+        Assert.Contains("element.closest(structuralContainerSelector)", script, StringComparison.Ordinal);
     }
 
     [Fact]

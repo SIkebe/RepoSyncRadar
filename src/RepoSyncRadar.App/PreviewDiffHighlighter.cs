@@ -57,7 +57,9 @@ internal static class PreviewDiffHighlighter
     internal const string ExtractBlocksScriptForTests = """
 (() => {
   const mediaSelector = 'img,video,audio,iframe,object,embed';
-  const blockSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-markdown-alert';
+  const structuralContainerSelector = '.ghd-markdown-alert,.ghd-alert,.ghd-tool,.ghd-code-tabs';
+  const blockSelector =
+    `h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,${structuralContainerSelector}`;
   const leafSelector = `${blockSelector},${mediaSelector}`;
   const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
   const root =
@@ -173,11 +175,15 @@ internal static class PreviewDiffHighlighter
       if (element.matches(mediaSelector)) {
         return isVisibleMedia(element);
       }
+      if (element.closest(structuralContainerSelector) &&
+          !element.matches(structuralContainerSelector)) {
+        return false;
+      }
       const text = describe(element);
       if (text.length < 2) {
         return false;
       }
-      return element.classList.contains('ghd-markdown-alert') || !element.querySelector(blockSelector);
+      return element.matches(structuralContainerSelector) || !element.querySelector(blockSelector);
     });
 
   const alignmentGroups = new WeakMap();
@@ -645,11 +651,8 @@ td.rsr-preview-diff-alignment-gap {
       row.parentNode.insertBefore(gapRow, row);
       return;
     }
-    const placement =
-      anchor?.closest('.ghd-markdown-alert,.ghd-alert,.ghd-tool,.ghd-code-tabs') ||
-      anchor;
-    if (placement?.parentNode) {
-      placement.parentNode.insertBefore(createGap(height, gap.navigationIndex), placement);
+    if (anchor?.parentNode) {
+      anchor.parentNode.insertBefore(createGap(height, gap.navigationIndex), anchor);
       return;
     }
     root.appendChild(createGap(height, gap.navigationIndex));
