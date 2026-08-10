@@ -13,7 +13,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// </list>
 /// </summary>
 [Trait("Category", "E2E")]
-[Collection(SeededE2ETests.Name)]
+[Collection(E2ETests.Name)]
 public sealed class LegacyTeamsDraftE2ETests
 {
     private readonly SeededAppHostFixture _fixture;

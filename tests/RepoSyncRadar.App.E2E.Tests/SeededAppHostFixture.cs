@@ -8,9 +8,9 @@ namespace RepoSyncRadar.App.E2E.Tests;
 
 /// <summary>
 /// xUnit fixture that launches the App against a throwaway, fully seeded SQLite
-/// database. Used by E2E regression tests that need to verify rendering of data
-/// that is normally produced by the LLM (Scoring rows, Drafts rows). Without
-/// seeding the App boots into an empty inbox and these surfaces never appear.
+/// database. Every E2E class shares this fixture so WebView2 only starts once per
+/// test run, while tests that verify LLM-produced data have deterministic Scoring
+/// and Draft rows available.
 /// </summary>
 /// <remarks>
 /// The DB lives under <c>Path.GetTempPath()</c> so the developer's real
@@ -189,10 +189,4 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
             // Same rationale as IOException above.
         }
     }
-}
-
-[CollectionDefinition(Name)]
-public sealed class SeededE2ETests : ICollectionFixture<SeededAppHostFixture>
-{
-    public const string Name = "Seeded App End-to-end tests";
 }

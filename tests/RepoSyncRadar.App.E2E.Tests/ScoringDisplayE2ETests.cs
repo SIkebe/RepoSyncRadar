@@ -12,7 +12,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// fields appear in the Blazor view once the user clicks the seeded commit.
 /// </summary>
 [Trait("Category", "E2E")]
-[Collection(SeededE2ETests.Name)]
+[Collection(E2ETests.Name)]
 public sealed class ScoringDisplayE2ETests
 {
     private readonly SeededAppHostFixture _fixture;

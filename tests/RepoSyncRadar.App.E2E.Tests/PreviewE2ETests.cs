@@ -31,7 +31,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// has a real bare clone in <c>appsettings.Local.json</c>.
 /// </remarks>
 [Trait("Category", "E2E")]
-[Collection(SeededE2ETests.Name)]
+[Collection(E2ETests.Name)]
 public sealed class PreviewE2ETests
 {
     private const string _previewDisabledStatus =
