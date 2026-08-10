@@ -37,8 +37,8 @@ function Get-PropertyValue {
     }
 
     foreach ($name in $Names) {
-        if ($Object.PSObject.Properties.Name -contains $name) {
-            return $Object.$name
+        if ($null -ne $Object.PSObject.Properties[$name]) {
+            return $Object.PSObject.Properties[$name].Value
         }
     }
 
