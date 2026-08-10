@@ -34,6 +34,7 @@ internal static class SessionConfigBuilder
         {
             ClientName = _clientName,
             Model = copilot.DefaultModel,
+            ReasoningEffort = copilot.ReasoningEffort,
             ContextTier = ParseContextTier(copilot.ContextTier),
             Streaming = copilot.Streaming,
             SystemMessage = new SystemMessageConfig

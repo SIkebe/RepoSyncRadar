@@ -24,6 +24,7 @@ public class OptionsValidationTests
       },
       "Copilot": {
         "DefaultModel": "gpt-5",
+        "ReasoningEffort": "high",
         "Streaming": true,
         "CaptureContent": false,
         "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ]
@@ -44,6 +45,7 @@ public class OptionsValidationTests
         Assert.Null(github.PullRequestCreatedAtOrAfter);
         Assert.Equal(new Uri("https://docs.github.com/"), docs.BaseAddress);
         Assert.Equal("gpt-5", copilot.DefaultModel);
+        Assert.Equal("high", copilot.ReasoningEffort);
     }
 
     [Fact]
@@ -184,6 +186,21 @@ public class OptionsValidationTests
             () => _ = sp.GetRequiredService<IOptions<CopilotOptions>>().Value);
 
         Assert.Contains("ContextTier", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Bind_CopilotReasoningEffortInvalid_ThrowsOptionsValidationException()
+    {
+        var json = _validJson.Replace(
+            "\"ReasoningEffort\": \"high\"",
+            "\"ReasoningEffort\": \"extreme\"",
+            StringComparison.Ordinal);
+        using var sp = BuildServiceProvider(json);
+
+        var ex = Assert.Throws<OptionsValidationException>(
+            () => _ = sp.GetRequiredService<IOptions<CopilotOptions>>().Value);
+
+        Assert.Contains("ReasoningEffort", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

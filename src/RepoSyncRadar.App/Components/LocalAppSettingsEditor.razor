@@ -97,6 +97,17 @@
                     <span>@L["LocalSettings.Label.DefaultModel"]</span>
                     <input data-testid="settings-copilot-model" value="@settings.Copilot.DefaultModel" disabled="@_saving" @oninput="e => settings.Copilot.DefaultModel = StringValue(e)" />
                 </label>
+                <label class="local-settings-field">
+                    <span>@L["LocalSettings.Label.ReasoningEffort"]</span>
+                    <select data-testid="settings-copilot-reasoning-effort" @bind:get="settings.Copilot.ReasoningEffort" @bind:set="value => settings.Copilot.ReasoningEffort = NullableStringValue(value)" disabled="@_saving">
+                        <option value="">@L["LocalSettings.Option.SdkDefault"]</option>
+                        <option value="low">low</option>
+                        <option value="medium">medium</option>
+                        <option value="high">high</option>
+                        <option value="xhigh">xhigh</option>
+                        <option value="max">max</option>
+                    </select>
+                </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-copilot-streaming" checked="@settings.Copilot.Streaming" disabled="@_saving" @onchange="e => settings.Copilot.Streaming = BoolValue(e)" />
                     <span>@L["LocalSettings.Label.Streaming"]</span>

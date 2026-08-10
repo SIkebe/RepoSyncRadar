@@ -68,16 +68,17 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
       // null / 未指定なら作成日では絞り込まない。
       "PullRequestCreatedAtOrAfter": "2026-05-15T00:00:00Z"
    },
-  "Copilot": {
-    "DefaultModel": "gpt-5",
+   "Copilot": {
+      "DefaultModel": "gpt-5.6-luna",
+      "ReasoningEffort": "high",
       "LogLevel": "info",
       "SessionIdleTimeoutSeconds": 0,
       "TelemetryFilePath": "",
       "CaptureContent": false,
-    "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ],
+      "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ],
       // 任意: 公式配布 Client ID を使う場合は省略。独自 OAuth App の場合だけ指定。
       "OAuthClientId": "Iv23liXXXXXXXXXXXXXX",
-    "OAuthScopes": [ "public_repo" ]
+      "OAuthScopes": [ "public_repo" ]
   },
   // ローカル Markdown プレビューを使う場合のみ。空ならローカルプレビュー機能はオフ。
   "DocsRepository": {

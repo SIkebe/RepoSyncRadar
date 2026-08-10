@@ -269,7 +269,7 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 ### 7.1 `MorningTriageSession`
 
 - 朝の一括処理。「最新の Repo sync PR を取り込み、スコアリング → 要約 → Must read 5 件を選出」。
-- モデル: `gpt-5` 既定(コスト最適)。`Streaming = true`。
+- モデル: `gpt-5.6-luna` / reasoning effort `high` を既定とする。`Streaming = true`。
 - `SystemMessageMode.Append` で日本語の運用ルール(無視リスト、ブースト、媒体特性)を投入。
 
 ### 7.2 `AdoptionSession`
