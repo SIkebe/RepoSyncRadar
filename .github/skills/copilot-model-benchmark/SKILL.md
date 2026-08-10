@@ -25,6 +25,7 @@ RepoSyncRadar が GitHub Copilot SDK セッションで使うモデルまたは 
 2. **読み取り専用にする。**
    - ベンチマークでファイル変更、shell実行、test実行、外部MCP利用を許可しない。
    - `--deny-tool=write --deny-tool='shell(*)' --disable-builtin-mcps` を指定する。
+   - `copilot mcp list --json`でuser、workspace、plugin由来の全MCP server名を取得し、それぞれを`--disable-mcp-server`で無効化する。列挙に失敗した場合はベンチマークを実行しない。
    - ベンチマーク結果をリポジトリへ保存しない。
 
 3. **実際のコード理解を測る。**
@@ -97,6 +98,16 @@ $prompt = 'READ-ONLY BENCHMARK. Do not edit files, run shell commands, or run te
 $output = Join-Path $artifactDir "$model-$effort.txt"
 $timing = Join-Path $artifactDir "$model-$effort.time.txt"
 
+$mcpConfigJson = & copilot.cmd mcp list --json
+if ($LASTEXITCODE -ne 0) {
+    throw "Configured MCP servers could not be enumerated."
+}
+$mcpConfig = $mcpConfigJson | ConvertFrom-Json
+$disabledMcpArgs = @(
+    $mcpConfig.mcpServers.PSObject.Properties.Name |
+        ForEach-Object { "--disable-mcp-server=$_" }
+)
+
 $sw = [Diagnostics.Stopwatch]::StartNew()
 & copilot.cmd -C . `
   --model $model `
@@ -106,6 +117,7 @@ $sw = [Diagnostics.Stopwatch]::StartNew()
   --deny-tool=write `
   --deny-tool='shell(*)' `
   --disable-builtin-mcps `
+  @disabledMcpArgs `
   --no-custom-instructions `
   --no-remote `
   --no-remote-export `
