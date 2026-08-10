@@ -81,7 +81,7 @@ public sealed class RadarRepositoryTests
         var repository = fixture.CreateRepository();
         var ct = TestContext.Current.CancellationToken;
 
-        var commit = MakeCommit("sha-a", prNumber: 1);
+        var commit = MakeCommit("sha-a", prNumber: 1, includeDefaultFile: false);
         commit.Files.Add(new CommitFile
         {
             Sha = "sha-a",
@@ -122,7 +122,7 @@ public sealed class RadarRepositoryTests
         var repository = fixture.CreateRepository();
         var ct = TestContext.Current.CancellationToken;
 
-        var commit = MakeCommit("sha-a", prNumber: 1);
+        var commit = MakeCommit("sha-a", prNumber: 1, includeDefaultFile: false);
         commit.Files.Add(new CommitFile
         {
             Sha = "sha-a",
@@ -149,7 +149,7 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
-    public async Task UpsertCommitsAsync_AutoRejects_New_Commits_Matching_Ignore_Rules()
+    public async Task UpsertCommitsAsync_AutoRejects_Only_When_All_Files_Match_Ignore_Rules()
     {
         using var fixture = new SqliteFixture();
         var repository = fixture.CreateRepository();
@@ -166,7 +166,7 @@ public sealed class RadarRepositoryTests
             await seed.SaveChangesAsync(ct);
         }
 
-        var ignored = MakeCommit("sha-ignored", prNumber: 1);
+        var ignored = MakeCommit("sha-ignored", prNumber: 1, includeDefaultFile: false);
         ignored.Files.Add(new CommitFile
         {
             Sha = ignored.Sha,
@@ -175,7 +175,24 @@ public sealed class RadarRepositoryTests
             Additions = 1,
             Deletions = 0,
         });
-        var visible = MakeCommit("sha-visible", prNumber: 1);
+        var partiallyIgnored = MakeCommit("sha-partially-ignored", prNumber: 1, includeDefaultFile: false);
+        partiallyIgnored.Files.Add(new CommitFile
+        {
+            Sha = partiallyIgnored.Sha,
+            Path = "content/copilot/concepts/billing.md",
+            Status = "modified",
+            Additions = 1,
+            Deletions = 0,
+        });
+        partiallyIgnored.Files.Add(new CommitFile
+        {
+            Sha = partiallyIgnored.Sha,
+            Path = "content/actions/reference.md",
+            Status = "modified",
+            Additions = 1,
+            Deletions = 0,
+        });
+        var visible = MakeCommit("sha-visible", prNumber: 1, includeDefaultFile: false);
         visible.Files.Add(new CommitFile
         {
             Sha = visible.Sha,
@@ -185,7 +202,7 @@ public sealed class RadarRepositoryTests
             Deletions = 0,
         });
 
-        await repository.UpsertCommitsAsync([ignored, visible], ct);
+        await repository.UpsertCommitsAsync([ignored, partiallyIgnored, visible], ct);
 
         using var verify = fixture.CreateContext();
         var review = await verify.Reviews.SingleAsync(r => r.Sha == ignored.Sha, ct);
@@ -195,7 +212,28 @@ public sealed class RadarRepositoryTests
         Assert.Equal(ReviewStatus.Rejected, history.Status);
         Assert.Equal("auto-ignored", history.Reason);
         Assert.Equal(ReviewHistorySources.AutoIgnore, history.Source);
+        Assert.False(await verify.Reviews.AnyAsync(r => r.Sha == partiallyIgnored.Sha, ct));
         Assert.False(await verify.Reviews.AnyAsync(r => r.Sha == visible.Sha, ct));
+    }
+
+    [Fact]
+    public async Task UpsertCommitsAsync_AutoArchives_New_Commits_With_Empty_Diffs()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+        var empty = MakeCommit("sha-empty", prNumber: 1, includeDefaultFile: false);
+
+        await repository.UpsertCommitsAsync([empty], ct);
+
+        using var verify = fixture.CreateContext();
+        var review = await verify.Reviews.SingleAsync(r => r.Sha == empty.Sha, ct);
+        Assert.Equal(ReviewStatus.Archived, review.Status);
+        Assert.Equal("empty-diff", review.Reason);
+        var history = await verify.ReviewHistories.SingleAsync(h => h.Sha == empty.Sha, ct);
+        Assert.Equal(ReviewStatus.Archived, history.Status);
+        Assert.Equal("empty-diff", history.Reason);
+        Assert.Equal(ReviewHistorySources.AutoEmptyDiff, history.Source);
     }
 
     [Fact]
@@ -762,7 +800,7 @@ public sealed class RadarRepositoryTests
         var repository = fixture.CreateRepository();
         var ct = TestContext.Current.CancellationToken;
 
-        var matching = MakeCommit("sha-match", prNumber: 1);
+        var matching = MakeCommit("sha-match", prNumber: 1, includeDefaultFile: false);
         matching.Files.Add(new CommitFile
         {
             Sha = matching.Sha,
@@ -771,7 +809,7 @@ public sealed class RadarRepositoryTests
             Additions = 1,
             Deletions = 0,
         });
-        var other = MakeCommit("sha-other", prNumber: 1);
+        var other = MakeCommit("sha-other", prNumber: 1, includeDefaultFile: false);
         other.Files.Add(new CommitFile
         {
             Sha = other.Sha,
@@ -970,10 +1008,11 @@ public sealed class RadarRepositoryTests
         int prNumber,
         DateTime? authoredAt = null,
         DateTime? fetchedAt = null,
-        string? message = null)
+        string? message = null,
+        bool includeDefaultFile = true)
     {
         var now = new DateTime(2026, 5, 13, 12, 0, 0, DateTimeKind.Utc);
-        return new Commit
+        var commit = new Commit
         {
             Sha = sha,
             PrNumber = prNumber,
@@ -982,6 +1021,19 @@ public sealed class RadarRepositoryTests
             AuthoredAt = authoredAt ?? now,
             FetchedAt = fetchedAt ?? now,
         };
+        if (includeDefaultFile)
+        {
+            commit.Files.Add(new CommitFile
+            {
+                Sha = sha,
+                Path = $"content/test/{sha}.md",
+                Status = "modified",
+                Additions = 1,
+                Deletions = 0,
+            });
+        }
+
+        return commit;
     }
 
     /// <summary>

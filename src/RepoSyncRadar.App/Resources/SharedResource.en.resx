@@ -167,6 +167,7 @@
   <data name="CommitDetail.History.Review.DescriptionWithReason" xml:space="preserve"><value>Source: {0}. Reason: {1}</value></data>
   <data name="CommitDetail.History.Source.User" xml:space="preserve"><value>user action</value></data>
   <data name="CommitDetail.History.Source.AutoIgnore" xml:space="preserve"><value>ignore rule</value></data>
+  <data name="CommitDetail.History.Source.AutoEmptyDiff" xml:space="preserve"><value>empty-diff automation</value></data>
   <data name="CommitDetail.History.Source.BulkIgnore" xml:space="preserve"><value>bulk ignore</value></data>
   <data name="CommitDetail.History.Draft.Title" xml:space="preserve"><value>{0} draft generated</value></data>
   <data name="CommitDetail.History.Draft.Description" xml:space="preserve"><value>Saved the sharing draft displayed for {0}.</value></data>

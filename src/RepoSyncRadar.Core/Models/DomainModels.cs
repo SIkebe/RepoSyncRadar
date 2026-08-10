@@ -118,6 +118,7 @@ public static class ReviewHistorySources
 {
     public const string User = "user";
     public const string AutoIgnore = "auto-ignore";
+    public const string AutoEmptyDiff = "auto-empty-diff";
     public const string BulkIgnore = "bulk-ignore";
 }
 

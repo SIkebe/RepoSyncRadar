@@ -31,7 +31,8 @@ public interface IRadarRepository
     /// whose <see cref="Commit.Sha"/> is already in the store are left untouched (including
     /// their <see cref="Commit.FetchedAt"/>), so this method is safe to call repeatedly with
     /// overlapping batches. <see cref="Commit.Files"/> are cascade-persisted for newly inserted
-    /// rows only.
+    /// rows only. New commits with no changed files are automatically archived; commits whose
+    /// changed files all match ignore rules are automatically rejected.
     /// </summary>
     /// <returns>The SHAs that were actually inserted, in input order.</returns>
     Task<IReadOnlyList<string>> UpsertCommitsAsync(
