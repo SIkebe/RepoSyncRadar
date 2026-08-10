@@ -851,6 +851,59 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderedDiff_Does_Not_Insert_Span_Into_Autotitle_Href_With_Comparison_Contexts()
+    {
+        const string beforeMarkdown = "See [AUTOTITLE](/old-target).";
+        const string afterMarkdown = "See [AUTOTITLE](/new-target).";
+        var beforeContext = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/old-target"] = "Old target",
+            });
+        var afterContext = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/new-target"] = "New target",
+            });
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "501a9d1",
+            "変更前",
+            beforeContext,
+            diffAgainstMarkdown: afterMarkdown,
+            diffAgainstLiquidContext: afterContext,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "c19e3ad",
+            "PR HEAD",
+            afterContext,
+            diffAgainstMarkdown: beforeMarkdown,
+            diffAgainstLiquidContext: beforeContext,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-removed\"><a href=\"/old-target\">Old target</a></span>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\"><a href=\"/new-target\">New target</a></span>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("href=\"/old<span", beforeHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("href=\"/new<span", afterHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("%3Cspan", beforeHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("%3Cspan", afterHtml, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void RenderedDiff_Does_Not_Insert_Span_Into_Autotitle_Link_Destination()
     {
         var context = new DocsLiquidContext(

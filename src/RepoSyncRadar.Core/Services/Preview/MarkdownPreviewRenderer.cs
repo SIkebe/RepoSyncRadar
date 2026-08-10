@@ -3149,6 +3149,7 @@ internal static partial class MarkdownPreviewRenderer
                 : content;
         }
         changedRange = ExpandRenderedDiffRange(content, changedRange);
+        changedRange = ExpandRenderedDiffRangeAroundChangedAnchor(content, changedRange);
         changedRange = SnapRangeOutsideLiquidTokens(content, changedRange);
         if (changedRange.Length == 0)
         {
@@ -3156,6 +3157,48 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         return WrapRenderedDiffRangePreservingInlineCode(content, markerClass, changedRange);
+    }
+
+    private static InlineChangedRange ExpandRenderedDiffRangeAroundChangedAnchor(
+        string content,
+        InlineChangedRange changedRange)
+    {
+        var changedEnd = changedRange.End;
+        var searchStart = 0;
+        while (searchStart < content.Length)
+        {
+            var anchorStart = content.IndexOf("<a", searchStart, StringComparison.OrdinalIgnoreCase);
+            if (anchorStart < 0)
+            {
+                return changedRange;
+            }
+
+            var openingEnd = content.IndexOf('>', anchorStart + 2);
+            if (openingEnd < 0)
+            {
+                return changedRange;
+            }
+
+            var closingStart = content.IndexOf("</a>", openingEnd + 1, StringComparison.OrdinalIgnoreCase);
+            if (closingStart < 0)
+            {
+                return changedRange;
+            }
+
+            var closingEnd = closingStart + 4;
+            var changedRangeIntersectsOpeningTag = changedRange.Start < openingEnd + 1
+                && changedEnd > anchorStart;
+            if (changedRangeIntersectsOpeningTag)
+            {
+                var expandedStart = Math.Min(changedRange.Start, anchorStart);
+                var expandedEnd = Math.Max(changedEnd, closingEnd);
+                return new InlineChangedRange(expandedStart, expandedEnd - expandedStart);
+            }
+
+            searchStart = closingEnd;
+        }
+
+        return changedRange;
     }
 
     private static string WrapRenderedDiffRangePreservingInlineCode(
