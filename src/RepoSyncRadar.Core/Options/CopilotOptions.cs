@@ -18,7 +18,7 @@ public sealed class CopilotOptions
 
     /// <summary>Optional reasoning effort override for models that support it.</summary>
     [RegularExpression("^(low|medium|high|xhigh|max)$")]
-    public string? ReasoningEffort { get; set; } = "high";
+    public string? ReasoningEffort { get; set; }
 
     /// <summary>Enable streaming response chunks. Recommended for the UI.</summary>
     public bool Streaming { get; set; } = true;

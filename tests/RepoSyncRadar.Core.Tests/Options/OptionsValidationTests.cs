@@ -204,6 +204,20 @@ public class OptionsValidationTests
     }
 
     [Fact]
+    public void Bind_CopilotReasoningEffortNull_RemainsNull()
+    {
+        var json = _validJson.Replace(
+            "\"ReasoningEffort\": \"high\"",
+            "\"ReasoningEffort\": null",
+            StringComparison.Ordinal);
+        using var sp = BuildServiceProvider(json);
+
+        var copilot = sp.GetRequiredService<IOptions<CopilotOptions>>().Value;
+
+        Assert.Null(copilot.ReasoningEffort);
+    }
+
+    [Fact]
     public void Bind_CopilotDefaultModelEmpty_ThrowsOptionsValidationException()
     {
         var json = _validJson.Replace("\"DefaultModel\": \"gpt-5\"", "\"DefaultModel\": \"\"", StringComparison.Ordinal);

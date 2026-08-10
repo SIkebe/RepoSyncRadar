@@ -194,11 +194,11 @@ source/testを読み、モデルの自己評価に依存せず100点で採点す
 
 固定ルーブリックのjudgeはClaude Opus 5 / high。Solは制御フローと例外処理の精度が最も高く、Lunaは2点差でAI Credits中央値が約16分の1、TerraはLunaより低品質かつ約9倍のAI Creditsだった。この結果では既定をLuna / high、高難度用途をSol / highとする。
 
-Lunaのeffort比較:
+Lunaのeffort比較は`high`、`max`ともに各1runの参考値であり、成功率、中央値、範囲を評価できない:
 
 | Effort | Quality | AI Credits | Input | Output | Reasoning | Elapsed |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | high | 88 | 5.22 | 891.3k | 8.5k | 4.1k | 3m01s |
 | max | 89 | 5.99 | 738.6k | 15.9k | 11.3k | 3m11s |
 
-この3run比較は静的コード理解の一次評価であり、Morning Triageの採点品質を直接測ったものでも、将来のmodelを恒久的に順位付けするものでもない。新モデル評価時は同じ手法で再測定し、既定値変更前に代表的なSDKワークフローでも妥当性を確認する。
+上記のモデル間3run比較は静的コード理解の一次評価であり、Morning Triageの採点品質を直接測ったものでも、将来のmodelを恒久的に順位付けするものでもない。新モデル評価時は同じ手法で再測定し、既定値変更前に代表的なSDKワークフローでも妥当性を確認する。
