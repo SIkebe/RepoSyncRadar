@@ -424,8 +424,14 @@ public sealed class PreviewCoordinatorTests : IDisposable
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(123, "headsha", sourcePath, cancellationToken: ct);
 
         Assert.NotNull(link);
-        Assert.Contains(">Migrating from GitLab</a>", capturedPages["/markdown/before"], StringComparison.Ordinal);
-        Assert.Contains(">Migrating from GitLab to GitHub</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains(
+            ">Migrating from GitLab<span class=\"rsr-rendered-diff-added rsr-rendered-diff-gap\"",
+            capturedPages["/markdown/before"],
+            StringComparison.Ordinal);
+        Assert.Contains(
+            ">Migrating from GitLab<span class=\"rsr-rendered-diff-added\"> to GitHub</span></a>",
+            capturedPages["/markdown/after"],
+            StringComparison.Ordinal);
         Assert.DoesNotContain(">AUTOTITLE</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
     }
 

@@ -192,20 +192,32 @@ internal static partial class MarkdownPreviewRenderer
                 effectiveLiquidContext,
                 effectiveVersion);
             var tableFragmentsExpanded = ExpandMarkdownTableFragments(liquidEvaluated);
+            var compareAutotitleLabels = diffAgainstLiquidContext is not null;
+            var renderedDiffInput = compareAutotitleLabels
+                ? RewriteAutotitleMarkdownLinks(
+                    tableFragmentsExpanded,
+                    trimmedRepoPath,
+                    effectiveLiquidContext,
+                    effectiveVersion)
+                : tableFragmentsExpanded;
             var diffMarked = ApplyRenderedMarkdownDiff(
-                tableFragmentsExpanded,
+                renderedDiffInput,
                 diffAgainstMarkdown,
                 diffAgainstLiquidContext ?? DocsLiquidContext.Empty,
+                trimmedRepoPath,
                 effectiveVersion,
+                compareAutotitleLabels,
                 diffSide);
             var protectedHtmlFragments = new RenderedHtmlPlaceholderStore();
             var liquidBlocksRendered = RenderOfficialLiquidBlocks(diffMarked, protectedHtmlFragments);
             var githubAlertsRendered = RenderGitHubAlertBlocks(liquidBlocksRendered);
-            var autotitleMarkdownRewritten = RewriteAutotitleMarkdownLinks(
-                githubAlertsRendered,
-                trimmedRepoPath,
-                effectiveLiquidContext,
-                effectiveVersion);
+            var autotitleMarkdownRewritten = compareAutotitleLabels
+                ? githubAlertsRendered
+                : RewriteAutotitleMarkdownLinks(
+                    githubAlertsRendered,
+                    trimmedRepoPath,
+                    effectiveLiquidContext,
+                    effectiveVersion);
             var liquidNeutralized = NeutralizeLiquid(autotitleMarkdownRewritten);
             body = Markdown.ToHtml(liquidNeutralized, _pipeline);
             body = protectedHtmlFragments.Restore(body);
@@ -2260,7 +2272,9 @@ internal static partial class MarkdownPreviewRenderer
         string renderedMarkdown,
         string? diffAgainstMarkdown,
         DocsLiquidContext diffAgainstLiquidContext,
+        string repoPath,
         DocsVersion version,
+        bool compareAutotitleLabels,
         RenderedMarkdownDiffSide diffSide)
     {
         if (diffSide == RenderedMarkdownDiffSide.None || string.IsNullOrEmpty(diffAgainstMarkdown))
@@ -2274,6 +2288,14 @@ internal static partial class MarkdownPreviewRenderer
             diffAgainstLiquidContext,
             version);
         comparisonRendered = ExpandMarkdownTableFragments(comparisonRendered);
+        if (compareAutotitleLabels)
+        {
+            comparisonRendered = RewriteAutotitleMarkdownLinks(
+                comparisonRendered,
+                repoPath,
+                diffAgainstLiquidContext,
+                version);
+        }
         if (string.Equals(renderedMarkdown, comparisonRendered, StringComparison.Ordinal))
         {
             return renderedMarkdown;
@@ -3127,6 +3149,7 @@ internal static partial class MarkdownPreviewRenderer
                 : content;
         }
         changedRange = ExpandRenderedDiffRange(content, changedRange);
+        changedRange = ExpandRenderedDiffRangeAroundChangedAnchor(content, changedRange);
         changedRange = SnapRangeOutsideLiquidTokens(content, changedRange);
         if (changedRange.Length == 0)
         {
@@ -3134,6 +3157,48 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         return WrapRenderedDiffRangePreservingInlineCode(content, markerClass, changedRange);
+    }
+
+    private static InlineChangedRange ExpandRenderedDiffRangeAroundChangedAnchor(
+        string content,
+        InlineChangedRange changedRange)
+    {
+        var changedEnd = changedRange.End;
+        var searchStart = 0;
+        while (searchStart < content.Length)
+        {
+            var anchorStart = content.IndexOf("<a", searchStart, StringComparison.OrdinalIgnoreCase);
+            if (anchorStart < 0)
+            {
+                return changedRange;
+            }
+
+            var openingEnd = content.IndexOf('>', anchorStart + 2);
+            if (openingEnd < 0)
+            {
+                return changedRange;
+            }
+
+            var closingStart = content.IndexOf("</a>", openingEnd + 1, StringComparison.OrdinalIgnoreCase);
+            if (closingStart < 0)
+            {
+                return changedRange;
+            }
+
+            var closingEnd = closingStart + 4;
+            var changedRangeIntersectsOpeningTag = changedRange.Start < openingEnd + 1
+                && changedEnd > anchorStart;
+            if (changedRangeIntersectsOpeningTag)
+            {
+                var expandedStart = Math.Min(changedRange.Start, anchorStart);
+                var expandedEnd = Math.Max(changedEnd, closingEnd);
+                return new InlineChangedRange(expandedStart, expandedEnd - expandedStart);
+            }
+
+            searchStart = closingEnd;
+        }
+
+        return changedRange;
     }
 
     private static string WrapRenderedDiffRangePreservingInlineCode(
