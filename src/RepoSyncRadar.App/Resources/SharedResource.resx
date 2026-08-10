@@ -167,6 +167,7 @@
   <data name="CommitDetail.History.Review.DescriptionWithReason" xml:space="preserve"><value>記録元: {0}。理由: {1}</value></data>
   <data name="CommitDetail.History.Source.User" xml:space="preserve"><value>ユーザー操作</value></data>
   <data name="CommitDetail.History.Source.AutoIgnore" xml:space="preserve"><value>ignore ルール</value></data>
+  <data name="CommitDetail.History.Source.AutoEmptyDiff" xml:space="preserve"><value>空差分の自動整理</value></data>
   <data name="CommitDetail.History.Source.BulkIgnore" xml:space="preserve"><value>一括 ignore</value></data>
   <data name="CommitDetail.History.Draft.Title" xml:space="preserve"><value>{0} 文案を生成</value></data>
   <data name="CommitDetail.History.Draft.Description" xml:space="preserve"><value>{0} に表示する共有文案を保存しました。</value></data>

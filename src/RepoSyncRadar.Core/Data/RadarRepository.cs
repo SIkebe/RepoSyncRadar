@@ -107,24 +107,25 @@ public sealed class RadarRepository : IRadarRepository
             }
             db.Commits.Add(commit);
             inserted.Add(commit.Sha);
-            if (MatchesIgnoreRule(commit, ignoreRules))
+            if (commit.Files.Count == 0)
             {
-                var reviewedAt = now;
-                db.Reviews.Add(new Review
-                {
-                    Sha = commit.Sha,
-                    Status = ReviewStatus.Rejected,
-                    Reason = "auto-ignored",
-                    ReviewedAt = reviewedAt,
-                });
-                db.ReviewHistories.Add(new ReviewHistory
-                {
-                    Sha = commit.Sha,
-                    Status = ReviewStatus.Rejected,
-                    Reason = "auto-ignored",
-                    ChangedAt = reviewedAt,
-                    Source = ReviewHistorySources.AutoIgnore,
-                });
+                AddAutomaticReview(
+                    db,
+                    commit.Sha,
+                    ReviewStatus.Archived,
+                    "empty-diff",
+                    ReviewHistorySources.AutoEmptyDiff,
+                    now);
+            }
+            else if (AllFilesMatchIgnoreRules(commit, ignoreRules))
+            {
+                AddAutomaticReview(
+                    db,
+                    commit.Sha,
+                    ReviewStatus.Rejected,
+                    "auto-ignored",
+                    ReviewHistorySources.AutoIgnore,
+                    now);
             }
         }
 
@@ -136,14 +137,39 @@ public sealed class RadarRepository : IRadarRepository
         return inserted;
     }
 
-    private static bool MatchesIgnoreRule(Commit commit, List<IgnoreRule> ignoreRules)
+    private static void AddAutomaticReview(
+        RadarDbContext db,
+        string sha,
+        ReviewStatus status,
+        string reason,
+        string source,
+        DateTime reviewedAt)
+    {
+        db.Reviews.Add(new Review
+        {
+            Sha = sha,
+            Status = status,
+            Reason = reason,
+            ReviewedAt = reviewedAt,
+        });
+        db.ReviewHistories.Add(new ReviewHistory
+        {
+            Sha = sha,
+            Status = status,
+            Reason = reason,
+            ChangedAt = reviewedAt,
+            Source = source,
+        });
+    }
+
+    private static bool AllFilesMatchIgnoreRules(Commit commit, List<IgnoreRule> ignoreRules)
     {
         if (ignoreRules.Count == 0 || commit.Files.Count == 0)
         {
             return false;
         }
 
-        return ignoreRules.Any(rule => commit.Files.Any(file => MatchesIgnorePattern(file.Path, rule.Pattern)));
+        return commit.Files.All(file => ignoreRules.Any(rule => MatchesIgnorePattern(file.Path, rule.Pattern)));
     }
 
     private static bool MatchesIgnorePattern(string path, string pattern)
