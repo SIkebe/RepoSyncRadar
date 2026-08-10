@@ -784,7 +784,11 @@ public sealed class MainWindowPreviewComparisonTests
 
         Assert.Contains("Array.from(root.querySelectorAll('table'))", script, StringComparison.Ordinal);
         Assert.Contains("cell.rowSpan === 0", script, StringComparison.Ordinal);
-        Assert.Contains("sectionEndRowIndex - rowIndex + 1", script, StringComparison.Ordinal);
+        Assert.Contains("const rowsRemainingInSection =", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "Math.min(rowsRemainingInSection, Math.max(1, cell.rowSpan))",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("groupEndRowIndex", script, StringComparison.Ordinal);
     }
 

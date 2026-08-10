@@ -201,9 +201,10 @@ internal static class PreviewDiffHighlighter
           candidate.parentElement === row.parentElement ? candidateIndex : endIndex,
         rowIndex);
       Array.from(row.cells).forEach((cell) => {
+        const rowsRemainingInSection = sectionEndRowIndex - rowIndex + 1;
         const effectiveRowSpan = cell.rowSpan === 0
-          ? sectionEndRowIndex - rowIndex + 1
-          : Math.max(1, cell.rowSpan);
+          ? rowsRemainingInSection
+          : Math.min(rowsRemainingInSection, Math.max(1, cell.rowSpan));
         groupEndRowIndex = Math.max(
           groupEndRowIndex,
           rowIndex + effectiveRowSpan - 1);
@@ -669,9 +670,10 @@ td.rsr-preview-diff-alignment-gap {
             }
           }
         }
+        const rowsRemainingInSection = sectionEndRowIndex - rowIndex + 1;
         const effectiveRowSpan = cell.rowSpan === 0
-          ? sectionEndRowIndex - rowIndex + 1
-          : Math.max(1, cell.rowSpan);
+          ? rowsRemainingInSection
+          : Math.min(rowsRemainingInSection, Math.max(1, cell.rowSpan));
         for (let offset = 0; offset < colSpan; offset++) {
           activeRowSpans[columnIndex + offset] = Math.max(
             activeRowSpans[columnIndex + offset] || 0,
