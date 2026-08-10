@@ -264,6 +264,7 @@
   <data name="LocalSettings.Label.ClientName" xml:space="preserve"><value>ClientName</value></data>
   <data name="LocalSettings.Label.PageListCacheSeconds" xml:space="preserve"><value>PageListCacheSeconds</value></data>
   <data name="LocalSettings.Label.DefaultModel" xml:space="preserve"><value>DefaultModel</value></data>
+  <data name="LocalSettings.Label.ReasoningEffort" xml:space="preserve"><value>ReasoningEffort</value></data>
   <data name="LocalSettings.Label.Streaming" xml:space="preserve"><value>Streaming</value></data>
   <data name="LocalSettings.Label.ContextTier" xml:space="preserve"><value>ContextTier</value></data>
   <data name="LocalSettings.Label.LogLevel" xml:space="preserve"><value>LogLevel</value></data>

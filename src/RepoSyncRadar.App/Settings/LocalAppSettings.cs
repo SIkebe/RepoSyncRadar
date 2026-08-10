@@ -75,7 +75,9 @@ public sealed class DocsApiLocalAppSettings
 
 public sealed class CopilotLocalAppSettings
 {
-    public string DefaultModel { get; set; } = "gpt-5";
+    public string DefaultModel { get; set; } = "gpt-5.6-luna";
+
+    public string? ReasoningEffort { get; set; } = "high";
 
     public bool Streaming { get; set; } = true;
 
@@ -113,6 +115,7 @@ public sealed class CopilotLocalAppSettings
         => new()
         {
             DefaultModel = DefaultModel,
+            ReasoningEffort = ReasoningEffort,
             Streaming = Streaming,
             ContextTier = ContextTier,
             LogLevel = LogLevel,

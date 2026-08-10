@@ -228,6 +228,8 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             Copilot = new CopilotLocalAppSettings
             {
                 DefaultModel = GetString(configuration, "Copilot:DefaultModel", defaults.Copilot.DefaultModel),
+                ReasoningEffort = GetNullableString(configuration, "Copilot:ReasoningEffort")?.ToLowerInvariant()
+                    ?? defaults.Copilot.ReasoningEffort,
                 Streaming = GetBool(configuration, "Copilot:Streaming", defaults.Copilot.Streaming),
                 ContextTier = GetNullableString(configuration, "Copilot:ContextTier")?.ToLowerInvariant(),
                 LogLevel = GetString(configuration, "Copilot:LogLevel", defaults.Copilot.LogLevel),
@@ -292,6 +294,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             Copilot = new CopilotLocalAppSettings
             {
                 DefaultModel = GetString(root, "Copilot", "DefaultModel", fallback.Copilot.DefaultModel),
+                ReasoningEffort = GetNullableString(root, "Copilot", "ReasoningEffort", fallback.Copilot.ReasoningEffort),
                 Streaming = GetBool(root, "Copilot", "Streaming", fallback.Copilot.Streaming),
                 ContextTier = GetNullableString(root, "Copilot", "ContextTier", fallback.Copilot.ContextTier),
                 LogLevel = GetString(root, "Copilot", "LogLevel", fallback.Copilot.LogLevel),
@@ -353,6 +356,9 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
 
         var copilot = GetOrReplaceObject(root, "Copilot");
         copilot["DefaultModel"] = settings.Copilot.DefaultModel;
+        copilot["ReasoningEffort"] = string.IsNullOrWhiteSpace(settings.Copilot.ReasoningEffort)
+            ? null
+            : settings.Copilot.ReasoningEffort;
         copilot["Streaming"] = settings.Copilot.Streaming;
         copilot["ContextTier"] = string.IsNullOrWhiteSpace(settings.Copilot.ContextTier)
             ? null
@@ -436,6 +442,7 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             Copilot = new CopilotLocalAppSettings
             {
                 DefaultModel = TrimOrEmpty(settings.Copilot.DefaultModel),
+                ReasoningEffort = NormalizeNullable(settings.Copilot.ReasoningEffort)?.ToLowerInvariant(),
                 Streaming = settings.Copilot.Streaming,
                 ContextTier = NormalizeNullable(settings.Copilot.ContextTier)?.ToLowerInvariant(),
                 LogLevel = string.IsNullOrWhiteSpace(settings.Copilot.LogLevel)
@@ -504,6 +511,11 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         ValidateRange(settings.DocsApi.PageListCacheSeconds, 1, int.MaxValue, "DocsApi.PageListCacheSeconds", errors);
 
         Require(settings.Copilot.DefaultModel, "Copilot.DefaultModel", errors);
+        if (settings.Copilot.ReasoningEffort is { } reasoningEffort
+            && reasoningEffort is not ("low" or "medium" or "high" or "xhigh" or "max"))
+        {
+            errors.Add("Copilot.ReasoningEffort は low、medium、high、xhigh、max のいずれかにしてください。");
+        }
         if (settings.Copilot.ContextTier is { } contextTier
             && !string.Equals(contextTier, "default", StringComparison.Ordinal)
             && !string.Equals(contextTier, "long_context", StringComparison.Ordinal))

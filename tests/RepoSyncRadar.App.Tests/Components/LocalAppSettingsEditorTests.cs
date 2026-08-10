@@ -15,6 +15,7 @@ public sealed class LocalAppSettingsEditorTests
         var settings = LocalAppSettings.Default.Clone();
         settings.GitHub.Owner = "github-local";
         settings.Copilot.DefaultModel = "gpt-5.5";
+        settings.Copilot.ReasoningEffort = "max";
         settings.Copilot.ContextTier = "long_context";
         settings.Copilot.EnableRemoteSessions = true;
         settings.Copilot.EnableWebSocketResponses = false;
@@ -35,6 +36,8 @@ public sealed class LocalAppSettingsEditorTests
         {
             Assert.Equal("github-local", cut.Find("[data-testid=\"settings-github-owner\"]").GetAttribute("value"));
             Assert.Equal("gpt-5.5", cut.Find("[data-testid=\"settings-copilot-model\"]").GetAttribute("value"));
+            var reasoningEffort = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-reasoning-effort\"]"));
+            Assert.Equal("max", reasoningEffort.Value);
             var contextTier = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-context-tier\"]"));
             Assert.Equal("long_context", contextTier.Value);
             Assert.True(cut.Find("[data-testid=\"settings-copilot-enable-remote-sessions\"]").HasAttribute("checked"));
@@ -101,6 +104,7 @@ public sealed class LocalAppSettingsEditorTests
 
         cut.Find("[data-testid=\"settings-github-owner\"]").Input("contoso");
         cut.Find("[data-testid=\"settings-copilot-model\"]").Input("gpt-5.5");
+        cut.Find("[data-testid=\"settings-copilot-reasoning-effort\"]").Change("high");
         cut.Find("[data-testid=\"settings-copilot-context-tier\"]").Change("long_context");
         cut.Find("[data-testid=\"settings-copilot-enable-remote-sessions\"]").Change(true);
         cut.Find("[data-testid=\"settings-copilot-enable-websocket-responses\"]").Change("false");
@@ -118,6 +122,7 @@ public sealed class LocalAppSettingsEditorTests
             Assert.NotNull(store.Saved);
             Assert.Equal("contoso", store.Saved.GitHub.Owner);
             Assert.Equal("gpt-5.5", store.Saved.Copilot.DefaultModel);
+            Assert.Equal("high", store.Saved.Copilot.ReasoningEffort);
             Assert.Equal("long_context", store.Saved.Copilot.ContextTier);
             Assert.True(store.Saved.Copilot.EnableRemoteSessions);
             Assert.False(store.Saved.Copilot.EnableWebSocketResponses.GetValueOrDefault());

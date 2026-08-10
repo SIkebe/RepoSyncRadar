@@ -95,7 +95,14 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             _permissionPolicy.HandleAsync,
             _auditHook,
             CreateToolsFor(purpose));
-        config.Model = model;
+        if (_modelOverride is null)
+        {
+            config.Model = model;
+        }
+        else
+        {
+            ConfigureFallbackModel(config, model);
+        }
 
         CopilotSession session;
         try
@@ -112,11 +119,20 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 
             LogRetryingWithFallbackModel(_logger, ex, model, fallbackModel);
             _modelOverride = fallbackModel;
-            config.Model = fallbackModel;
+            ConfigureFallbackModel(config, fallbackModel);
             session = await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
         }
 
         return new SdkCopilotSession(session, purpose, _logger, _usageTracker);
+    }
+
+    internal static void ConfigureFallbackModel(SessionConfig config, string fallbackModel)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        ArgumentException.ThrowIfNullOrWhiteSpace(fallbackModel);
+
+        config.Model = fallbackModel;
+        config.ReasoningEffort = null;
     }
 
     internal static string? ResolveFallbackModel(string? configuredModel, IReadOnlyList<string> availableModelIds)

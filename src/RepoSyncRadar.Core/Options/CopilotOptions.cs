@@ -12,9 +12,13 @@ public sealed class CopilotOptions
     /// <summary>Override the bundled Copilot CLI binary. Null means use the SDK default.</summary>
     public string? CliPath { get; set; }
 
-    /// <summary>Default model id (e.g. <c>gpt-5</c>, <c>claude-sonnet-4.5</c>).</summary>
+    /// <summary>Default model id (e.g. <c>gpt-5.6-luna</c>, <c>claude-sonnet-5</c>).</summary>
     [Required(AllowEmptyStrings = false)]
-    public string DefaultModel { get; set; } = "gpt-5";
+    public string DefaultModel { get; set; } = "gpt-5.6-luna";
+
+    /// <summary>Optional reasoning effort override for models that support it.</summary>
+    [RegularExpression("^(low|medium|high|xhigh|max)$")]
+    public string? ReasoningEffort { get; set; }
 
     /// <summary>Enable streaming response chunks. Recommended for the UI.</summary>
     public bool Streaming { get; set; } = true;

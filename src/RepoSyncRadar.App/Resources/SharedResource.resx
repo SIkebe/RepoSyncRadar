@@ -264,6 +264,7 @@
   <data name="LocalSettings.Label.ClientName" xml:space="preserve"><value>クライアント名</value></data>
   <data name="LocalSettings.Label.PageListCacheSeconds" xml:space="preserve"><value>ページ一覧キャッシュ秒数</value></data>
   <data name="LocalSettings.Label.DefaultModel" xml:space="preserve"><value>既定モデル</value></data>
+  <data name="LocalSettings.Label.ReasoningEffort" xml:space="preserve"><value>推論強度</value></data>
   <data name="LocalSettings.Label.Streaming" xml:space="preserve"><value>ストリーミング</value></data>
   <data name="LocalSettings.Label.ContextTier" xml:space="preserve"><value>コンテキスト階層</value></data>
   <data name="LocalSettings.Label.LogLevel" xml:space="preserve"><value>ログレベル</value></data>

@@ -43,6 +43,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
                 ["GitHub:Repo"] = "docs-from-config",
                 ["GitHub:PullRequestTitleFilter"] = "Repo sync",
                 ["Copilot:DefaultModel"] = "gpt-config",
+                ["Copilot:ReasoningEffort"] = " HIGH ",
                 ["Copilot:ContextTier"] = " Long_Context ",
                 ["Copilot:EnableWebSocketResponses"] = "false",
                 ["Copilot:OAuthScopes:0"] = "public_repo",
@@ -57,6 +58,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("docs-from-config", settings.GitHub.Repo);
         Assert.Equal(8, settings.GitHub.MaxPullRequests);
         Assert.Equal("gpt-config", settings.Copilot.DefaultModel);
+        Assert.Equal("high", settings.Copilot.ReasoningEffort);
         Assert.Equal("long_context", settings.Copilot.ContextTier);
         Assert.False(settings.Copilot.EnableWebSocketResponses.GetValueOrDefault());
         Assert.Equal(["docs.github.com", "api.github.com"], settings.Copilot.AllowedUrlHosts);
@@ -98,6 +100,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.GitHub.Repo = "docs";
         settings.GitHub.PullRequestCreatedAtOrAfter = "2026-05-15T00:00:00Z";
         settings.Copilot.DefaultModel = "gpt-5.5";
+        settings.Copilot.ReasoningEffort = " MAX ";
         settings.Copilot.ContextTier = " Long_Context ";
         settings.Copilot.LogLevel = " Debug ";
         settings.Copilot.SessionIdleTimeoutSeconds = 120;
@@ -131,6 +134,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("keep", root.GetProperty("GitHub").GetProperty("Unknown").GetString());
         Assert.Equal("github", root.GetProperty("GitHub").GetProperty("Owner").GetString());
         Assert.Equal("gpt-5.5", root.GetProperty("Copilot").GetProperty("DefaultModel").GetString());
+        Assert.Equal("max", root.GetProperty("Copilot").GetProperty("ReasoningEffort").GetString());
         Assert.Equal("long_context", root.GetProperty("Copilot").GetProperty("ContextTier").GetString());
         Assert.Equal("debug", root.GetProperty("Copilot").GetProperty("LogLevel").GetString());
         Assert.Equal(120, root.GetProperty("Copilot").GetProperty("SessionIdleTimeoutSeconds").GetInt32());

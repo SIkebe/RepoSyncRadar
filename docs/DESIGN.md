@@ -266,16 +266,20 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 
 ## 7. セッション設計
 
+全セッション種別は `SessionConfigBuilder` を通じて `Copilot:DefaultModel` と
+`Copilot:ReasoningEffort` を共有する。出荷時の既定は `gpt-5.6-luna` / `high` で、
+ローカル設定から上書きできる。用途別のモデル選択は現在実装していない。
+
 ### 7.1 `MorningTriageSession`
 
 - 朝の一括処理。「最新の Repo sync PR を取り込み、スコアリング → 要約 → Must read 5 件を選出」。
-- モデル: `gpt-5` 既定(コスト最適)。`Streaming = true`。
+- `Streaming = true`。
 - `SystemMessageMode.Append` で日本語の運用ルール(無視リスト、ブースト、媒体特性)を投入。
 
 ### 7.2 `AdoptionSession`
 
 - ユーザーが注目したコミット 1 件に対し、Twitter / 顧客向けの下書きを生成。
-- モデル: `claude-sonnet-4.5` を選好(文体表現力)。
+- 共通のモデル / reasoning effort 設定を使用する。
 - 入力: 注目コミット + 差分 + 解決済み URL + 過去の注目例 5 件(few-shot)。
 - 出力: JSON で `{ explanation, twitter, customer }`。
 
