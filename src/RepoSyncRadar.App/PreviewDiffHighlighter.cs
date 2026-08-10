@@ -546,7 +546,14 @@ td.rsr-preview-diff-alignment-gap {
       gapRow.setAttribute('aria-hidden', 'true');
       gapRow.setAttribute('role', 'presentation');
       const gapCell = createGap(height, gap.navigationIndex, 'td');
-      gapCell.colSpan = Math.max(1, row.children.length);
+      const table = row.closest('table');
+      const columnCount = Math.max(
+        1,
+        ...Array.from(table?.rows || []).map((tableRow) =>
+          Array.from(tableRow.cells).reduce(
+            (count, cell) => count + Math.max(1, cell.colSpan || 1),
+            0)));
+      gapCell.colSpan = columnCount;
       gapRow.appendChild(gapCell);
       row.parentNode.insertBefore(gapRow, row);
       return;
