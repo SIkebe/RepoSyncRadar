@@ -44,8 +44,7 @@ internal sealed record PreviewDiffNavigationTarget(
     [property: JsonPropertyName("navigationIndex")] int NavigationIndex);
 
 internal readonly record struct PreviewDiffNavigationResult(
-    [property: JsonPropertyName("found")] bool Found,
-    [property: JsonPropertyName("ratio")] double Ratio);
+    [property: JsonPropertyName("found")] bool Found);
 
 internal static class PreviewDiffHighlighter
 {
@@ -857,7 +856,7 @@ td.rsr-preview-diff-alignment-gap {
   let targets = Array.from(
     document.querySelectorAll('[data-rsr-diff-navigation-index="{{navigationIndex}}"]'));
   if (targets.length === 0) {
-    return { found: false, ratio: 0 };
+    return { found: false };
   }
   const root = document.scrollingElement || document.documentElement || document.body;
   const maxScrollTop = Math.max(1, (root?.scrollHeight || 0) - window.innerHeight);
@@ -865,7 +864,7 @@ td.rsr-preview-diff-alignment-gap {
     .map((target) => target.getBoundingClientRect())
     .filter((rect) => rect.width > 0 && rect.height > 0);
   if (targetRects.length === 0) {
-    return { found: false, ratio: 0 };
+    return { found: false };
   }
   const targetTop = Math.min(...targetRects.map((rect) => rect.top)) + window.scrollY;
   const targetBottom = Math.max(...targetRects.map((rect) => rect.bottom)) + window.scrollY;
@@ -873,7 +872,6 @@ td.rsr-preview-diff-alignment-gap {
   const centeredScrollTop = Math.max(
     0,
     Math.min(maxScrollTop, targetTop - (window.innerHeight - targetHeight) / 2));
-  const ratio = Math.max(0, Math.min(1, centeredScrollTop / maxScrollTop));
   const overlay = document.createElement('div');
   overlay.id = overlayId;
   overlay.className = 'rsr-preview-diff-active-overlay';
@@ -922,7 +920,7 @@ td.rsr-preview-diff-alignment-gap {
     scrollSyncState.suppressUntil = Date.now() + 1000;
   }
   window.scrollTo({ top: centeredScrollTop, behavior: 'auto' });
-  return { found: true, ratio };
+  return { found: true };
 })();
 """;
     }
@@ -940,7 +938,7 @@ td.rsr-preview-diff-alignment-gap {
             var result = JsonSerializer.Deserialize<PreviewDiffNavigationResult>(
                 scriptResult,
                 _jsonOptions);
-            return result with { Ratio = Math.Clamp(result.Ratio, 0, 1) };
+            return result;
         }
         catch (JsonException)
         {

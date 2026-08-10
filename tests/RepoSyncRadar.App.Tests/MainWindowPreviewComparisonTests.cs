@@ -772,8 +772,8 @@ public sealed class MainWindowPreviewComparisonTests
         bool afterFound,
         bool expected)
     {
-        var beforeResult = new PreviewDiffNavigationResult(beforeFound, 0);
-        var afterResult = new PreviewDiffNavigationResult(afterFound, 0);
+        var beforeResult = new PreviewDiffNavigationResult(beforeFound);
+        var afterResult = new PreviewDiffNavigationResult(afterFound);
 
         Assert.Equal(
             expected,
@@ -881,25 +881,23 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("targetTop - (window.innerHeight - targetHeight) / 2", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollTo({ top: centeredScrollTop, behavior: 'auto' })", script, StringComparison.Ordinal);
         Assert.Contains("__repoSyncRadarPreviewScrollSync", script, StringComparison.Ordinal);
-        Assert.Contains("return { found: true, ratio }", script, StringComparison.Ordinal);
-        Assert.Contains("return { found: false, ratio: 0 }", script, StringComparison.Ordinal);
+        Assert.Contains("return { found: true }", script, StringComparison.Ordinal);
+        Assert.Contains("return { found: false }", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("const ratio =", script, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("""{"found":true,"ratio":0.75}""", true, 0.75)]
-    [InlineData("""{"found":true,"ratio":2.5}""", true, 1.0)]
-    [InlineData("""{"found":false,"ratio":0}""", false, 0.0)]
-    [InlineData("null", false, 0.0)]
-    [InlineData("invalid", false, 0.0)]
+    [InlineData("""{"found":true}""", true)]
+    [InlineData("""{"found":false}""", false)]
+    [InlineData("null", false)]
+    [InlineData("invalid", false)]
     public void PreviewDiffHighlighter_ParseNavigateResult_Handles_WebView_Result(
         string result,
-        bool expectedFound,
-        double expectedRatio)
+        bool expectedFound)
     {
         var parsed = PreviewDiffHighlighter.ParseNavigateResult(result);
 
         Assert.Equal(expectedFound, parsed.Found);
-        Assert.Equal(expectedRatio, parsed.Ratio);
     }
 
     [Theory]
