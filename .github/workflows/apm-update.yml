@@ -147,14 +147,22 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin "+refs/heads/${env:UPDATE_BRANCH}:refs/remotes/origin/$env:UPDATE_BRANCH"
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host 'No existing APM update branch was found; creating it.'
+          $repositoryUrl = "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          $remoteRef = "refs/heads/$env:UPDATE_BRANCH"
+          $remoteResult = git ls-remote --exit-code --heads $repositoryUrl $remoteRef 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            $remoteSha = ([string]$remoteResult -split '\s+')[0]
+            $leaseArgument = "--force-with-lease=${remoteRef}:$remoteSha"
+          } elseif ($LASTEXITCODE -eq 2) {
+            $leaseArgument = "--force-with-lease=${remoteRef}:"
+          } else {
+            throw "Failed to inspect the existing APM update branch: $remoteResult"
           }
+
           git checkout -B $env:UPDATE_BRANCH
           git add apm.yml apm.lock.yaml .agents/skills
           git commit -m 'Update APM managed skills'
-          git push --force-with-lease "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git" "HEAD:$env:UPDATE_BRANCH"
+          git push $leaseArgument $repositoryUrl "HEAD:$env:UPDATE_BRANCH"
 
           $bodyPath = 'artifacts/apm-update-pr-body.md'
           $summary = Get-Content -Raw -Path artifacts/apm-update-summary.md
