@@ -24,6 +24,7 @@ RepoSyncRadar が GitHub Copilot SDK セッションで使うモデルまたは 
 
 2. **読み取り専用にする。**
    - ベンチマークでファイル変更、shell実行、test実行、外部MCP利用を許可しない。
+   - modelへ公開するtoolは`view`、`glob`、`grep`、`lsp`だけに限定し、`skill`、subagent、web、shell、write toolを公開しない。
    - `--deny-tool=write --deny-tool='shell(*)' --disable-builtin-mcps` を指定する。
    - `copilot mcp list --json`でuser、workspace、plugin由来の全MCP server名を取得し、それぞれを`--disable-mcp-server`で無効化する。列挙に失敗した場合はベンチマークを実行しない。
    - ベンチマーク結果をリポジトリへ保存しない。
@@ -113,6 +114,7 @@ $sw = [Diagnostics.Stopwatch]::StartNew()
   --model $model `
   --effort $effort `
   --prompt $prompt `
+  --available-tools view glob grep lsp `
   --allow-all-tools `
   --deny-tool=write `
   --deny-tool='shell(*)' `
