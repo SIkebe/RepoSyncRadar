@@ -554,6 +554,76 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Advances_Table_Anchor_Past_Changed_Row()
+    {
+        var beforeBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "Old value", "table-row-0"),
+            new PreviewDiffBlock(1, "Shared value", "table-row-0"),
+            new PreviewDiffBlock(2, "Next row", "table-row-1"),
+        };
+        var afterBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "New value", "table-row-0"),
+            new PreviewDiffBlock(1, "Shared value", "table-row-0"),
+            new PreviewDiffBlock(2, "Next row", "table-row-1"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(2, change.BeforeAnchorIndex);
+        Assert.Equal(2, change.AfterAnchorIndex);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Advances_Both_Table_Anchors_For_Inserted_Cell()
+    {
+        var beforeBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "First value", "table-row-0"),
+            new PreviewDiffBlock(1, "Shared value", "table-row-0"),
+            new PreviewDiffBlock(2, "Next row", "table-row-1"),
+        };
+        var afterBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "First value", "table-row-0"),
+            new PreviewDiffBlock(1, "Inserted value", "table-row-0"),
+            new PreviewDiffBlock(2, "Shared value", "table-row-0"),
+            new PreviewDiffBlock(3, "Next row", "table-row-1"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(2, change.BeforeAnchorIndex);
+        Assert.Equal(3, change.AfterAnchorIndex);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Advances_Anchor_Past_Rowspan_Group()
+    {
+        var beforeBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "Old spanning value", "table-0-row-group-0"),
+            new PreviewDiffBlock(1, "Shared second row", "table-0-row-group-0"),
+            new PreviewDiffBlock(2, "Next visual row", "table-0-row-group-1"),
+        };
+        var afterBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "New spanning value", "table-0-row-group-0"),
+            new PreviewDiffBlock(1, "Shared second row", "table-0-row-group-0"),
+            new PreviewDiffBlock(2, "Next visual row", "table-0-row-group-1"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(2, change.BeforeAnchorIndex);
+        Assert.Equal(2, change.AfterAnchorIndex);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildPlan_Groups_Adjacent_Changed_Blocks_For_Navigation()
     {
         var beforeBlocks = new[]
@@ -703,6 +773,17 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_ExtractScript_Groups_Rows_Connected_By_Rowspan()
+    {
+        var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
+
+        Assert.Contains("Array.from(root.querySelectorAll('table'))", script, StringComparison.Ordinal);
+        Assert.Contains("cell.rowSpan === 0", script, StringComparison.Ordinal);
+        Assert.Contains("sectionEndRowIndex - rowIndex + 1", script, StringComparison.Ordinal);
+        Assert.Contains("groupEndRowIndex", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_ExtractScript_Treats_Visible_Media_As_Content()
     {
         var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
@@ -803,6 +884,26 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(
             expected,
             MainWindow.IsPreviewDiffNavigationOperationCurrent(
+                expectedGeneration,
+                currentGeneration,
+                expectedOperationId,
+                currentOperationId));
+    }
+
+    [Theory]
+    [InlineData(3, 3, 7, 7, true)]
+    [InlineData(3, 4, 7, 7, false)]
+    [InlineData(3, 3, 7, 8, false)]
+    public void IsPreviewAlignmentOperationCurrent_Requires_Generation_And_Operation(
+        int expectedGeneration,
+        int currentGeneration,
+        int expectedOperationId,
+        int currentOperationId,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            MainWindow.IsPreviewAlignmentOperationCurrent(
                 expectedGeneration,
                 currentGeneration,
                 expectedOperationId,

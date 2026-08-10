@@ -13,7 +13,8 @@ internal enum PreviewDiffPane
 
 internal sealed record PreviewDiffBlock(
     [property: JsonPropertyName("index")] int Index,
-    [property: JsonPropertyName("text")] string Text);
+    [property: JsonPropertyName("text")] string Text,
+    [property: JsonPropertyName("alignmentGroup")] string? AlignmentGroup = null);
 
 internal sealed record PreviewDiffPlan(
     IReadOnlyList<int> BeforeChangedIndexes,
@@ -179,9 +180,38 @@ internal static class PreviewDiffHighlighter
       return element.classList.contains('ghd-markdown-alert') || !element.querySelector(blockSelector);
     });
 
+  const alignmentGroups = new WeakMap();
+  Array.from(root.querySelectorAll('table')).forEach((table, tableIndex) => {
+    const rows = Array.from(table.rows);
+    let groupIndex = -1;
+    let groupEndRowIndex = -1;
+    rows.forEach((row, rowIndex) => {
+      if (rowIndex > groupEndRowIndex) {
+        groupIndex++;
+        groupEndRowIndex = rowIndex;
+      }
+      const sectionEndRowIndex = rows.reduce(
+        (endIndex, candidate, candidateIndex) =>
+          candidate.parentElement === row.parentElement ? candidateIndex : endIndex,
+        rowIndex);
+      Array.from(row.cells).forEach((cell) => {
+        const effectiveRowSpan = cell.rowSpan === 0
+          ? sectionEndRowIndex - rowIndex + 1
+          : Math.max(1, cell.rowSpan);
+        groupEndRowIndex = Math.max(
+          groupEndRowIndex,
+          rowIndex + effectiveRowSpan - 1);
+      });
+      alignmentGroups.set(row, `table-${tableIndex}-row-group-${groupIndex}`);
+    });
+  });
+  const getAlignmentGroup = (element) => {
+    const row = element.closest('tr');
+    return row ? alignmentGroups.get(row) || null : null;
+  };
   return elements.map((element, index) => {
     element.setAttribute('data-rsr-diff-index', String(index));
-    return { index, text: describe(element) };
+    return { index, text: describe(element), alignmentGroup: getAlignmentGroup(element) };
   });
 })();
 """;
@@ -260,11 +290,22 @@ internal static class PreviewDiffHighlighter
                 return;
             }
 
+            var advancePastCurrentAlignmentGroup =
+                IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, currentBeforeIndexes)
+                || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, currentAfterIndexes);
             changes.Add(new PreviewDiffChange(
                 currentBeforeIndexes.ToArray(),
                 currentAfterIndexes.ToArray(),
-                beforeCursor < beforeBlocks.Count ? beforeBlocks[beforeCursor].Index : null,
-                afterCursor < afterBlocks.Count ? afterBlocks[afterCursor].Index : null));
+                FindAlignmentAnchorIndex(
+                    beforeBlocks,
+                    beforeCursor,
+                    currentBeforeIndexes,
+                    advancePastCurrentAlignmentGroup),
+                FindAlignmentAnchorIndex(
+                    afterBlocks,
+                    afterCursor,
+                    currentAfterIndexes,
+                    advancePastCurrentAlignmentGroup)));
             currentBeforeIndexes.Clear();
             currentAfterIndexes.Clear();
         }
@@ -309,6 +350,52 @@ internal static class PreviewDiffHighlighter
         FlushChange();
 
         return new PreviewDiffPlan(beforeChanged, afterChanged, changes);
+    }
+
+    private static int? FindAlignmentAnchorIndex(
+        IReadOnlyList<PreviewDiffBlock> blocks,
+        int cursor,
+        IReadOnlyCollection<int> changedIndexes,
+        bool advancePastCurrentAlignmentGroup)
+    {
+        if (cursor >= blocks.Count)
+        {
+            return null;
+        }
+
+        var changedIndexSet = changedIndexes.ToHashSet();
+        var changedGroups = blocks
+            .Where(block => changedIndexSet.Contains(block.Index) && block.AlignmentGroup is not null)
+            .Select(static block => block.AlignmentGroup!)
+            .ToHashSet(StringComparer.Ordinal);
+        if (advancePastCurrentAlignmentGroup && blocks[cursor].AlignmentGroup is { } currentGroup)
+        {
+            changedGroups.Add(currentGroup);
+        }
+        while (cursor < blocks.Count
+            && blocks[cursor].AlignmentGroup is { } group
+            && changedGroups.Contains(group))
+        {
+            cursor++;
+        }
+
+        return cursor < blocks.Count ? blocks[cursor].Index : null;
+    }
+
+    private static bool IsAnchorInChangedAlignmentGroup(
+        IReadOnlyList<PreviewDiffBlock> blocks,
+        int cursor,
+        IReadOnlyCollection<int> changedIndexes)
+    {
+        if (cursor >= blocks.Count || blocks[cursor].AlignmentGroup is not { } anchorGroup)
+        {
+            return false;
+        }
+
+        var changedIndexSet = changedIndexes.ToHashSet();
+        return blocks.Any(
+            block => changedIndexSet.Contains(block.Index)
+                && string.Equals(block.AlignmentGroup, anchorGroup, StringComparison.Ordinal));
     }
 
     internal static async Task ApplyAlignmentGapsAsync(

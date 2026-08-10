@@ -159,6 +159,7 @@ public partial class MainWindow : Window
     private int _currentPreviewDiffIndex = -1;
     private int _requestedPreviewDiffIndex = -1;
     private int _previewDiffNavigationOperationId;
+    private int _previewAlignmentOperationId;
     private int _previewDiffCount;
     private PreviewDiffPlan? _activePreviewDiffPlan;
     private Task _previewDiffNavigationTask = Task.CompletedTask;
@@ -2058,6 +2059,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        _previewAlignmentOperationId++;
         _previewAlignmentTimer.Stop();
         _previewAlignmentTimer.Start();
     }
@@ -2067,6 +2069,7 @@ public partial class MainWindow : Window
         _previewAlignmentTimer.Stop();
         var plan = _activePreviewDiffPlan;
         var generation = _previewDiffGeneration;
+        var operationId = _previewAlignmentOperationId;
         if (plan is null || !_beforePreviewDiffReady || !_afterPreviewDiffReady)
         {
             return;
@@ -2074,7 +2077,11 @@ public partial class MainWindow : Window
         try
         {
             if (!ReferenceEquals(plan, _activePreviewDiffPlan)
-                || generation != _previewDiffGeneration)
+                || !IsPreviewAlignmentOperationCurrent(
+                    generation,
+                    _previewDiffGeneration,
+                    operationId,
+                    _previewAlignmentOperationId))
             {
                 return;
             }
@@ -2084,13 +2091,25 @@ public partial class MainWindow : Window
                 PreviewView,
                 plan.Changes,
                 () => ReferenceEquals(plan, _activePreviewDiffPlan)
-                    && generation == _previewDiffGeneration);
+                    && IsPreviewAlignmentOperationCurrent(
+                        generation,
+                        _previewDiffGeneration,
+                        operationId,
+                        _previewAlignmentOperationId));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogPreviewDiffNavigationFailed(_logger, ex);
+            LogPreviewAlignmentFailed(_logger, ex);
         }
     }
+
+    internal static bool IsPreviewAlignmentOperationCurrent(
+        int expectedGeneration,
+        int currentGeneration,
+        int expectedOperationId,
+        int currentOperationId)
+        => expectedGeneration == currentGeneration
+            && expectedOperationId == currentOperationId;
 
     private void ShowOfficialOnlyMode()
         => ShowSinglePageMode("公式 docs.github.com");
@@ -3002,4 +3021,10 @@ public partial class MainWindow : Window
         Level = LogLevel.Debug,
         Message = "Preview diff navigation failed.")]
     private static partial void LogPreviewDiffNavigationFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 12,
+        Level = LogLevel.Debug,
+        Message = "Preview diff alignment failed.")]
+    private static partial void LogPreviewAlignmentFailed(ILogger logger, Exception exception);
 }
