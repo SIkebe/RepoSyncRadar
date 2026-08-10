@@ -163,6 +163,9 @@ jobs:
           git add apm.yml apm.lock.yaml .agents/skills
           git commit -m 'Update APM managed skills'
           git push $leaseArgument $repositoryUrl "HEAD:$env:UPDATE_BRANCH"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to push the APM update branch."
+          }
 
           $bodyPath = 'artifacts/apm-update-pr-body.md'
           $summary = Get-Content -Raw -Path artifacts/apm-update-summary.md
