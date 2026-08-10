@@ -94,13 +94,13 @@ jobs:
 
             $latest = $latest.Trim().ToLowerInvariant()
             if ($current -eq $latest) {
-              $script:rows.Add("| `$package` | `$($current.Substring(0, 8))` | `$($latest.Substring(0, 8))` | no change |")
+              $script:rows.Add(('| `{0}` | `{1}` | `{2}` | no change |' -f $package, $current.Substring(0, 8), $latest.Substring(0, 8)))
               return $match.Value
             }
 
             $script:updated = $true
             $compareUrl = "https://github.com/$owner/$repo/compare/$current...$latest"
-            $script:rows.Add("| `$package` | `$($current.Substring(0, 8))` | `$($latest.Substring(0, 8))` | $compareUrl |")
+            $script:rows.Add(('| `{0}` | `{1}` | `{2}` | {3} |' -f $package, $current.Substring(0, 8), $latest.Substring(0, 8), $compareUrl))
             return "$($match.Groups['prefix'].Value)$package#$latest$($match.Groups['suffix'].Value)"
           })
 
@@ -147,21 +147,36 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          $repositoryUrl = "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git"
+          $remoteRef = "refs/heads/$env:UPDATE_BRANCH"
+          $remoteResult = git ls-remote --exit-code --heads $repositoryUrl $remoteRef 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            $remoteSha = ([string]$remoteResult -split '\s+')[0]
+            $leaseArgument = "--force-with-lease=${remoteRef}:$remoteSha"
+          } elseif ($LASTEXITCODE -eq 2) {
+            $leaseArgument = "--force-with-lease=${remoteRef}:"
+          } else {
+            throw "Failed to inspect the existing APM update branch: $remoteResult"
+          }
+
           git checkout -B $env:UPDATE_BRANCH
           git add apm.yml apm.lock.yaml .agents/skills
           git commit -m 'Update APM managed skills'
-          git push --force-with-lease "https://x-access-token:$env:GH_TOKEN@github.com/$env:GITHUB_REPOSITORY.git" "HEAD:$env:UPDATE_BRANCH"
+          git push $leaseArgument $repositoryUrl "HEAD:$env:UPDATE_BRANCH"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to push the APM update branch."
+          }
 
           $bodyPath = 'artifacts/apm-update-pr-body.md'
           $summary = Get-Content -Raw -Path artifacts/apm-update-summary.md
-          Set-Content -Path $bodyPath -Value @"
+          $bodyTemplate = @'
           ## Summary
 
           - Update APM-managed skill dependencies pinned in `apm.yml`.
           - Regenerate `apm.lock.yaml` and deployed `.agents/skills/` content.
           - Preserve full commit SHA pins so the generated diff is reviewable before merge.
 
-          $summary
+          {{APM_UPDATE_SUMMARY}}
 
           ## Related Issues
 
@@ -199,7 +214,8 @@ jobs:
           Release note draft:
 
           N/A - internal agent guidance update only.
-          "@
+          '@
+          Set-Content -Path $bodyPath -Value $bodyTemplate.Replace('{{APM_UPDATE_SUMMARY}}', $summary)
 
           $existingPr = gh pr list --head $env:UPDATE_BRANCH --base main --state open --json number --jq '.[0].number'
           if ([string]::IsNullOrWhiteSpace($existingPr)) {
