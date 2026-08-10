@@ -800,6 +800,57 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderedDiff_Marks_Autotitle_Changes_From_Comparison_Liquid_Context()
+    {
+        const string markdown = """
+            > [!NOTE]
+            > If you want your developers to have access to local MCP servers, include those servers in your registry with the correct server ID. For more information, see [AUTOTITLE](/copilot/reference/mcp-allowlist-enforcement).
+            """;
+        var beforeContext = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/copilot/reference/mcp-allowlist-enforcement"] = "MCP allowlist enforcement",
+            });
+        var afterContext = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["/copilot/reference/mcp-allowlist-enforcement"] = "MCP private registry enforcement",
+            });
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/administer-copilot/manage-mcp-usage/configure-mcp-registry.md",
+            markdown,
+            "501a9d1",
+            "変更前",
+            beforeContext,
+            diffAgainstMarkdown: markdown,
+            diffAgainstLiquidContext: afterContext,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/how-tos/administer-copilot/manage-mcp-usage/configure-mcp-registry.md",
+            markdown,
+            "c19e3ad",
+            "PR HEAD",
+            afterContext,
+            diffAgainstMarkdown: markdown,
+            diffAgainstLiquidContext: beforeContext,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "MCP <span class=\"rsr-rendered-diff-removed\">allowlist</span> enforcement</a>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "MCP <span class=\"rsr-rendered-diff-added\">private registry</span> enforcement</a>",
+            afterHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderedDiff_Does_Not_Insert_Span_Into_Autotitle_Link_Destination()
     {
         var context = new DocsLiquidContext(
