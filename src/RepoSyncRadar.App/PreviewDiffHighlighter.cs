@@ -564,9 +564,19 @@ internal static class PreviewDiffHighlighter
         var afterAnchorsJson = JsonSerializer.Serialize(
             changes.Select(static change => change.AfterAnchorIndex),
             _jsonOptions);
+        var beforeCodeWrappingIndexesJson = JsonSerializer.Serialize(
+            GetCodeWrappingCandidateIndexes(changes, PreviewDiffPane.Before),
+            _jsonOptions);
+        var afterCodeWrappingIndexesJson = JsonSerializer.Serialize(
+            GetCodeWrappingCandidateIndexes(changes, PreviewDiffPane.After),
+            _jsonOptions);
         var measurements = await Task.WhenAll(
-            beforeView.ExecuteScriptAsync(BuildMeasureAlignmentAnchorsScript(beforeAnchorsJson)),
-            afterView.ExecuteScriptAsync(BuildMeasureAlignmentAnchorsScript(afterAnchorsJson)));
+            beforeView.ExecuteScriptAsync(BuildMeasureAlignmentAnchorsScript(
+                beforeAnchorsJson,
+                beforeCodeWrappingIndexesJson)),
+            afterView.ExecuteScriptAsync(BuildMeasureAlignmentAnchorsScript(
+                afterAnchorsJson,
+                afterCodeWrappingIndexesJson)));
         var beforeMeasurement = DeserializeMeasurement(measurements[0]);
         var afterMeasurement = DeserializeMeasurement(measurements[1]);
         if (isCurrent is not null && !isCurrent())
@@ -627,6 +637,49 @@ internal static class PreviewDiffHighlighter
         double afterScrollTop)
         => Math.Min(Math.Max(0, beforeScrollTop), Math.Max(0, afterScrollTop));
 
+    internal static IReadOnlyList<int> GetCodeWrappingCandidateIndexes(
+        IReadOnlyList<PreviewDiffChange> changes,
+        PreviewDiffPane pane)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        var indexes = new List<int>();
+        var seen = new HashSet<int>();
+        foreach (var change in changes)
+        {
+            var changedIndexes = pane == PreviewDiffPane.Before
+                ? change.BeforeIndexes
+                : change.AfterIndexes;
+            foreach (var index in changedIndexes)
+            {
+                if (seen.Add(index))
+                {
+                    indexes.Add(index);
+                }
+            }
+
+            var anchorIndex = pane == PreviewDiffPane.Before
+                ? change.BeforeAnchorIndex
+                : change.AfterAnchorIndex;
+            if (anchorIndex is { } anchor)
+            {
+                if (anchor > 0 && seen.Add(anchor - 1))
+                {
+                    indexes.Add(anchor - 1);
+                }
+                if (seen.Add(anchor))
+                {
+                    indexes.Add(anchor);
+                }
+            }
+            else if (seen.Add(-1))
+            {
+                indexes.Add(-1);
+            }
+        }
+
+        return indexes;
+    }
+
     internal static PreviewDiffAlignmentGapPlan BuildAlignmentGapPlan(
         IReadOnlyList<PreviewDiffChange> changes,
         IReadOnlyList<double> beforeAnchorOffsets,
@@ -671,9 +724,12 @@ internal static class PreviewDiffHighlighter
         return new PreviewDiffAlignmentGapPlan(beforeGaps, afterGaps);
     }
 
-    internal static string BuildMeasureAlignmentAnchorsScript(string anchorIndexesJson)
+    internal static string BuildMeasureAlignmentAnchorsScript(
+        string anchorIndexesJson,
+        string codeWrappingIndexesJson = "[]")
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(anchorIndexesJson);
+        ArgumentException.ThrowIfNullOrWhiteSpace(codeWrappingIndexesJson);
         return $$"""
 (() => {
   const root =
@@ -705,6 +761,35 @@ internal static class PreviewDiffHighlighter
     restoreExistingGaps();
     return { scrollTop, offsets: [] };
   }
+  const codeWrapStyleId = 'rsr-preview-diff-code-wrap-style';
+  if (!document.getElementById(codeWrapStyleId)) {
+    const style = document.createElement('style');
+    style.id = codeWrapStyleId;
+    style.textContent = `
+html, body {
+  overflow-anchor: none !important;
+}
+pre.rsr-preview-diff-aligned-code {
+  overflow-wrap: anywhere !important;
+  white-space: pre-wrap !important;
+}
+pre.rsr-preview-diff-aligned-code code {
+  overflow-wrap: inherit !important;
+  white-space: inherit !important;
+}
+`;
+    document.head.appendChild(style);
+  }
+  root.querySelectorAll('pre.rsr-preview-diff-aligned-code').forEach((element) => {
+    element.classList.remove('rsr-preview-diff-aligned-code');
+  });
+  {{codeWrappingIndexesJson}}.forEach((index) => {
+    const target = index >= 0
+      ? document.querySelector(`[data-rsr-diff-index="${index}"]`)
+      : Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1);
+    const codeBlock = target?.matches('pre') ? target : target?.closest('pre');
+    codeBlock?.classList.add('rsr-preview-diff-aligned-code');
+  });
   const offsets = {{anchorIndexesJson}}.map((anchorIndex) => {
       if (anchorIndex === null) {
         return root.getBoundingClientRect().bottom + window.scrollY;
@@ -752,22 +837,20 @@ internal static class PreviewDiffHighlighter
   --rsr-preview-gap-stripe: rgba(139, 148, 158, 0.42);
   --rsr-preview-gap-border: rgba(139, 148, 158, 0.24);
 }
-html, body {
-  overflow-anchor: none !important;
-}
 .rsr-preview-diff-alignment-gap {
+  background-clip: content-box !important;
   background-color: var(--rsr-preview-gap-bg) !important;
   background-image: repeating-linear-gradient(
     -45deg,
     transparent 0 6px,
     var(--rsr-preview-gap-stripe) 6px 8px) !important;
   border-block-start: 1px solid var(--rsr-preview-gap-border) !important;
-  border-block-end: 1px solid transparent !important;
   box-sizing: border-box !important;
   display: block !important;
   list-style: none !important;
   margin: 0 !important;
   padding: 0 !important;
+  padding-block-end: var(--rsr-preview-gap-separator) !important;
   pointer-events: none !important;
   width: 100% !important;
 }
@@ -798,6 +881,10 @@ td.rsr-preview-diff-alignment-gap {
     element.setAttribute('aria-hidden', 'true');
     element.setAttribute('role', 'presentation');
     element.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
+    const separatorHeight = Math.min(6, Math.max(0, height - 1));
+    element.style.setProperty(
+      '--rsr-preview-gap-separator',
+      `${separatorHeight.toFixed(2)}px`);
     element.style.height = `${height.toFixed(2)}px`;
     return element;
   };
@@ -1239,11 +1326,11 @@ td.rsr-preview-diff-alignment-gap {
       return;
     }
     overlay.hidden = false;
-    const padding = 6;
-    const left = Math.min(...rects.map((rect) => rect.left)) + window.scrollX - padding;
-    const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY - padding;
-    const right = Math.max(...rects.map((rect) => rect.right)) + window.scrollX + padding;
-    const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY + padding;
+    const inlinePadding = 6;
+    const left = Math.min(...rects.map((rect) => rect.left)) + window.scrollX - inlinePadding;
+    const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
+    const right = Math.max(...rects.map((rect) => rect.right)) + window.scrollX + inlinePadding;
+    const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
     overlay.style.left = `${left.toFixed(1)}px`;
     overlay.style.top = `${top.toFixed(1)}px`;
     overlay.style.width = `${Math.max(0, right - left).toFixed(1)}px`;

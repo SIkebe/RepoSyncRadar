@@ -812,9 +812,52 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_CodeWrappingCandidates_Include_Anchor_And_Preceding_Block()
+    {
+        var changes = new[]
+        {
+            new PreviewDiffChange([], [7, 8], 6, 9),
+            new PreviewDiffChange([12], [13], 14, 15),
+        };
+
+        Assert.Equal(
+            [5, 6, 12, 13, 14],
+            PreviewDiffHighlighter.GetCodeWrappingCandidateIndexes(
+                changes,
+                PreviewDiffPane.Before));
+        Assert.Equal(
+            [7, 8, 9, 13, 14, 15],
+            PreviewDiffHighlighter.GetCodeWrappingCandidateIndexes(
+                changes,
+                PreviewDiffPane.After));
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_CodeWrappingCandidates_Include_Last_Block_When_Final_Anchor_Is_Missing()
+    {
+        var changes = new[]
+        {
+            new PreviewDiffChange([], [7, 8], null, null),
+        };
+
+        Assert.Equal(
+            [-1],
+            PreviewDiffHighlighter.GetCodeWrappingCandidateIndexes(
+                changes,
+                PreviewDiffPane.Before));
+        Assert.Equal(
+            [7, 8, -1],
+            PreviewDiffHighlighter.GetCodeWrappingCandidateIndexes(
+                changes,
+                PreviewDiffPane.After));
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_AlignmentScripts_Measure_Anchors_And_Draw_Striped_Gaps()
     {
-        var measureScript = PreviewDiffHighlighter.BuildMeasureAlignmentAnchorsScript("[1,null]");
+        var measureScript = PreviewDiffHighlighter.BuildMeasureAlignmentAnchorsScript(
+            "[1,null]",
+            "[1,2]");
         var applyScript = PreviewDiffHighlighter.BuildApplyAlignmentGapsScript(
             """[{"anchorIndex":1,"height":80,"navigationIndex":0}]""");
 
@@ -826,6 +869,14 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("getBoundingClientRect().top + window.scrollY", measureScript, StringComparison.Ordinal);
         Assert.Contains("root.getBoundingClientRect().bottom + window.scrollY", measureScript, StringComparison.Ordinal);
         Assert.Contains(": null", measureScript, StringComparison.Ordinal);
+        Assert.Contains("rsr-preview-diff-aligned-code", measureScript, StringComparison.Ordinal);
+        Assert.Contains("overflow-anchor: none", measureScript, StringComparison.Ordinal);
+        Assert.Contains("target?.matches('pre') ? target : target?.closest('pre')", measureScript, StringComparison.Ordinal);
+        Assert.Contains("[1,2].forEach((index)", measureScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1)",
+            measureScript,
+            StringComparison.Ordinal);
         Assert.Contains("repeating-linear-gradient", applyScript, StringComparison.Ordinal);
         Assert.Contains("td.rsr-preview-diff-alignment-gap", applyScript, StringComparison.Ordinal);
         Assert.Contains("display: table-cell", applyScript, StringComparison.Ordinal);
@@ -834,6 +885,9 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const activeRowSpans = []", applyScript, StringComparison.Ordinal);
         Assert.Contains("activeRowSpans[columnIndex + offset]", applyScript, StringComparison.Ordinal);
         Assert.Contains("gapCell.colSpan = getTableColumnCount(table)", applyScript, StringComparison.Ordinal);
+        Assert.Contains("--rsr-preview-gap-separator", applyScript, StringComparison.Ordinal);
+        Assert.Contains("background-clip: content-box", applyScript, StringComparison.Ordinal);
+        Assert.Contains("padding-block-end: var(--rsr-preview-gap-separator)", applyScript, StringComparison.Ordinal);
         Assert.Contains("aria-hidden", applyScript, StringComparison.Ordinal);
         Assert.Contains("role", applyScript, StringComparison.Ordinal);
         Assert.Contains("data-rsr-diff-navigation-index", applyScript, StringComparison.Ordinal);
@@ -844,9 +898,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const actualDisplacement =", applyScript, StringComparison.Ordinal);
         Assert.Contains("gap.style.height =", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("'margin-block-end'", applyScript, StringComparison.Ordinal);
-        Assert.Contains("border-block-end: 1px solid transparent", applyScript, StringComparison.Ordinal);
-        Assert.Contains("html, body", applyScript, StringComparison.Ordinal);
-        Assert.Contains("overflow-anchor: none", applyScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("border-block-end", applyScript, StringComparison.Ordinal);
         Assert.Contains("if (!root) {\n    return null;", applyScript, StringComparison.Ordinal);
         Assert.Contains("return window.scrollY || scrollingRoot?.scrollTop || 0", applyScript, StringComparison.Ordinal);
         Assert.Contains("anchor.matches('.rsr-code-line') ? 'span' : 'div'", applyScript, StringComparison.Ordinal);
@@ -1123,6 +1175,17 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("overlay.setAttribute('aria-hidden', 'true')", script, StringComparison.Ordinal);
         Assert.Contains("Math.min(...rects.map((rect) => rect.left))", script, StringComparison.Ordinal);
         Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
+        Assert.Contains("const inlinePadding = 6", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("rect.top)) + window.scrollY - padding", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("rect.bottom)) + window.scrollY + padding", script, StringComparison.Ordinal);
         Assert.Contains("new ResizeObserver(positionOverlay)", script, StringComparison.Ordinal);
         Assert.Contains("const refreshTargets = () =>", script, StringComparison.Ordinal);
         Assert.Contains("window.__repoSyncRadarDiffNavigation = {", script, StringComparison.Ordinal);
