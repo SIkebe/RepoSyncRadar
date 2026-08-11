@@ -53,14 +53,16 @@ internal static class PreviewDiffHighlighter
     private static readonly TimeSpan _extractionRetryDelay = TimeSpan.FromMilliseconds(250);
 
     private const int _maxExtractionAttempts = 6;
+    private const long _maxGranularPlanCells = 1_000_000;
+    private const string _extractCodeLinesToken = "__RSR_EXTRACT_CODE_LINES__";
 
-    internal const string ExtractBlocksScriptForTests = """
-(() => {
+    private const string _extractBlocksScriptTemplate = """
+((extractCodeLines) => {
   const mediaSelector = 'img,video,audio,iframe,object,embed';
   const structuralContainerSelector = '.ghd-markdown-alert,.ghd-alert,.ghd-tool';
   const codeLineSelector = 'pre > code > .rsr-code-line';
   const blockSelector =
-    `h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-code-tab-label,${codeLineSelector},${structuralContainerSelector}`;
+    `h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-code-tab-label,${extractCodeLines ? `${codeLineSelector},` : ''}${structuralContainerSelector}`;
   const leafSelector = `${blockSelector},${mediaSelector}`;
   const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
   const root =
@@ -194,15 +196,20 @@ internal static class PreviewDiffHighlighter
       const structuralContainer = element.closest(structuralContainerSelector);
       if (structuralContainer &&
           !element.matches(structuralContainerSelector) &&
-          !structuralContainer.querySelector(codeLineSelector)) {
+          !(extractCodeLines && structuralContainer.querySelector(codeLineSelector))) {
         return false;
       }
       const text = describe(element);
-      if (!element.matches(codeLineSelector) && text.length < 2) {
+      const isCodeBlock =
+        (extractCodeLines && element.matches(codeLineSelector)) ||
+        (!extractCodeLines &&
+          element.matches(`pre,${structuralContainerSelector}`) &&
+          element.querySelector(codeLineSelector));
+      if (!isCodeBlock && text.length < 2) {
         return false;
       }
       if (element.matches(structuralContainerSelector)) {
-        return !element.querySelector(codeLineSelector);
+        return !(extractCodeLines && element.querySelector(codeLineSelector));
       }
       return !element.querySelector(blockSelector);
     });
@@ -241,10 +248,20 @@ internal static class PreviewDiffHighlighter
     element.setAttribute('data-rsr-diff-index', String(index));
     return { index, text: describe(element), alignmentGroup: getAlignmentGroup(element) };
   });
-})();
+})(__RSR_EXTRACT_CODE_LINES__);
 """;
 
-    internal static async Task<IReadOnlyList<PreviewDiffBlock>> ExtractBlocksAsync(WebView2CompositionControl view)
+    internal static string ExtractBlocksScriptForTests => BuildExtractBlocksScript(extractCodeLines: true);
+
+    internal static string BuildExtractBlocksScript(bool extractCodeLines)
+        => _extractBlocksScriptTemplate.Replace(
+            _extractCodeLinesToken,
+            extractCodeLines ? "true" : "false",
+            StringComparison.Ordinal);
+
+    internal static async Task<IReadOnlyList<PreviewDiffBlock>> ExtractBlocksAsync(
+        WebView2CompositionControl view,
+        bool extractCodeLines = true)
     {
         ArgumentNullException.ThrowIfNull(view);
         if (view.CoreWebView2 is null)
@@ -254,17 +271,47 @@ internal static class PreviewDiffHighlighter
 
         for (var attempt = 0; attempt < _maxExtractionAttempts; attempt++)
         {
-          var scriptResult = await view.ExecuteScriptAsync(ExtractBlocksScriptForTests);
+            var scriptResult = await view.ExecuteScriptAsync(BuildExtractBlocksScript(extractCodeLines));
             var blocks = DeserializeBlocks(scriptResult);
-          if (blocks.Count > 0 || attempt == _maxExtractionAttempts - 1)
+            if (blocks.Count > 0 || attempt == _maxExtractionAttempts - 1)
             {
                 return blocks;
             }
 
-          await Task.Delay(_extractionRetryDelay);
+            await Task.Delay(_extractionRetryDelay);
         }
 
         return Array.Empty<PreviewDiffBlock>();
+    }
+
+    internal static async Task<IReadOnlyList<PreviewDiffBlock>[]> ExtractComparableBlocksAsync(
+        WebView2CompositionControl beforeView,
+        WebView2CompositionControl afterView)
+    {
+        ArgumentNullException.ThrowIfNull(beforeView);
+        ArgumentNullException.ThrowIfNull(afterView);
+
+        var blocks = await Task.WhenAll(
+            ExtractBlocksAsync(beforeView),
+            ExtractBlocksAsync(afterView));
+        if (!RequiresCoarseCodeBlockExtraction(blocks[0].Count, blocks[1].Count))
+        {
+            return blocks;
+        }
+
+        return await Task.WhenAll(
+            ExtractBlocksAsync(beforeView, extractCodeLines: false),
+            ExtractBlocksAsync(afterView, extractCodeLines: false));
+    }
+
+    internal static bool RequiresCoarseCodeBlockExtraction(int beforeBlockCount, int afterBlockCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(beforeBlockCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(afterBlockCount);
+
+        return beforeBlockCount > 0
+            && afterBlockCount > 0
+            && ExceedsPlanCellBudget(beforeBlockCount, afterBlockCount);
     }
 
     internal static PreviewDiffPlan BuildPlan(
@@ -289,6 +336,11 @@ internal static class PreviewDiffHighlighter
 
         var beforeTexts = beforeBlocks.Select(block => NormalizeText(block.Text)).ToArray();
         var afterTexts = afterBlocks.Select(block => NormalizeText(block.Text)).ToArray();
+        if (ExceedsPlanCellBudget(beforeTexts.Length, afterTexts.Length))
+        {
+            return BuildBoundedPlan(beforeBlocks, afterBlocks, beforeTexts, afterTexts);
+        }
+
         var lengths = new int[beforeTexts.Length + 1, afterTexts.Length + 1];
 
         for (var beforeIndex = beforeTexts.Length - 1; beforeIndex >= 0; beforeIndex--)
@@ -379,6 +431,72 @@ internal static class PreviewDiffHighlighter
 
         return new PreviewDiffPlan(beforeChanged, afterChanged, changes);
     }
+
+    private static PreviewDiffPlan BuildBoundedPlan(
+        IReadOnlyList<PreviewDiffBlock> beforeBlocks,
+        IReadOnlyList<PreviewDiffBlock> afterBlocks,
+        string[] beforeTexts,
+        string[] afterTexts)
+    {
+        var commonPrefixLength = 0;
+        while (commonPrefixLength < beforeTexts.Length
+            && commonPrefixLength < afterTexts.Length
+            && string.Equals(
+                beforeTexts[commonPrefixLength],
+                afterTexts[commonPrefixLength],
+                StringComparison.Ordinal))
+        {
+            commonPrefixLength++;
+        }
+
+        var beforeEnd = beforeTexts.Length - 1;
+        var afterEnd = afterTexts.Length - 1;
+        while (beforeEnd >= commonPrefixLength
+            && afterEnd >= commonPrefixLength
+            && string.Equals(beforeTexts[beforeEnd], afterTexts[afterEnd], StringComparison.Ordinal))
+        {
+            beforeEnd--;
+            afterEnd--;
+        }
+
+        var beforeChangedIndexes = beforeBlocks
+            .Skip(commonPrefixLength)
+            .Take(beforeEnd - commonPrefixLength + 1)
+            .Select(static block => block.Index)
+            .ToArray();
+        var afterChangedIndexes = afterBlocks
+            .Skip(commonPrefixLength)
+            .Take(afterEnd - commonPrefixLength + 1)
+            .Select(static block => block.Index)
+            .ToArray();
+        if (beforeChangedIndexes.Length == 0 && afterChangedIndexes.Length == 0)
+        {
+            return new PreviewDiffPlan([], [], []);
+        }
+
+        var beforeCursor = beforeEnd + 1;
+        var afterCursor = afterEnd + 1;
+        var advancePastCurrentAlignmentGroup =
+            IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, beforeChangedIndexes)
+            || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, afterChangedIndexes);
+        var change = new PreviewDiffChange(
+            beforeChangedIndexes,
+            afterChangedIndexes,
+            FindAlignmentAnchorIndex(
+                beforeBlocks,
+                beforeCursor,
+                beforeChangedIndexes,
+                advancePastCurrentAlignmentGroup),
+            FindAlignmentAnchorIndex(
+                afterBlocks,
+                afterCursor,
+                afterChangedIndexes,
+                advancePastCurrentAlignmentGroup));
+        return new PreviewDiffPlan(beforeChangedIndexes, afterChangedIndexes, [change]);
+    }
+
+    private static bool ExceedsPlanCellBudget(int beforeBlockCount, int afterBlockCount)
+        => ((long)beforeBlockCount + 1) * (afterBlockCount + 1) > _maxGranularPlanCells;
 
     private static int? FindAlignmentAnchorIndex(
         IReadOnlyList<PreviewDiffBlock> blocks,

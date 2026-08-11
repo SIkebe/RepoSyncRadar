@@ -1835,9 +1835,9 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var blocks = await Task.WhenAll(
-                PreviewDiffHighlighter.ExtractBlocksAsync(DocsView),
-                PreviewDiffHighlighter.ExtractBlocksAsync(PreviewView));
+            var blocks = await PreviewDiffHighlighter.ExtractComparableBlocksAsync(
+                DocsView,
+                PreviewView);
             if (!IsPreviewDiffOperationCurrent(
                     _activePreviewDiffRequest,
                     request,
@@ -1949,8 +1949,11 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var beforeBlocks = await PreviewDiffHighlighter.ExtractBlocksAsync(DocsView);
-            var afterBlocks = await PreviewDiffHighlighter.ExtractBlocksAsync(PreviewView);
+            var blocks = await PreviewDiffHighlighter.ExtractComparableBlocksAsync(
+                DocsView,
+                PreviewView);
+            var beforeBlocks = blocks[0];
+            var afterBlocks = blocks[1];
             if (!ReferenceEquals(request, _activePreviewDiffRequest) || generation != _previewDiffGeneration)
             {
                 return;

@@ -708,6 +708,58 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(3, change.AfterAnchorIndex);
     }
 
+    [Theory]
+    [InlineData(999, 999, false)]
+    [InlineData(1000, 1000, true)]
+    [InlineData(3000, 3001, true)]
+    [InlineData(0, 3000, false)]
+    public void PreviewDiffHighlighter_RequiresCoarseCodeBlockExtraction_Bounds_Lcs_Matrix(
+        int beforeBlockCount,
+        int afterBlockCount,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            PreviewDiffHighlighter.RequiresCoarseCodeBlockExtraction(
+                beforeBlockCount,
+                afterBlockCount));
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildExtractBlocksScript_Can_Collapse_Code_Lines()
+    {
+        var granularScript = PreviewDiffHighlighter.BuildExtractBlocksScript(extractCodeLines: true);
+        var coarseScript = PreviewDiffHighlighter.BuildExtractBlocksScript(extractCodeLines: false);
+
+        Assert.EndsWith("})(true);", granularScript, StringComparison.Ordinal);
+        Assert.EndsWith("})(false);", coarseScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "element.matches(`pre,${structuralContainerSelector}`)",
+            coarseScript,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("__RSR_EXTRACT_CODE_LINES__", coarseScript, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Bounds_Large_Comparisons()
+    {
+        var beforeBlocks = Enumerable.Range(0, 1000)
+            .Select(index => new PreviewDiffBlock(index, $"Shared block {index}"))
+            .ToArray();
+        var afterBlocks = beforeBlocks
+            .Select(block => block with { })
+            .ToArray();
+        afterBlocks[500] = new PreviewDiffBlock(500, "Changed block");
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Equal([500], plan.BeforeChangedIndexes);
+        Assert.Equal([500], plan.AfterChangedIndexes);
+        var change = Assert.Single(plan.Changes);
+        Assert.Equal(501, change.BeforeAnchorIndex);
+        Assert.Equal(501, change.AfterAnchorIndex);
+    }
+
     [Fact]
     public void PreviewDiffHighlighter_BuildAlignmentGapPlan_Fills_Shorter_Pane_At_Each_Hunk()
     {
