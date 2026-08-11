@@ -1,6 +1,6 @@
 ---
 name: app-improvement-audit
-description: 'Hands-on audit of RepoSyncRadar as an application. USE FOR: アプリとしての改善点を徹底調査、実際に操作しながら判断、UX/起動/設定/エラー/性能/導線/アクセシビリティ/信頼性の改善探索、manual smoke, dogfooding, end-to-end app review. Runs the app, observes failures and UI behavior, inspects code/tests only after reproducing or mapping flows, ranks findings, implements safe scoped fixes, and validates with build/tests.'
+description: 'Hands-on audit of RepoSyncRadar as an application. USE FOR: アプリとしての改善点を徹底調査、実際に操作しながら判断、preview visual regression、左右差分ずれ、WebView2 UI、UX/起動/設定/エラー/性能/導線/アクセシビリティ/信頼性の改善探索、manual smoke, dogfooding, end-to-end app review. Runs the app, observes failures and UI behavior, inspects code/tests only after reproducing or mapping flows, ranks findings, implements safe scoped fixes, and validates with build/tests.'
 argument-hint: '(任意) 重点領域: startup / settings / triage / drafts / preview / Copilot / UX / performance / report-only など'
 ---
 
@@ -71,6 +71,48 @@ RepoSyncRadar を「コードの集合」ではなく「実際に使うアプリ
    - WebView2 / preview の navigation、loading、リンク、テーマ
 4. ブラウザ/CDP/Playwright 操作が使える場合は、スクリーンショットや DOM state で確認する。既存 E2E の helper を参考に、必要なら artifacts 配下に使い捨ての Playwright/CDP smoke を作り、実設定パスは `REPOSYNCRADAR_LOCAL_APPSETTINGS_PATH` で明示する。使えない場合は terminal output、E2E tests、component tests、コード上の state transition で代替する。
    - 徹底監査で BlazorWebView / docs WebView の内部状態も見る場合は、`REPOSYNCRADAR_BLAZOR_CDP_PORT` と `REPOSYNCRADAR_DOCS_CDP_PORT` を明示して起動し、`http://127.0.0.1:<port>/json/list` で target を確認する。DOM state の記録は UI 状態や `data-testid` に絞り、Copilot prompt/response 本文やトークンなどの機密値を保存しない。
+
+### 3.1 Preview の視覚回帰を調べる
+
+左右差分、斜線 gap、overlay、スクロール同期、ペイン開閉などの報告では、代表要素1個の一致だけで解決扱いにしない。次の順で、ユーザーが見た状態そのものを検証する。
+
+1. 再現条件を固定する。
+   - commit SHA、file path、docs version
+   - ウィンドウ状態、左右の viewport 幅、DPI / device scale
+   - 左作業ペインの開閉状態、差分番号、開始 `scrollTop`
+   - 初回表示、通常スクロール後、差分移動後のどこで発生したか
+2. 左右両WebViewの状態を観測する。
+   - 片側しか CDP で見えていない状態で、もう片側も一致したと推測しない。
+   - 診断専用の env-gated CDP hook を一時追加する場合は未コミットのまま使い、最終差分から必ず除去する。
+   - 同一 origin の iframe 比較は静的 DOM/layout の切り分けには使えるが、WPF resize、WebView2 navigation、アプリの同期経路を通した最終確認の代わりにはしない。
+3. 実際のユーザー入力経路を通す。
+   - 両ペインへ直接 `scrollTo` して揃えるのではなく、片側だけを wheel / keyboard で動かし、アプリの同期処理を通す。
+   - `‹‹ / ››` は WPF UI Automation で実際のボタンを押す。幅だけを JavaScript で模擬しない。
+   - F7 や差分ボタンが報告に関係する場合だけその経路も分けて測る。初回自動移動と通常スクロールを混同しない。
+4. 文書全体を境界単位で測る。
+   - 対応する全 anchor の `documentTop`、`viewportTop`、height を比較し、最初に差が発生する DOM 境界を特定する。
+   - code block は先頭行だけでなく全行、空行、末尾、次言語見出しまで測る。
+   - table は gap の表示/非表示で、直前行高、次行 top、`colSpan` / `rowSpan`、computed `width` が変わらないか確認する。
+   - paragraph → heading では margin collapse、table では synthetic cell の列幅再配分、code では片側だけの wrapping を優先的に疑う。
+5. resize の settle を待って反復する。
+   - debounce 直後の1回だけでなく、遅延再計測後にも同じ値か確認する。
+   - 通常幅、最大化、左ペイン閉、再オープンを最低2往復し、必要なら6往復する。
+   - 各回、左右 `scrollTop` と主要境界差を記録する。目安は `0.5 CSS px` 以下。
+6. 数値と画像の両方を証拠にする。
+   - 数値が一致しても、overlay / Tip / stripe の重なりは実スクリーンショットで確認する。
+   - device scale を考慮し、接する境界の物理ピクセル行が重なっていないことを見る。
+   - 最終スクリーンショットはユーザーが指摘した位置そのものを写す。
+7. 仮説はDOMを一時的に変えて反証する。
+   - gap row を隠す、`width:auto` にする、wrapping class を揃えるなど、1要因ずつ切り替えて誤差が消えるか測る。
+   - 誤差が消えたプロパティと、変化した行高/anchor変位を根本原因の証拠にする。
+
+完了条件:
+
+- 指摘された exact SHA / path / viewport state で再現と修正後を確認した
+- 初回、片側スクロール、resize / pane toggle 後の左右 `scrollTop` が一致した
+- 指摘位置を含む全関連境界で最初の発散がなくなった
+- 実スクリーンショットで重なりや数行ずれがない
+- 診断専用コード、ポート、スクリプトが tracked diff に残っていない
 
 ### 4. 観察メモを finding に変換する
 
