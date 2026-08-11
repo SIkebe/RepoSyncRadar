@@ -27,6 +27,7 @@ RepoSyncRadar の docs preview / Markdown comparison / cache cleanup の遅延�
 5. **UIを長時間ブロックしない**。巨大worktree削除や prune は、可能なら detach/rename して前面待ちを短くし、物理削除を背景に回す。
 6. **既存変更を壊さない**。dirty worktree を前提に、関係ない変更は戻さない。
 7. **検証は実測で閉じる**。最後に対象commitをもう一度実アプリで測り、短縮後の時間を報告する。
+8. **表示の正しさも同じユーザー経路で確認する**。性能改善後の preview が左右比較、スクロール、resize、overlay を含む場合は、`app-improvement-audit` の「Preview の視覚回帰を調べる」に従い、代表要素1個や片側CDPだけで成功判定しない。
 
 ## 手順
 
@@ -187,6 +188,15 @@ dotnet run --project src/RepoSyncRadar.App --no-build
 - 修正後の実測時間
 - どのprogress segmentが消えたか
 - cache cleanup のforeground待ち時間
+
+比較 preview の layout に触れた場合は、時間だけで閉じず次も記録する。
+
+- 左右両WebViewの viewport 幅と `scrollTop`
+- 片側だけを wheel / keyboard で動かした後の同期結果
+- 最大化と左作業ペイン開閉後の主要 anchor 差
+- user-reported file の指摘位置を写した実スクリーンショット
+
+両ペインへ直接 `scrollTo` した測定、先頭 anchor だけの一致、差分移動後だけの一致は、通常スクロールや resize 回帰の証拠にしない。
 
 ### 9. full gate で閉じる
 

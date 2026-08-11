@@ -13,7 +13,8 @@ internal enum PreviewDiffPane
 
 internal sealed record PreviewDiffBlock(
     [property: JsonPropertyName("index")] int Index,
-    [property: JsonPropertyName("text")] string Text);
+    [property: JsonPropertyName("text")] string Text,
+    [property: JsonPropertyName("alignmentGroup")] string? AlignmentGroup = null);
 
 internal sealed record PreviewDiffPlan(
     IReadOnlyList<int> BeforeChangedIndexes,
@@ -22,7 +23,22 @@ internal sealed record PreviewDiffPlan(
 
 internal sealed record PreviewDiffChange(
     IReadOnlyList<int> BeforeIndexes,
-    IReadOnlyList<int> AfterIndexes);
+    IReadOnlyList<int> AfterIndexes,
+    int? BeforeAnchorIndex,
+    int? AfterAnchorIndex);
+
+internal sealed record PreviewDiffAlignmentGap(
+    [property: JsonPropertyName("anchorIndex")] int? AnchorIndex,
+    [property: JsonPropertyName("height")] double Height,
+    [property: JsonPropertyName("navigationIndex")] int NavigationIndex);
+
+internal sealed record PreviewDiffAlignmentGapPlan(
+    IReadOnlyList<PreviewDiffAlignmentGap> Before,
+    IReadOnlyList<PreviewDiffAlignmentGap> After);
+
+internal sealed record PreviewDiffAlignmentMeasurement(
+    [property: JsonPropertyName("scrollTop")] double ScrollTop,
+    [property: JsonPropertyName("offsets")] double?[] Offsets);
 
 internal sealed record PreviewDiffNavigationTarget(
     [property: JsonPropertyName("index")] int Index,
@@ -30,7 +46,7 @@ internal sealed record PreviewDiffNavigationTarget(
 
 internal readonly record struct PreviewDiffNavigationResult(
     [property: JsonPropertyName("found")] bool Found,
-    [property: JsonPropertyName("ratio")] double Ratio);
+    [property: JsonPropertyName("scrollTop")] double ScrollTop = 0);
 
 internal static class PreviewDiffHighlighter
 {
@@ -38,11 +54,16 @@ internal static class PreviewDiffHighlighter
     private static readonly TimeSpan _extractionRetryDelay = TimeSpan.FromMilliseconds(250);
 
     private const int _maxExtractionAttempts = 6;
+    private const long _maxGranularPlanCells = 1_000_000;
+    private const string _extractCodeLinesToken = "__RSR_EXTRACT_CODE_LINES__";
 
-    internal const string ExtractBlocksScriptForTests = """
-(() => {
+    private const string _extractBlocksScriptTemplate = """
+((extractCodeLines) => {
   const mediaSelector = 'img,video,audio,iframe,object,embed';
-  const blockSelector = 'h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-markdown-alert';
+  const structuralContainerSelector = '.ghd-markdown-alert,.ghd-alert,.ghd-tool';
+  const codeLineSelector = 'pre > code > .rsr-code-line';
+  const blockSelector =
+    `h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-code-tab-label,${extractCodeLines ? `${codeLineSelector},` : ''}${structuralContainerSelector}`;
   const leafSelector = `${blockSelector},${mediaSelector}`;
   const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
   const root =
@@ -61,6 +82,9 @@ internal static class PreviewDiffHighlighter
 
   const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
   const diffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
+  const substantiveDiffSelector =
+    '.rsr-rendered-diff-added:not(.rsr-rendered-diff-gap),' +
+    '.rsr-rendered-diff-removed:not(.rsr-rendered-diff-gap)';
   const canonicalizePaneRoutes = (value) =>
     normalize(value).replace(
       /\/markdown-assets\/(?:before|after)(?=\/)/g,
@@ -94,6 +118,9 @@ internal static class PreviewDiffHighlighter
   };
   const describeChangedMarkup = (element) => {
     const clone = element.cloneNode(true);
+    if (element.matches(codeLineSelector)) {
+      clone.querySelectorAll('.rsr-rendered-diff-gap').forEach((marker) => marker.remove());
+    }
     const markers = [
       ...(clone.matches(diffSelector) ? [clone] : []),
       ...clone.querySelectorAll(diffSelector),
@@ -125,6 +152,15 @@ internal static class PreviewDiffHighlighter
         element.getAttribute('alt') ||
         element.outerHTML;
       return `media:${element.tagName.toLowerCase()}:${canonicalizePaneRoutes(source)}:${fingerprintMediaContent(element)}`;
+    }
+    if (element.matches(codeLineSelector)) {
+      const text = element.textContent || '';
+      const hasSubstantiveDiff =
+        element.matches(substantiveDiffSelector) ||
+        element.querySelector(substantiveDiffSelector);
+      return hasSubstantiveDiff
+        ? `code:${text}|markup:${describeChangedMarkup(element)}`
+        : `code:${text}`;
     }
     const text = normalize(element.innerText || element.textContent);
     return element.matches(diffSelector) || element.querySelector(diffSelector)
@@ -158,21 +194,77 @@ internal static class PreviewDiffHighlighter
       if (element.matches(mediaSelector)) {
         return isVisibleMedia(element);
       }
-      const text = describe(element);
-      if (text.length < 2) {
+      const structuralContainer = element.closest(structuralContainerSelector);
+      if (structuralContainer &&
+          !element.matches(structuralContainerSelector) &&
+          !(extractCodeLines && structuralContainer.querySelector(codeLineSelector))) {
         return false;
       }
-      return element.classList.contains('ghd-markdown-alert') || !element.querySelector(blockSelector);
+      const text = describe(element);
+      const isCodeBlock =
+        (extractCodeLines && element.matches(codeLineSelector)) ||
+        (!extractCodeLines &&
+          element.matches(`pre,${structuralContainerSelector}`) &&
+          element.querySelector(codeLineSelector));
+      if (!isCodeBlock && text.length < 2) {
+        return false;
+      }
+      if (element.matches(structuralContainerSelector)) {
+        return !(extractCodeLines && element.querySelector(codeLineSelector));
+      }
+      return !element.querySelector(blockSelector);
     });
 
+  const alignmentGroups = new WeakMap();
+  Array.from(root.querySelectorAll('table')).forEach((table, tableIndex) => {
+    const rows = Array.from(table.rows);
+    const sectionEndRowIndexes = new Map();
+    rows.forEach((row, rowIndex) => {
+      sectionEndRowIndexes.set(row.parentElement, rowIndex);
+    });
+    let groupIndex = -1;
+    let groupEndRowIndex = -1;
+    rows.forEach((row, rowIndex) => {
+      if (rowIndex > groupEndRowIndex) {
+        groupIndex++;
+        groupEndRowIndex = rowIndex;
+      }
+      const sectionEndRowIndex =
+        sectionEndRowIndexes.get(row.parentElement) ?? rowIndex;
+      Array.from(row.cells).forEach((cell) => {
+        const rowsRemainingInSection = sectionEndRowIndex - rowIndex + 1;
+        const effectiveRowSpan = cell.rowSpan === 0
+          ? rowsRemainingInSection
+          : Math.min(rowsRemainingInSection, Math.max(1, cell.rowSpan));
+        groupEndRowIndex = Math.max(
+          groupEndRowIndex,
+          rowIndex + effectiveRowSpan - 1);
+      });
+      alignmentGroups.set(row, `table-${tableIndex}-row-group-${groupIndex}`);
+    });
+  });
+  const getAlignmentGroup = (element) => {
+    const row = element.closest('tr');
+    return row ? alignmentGroups.get(row) || null : null;
+  };
   return elements.map((element, index) => {
     element.setAttribute('data-rsr-diff-index', String(index));
-    return { index, text: describe(element) };
+    return { index, text: describe(element), alignmentGroup: getAlignmentGroup(element) };
   });
-})();
+})(__RSR_EXTRACT_CODE_LINES__);
 """;
 
-    internal static async Task<IReadOnlyList<PreviewDiffBlock>> ExtractBlocksAsync(WebView2CompositionControl view)
+    internal static string ExtractBlocksScriptForTests => BuildExtractBlocksScript(extractCodeLines: true);
+
+    internal static string BuildExtractBlocksScript(bool extractCodeLines)
+        => _extractBlocksScriptTemplate.Replace(
+            _extractCodeLinesToken,
+            extractCodeLines ? "true" : "false",
+            StringComparison.Ordinal);
+
+    internal static async Task<IReadOnlyList<PreviewDiffBlock>> ExtractBlocksAsync(
+        WebView2CompositionControl view,
+        bool extractCodeLines = true)
     {
         ArgumentNullException.ThrowIfNull(view);
         if (view.CoreWebView2 is null)
@@ -182,17 +274,47 @@ internal static class PreviewDiffHighlighter
 
         for (var attempt = 0; attempt < _maxExtractionAttempts; attempt++)
         {
-          var scriptResult = await view.ExecuteScriptAsync(ExtractBlocksScriptForTests);
+            var scriptResult = await view.ExecuteScriptAsync(BuildExtractBlocksScript(extractCodeLines));
             var blocks = DeserializeBlocks(scriptResult);
-          if (blocks.Count > 0 || attempt == _maxExtractionAttempts - 1)
+            if (blocks.Count > 0 || attempt == _maxExtractionAttempts - 1)
             {
                 return blocks;
             }
 
-          await Task.Delay(_extractionRetryDelay);
+            await Task.Delay(_extractionRetryDelay);
         }
 
         return Array.Empty<PreviewDiffBlock>();
+    }
+
+    internal static async Task<IReadOnlyList<PreviewDiffBlock>[]> ExtractComparableBlocksAsync(
+        WebView2CompositionControl beforeView,
+        WebView2CompositionControl afterView)
+    {
+        ArgumentNullException.ThrowIfNull(beforeView);
+        ArgumentNullException.ThrowIfNull(afterView);
+
+        var blocks = await Task.WhenAll(
+            ExtractBlocksAsync(beforeView),
+            ExtractBlocksAsync(afterView));
+        if (!RequiresCoarseCodeBlockExtraction(blocks[0].Count, blocks[1].Count))
+        {
+            return blocks;
+        }
+
+        return await Task.WhenAll(
+            ExtractBlocksAsync(beforeView, extractCodeLines: false),
+            ExtractBlocksAsync(afterView, extractCodeLines: false));
+    }
+
+    internal static bool RequiresCoarseCodeBlockExtraction(int beforeBlockCount, int afterBlockCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(beforeBlockCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(afterBlockCount);
+
+        return beforeBlockCount > 0
+            && afterBlockCount > 0
+            && ExceedsPlanCellBudget(beforeBlockCount, afterBlockCount);
     }
 
     internal static PreviewDiffPlan BuildPlan(
@@ -208,7 +330,7 @@ internal static class PreviewDiffHighlighter
             var afterIndexes = afterBlocks.Select(static block => block.Index).ToArray();
             var emptySideChanges = beforeIndexes.Length == 0 && afterIndexes.Length == 0
                 ? Array.Empty<PreviewDiffChange>()
-                : [new PreviewDiffChange(beforeIndexes, afterIndexes)];
+                : [new PreviewDiffChange(beforeIndexes, afterIndexes, null, null)];
             return new PreviewDiffPlan(
                 beforeIndexes,
                 afterIndexes,
@@ -217,6 +339,11 @@ internal static class PreviewDiffHighlighter
 
         var beforeTexts = beforeBlocks.Select(block => NormalizeText(block.Text)).ToArray();
         var afterTexts = afterBlocks.Select(block => NormalizeText(block.Text)).ToArray();
+        if (ExceedsPlanCellBudget(beforeTexts.Length, afterTexts.Length))
+        {
+            return BuildBoundedPlan(beforeBlocks, afterBlocks, beforeTexts, afterTexts);
+        }
+
         var lengths = new int[beforeTexts.Length + 1, afterTexts.Length + 1];
 
         for (var beforeIndex = beforeTexts.Length - 1; beforeIndex >= 0; beforeIndex--)
@@ -237,6 +364,8 @@ internal static class PreviewDiffHighlighter
         var changes = new List<PreviewDiffChange>();
         var currentBeforeIndexes = new List<int>();
         var currentAfterIndexes = new List<int>();
+        var beforeCursor = 0;
+        var afterCursor = 0;
         void FlushChange()
         {
             if (currentBeforeIndexes.Count == 0 && currentAfterIndexes.Count == 0)
@@ -244,15 +373,26 @@ internal static class PreviewDiffHighlighter
                 return;
             }
 
+            var advancePastCurrentAlignmentGroup =
+                IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, currentBeforeIndexes)
+                || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, currentAfterIndexes);
             changes.Add(new PreviewDiffChange(
                 currentBeforeIndexes.ToArray(),
-                currentAfterIndexes.ToArray()));
+                currentAfterIndexes.ToArray(),
+                FindAlignmentAnchorIndex(
+                    beforeBlocks,
+                    beforeCursor,
+                    currentBeforeIndexes,
+                    advancePastCurrentAlignmentGroup),
+                FindAlignmentAnchorIndex(
+                    afterBlocks,
+                    afterCursor,
+                    currentAfterIndexes,
+                    advancePastCurrentAlignmentGroup)));
             currentBeforeIndexes.Clear();
             currentAfterIndexes.Clear();
         }
 
-        var beforeCursor = 0;
-        var afterCursor = 0;
         while (beforeCursor < beforeTexts.Length && afterCursor < afterTexts.Length)
         {
             if (string.Equals(beforeTexts[beforeCursor], afterTexts[afterCursor], StringComparison.Ordinal))
@@ -293,6 +433,710 @@ internal static class PreviewDiffHighlighter
         FlushChange();
 
         return new PreviewDiffPlan(beforeChanged, afterChanged, changes);
+    }
+
+    private static PreviewDiffPlan BuildBoundedPlan(
+        IReadOnlyList<PreviewDiffBlock> beforeBlocks,
+        IReadOnlyList<PreviewDiffBlock> afterBlocks,
+        string[] beforeTexts,
+        string[] afterTexts)
+    {
+        var commonPrefixLength = 0;
+        while (commonPrefixLength < beforeTexts.Length
+            && commonPrefixLength < afterTexts.Length
+            && string.Equals(
+                beforeTexts[commonPrefixLength],
+                afterTexts[commonPrefixLength],
+                StringComparison.Ordinal))
+        {
+            commonPrefixLength++;
+        }
+
+        var beforeEnd = beforeTexts.Length - 1;
+        var afterEnd = afterTexts.Length - 1;
+        while (beforeEnd >= commonPrefixLength
+            && afterEnd >= commonPrefixLength
+            && string.Equals(beforeTexts[beforeEnd], afterTexts[afterEnd], StringComparison.Ordinal))
+        {
+            beforeEnd--;
+            afterEnd--;
+        }
+
+        var beforeChangedIndexes = beforeBlocks
+            .Skip(commonPrefixLength)
+            .Take(beforeEnd - commonPrefixLength + 1)
+            .Select(static block => block.Index)
+            .ToArray();
+        var afterChangedIndexes = afterBlocks
+            .Skip(commonPrefixLength)
+            .Take(afterEnd - commonPrefixLength + 1)
+            .Select(static block => block.Index)
+            .ToArray();
+        if (beforeChangedIndexes.Length == 0 && afterChangedIndexes.Length == 0)
+        {
+            return new PreviewDiffPlan([], [], []);
+        }
+
+        var beforeCursor = beforeEnd + 1;
+        var afterCursor = afterEnd + 1;
+        var advancePastCurrentAlignmentGroup =
+            IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, beforeChangedIndexes)
+            || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, afterChangedIndexes);
+        var change = new PreviewDiffChange(
+            beforeChangedIndexes,
+            afterChangedIndexes,
+            FindAlignmentAnchorIndex(
+                beforeBlocks,
+                beforeCursor,
+                beforeChangedIndexes,
+                advancePastCurrentAlignmentGroup),
+            FindAlignmentAnchorIndex(
+                afterBlocks,
+                afterCursor,
+                afterChangedIndexes,
+                advancePastCurrentAlignmentGroup));
+        return new PreviewDiffPlan(beforeChangedIndexes, afterChangedIndexes, [change]);
+    }
+
+    private static bool ExceedsPlanCellBudget(int beforeBlockCount, int afterBlockCount)
+        => ((long)beforeBlockCount + 1) * (afterBlockCount + 1) > _maxGranularPlanCells;
+
+    private static int? FindAlignmentAnchorIndex(
+        IReadOnlyList<PreviewDiffBlock> blocks,
+        int cursor,
+        IReadOnlyCollection<int> changedIndexes,
+        bool advancePastCurrentAlignmentGroup)
+    {
+        if (cursor >= blocks.Count)
+        {
+            return null;
+        }
+
+        var changedIndexSet = changedIndexes.ToHashSet();
+        var changedGroups = blocks
+            .Where(block => changedIndexSet.Contains(block.Index) && block.AlignmentGroup is not null)
+            .Select(static block => block.AlignmentGroup!)
+            .ToHashSet(StringComparer.Ordinal);
+        if (advancePastCurrentAlignmentGroup && blocks[cursor].AlignmentGroup is { } currentGroup)
+        {
+            changedGroups.Add(currentGroup);
+        }
+        while (cursor < blocks.Count
+            && blocks[cursor].AlignmentGroup is { } group
+            && changedGroups.Contains(group))
+        {
+            cursor++;
+        }
+
+        return cursor < blocks.Count ? blocks[cursor].Index : null;
+    }
+
+    private static bool IsAnchorInChangedAlignmentGroup(
+        IReadOnlyList<PreviewDiffBlock> blocks,
+        int cursor,
+        IReadOnlyCollection<int> changedIndexes)
+    {
+        if (cursor >= blocks.Count || blocks[cursor].AlignmentGroup is not { } anchorGroup)
+        {
+            return false;
+        }
+
+        var changedIndexSet = changedIndexes.ToHashSet();
+        return blocks.Any(
+            block => changedIndexSet.Contains(block.Index)
+                && string.Equals(block.AlignmentGroup, anchorGroup, StringComparison.Ordinal));
+    }
+
+    internal static async Task ApplyAlignmentGapsAsync(
+        WebView2CompositionControl beforeView,
+        WebView2CompositionControl afterView,
+        IReadOnlyList<PreviewDiffChange> changes,
+        Func<bool>? isCurrent = null)
+    {
+        ArgumentNullException.ThrowIfNull(beforeView);
+        ArgumentNullException.ThrowIfNull(afterView);
+        ArgumentNullException.ThrowIfNull(changes);
+        if (beforeView.CoreWebView2 is null || afterView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        var beforeAnchorsJson = JsonSerializer.Serialize(
+            changes.Select(static change => change.BeforeAnchorIndex),
+            _jsonOptions);
+        var afterAnchorsJson = JsonSerializer.Serialize(
+            changes.Select(static change => change.AfterAnchorIndex),
+            _jsonOptions);
+        var beforeCodeWrappingIndexesJson = JsonSerializer.Serialize(
+            GetCodeWrappingCandidateIndexes(changes, PreviewDiffPane.Before),
+            _jsonOptions);
+        var afterCodeWrappingIndexesJson = JsonSerializer.Serialize(
+            GetCodeWrappingCandidateIndexes(changes, PreviewDiffPane.After),
+            _jsonOptions);
+        var measurements = await Task.WhenAll(
+            beforeView.ExecuteScriptAsync(BuildMeasureAlignmentAnchorsScript(
+                beforeAnchorsJson,
+                beforeCodeWrappingIndexesJson)),
+            afterView.ExecuteScriptAsync(BuildMeasureAlignmentAnchorsScript(
+                afterAnchorsJson,
+                afterCodeWrappingIndexesJson)));
+        var beforeMeasurement = DeserializeMeasurement(measurements[0]);
+        var afterMeasurement = DeserializeMeasurement(measurements[1]);
+        if (isCurrent is not null && !isCurrent())
+        {
+            return;
+        }
+
+        if (beforeMeasurement.Offsets.Length != changes.Count
+            || afterMeasurement.Offsets.Length != changes.Count
+            || beforeMeasurement.Offsets.Any(static offset => offset is null)
+            || afterMeasurement.Offsets.Any(static offset => offset is null))
+        {
+            return;
+        }
+
+        var gapPlan = BuildAlignmentGapPlan(
+            changes,
+            beforeMeasurement.Offsets.Select(static offset => offset!.Value).ToArray(),
+            afterMeasurement.Offsets.Select(static offset => offset!.Value).ToArray());
+        var synchronizedScrollTop = ResolveSynchronizedScrollTop(
+            beforeMeasurement.ScrollTop,
+            afterMeasurement.ScrollTop);
+
+        var appliedScrollTops = await Task.WhenAll(
+            beforeView.ExecuteScriptAsync(BuildApplyAlignmentGapsScript(
+                JsonSerializer.Serialize(gapPlan.Before, _jsonOptions),
+                synchronizedScrollTop)),
+            afterView.ExecuteScriptAsync(BuildApplyAlignmentGapsScript(
+                JsonSerializer.Serialize(gapPlan.After, _jsonOptions),
+                synchronizedScrollTop)));
+        if (isCurrent is not null && !isCurrent())
+        {
+            return;
+        }
+
+        var beforeAppliedScrollTop = DeserializeDouble(appliedScrollTops[0]);
+        var afterAppliedScrollTop = DeserializeDouble(appliedScrollTops[1]);
+        if (beforeAppliedScrollTop is null || afterAppliedScrollTop is null)
+        {
+            return;
+        }
+
+        var appliedSynchronizedScrollTop = ResolveAppliedSynchronizedScrollTop(
+            beforeAppliedScrollTop.Value,
+            afterAppliedScrollTop.Value);
+        var finalScrollScript = MainWindow.BuildApplySynchronizedScrollScript(
+            appliedSynchronizedScrollTop);
+        await Task.WhenAll(
+            beforeView.ExecuteScriptAsync(finalScrollScript),
+            afterView.ExecuteScriptAsync(finalScrollScript));
+    }
+
+    internal static double ResolveSynchronizedScrollTop(double beforeScrollTop, double afterScrollTop)
+        => Math.Max(Math.Max(0, beforeScrollTop), afterScrollTop);
+
+    internal static double ResolveAppliedSynchronizedScrollTop(
+        double beforeScrollTop,
+        double afterScrollTop)
+        => Math.Min(Math.Max(0, beforeScrollTop), Math.Max(0, afterScrollTop));
+
+    internal static IReadOnlyList<int> GetCodeWrappingCandidateIndexes(
+        IReadOnlyList<PreviewDiffChange> changes,
+        PreviewDiffPane pane)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        var indexes = new List<int>();
+        var seen = new HashSet<int>();
+        foreach (var change in changes)
+        {
+            var changedIndexes = pane == PreviewDiffPane.Before
+                ? change.BeforeIndexes
+                : change.AfterIndexes;
+            foreach (var index in changedIndexes)
+            {
+                if (seen.Add(index))
+                {
+                    indexes.Add(index);
+                }
+            }
+
+            var anchorIndex = pane == PreviewDiffPane.Before
+                ? change.BeforeAnchorIndex
+                : change.AfterAnchorIndex;
+            if (anchorIndex is { } anchor)
+            {
+                if (anchor > 0 && seen.Add(anchor - 1))
+                {
+                    indexes.Add(anchor - 1);
+                }
+                if (seen.Add(anchor))
+                {
+                    indexes.Add(anchor);
+                }
+            }
+            else if (seen.Add(-1))
+            {
+                indexes.Add(-1);
+            }
+        }
+
+        return indexes;
+    }
+
+    internal static PreviewDiffAlignmentGapPlan BuildAlignmentGapPlan(
+        IReadOnlyList<PreviewDiffChange> changes,
+        IReadOnlyList<double> beforeAnchorOffsets,
+        IReadOnlyList<double> afterAnchorOffsets)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        ArgumentNullException.ThrowIfNull(beforeAnchorOffsets);
+        ArgumentNullException.ThrowIfNull(afterAnchorOffsets);
+        if (beforeAnchorOffsets.Count != changes.Count || afterAnchorOffsets.Count != changes.Count)
+        {
+            throw new ArgumentException("Every diff change must have one measured anchor in each pane.");
+        }
+
+        var beforeGaps = new List<PreviewDiffAlignmentGap>();
+        var afterGaps = new List<PreviewDiffAlignmentGap>();
+        var cumulativeBeforeGap = 0d;
+        var cumulativeAfterGap = 0d;
+        for (var index = 0; index < changes.Count; index++)
+        {
+            var beforeOffset = beforeAnchorOffsets[index] + cumulativeBeforeGap;
+            var afterOffset = afterAnchorOffsets[index] + cumulativeAfterGap;
+            var delta = beforeOffset - afterOffset;
+            if (Math.Abs(delta) < 1)
+            {
+                continue;
+            }
+
+            var change = changes[index];
+            if (delta < 0)
+            {
+                var height = -delta;
+                beforeGaps.Add(new PreviewDiffAlignmentGap(change.BeforeAnchorIndex, height, index));
+                cumulativeBeforeGap += height;
+            }
+            else
+            {
+                afterGaps.Add(new PreviewDiffAlignmentGap(change.AfterAnchorIndex, delta, index));
+                cumulativeAfterGap += delta;
+            }
+        }
+
+        return new PreviewDiffAlignmentGapPlan(beforeGaps, afterGaps);
+    }
+
+    internal static string BuildMeasureAlignmentAnchorsScript(
+        string anchorIndexesJson,
+        string codeWrappingIndexesJson = "[]")
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(anchorIndexesJson);
+        ArgumentException.ThrowIfNullOrWhiteSpace(codeWrappingIndexesJson);
+        return $$"""
+(() => {
+  const root =
+    document.querySelector('main article') ||
+    document.querySelector('article') ||
+    document.querySelector('[data-testid="article-body"]') ||
+    document.querySelector('main') ||
+    document.body;
+  const scrollingRoot = document.scrollingElement || document.documentElement || document.body;
+  const scrollTop = window.scrollY || scrollingRoot?.scrollTop || 0;
+  const existingGapElements = Array.from(
+    document.querySelectorAll('.rsr-preview-diff-alignment-gap-row,.rsr-preview-diff-alignment-gap'));
+  existingGapElements.forEach((element) => {
+    element.style.setProperty('display', 'none', 'important');
+  });
+  const restoreExistingGaps = () => {
+    existingGapElements.forEach((element) => element.style.removeProperty('display'));
+    const scrollSyncState = window.__repoSyncRadarPreviewScrollSync;
+    if (scrollSyncState) {
+      scrollSyncState.suppressUntil = Date.now() + 1000;
+    }
+    const maxScrollTop = Math.max(0, (scrollingRoot?.scrollHeight || 0) - window.innerHeight);
+    window.scrollTo({ top: Math.min(scrollTop, maxScrollTop), behavior: 'auto' });
+    if (scrollSyncState) {
+      scrollSyncState.lastScrollTop = window.scrollY || scrollingRoot?.scrollTop || 0;
+    }
+  };
+  if (!root) {
+    restoreExistingGaps();
+    return { scrollTop, offsets: [] };
+  }
+  const codeWrapStyleId = 'rsr-preview-diff-code-wrap-style';
+  if (!document.getElementById(codeWrapStyleId)) {
+    const style = document.createElement('style');
+    style.id = codeWrapStyleId;
+    style.textContent = `
+html, body {
+  overflow-anchor: none !important;
+}
+pre.rsr-preview-diff-aligned-code {
+  overflow-wrap: anywhere !important;
+  white-space: pre-wrap !important;
+}
+pre.rsr-preview-diff-aligned-code code {
+  overflow-wrap: inherit !important;
+  white-space: inherit !important;
+}
+`;
+    document.head.appendChild(style);
+  }
+  root.querySelectorAll('pre.rsr-preview-diff-aligned-code').forEach((element) => {
+    element.classList.remove('rsr-preview-diff-aligned-code');
+  });
+  {{codeWrappingIndexesJson}}.forEach((index) => {
+    const target = index >= 0
+      ? document.querySelector(`[data-rsr-diff-index="${index}"]`)
+      : Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1);
+    const codeBlock = target?.matches('pre') ? target : target?.closest('pre');
+    codeBlock?.classList.add('rsr-preview-diff-aligned-code');
+  });
+  const offsets = {{anchorIndexesJson}}.map((anchorIndex) => {
+      if (anchorIndex === null) {
+        return root.getBoundingClientRect().bottom + window.scrollY;
+      }
+      const anchor = document.querySelector(`[data-rsr-diff-index="${anchorIndex}"]`);
+      return anchor
+        ? anchor.getBoundingClientRect().top + window.scrollY
+        : null;
+    });
+  restoreExistingGaps();
+  return { scrollTop, offsets };
+})();
+""";
+    }
+
+    internal static string BuildApplyAlignmentGapsScript(
+        string gapsJson,
+        double preservedScrollTop = 0)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gapsJson);
+        var scrollTopLiteral = Math.Max(0, preservedScrollTop)
+            .ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        return $$"""
+(() => {
+  const preservedScrollTop = {{scrollTopLiteral}};
+  const styleId = 'rsr-preview-diff-alignment-style';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+:root {
+  --rsr-preview-gap-bg: rgba(110, 118, 129, 0.08);
+  --rsr-preview-gap-stripe: rgba(110, 118, 129, 0.42);
+  --rsr-preview-gap-border: rgba(110, 118, 129, 0.22);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-color-mode="light"]) {
+    --rsr-preview-gap-bg: rgba(139, 148, 158, 0.08);
+    --rsr-preview-gap-stripe: rgba(139, 148, 158, 0.42);
+    --rsr-preview-gap-border: rgba(139, 148, 158, 0.24);
+  }
+}
+:root[data-color-mode="dark"] {
+  --rsr-preview-gap-bg: rgba(139, 148, 158, 0.08);
+  --rsr-preview-gap-stripe: rgba(139, 148, 158, 0.42);
+  --rsr-preview-gap-border: rgba(139, 148, 158, 0.24);
+}
+.rsr-preview-diff-alignment-gap {
+  background-clip: content-box !important;
+  background-color: var(--rsr-preview-gap-bg) !important;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    var(--rsr-preview-gap-stripe) 6px 8px) !important;
+  border-block-start: 1px solid var(--rsr-preview-gap-border) !important;
+  box-sizing: border-box !important;
+  display: block !important;
+  list-style: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  padding-block-end: var(--rsr-preview-gap-separator) !important;
+  pointer-events: none !important;
+  width: 100% !important;
+}
+td.rsr-preview-diff-alignment-gap {
+  display: table-cell !important;
+  width: auto !important;
+}
+`;
+    document.head.appendChild(style);
+  }
+
+  document.querySelectorAll(
+    '.rsr-preview-diff-alignment-gap-section,' +
+    '.rsr-preview-diff-alignment-gap-row,' +
+    '.rsr-preview-diff-alignment-gap').forEach((element) => {
+    element.remove();
+  });
+  const root =
+    document.querySelector('main article') ||
+    document.querySelector('article') ||
+    document.querySelector('[data-testid="article-body"]') ||
+    document.querySelector('main') ||
+    document.body;
+  if (!root) {
+    return null;
+  }
+
+  const setGapHeight = (element, height) => {
+    const separatorHeight = Math.min(6, Math.max(0, height - 1));
+    element.style.setProperty(
+      '--rsr-preview-gap-separator',
+      `${separatorHeight.toFixed(2)}px`);
+    element.style.height = `${height.toFixed(2)}px`;
+  };
+  const createGap = (height, navigationIndex, tagName = 'div') => {
+    const element = document.createElement(tagName);
+    element.className = 'rsr-preview-diff-alignment-gap';
+    element.setAttribute('aria-hidden', 'true');
+    element.setAttribute('role', 'presentation');
+    element.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
+    setGapHeight(element, height);
+    return element;
+  };
+  const insertGapBefore = (anchor, gap, desiredHeight) => {
+    const anchorTopBefore = anchor.getBoundingClientRect().top;
+    anchor.parentNode.insertBefore(gap, anchor);
+    let renderedHeight = desiredHeight;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const actualDisplacement = anchor.getBoundingClientRect().top - anchorTopBefore;
+      const correction = desiredHeight - actualDisplacement;
+      if (Math.abs(correction) <= 0.1) {
+        break;
+      }
+      renderedHeight = Math.max(1, renderedHeight + correction);
+      setGapHeight(gap, renderedHeight);
+    }
+  };
+  const insertGapAfter = (context, gap, desiredHeight) => {
+    const rootBottomBefore = root.getBoundingClientRect().bottom;
+    context.parentNode.insertBefore(gap, context.nextSibling);
+    let renderedHeight = desiredHeight;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const actualDisplacement = root.getBoundingClientRect().bottom - rootBottomBefore;
+      const correction = desiredHeight - actualDisplacement;
+      if (Math.abs(correction) <= 0.1) {
+        break;
+      }
+      renderedHeight = Math.max(1, renderedHeight + correction);
+      setGapHeight(gap, renderedHeight);
+    }
+  };
+  const insertTableGapBefore = (row, gapRow, gapCell, desiredHeight) => {
+    const rowTopBefore = row.getBoundingClientRect().top;
+    row.parentNode.insertBefore(gapRow, row);
+    let renderedHeight = desiredHeight;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const actualDisplacement = row.getBoundingClientRect().top - rowTopBefore;
+      const correction = desiredHeight - actualDisplacement;
+      if (Math.abs(correction) <= 0.1) {
+        break;
+      }
+      renderedHeight = Math.max(1, renderedHeight + correction);
+      setGapHeight(gapCell, renderedHeight);
+    }
+  };
+  const insertTableGapAfter = (row, gapSection, gapCell, desiredHeight) => {
+    const rootBottomBefore = root.getBoundingClientRect().bottom;
+    const rowGroup = row.parentNode;
+    const table = row.closest('table');
+    table.insertBefore(gapSection, rowGroup.nextSibling);
+    let renderedHeight = desiredHeight;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const actualDisplacement = root.getBoundingClientRect().bottom - rootBottomBefore;
+      const correction = desiredHeight - actualDisplacement;
+      if (Math.abs(correction) <= 0.1) {
+        break;
+      }
+      renderedHeight = Math.max(1, renderedHeight + correction);
+      setGapHeight(gapCell, renderedHeight);
+    }
+  };
+  const tableColumnCounts = new WeakMap();
+  const getTableColumnCount = (table) => {
+    if (!table) {
+      return 1;
+    }
+    const cachedColumnCount = tableColumnCounts.get(table);
+    if (cachedColumnCount !== undefined) {
+      return cachedColumnCount;
+    }
+    const rows = Array.from(table.rows);
+    const sectionEndRowIndexes = new Map();
+    rows.forEach((tableRow, rowIndex) => {
+      sectionEndRowIndexes.set(tableRow.parentElement, rowIndex);
+    });
+    const activeRowSpans = [];
+    let widestColumnCount = 1;
+    rows.forEach((tableRow, rowIndex) => {
+      const sectionEndRowIndex =
+        sectionEndRowIndexes.get(tableRow.parentElement) ?? rowIndex;
+      let columnIndex = 0;
+      Array.from(tableRow.cells).forEach((cell) => {
+        const colSpan = Math.max(1, cell.colSpan || 1);
+        let fits = false;
+        while (!fits) {
+          while ((activeRowSpans[columnIndex] || 0) > 0) {
+            columnIndex++;
+          }
+          fits = true;
+          for (let offset = 0; offset < colSpan; offset++) {
+            if ((activeRowSpans[columnIndex + offset] || 0) > 0) {
+              columnIndex += offset + 1;
+              fits = false;
+              break;
+            }
+          }
+        }
+        const rowsRemainingInSection = sectionEndRowIndex - rowIndex + 1;
+        const effectiveRowSpan = cell.rowSpan === 0
+          ? rowsRemainingInSection
+          : Math.min(rowsRemainingInSection, Math.max(1, cell.rowSpan));
+        for (let offset = 0; offset < colSpan; offset++) {
+          activeRowSpans[columnIndex + offset] = Math.max(
+            activeRowSpans[columnIndex + offset] || 0,
+            effectiveRowSpan);
+        }
+        columnIndex += colSpan;
+      });
+      const occupiedColumnCount = activeRowSpans.reduce(
+        (count, remainingRows, index) => remainingRows > 0 ? index + 1 : count,
+        0);
+      widestColumnCount = Math.max(
+        widestColumnCount,
+        columnIndex,
+        occupiedColumnCount);
+      for (let index = 0; index < activeRowSpans.length; index++) {
+        activeRowSpans[index] = Math.max(0, (activeRowSpans[index] || 0) - 1);
+      }
+    });
+    tableColumnCounts.set(table, widestColumnCount);
+    return widestColumnCount;
+  };
+  const gaps = {{gapsJson}};
+  gaps.forEach((gap) => {
+    const height = Math.max(1, Number(gap.height) || 0);
+    const anchor = gap.anchorIndex === null
+      ? null
+      : document.querySelector(`[data-rsr-diff-index="${gap.anchorIndex}"]`);
+    const row = anchor?.closest('tr');
+    if (row?.parentNode) {
+      const gapRow = document.createElement('tr');
+      gapRow.className = 'rsr-preview-diff-alignment-gap-row';
+      gapRow.setAttribute('aria-hidden', 'true');
+      gapRow.setAttribute('role', 'presentation');
+      const gapCell = createGap(height, gap.navigationIndex, 'td');
+      const table = row.closest('table');
+      gapCell.colSpan = getTableColumnCount(table);
+      gapRow.appendChild(gapCell);
+      insertTableGapBefore(row, gapRow, gapCell, height);
+      return;
+    }
+    if (anchor?.parentNode) {
+      const tagName = anchor.matches('.rsr-code-line') ? 'span' : 'div';
+      insertGapBefore(anchor, createGap(height, gap.navigationIndex, tagName), height);
+      return;
+    }
+    const terminalElement =
+      Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1);
+    const terminalRow = terminalElement?.closest('tr');
+    if (terminalRow?.parentNode) {
+      const table = terminalRow.closest('table');
+      if (terminalRow.parentElement?.matches('tfoot')) {
+        insertGapAfter(table, createGap(height, gap.navigationIndex), height);
+        return;
+      }
+      const gapSection = document.createElement('tbody');
+      gapSection.className = 'rsr-preview-diff-alignment-gap-section';
+      gapSection.setAttribute('aria-hidden', 'true');
+      gapSection.setAttribute('role', 'presentation');
+      const gapRow = document.createElement('tr');
+      gapRow.className = 'rsr-preview-diff-alignment-gap-row';
+      gapRow.setAttribute('aria-hidden', 'true');
+      gapRow.setAttribute('role', 'presentation');
+      const gapCell = createGap(height, gap.navigationIndex, 'td');
+      gapCell.colSpan = getTableColumnCount(table);
+      gapRow.appendChild(gapCell);
+      gapSection.appendChild(gapRow);
+      insertTableGapAfter(terminalRow, gapSection, gapCell, height);
+      return;
+    }
+    const terminalMediaSelector = 'img,video,audio,iframe,object,embed';
+    const terminalContext = terminalElement?.matches(terminalMediaSelector)
+      ? terminalElement.closest('li') ||
+        terminalElement.closest('p,figure') ||
+        terminalElement.closest('picture,object') ||
+        terminalElement
+      : terminalElement;
+    if (terminalContext?.parentNode) {
+      const tagName = terminalContext.matches('.rsr-code-line')
+        ? 'span'
+        : terminalContext.matches('li') ? 'li' : 'div';
+      insertGapAfter(
+        terminalContext,
+        createGap(height, gap.navigationIndex, tagName),
+        height);
+      return;
+    }
+    root.appendChild(createGap(height, gap.navigationIndex));
+  });
+  window.__repoSyncRadarDiffNavigation?.refresh?.();
+  window.__repoSyncRadarDiffScrollbar?.scheduleBuild?.();
+  const scrollingRoot = document.scrollingElement || document.documentElement || document.body;
+  const scrollSyncState = window.__repoSyncRadarPreviewScrollSync;
+  if (scrollSyncState) {
+    scrollSyncState.suppressUntil = Date.now() + 1000;
+  }
+  const maxScrollTop = Math.max(0, (scrollingRoot?.scrollHeight || 0) - window.innerHeight);
+  window.scrollTo({ top: Math.min(preservedScrollTop, maxScrollTop), behavior: 'auto' });
+  if (scrollSyncState) {
+    scrollSyncState.lastScrollTop = window.scrollY || scrollingRoot?.scrollTop || 0;
+  }
+  return window.scrollY || scrollingRoot?.scrollTop || 0;
+})();
+""";
+    }
+
+    private static PreviewDiffAlignmentMeasurement DeserializeMeasurement(string? scriptResult)
+    {
+        if (string.IsNullOrWhiteSpace(scriptResult)
+            || string.Equals(scriptResult, "null", StringComparison.Ordinal))
+        {
+            return new PreviewDiffAlignmentMeasurement(0, []);
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<PreviewDiffAlignmentMeasurement>(
+                    scriptResult,
+                    _jsonOptions)
+                ?? new PreviewDiffAlignmentMeasurement(0, []);
+        }
+        catch (JsonException)
+        {
+            return new PreviewDiffAlignmentMeasurement(0, []);
+        }
+    }
+
+    internal static double? DeserializeDouble(string? scriptResult)
+    {
+        if (string.IsNullOrWhiteSpace(scriptResult)
+            || string.Equals(scriptResult, "null", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<double>(scriptResult, _jsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     internal static async Task ApplyPlanAsync(
@@ -340,6 +1184,11 @@ internal static class PreviewDiffHighlighter
   padding: 0.14rem 0.45rem 0.14rem 0.65rem !important;
   margin-left: -0.65rem !important;
   color: inherit !important;
+}
+.rsr-code-line.rsr-preview-diff-block {
+  border-radius: 2px !important;
+  margin-left: 0 !important;
+  padding: 0 0 0 0.35rem !important;
 }
 .ghd-markdown-alert.rsr-preview-diff-block {
   display: block !important;
@@ -412,46 +1261,50 @@ internal static class PreviewDiffHighlighter
   });
 
   const markerRootId = 'rsr-preview-diff-scrollbar';
-  document.getElementById(markerRootId)?.remove();
-  if (changedIndexes.size > 0) {
+  const buildMarkers = () => {
+    document.getElementById(markerRootId)?.remove();
+    const markerElements = Array.from(
+      document.querySelectorAll('.rsr-preview-diff-block,[data-rsr-diff-navigation-index]'));
+    if (markerElements.length === 0) {
+      return;
+    }
     const root = document.scrollingElement || document.documentElement || document.body;
     const maxScrollTop = Math.max(1, root.scrollHeight - window.innerHeight);
     const rail = document.createElement('div');
     rail.id = markerRootId;
     rail.className = 'rsr-preview-diff-scrollbar';
     const markerGroups = new Map();
-    changedIndexes.forEach((index) => {
-      const element = document.querySelector(`[data-rsr-diff-index="${index}"]`);
-      if (!element) {
-        return;
-      }
-      const navigationIndex = element.getAttribute('data-rsr-diff-navigation-index');
-      const groupKey = navigationIndex === null ? `block-${index}` : `hunk-${navigationIndex}`;
-      if (!markerGroups.has(groupKey)) {
-        markerGroups.set(groupKey, []);
-      }
-      markerGroups.get(groupKey).push(element);
-    });
-    markerGroups.forEach((elements) => {
-      const rects = elements
-        .map((element) => element.getBoundingClientRect())
-        .filter((rect) => rect.width > 0 && rect.height > 0);
-      if (rects.length === 0) {
-        return;
-      }
-      const marker = document.createElement('div');
-      marker.className = `rsr-preview-diff-scrollbar-marker ${pane === 'before' ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
-      const absoluteTop = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
-      const absoluteBottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
-      const top = Math.max(0, Math.min(1, absoluteTop / maxScrollTop));
-      const height = Math.max(4, Math.min(window.innerHeight, ((absoluteBottom - absoluteTop) / maxScrollTop) * window.innerHeight));
-      const markerTop = Math.max(0, Math.min(window.innerHeight - height, top * window.innerHeight));
-      marker.style.top = `${markerTop.toFixed(1)}px`;
-      marker.style.height = `${height.toFixed(1)}px`;
-      rail.appendChild(marker);
-    });
-    document.body.appendChild(rail);
-  }
+    markerElements.forEach((element) => {
+        const navigationIndex = element.getAttribute('data-rsr-diff-navigation-index');
+        const blockIndex = element.getAttribute('data-rsr-diff-index') ?? markerGroups.size;
+        const groupKey = navigationIndex === null ? `block-${blockIndex}` : `hunk-${navigationIndex}`;
+        if (!markerGroups.has(groupKey)) {
+          markerGroups.set(groupKey, []);
+        }
+        markerGroups.get(groupKey).push(element);
+      });
+      markerGroups.forEach((elements) => {
+        const rects = elements
+          .map((element) => element.getBoundingClientRect())
+          .filter((rect) => rect.width > 0 && rect.height > 0);
+        if (rects.length === 0) {
+          return;
+        }
+        const marker = document.createElement('div');
+        marker.className = `rsr-preview-diff-scrollbar-marker ${pane === 'before' ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
+        const absoluteTop = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
+        const absoluteBottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
+        const top = Math.max(0, Math.min(1, absoluteTop / maxScrollTop));
+        const height = Math.max(4, Math.min(window.innerHeight, ((absoluteBottom - absoluteTop) / maxScrollTop) * window.innerHeight));
+        const markerTop = Math.max(0, Math.min(window.innerHeight - height, top * window.innerHeight));
+        marker.style.top = `${markerTop.toFixed(1)}px`;
+        marker.style.height = `${height.toFixed(1)}px`;
+        rail.appendChild(marker);
+      });
+      document.body.appendChild(rail);
+  };
+  window.__repoSyncRadarDiffScrollbar = { scheduleBuild: buildMarkers };
+  buildMarkers();
 
   return changedIndexes.size;
 })();
@@ -544,20 +1397,27 @@ internal static class PreviewDiffHighlighter
     window.removeEventListener('resize', existingOverlay.__positionHandler);
   }
   existingOverlay?.remove();
+  window.__repoSyncRadarDiffNavigation = undefined;
 
-  const targets = Array.from(
+  let targets = Array.from(
     document.querySelectorAll('[data-rsr-diff-navigation-index="{{navigationIndex}}"]'));
   if (targets.length === 0) {
-    return { found: false, ratio: 0 };
+    return { found: false };
   }
   const root = document.scrollingElement || document.documentElement || document.body;
   const maxScrollTop = Math.max(1, (root?.scrollHeight || 0) - window.innerHeight);
-  const targetRect = targets[0].getBoundingClientRect();
-  const targetTop = targetRect.top + window.scrollY;
+  const targetRects = targets
+    .map((target) => target.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+  if (targetRects.length === 0) {
+    return { found: false };
+  }
+  const targetTop = Math.min(...targetRects.map((rect) => rect.top)) + window.scrollY;
+  const targetBottom = Math.max(...targetRects.map((rect) => rect.bottom)) + window.scrollY;
+  const targetHeight = targetBottom - targetTop;
   const centeredScrollTop = Math.max(
     0,
-    Math.min(maxScrollTop, targetTop - (window.innerHeight - targetRect.height) / 2));
-  const ratio = Math.max(0, Math.min(1, centeredScrollTop / maxScrollTop));
+    Math.min(maxScrollTop, targetTop - (window.innerHeight - targetHeight) / 2));
   const overlay = document.createElement('div');
   overlay.id = overlayId;
   overlay.className = 'rsr-preview-diff-active-overlay';
@@ -571,11 +1431,11 @@ internal static class PreviewDiffHighlighter
       return;
     }
     overlay.hidden = false;
-    const padding = 6;
-    const left = Math.min(...rects.map((rect) => rect.left)) + window.scrollX - padding;
-    const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY - padding;
-    const right = Math.max(...rects.map((rect) => rect.right)) + window.scrollX + padding;
-    const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY + padding;
+    const inlinePadding = 6;
+    const left = Math.min(...rects.map((rect) => rect.left)) + window.scrollX - inlinePadding;
+    const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
+    const right = Math.max(...rects.map((rect) => rect.right)) + window.scrollX + inlinePadding;
+    const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
     overlay.style.left = `${left.toFixed(1)}px`;
     overlay.style.top = `${top.toFixed(1)}px`;
     overlay.style.width = `${Math.max(0, right - left).toFixed(1)}px`;
@@ -583,20 +1443,34 @@ internal static class PreviewDiffHighlighter
   };
   overlay.__positionHandler = positionOverlay;
   document.body.appendChild(overlay);
-  positionOverlay();
   window.addEventListener('resize', positionOverlay, { passive: true });
-  if (typeof ResizeObserver === 'function') {
-    const resizeObserver = new ResizeObserver(positionOverlay);
-    targets.forEach((target) => resizeObserver.observe(target));
-    resizeObserver.observe(document.body);
-    overlay.__resizeObserver = resizeObserver;
-  }
+  const refreshTargets = () => {
+    targets = Array.from(
+      document.querySelectorAll('[data-rsr-diff-navigation-index="{{navigationIndex}}"]'));
+    overlay.__resizeObserver?.disconnect();
+    positionOverlay();
+    if (typeof ResizeObserver === 'function') {
+      const resizeObserver = new ResizeObserver(positionOverlay);
+      targets.forEach((target) => resizeObserver.observe(target));
+      resizeObserver.observe(document.body);
+      overlay.__resizeObserver = resizeObserver;
+    }
+  };
+  window.__repoSyncRadarDiffNavigation = {
+    navigationIndex: {{navigationIndex}},
+    refresh: refreshTargets,
+  };
+  refreshTargets();
   const scrollSyncState = window.__repoSyncRadarPreviewScrollSync;
   if (scrollSyncState) {
     scrollSyncState.suppressUntil = Date.now() + 1000;
   }
   window.scrollTo({ top: centeredScrollTop, behavior: 'auto' });
-  return { found: true, ratio };
+  const appliedScrollTop = window.scrollY || root?.scrollTop || 0;
+  if (scrollSyncState) {
+    scrollSyncState.lastScrollTop = appliedScrollTop;
+  }
+  return { found: true, scrollTop: appliedScrollTop };
 })();
 """;
     }
@@ -614,7 +1488,7 @@ internal static class PreviewDiffHighlighter
             var result = JsonSerializer.Deserialize<PreviewDiffNavigationResult>(
                 scriptResult,
                 _jsonOptions);
-            return result with { Ratio = Math.Clamp(result.Ratio, 0, 1) };
+            return result;
         }
         catch (JsonException)
         {

@@ -266,7 +266,7 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("p,ul,ol,pre,blockquote,table{margin:0 0 1rem;}");
         html.AppendLine("a{color:var(--rsr-link);}code{background:var(--rsr-code-bg);border-radius:4px;padding:.12em .28em;font-family:'Cascadia Mono',Consolas,monospace;font-size:.92em;}");
         html.AppendLine("pre{background:var(--rsr-pre-bg);border-radius:6px;overflow:auto;padding:16px;}pre code{background:transparent;padding:0;}");
-        html.AppendLine(".rsr-syntax-token{color:var(--rsr-syntax-light);}");
+        html.AppendLine(".rsr-code-line{display:block;min-height:1.55em;}.rsr-syntax-token{color:var(--rsr-syntax-light);}");
         html.AppendLine("@media (prefers-color-scheme: dark){:root:not([data-color-mode=\"light\"]) .rsr-syntax-token{color:var(--rsr-syntax-dark);}}");
         html.AppendLine(":root[data-color-mode=\"dark\"] .rsr-syntax-token{color:var(--rsr-syntax-dark);}:root[data-color-mode=\"light\"] .rsr-syntax-token{color:var(--rsr-syntax-light);}");
         // Code blocks normally scroll horizontally to mirror docs.github.com, but a

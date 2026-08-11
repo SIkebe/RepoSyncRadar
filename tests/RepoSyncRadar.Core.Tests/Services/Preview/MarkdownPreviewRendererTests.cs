@@ -1677,6 +1677,35 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Wraps_Each_Code_Line_For_Preview_Alignment()
+    {
+        const string markdown = """
+            ```typescript
+            const first = 1;
+
+            const second = 2;
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains(
+            "<span class=\"rsr-code-line\"><span class=\"rsr-syntax-token\"",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-code-line\"><br></span>",
+            html,
+            StringComparison.Ordinal);
+        Assert.Equal(3, CountOccurrences(html, "<span class=\"rsr-code-line\">"));
+        Assert.Contains(".rsr-code-line{display:block;min-height:1.55em;}", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Highlights_Added_CodeTab_Without_Escaping_Diff_Markers()
     {
         const string beforeMarkdown = """
