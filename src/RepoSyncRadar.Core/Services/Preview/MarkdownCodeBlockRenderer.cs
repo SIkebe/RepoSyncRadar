@@ -322,14 +322,15 @@ internal sealed partial class MarkdownCodeBlockRenderer : HtmlObjectRenderer<Cod
                 var line = parsedCode.Code.AsMemory(lineStart, lineEnd - lineStart);
                 var tokenized = grammar.TokenizeLine(line, ruleStack, TimeSpan.FromSeconds(1));
                 ruleStack = tokenized.RuleStack;
+                renderer.Write("<span class=\"rsr-code-line\">");
                 WriteTokenizedLine(renderer, parsedCode, lineStart, line.Length, tokenized.Tokens);
+                renderer.Write("</span>");
 
                 if (!hasLineBreak)
                 {
                     break;
                 }
 
-                renderer.Write('\n');
                 lineStart = lineEnd + 1;
             }
         }
@@ -570,12 +571,33 @@ internal sealed partial class MarkdownCodeBlockRenderer : HtmlObjectRenderer<Cod
 
     private static void WritePlainCode(HtmlRenderer renderer, ParsedCode parsedCode)
     {
-        WriteCodeWithDiff(
-            renderer,
-            parsedCode,
-            0,
-            parsedCode.Code.Length,
-            [new StyledRange(0, parsedCode.Code.Length, null)]);
+        var lineStart = 0;
+        while (lineStart <= parsedCode.Code.Length)
+        {
+            var lineEnd = parsedCode.Code.IndexOf('\n', lineStart);
+            var hasLineBreak = lineEnd >= 0;
+            if (!hasLineBreak)
+            {
+                lineEnd = parsedCode.Code.Length;
+            }
+
+            var lineLength = lineEnd - lineStart;
+            renderer.Write("<span class=\"rsr-code-line\">");
+            WriteCodeWithDiff(
+                renderer,
+                parsedCode,
+                lineStart,
+                lineLength,
+                [new StyledRange(lineStart, lineLength, null)]);
+            renderer.Write("</span>");
+
+            if (!hasLineBreak)
+            {
+                break;
+            }
+
+            lineStart = lineEnd + 1;
+        }
     }
 
     private static void WriteGapMarkers(

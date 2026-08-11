@@ -682,6 +682,33 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Aligns_Inserted_Code_Lines_Inside_Block()
+    {
+        var beforeBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "case completed:"),
+            new PreviewDiffBlock(1, "break;"),
+            new PreviewDiffBlock(2, "case failed:"),
+        };
+        var afterBlocks = new[]
+        {
+            new PreviewDiffBlock(0, "case completed:"),
+            new PreviewDiffBlock(1, "log duration"),
+            new PreviewDiffBlock(2, "log tokens"),
+            new PreviewDiffBlock(3, "break;"),
+            new PreviewDiffBlock(4, "case failed:"),
+        };
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        var change = Assert.Single(plan.Changes);
+        Assert.Empty(change.BeforeIndexes);
+        Assert.Equal([1, 2], change.AfterIndexes);
+        Assert.Equal(1, change.BeforeAnchorIndex);
+        Assert.Equal(3, change.AfterAnchorIndex);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildAlignmentGapPlan_Fills_Shorter_Pane_At_Each_Hunk()
     {
         var changes = new[]
@@ -734,6 +761,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("__repoSyncRadarDiffNavigation?.refresh?.()", applyScript, StringComparison.Ordinal);
         Assert.Contains("const actualDisplacement =", applyScript, StringComparison.Ordinal);
         Assert.Contains("'margin-block-end'", applyScript, StringComparison.Ordinal);
+        Assert.Contains("anchor.matches('.rsr-code-line') ? 'span' : 'div'", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("anchor?.closest('.ghd-", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("createGap(height, gap.navigationIndex, 'li')", applyScript, StringComparison.Ordinal);
     }
@@ -772,9 +800,36 @@ public sealed class MainWindowPreviewComparisonTests
         var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
 
         Assert.Contains(".ghd-markdown-alert", script, StringComparison.Ordinal);
-        Assert.Contains(".ghd-alert,.ghd-tool,.ghd-code-tabs", script, StringComparison.Ordinal);
+        Assert.Contains(".ghd-alert,.ghd-tool", script, StringComparison.Ordinal);
         Assert.Contains("element.matches(structuralContainerSelector)", script, StringComparison.Ordinal);
         Assert.Contains("element.closest(structuralContainerSelector)", script, StringComparison.Ordinal);
+        Assert.Contains("structuralContainer.querySelector(codeLineSelector)", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ExtractScript_Uses_Code_Lines_Inside_Code_Tabs_And_Fences()
+    {
+        var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
+
+        Assert.Contains(
+            "const codeLineSelector = 'pre > code > .rsr-code-line'",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(".ghd-code-tab-label", script, StringComparison.Ordinal);
+        Assert.Contains("element.matches(codeLineSelector)", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "'.rsr-rendered-diff-added:not(.rsr-rendered-diff-gap),'",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "'.rsr-rendered-diff-removed:not(.rsr-rendered-diff-gap)'",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("element.matches(substantiveDiffSelector)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "const structuralContainerSelector = '.ghd-markdown-alert,.ghd-alert,.ghd-tool,.ghd-code-tabs'",
+            script,
+            StringComparison.Ordinal);
     }
 
     [Fact]

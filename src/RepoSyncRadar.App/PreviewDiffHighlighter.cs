@@ -57,9 +57,10 @@ internal static class PreviewDiffHighlighter
     internal const string ExtractBlocksScriptForTests = """
 (() => {
   const mediaSelector = 'img,video,audio,iframe,object,embed';
-  const structuralContainerSelector = '.ghd-markdown-alert,.ghd-alert,.ghd-tool,.ghd-code-tabs';
+  const structuralContainerSelector = '.ghd-markdown-alert,.ghd-alert,.ghd-tool';
+  const codeLineSelector = 'pre > code > .rsr-code-line';
   const blockSelector =
-    `h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,${structuralContainerSelector}`;
+    `h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-code-tab-label,${codeLineSelector},${structuralContainerSelector}`;
   const leafSelector = `${blockSelector},${mediaSelector}`;
   const blockedAncestorSelector = 'nav,header,footer,aside,[role="navigation"]';
   const root =
@@ -78,6 +79,9 @@ internal static class PreviewDiffHighlighter
 
   const normalize = (value) => (value || '').replace(/\s+/g, ' ').trim();
   const diffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
+  const substantiveDiffSelector =
+    '.rsr-rendered-diff-added:not(.rsr-rendered-diff-gap),' +
+    '.rsr-rendered-diff-removed:not(.rsr-rendered-diff-gap)';
   const canonicalizePaneRoutes = (value) =>
     normalize(value).replace(
       /\/markdown-assets\/(?:before|after)(?=\/)/g,
@@ -111,6 +115,9 @@ internal static class PreviewDiffHighlighter
   };
   const describeChangedMarkup = (element) => {
     const clone = element.cloneNode(true);
+    if (element.matches(codeLineSelector)) {
+      clone.querySelectorAll('.rsr-rendered-diff-gap').forEach((marker) => marker.remove());
+    }
     const markers = [
       ...(clone.matches(diffSelector) ? [clone] : []),
       ...clone.querySelectorAll(diffSelector),
@@ -142,6 +149,15 @@ internal static class PreviewDiffHighlighter
         element.getAttribute('alt') ||
         element.outerHTML;
       return `media:${element.tagName.toLowerCase()}:${canonicalizePaneRoutes(source)}:${fingerprintMediaContent(element)}`;
+    }
+    if (element.matches(codeLineSelector)) {
+      const text = element.textContent || '';
+      const hasSubstantiveDiff =
+        element.matches(substantiveDiffSelector) ||
+        element.querySelector(substantiveDiffSelector);
+      return hasSubstantiveDiff
+        ? `code:${text}|markup:${describeChangedMarkup(element)}`
+        : `code:${text}`;
     }
     const text = normalize(element.innerText || element.textContent);
     return element.matches(diffSelector) || element.querySelector(diffSelector)
@@ -175,15 +191,20 @@ internal static class PreviewDiffHighlighter
       if (element.matches(mediaSelector)) {
         return isVisibleMedia(element);
       }
-      if (element.closest(structuralContainerSelector) &&
-          !element.matches(structuralContainerSelector)) {
+      const structuralContainer = element.closest(structuralContainerSelector);
+      if (structuralContainer &&
+          !element.matches(structuralContainerSelector) &&
+          !structuralContainer.querySelector(codeLineSelector)) {
         return false;
       }
       const text = describe(element);
-      if (text.length < 2) {
+      if (!element.matches(codeLineSelector) && text.length < 2) {
         return false;
       }
-      return element.matches(structuralContainerSelector) || !element.querySelector(blockSelector);
+      if (element.matches(structuralContainerSelector)) {
+        return !element.querySelector(codeLineSelector);
+      }
+      return !element.querySelector(blockSelector);
     });
 
   const alignmentGroups = new WeakMap();
@@ -714,7 +735,8 @@ td.rsr-preview-diff-alignment-gap {
       return;
     }
     if (anchor?.parentNode) {
-      insertGapBefore(anchor, createGap(height, gap.navigationIndex), height);
+      const tagName = anchor.matches('.rsr-code-line') ? 'span' : 'div';
+      insertGapBefore(anchor, createGap(height, gap.navigationIndex, tagName), height);
       return;
     }
     root.appendChild(createGap(height, gap.navigationIndex));
@@ -802,6 +824,11 @@ td.rsr-preview-diff-alignment-gap {
   padding: 0.14rem 0.45rem 0.14rem 0.65rem !important;
   margin-left: -0.65rem !important;
   color: inherit !important;
+}
+.rsr-code-line.rsr-preview-diff-block {
+  border-radius: 2px !important;
+  margin-left: 0 !important;
+  padding: 0 0 0 0.35rem !important;
 }
 .ghd-markdown-alert.rsr-preview-diff-block {
   display: block !important;
