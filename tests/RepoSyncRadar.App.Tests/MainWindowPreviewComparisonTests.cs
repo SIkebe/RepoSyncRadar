@@ -882,6 +882,10 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("display: table-cell", applyScript, StringComparison.Ordinal);
         Assert.Contains("rsr-preview-diff-alignment-gap-row", applyScript, StringComparison.Ordinal);
         Assert.Contains("gapRow.className = 'rsr-preview-diff-alignment-gap-row'", applyScript, StringComparison.Ordinal);
+        Assert.Contains("const tableColumnCounts = new WeakMap()", applyScript, StringComparison.Ordinal);
+        Assert.Contains("tableColumnCounts.get(table)", applyScript, StringComparison.Ordinal);
+        Assert.Contains("tableColumnCounts.set(table, widestColumnCount)", applyScript, StringComparison.Ordinal);
+        Assert.Contains("const sectionEndRowIndexes = new Map()", applyScript, StringComparison.Ordinal);
         Assert.Contains("const activeRowSpans = []", applyScript, StringComparison.Ordinal);
         Assert.Contains("activeRowSpans[columnIndex + offset]", applyScript, StringComparison.Ordinal);
         Assert.Contains("gapCell.colSpan = getTableColumnCount(table)", applyScript, StringComparison.Ordinal);

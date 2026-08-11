@@ -902,15 +902,25 @@ td.rsr-preview-diff-alignment-gap {
       gap.style.height = `${renderedHeight.toFixed(2)}px`;
     }
   };
+  const tableColumnCounts = new WeakMap();
   const getTableColumnCount = (table) => {
-    const rows = Array.from(table?.rows || []);
+    if (!table) {
+      return 1;
+    }
+    const cachedColumnCount = tableColumnCounts.get(table);
+    if (cachedColumnCount !== undefined) {
+      return cachedColumnCount;
+    }
+    const rows = Array.from(table.rows);
+    const sectionEndRowIndexes = new Map();
+    rows.forEach((tableRow, rowIndex) => {
+      sectionEndRowIndexes.set(tableRow.parentElement, rowIndex);
+    });
     const activeRowSpans = [];
     let widestColumnCount = 1;
     rows.forEach((tableRow, rowIndex) => {
-      const sectionEndRowIndex = rows.reduce(
-        (endIndex, candidate, candidateIndex) =>
-          candidate.parentElement === tableRow.parentElement ? candidateIndex : endIndex,
-        rowIndex);
+      const sectionEndRowIndex =
+        sectionEndRowIndexes.get(tableRow.parentElement) ?? rowIndex;
       let columnIndex = 0;
       Array.from(tableRow.cells).forEach((cell) => {
         const colSpan = Math.max(1, cell.colSpan || 1);
@@ -950,6 +960,7 @@ td.rsr-preview-diff-alignment-gap {
         activeRowSpans[index] = Math.max(0, (activeRowSpans[index] || 0) - 1);
       }
     });
+    tableColumnCounts.set(table, widestColumnCount);
     return widestColumnCount;
   };
   const gaps = {{gapsJson}};
