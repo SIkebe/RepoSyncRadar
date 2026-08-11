@@ -324,6 +324,10 @@ internal sealed partial class MarkdownCodeBlockRenderer : HtmlObjectRenderer<Cod
                 ruleStack = tokenized.RuleStack;
                 renderer.Write("<span class=\"rsr-code-line\">");
                 WriteTokenizedLine(renderer, parsedCode, lineStart, line.Length, tokenized.Tokens);
+                if (line.IsEmpty)
+                {
+                    renderer.Write("<br>");
+                }
                 renderer.Write("</span>");
 
                 if (!hasLineBreak)
@@ -589,6 +593,10 @@ internal sealed partial class MarkdownCodeBlockRenderer : HtmlObjectRenderer<Cod
                 lineStart,
                 lineLength,
                 [new StyledRange(lineStart, lineLength, null)]);
+            if (lineLength == 0)
+            {
+                renderer.Write("<br>");
+            }
             renderer.Write("</span>");
 
             if (!hasLineBreak)

@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using System.Text.Json;
 using Xunit;
 
 namespace RepoSyncRadar.App.E2E.Tests;
@@ -81,6 +82,54 @@ public sealed class DocsViewE2ETests
             """,
             mode,
             new() { Timeout = 5000 });
+    }
+
+    [Fact]
+    public async Task DocsView_Code_Line_Markup_Preserves_Blank_Lines_When_Selected()
+    {
+        var page = await GetDocsPageAsync();
+
+        var probe = await page.EvaluateAsync<JsonElement>(
+            """
+            () => {
+                const host = document.createElement('div');
+                host.style.cssText =
+                    'position:fixed;inset-inline-start:-10000px;top:0;inline-size:300px';
+                host.innerHTML =
+                    '<pre style="font:16px/1.55 monospace"><code>' +
+                    '<span style="display:block">first</span>' +
+                    '<span style="display:block;min-block-size:1.55em"><br></span>' +
+                    '<span style="display:block">second</span>' +
+                    '</code></pre>';
+                document.body.appendChild(host);
+                try {
+                    const range = document.createRange();
+                    range.selectNodeContents(host.querySelector('pre'));
+                    const selection = window.getSelection();
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                    const lines = Array.from(host.querySelectorAll('span'));
+                    return {
+                        selectedText: selection.toString(),
+                        lineHeights: lines.map(line => line.getBoundingClientRect().height),
+                    };
+                } finally {
+                    window.getSelection()?.removeAllRanges();
+                    host.remove();
+                }
+            }
+            """);
+
+        var selectedText = probe.GetProperty("selectedText").GetString();
+        var lineHeights = probe.GetProperty("lineHeights")
+            .EnumerateArray()
+            .Select(static height => height.GetDouble())
+            .ToArray();
+        Assert.NotNull(selectedText);
+        Assert.Equal("first\n\nsecond", selectedText.ReplaceLineEndings("\n"));
+        Assert.Equal(3, lineHeights.Length);
+        Assert.Equal(lineHeights[0], lineHeights[1], precision: 2);
+        Assert.Equal(lineHeights[0], lineHeights[2], precision: 2);
     }
 
     private static async Task<string> WaitForPinnedColorModeAsync(IPage page)

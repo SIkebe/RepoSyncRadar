@@ -1698,7 +1698,7 @@ public sealed partial class MarkdownPreviewRendererTests
             html,
             StringComparison.Ordinal);
         Assert.Contains(
-            "<span class=\"rsr-code-line\"></span>",
+            "<span class=\"rsr-code-line\"><br></span>",
             html,
             StringComparison.Ordinal);
         Assert.Equal(3, CountOccurrences(html, "<span class=\"rsr-code-line\">"));
