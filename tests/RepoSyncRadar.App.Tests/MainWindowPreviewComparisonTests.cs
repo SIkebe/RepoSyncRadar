@@ -895,6 +895,20 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("gapCell.colSpan = getTableColumnCount(table)", applyScript, StringComparison.Ordinal);
         Assert.Contains("width: auto !important", applyScript, StringComparison.Ordinal);
         Assert.Contains("const insertTableGapBefore =", applyScript, StringComparison.Ordinal);
+        Assert.Contains("const insertTableGapAfter =", applyScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "table.insertBefore(gapSection, rowGroup.nextSibling)",
+            applyScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "terminalRow.parentElement?.matches('tfoot')",
+            applyScript,
+            StringComparison.Ordinal);
+        Assert.Contains("insertGapAfter(table", applyScript, StringComparison.Ordinal);
+        Assert.Contains(
+            ".rsr-preview-diff-alignment-gap-section",
+            applyScript,
+            StringComparison.Ordinal);
         Assert.Contains("row.getBoundingClientRect().top - rowTopBefore", applyScript, StringComparison.Ordinal);
         Assert.Contains("setGapHeight(gapCell, renderedHeight)", applyScript, StringComparison.Ordinal);
         Assert.Contains("--rsr-preview-gap-separator", applyScript, StringComparison.Ordinal);
@@ -915,7 +929,21 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("return window.scrollY || scrollingRoot?.scrollTop || 0", applyScript, StringComparison.Ordinal);
         Assert.Contains("anchor.matches('.rsr-code-line') ? 'span' : 'div'", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("anchor?.closest('.ghd-", applyScript, StringComparison.Ordinal);
-        Assert.DoesNotContain("createGap(height, gap.navigationIndex, 'li')", applyScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1)",
+            applyScript,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "terminalElement.closest('li') ||",
+            applyScript,
+            StringComparison.Ordinal);
+        Assert.Contains("terminalElement.closest('p,figure')", applyScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "terminalElement.closest('picture,object')",
+            applyScript,
+            StringComparison.Ordinal);
+        Assert.Contains("terminalContext.matches('li') ? 'li'", applyScript, StringComparison.Ordinal);
+        Assert.Contains("insertGapAfter(", applyScript, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -866,7 +866,9 @@ td.rsr-preview-diff-alignment-gap {
   }
 
   document.querySelectorAll(
-    '.rsr-preview-diff-alignment-gap-row,.rsr-preview-diff-alignment-gap').forEach((element) => {
+    '.rsr-preview-diff-alignment-gap-section,' +
+    '.rsr-preview-diff-alignment-gap-row,' +
+    '.rsr-preview-diff-alignment-gap').forEach((element) => {
     element.remove();
   });
   const root =
@@ -909,12 +911,42 @@ td.rsr-preview-diff-alignment-gap {
       setGapHeight(gap, renderedHeight);
     }
   };
+  const insertGapAfter = (context, gap, desiredHeight) => {
+    const rootBottomBefore = root.getBoundingClientRect().bottom;
+    context.parentNode.insertBefore(gap, context.nextSibling);
+    let renderedHeight = desiredHeight;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const actualDisplacement = root.getBoundingClientRect().bottom - rootBottomBefore;
+      const correction = desiredHeight - actualDisplacement;
+      if (Math.abs(correction) <= 0.1) {
+        break;
+      }
+      renderedHeight = Math.max(1, renderedHeight + correction);
+      setGapHeight(gap, renderedHeight);
+    }
+  };
   const insertTableGapBefore = (row, gapRow, gapCell, desiredHeight) => {
     const rowTopBefore = row.getBoundingClientRect().top;
     row.parentNode.insertBefore(gapRow, row);
     let renderedHeight = desiredHeight;
     for (let attempt = 0; attempt < 3; attempt++) {
       const actualDisplacement = row.getBoundingClientRect().top - rowTopBefore;
+      const correction = desiredHeight - actualDisplacement;
+      if (Math.abs(correction) <= 0.1) {
+        break;
+      }
+      renderedHeight = Math.max(1, renderedHeight + correction);
+      setGapHeight(gapCell, renderedHeight);
+    }
+  };
+  const insertTableGapAfter = (row, gapSection, gapCell, desiredHeight) => {
+    const rootBottomBefore = root.getBoundingClientRect().bottom;
+    const rowGroup = row.parentNode;
+    const table = row.closest('table');
+    table.insertBefore(gapSection, rowGroup.nextSibling);
+    let renderedHeight = desiredHeight;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const actualDisplacement = root.getBoundingClientRect().bottom - rootBottomBefore;
       const correction = desiredHeight - actualDisplacement;
       if (Math.abs(correction) <= 0.1) {
         break;
@@ -1006,6 +1038,47 @@ td.rsr-preview-diff-alignment-gap {
     if (anchor?.parentNode) {
       const tagName = anchor.matches('.rsr-code-line') ? 'span' : 'div';
       insertGapBefore(anchor, createGap(height, gap.navigationIndex, tagName), height);
+      return;
+    }
+    const terminalElement =
+      Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1);
+    const terminalRow = terminalElement?.closest('tr');
+    if (terminalRow?.parentNode) {
+      const table = terminalRow.closest('table');
+      if (terminalRow.parentElement?.matches('tfoot')) {
+        insertGapAfter(table, createGap(height, gap.navigationIndex), height);
+        return;
+      }
+      const gapSection = document.createElement('tbody');
+      gapSection.className = 'rsr-preview-diff-alignment-gap-section';
+      gapSection.setAttribute('aria-hidden', 'true');
+      gapSection.setAttribute('role', 'presentation');
+      const gapRow = document.createElement('tr');
+      gapRow.className = 'rsr-preview-diff-alignment-gap-row';
+      gapRow.setAttribute('aria-hidden', 'true');
+      gapRow.setAttribute('role', 'presentation');
+      const gapCell = createGap(height, gap.navigationIndex, 'td');
+      gapCell.colSpan = getTableColumnCount(table);
+      gapRow.appendChild(gapCell);
+      gapSection.appendChild(gapRow);
+      insertTableGapAfter(terminalRow, gapSection, gapCell, height);
+      return;
+    }
+    const terminalMediaSelector = 'img,video,audio,iframe,object,embed';
+    const terminalContext = terminalElement?.matches(terminalMediaSelector)
+      ? terminalElement.closest('li') ||
+        terminalElement.closest('p,figure') ||
+        terminalElement.closest('picture,object') ||
+        terminalElement
+      : terminalElement;
+    if (terminalContext?.parentNode) {
+      const tagName = terminalContext.matches('.rsr-code-line')
+        ? 'span'
+        : terminalContext.matches('li') ? 'li' : 'div';
+      insertGapAfter(
+        terminalContext,
+        createGap(height, gap.navigationIndex, tagName),
+        height);
       return;
     }
     root.appendChild(createGap(height, gap.navigationIndex));
