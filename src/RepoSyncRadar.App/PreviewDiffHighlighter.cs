@@ -741,13 +741,13 @@ internal static class PreviewDiffHighlighter
     document.body;
   const scrollingRoot = document.scrollingElement || document.documentElement || document.body;
   const scrollTop = window.scrollY || scrollingRoot?.scrollTop || 0;
-  const existingGaps = Array.from(
-    document.querySelectorAll('.rsr-preview-diff-alignment-gap'));
-  existingGaps.forEach((element) => {
+  const existingGapElements = Array.from(
+    document.querySelectorAll('.rsr-preview-diff-alignment-gap-row,.rsr-preview-diff-alignment-gap'));
+  existingGapElements.forEach((element) => {
     element.style.setProperty('display', 'none', 'important');
   });
   const restoreExistingGaps = () => {
-    existingGaps.forEach((element) => element.style.removeProperty('display'));
+    existingGapElements.forEach((element) => element.style.removeProperty('display'));
     const scrollSyncState = window.__repoSyncRadarPreviewScrollSync;
     if (scrollSyncState) {
       scrollSyncState.suppressUntil = Date.now() + 1000;
@@ -857,6 +857,7 @@ pre.rsr-preview-diff-aligned-code code {
 }
 td.rsr-preview-diff-alignment-gap {
   display: table-cell !important;
+  width: auto !important;
 }
 `;
     document.head.appendChild(style);
@@ -876,17 +877,20 @@ td.rsr-preview-diff-alignment-gap {
     return null;
   }
 
+  const setGapHeight = (element, height) => {
+    const separatorHeight = Math.min(6, Math.max(0, height - 1));
+    element.style.setProperty(
+      '--rsr-preview-gap-separator',
+      `${separatorHeight.toFixed(2)}px`);
+    element.style.height = `${height.toFixed(2)}px`;
+  };
   const createGap = (height, navigationIndex, tagName = 'div') => {
     const element = document.createElement(tagName);
     element.className = 'rsr-preview-diff-alignment-gap';
     element.setAttribute('aria-hidden', 'true');
     element.setAttribute('role', 'presentation');
     element.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
-    const separatorHeight = Math.min(6, Math.max(0, height - 1));
-    element.style.setProperty(
-      '--rsr-preview-gap-separator',
-      `${separatorHeight.toFixed(2)}px`);
-    element.style.height = `${height.toFixed(2)}px`;
+    setGapHeight(element, height);
     return element;
   };
   const insertGapBefore = (anchor, gap, desiredHeight) => {
@@ -900,7 +904,21 @@ td.rsr-preview-diff-alignment-gap {
         break;
       }
       renderedHeight = Math.max(1, renderedHeight + correction);
-      gap.style.height = `${renderedHeight.toFixed(2)}px`;
+      setGapHeight(gap, renderedHeight);
+    }
+  };
+  const insertTableGapBefore = (row, gapRow, gapCell, desiredHeight) => {
+    const rowTopBefore = row.getBoundingClientRect().top;
+    row.parentNode.insertBefore(gapRow, row);
+    let renderedHeight = desiredHeight;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const actualDisplacement = row.getBoundingClientRect().top - rowTopBefore;
+      const correction = desiredHeight - actualDisplacement;
+      if (Math.abs(correction) <= 0.1) {
+        break;
+      }
+      renderedHeight = Math.max(1, renderedHeight + correction);
+      setGapHeight(gapCell, renderedHeight);
     }
   };
   const tableColumnCounts = new WeakMap();
@@ -980,7 +998,7 @@ td.rsr-preview-diff-alignment-gap {
       const table = row.closest('table');
       gapCell.colSpan = getTableColumnCount(table);
       gapRow.appendChild(gapCell);
-      row.parentNode.insertBefore(gapRow, row);
+      insertTableGapBefore(row, gapRow, gapCell, height);
       return;
     }
     if (anchor?.parentNode) {

@@ -862,7 +862,10 @@ public sealed class MainWindowPreviewComparisonTests
         var applyScript = PreviewDiffHighlighter.BuildApplyAlignmentGapsScript(
             """[{"anchorIndex":1,"height":80,"navigationIndex":0}]""");
 
-        Assert.Contains("rsr-preview-diff-alignment-gap", measureScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "document.querySelectorAll('.rsr-preview-diff-alignment-gap-row,.rsr-preview-diff-alignment-gap')",
+            measureScript,
+            StringComparison.Ordinal);
         Assert.Contains("style.setProperty('display', 'none', 'important')", measureScript, StringComparison.Ordinal);
         Assert.Contains("style.removeProperty('display')", measureScript, StringComparison.Ordinal);
         Assert.Contains("scrollTop", measureScript, StringComparison.Ordinal);
@@ -890,6 +893,10 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const activeRowSpans = []", applyScript, StringComparison.Ordinal);
         Assert.Contains("activeRowSpans[columnIndex + offset]", applyScript, StringComparison.Ordinal);
         Assert.Contains("gapCell.colSpan = getTableColumnCount(table)", applyScript, StringComparison.Ordinal);
+        Assert.Contains("width: auto !important", applyScript, StringComparison.Ordinal);
+        Assert.Contains("const insertTableGapBefore =", applyScript, StringComparison.Ordinal);
+        Assert.Contains("row.getBoundingClientRect().top - rowTopBefore", applyScript, StringComparison.Ordinal);
+        Assert.Contains("setGapHeight(gapCell, renderedHeight)", applyScript, StringComparison.Ordinal);
         Assert.Contains("--rsr-preview-gap-separator", applyScript, StringComparison.Ordinal);
         Assert.Contains("background-clip: content-box", applyScript, StringComparison.Ordinal);
         Assert.Contains("padding-block-end: var(--rsr-preview-gap-separator)", applyScript, StringComparison.Ordinal);
@@ -901,7 +908,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("window.scrollTo", applyScript, StringComparison.Ordinal);
         Assert.Contains("__repoSyncRadarDiffNavigation?.refresh?.()", applyScript, StringComparison.Ordinal);
         Assert.Contains("const actualDisplacement =", applyScript, StringComparison.Ordinal);
-        Assert.Contains("gap.style.height =", applyScript, StringComparison.Ordinal);
+        Assert.Contains("setGapHeight(gap, renderedHeight)", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("'margin-block-end'", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("border-block-end", applyScript, StringComparison.Ordinal);
         Assert.Contains("if (!root) {\n    return null;", applyScript, StringComparison.Ordinal);
