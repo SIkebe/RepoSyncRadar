@@ -218,6 +218,10 @@ internal static class PreviewDiffHighlighter
   const alignmentGroups = new WeakMap();
   Array.from(root.querySelectorAll('table')).forEach((table, tableIndex) => {
     const rows = Array.from(table.rows);
+    const sectionEndRowIndexes = new Map();
+    rows.forEach((row, rowIndex) => {
+      sectionEndRowIndexes.set(row.parentElement, rowIndex);
+    });
     let groupIndex = -1;
     let groupEndRowIndex = -1;
     rows.forEach((row, rowIndex) => {
@@ -225,10 +229,8 @@ internal static class PreviewDiffHighlighter
         groupIndex++;
         groupEndRowIndex = rowIndex;
       }
-      const sectionEndRowIndex = rows.reduce(
-        (endIndex, candidate, candidateIndex) =>
-          candidate.parentElement === row.parentElement ? candidateIndex : endIndex,
-        rowIndex);
+      const sectionEndRowIndex =
+        sectionEndRowIndexes.get(row.parentElement) ?? rowIndex;
       Array.from(row.cells).forEach((cell) => {
         const rowsRemainingInSection = sectionEndRowIndex - rowIndex + 1;
         const effectiveRowSpan = cell.rowSpan === 0

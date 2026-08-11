@@ -990,6 +990,9 @@ public sealed class MainWindowPreviewComparisonTests
         var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
 
         Assert.Contains("Array.from(root.querySelectorAll('table'))", script, StringComparison.Ordinal);
+        Assert.Contains("const sectionEndRowIndexes = new Map()", script, StringComparison.Ordinal);
+        Assert.Contains("sectionEndRowIndexes.get(row.parentElement)", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("rows.reduce(", script, StringComparison.Ordinal);
         Assert.Contains("cell.rowSpan === 0", script, StringComparison.Ordinal);
         Assert.Contains("const rowsRemainingInSection =", script, StringComparison.Ordinal);
         Assert.Contains(
