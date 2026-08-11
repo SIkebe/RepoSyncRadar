@@ -586,15 +586,21 @@ internal static class PreviewDiffHighlighter
             changes,
             beforeMeasurement.Offsets.Select(static offset => offset!.Value).ToArray(),
             afterMeasurement.Offsets.Select(static offset => offset!.Value).ToArray());
+        var synchronizedScrollTop = ResolveSynchronizedScrollTop(
+            beforeMeasurement.ScrollTop,
+            afterMeasurement.ScrollTop);
 
         await Task.WhenAll(
             beforeView.ExecuteScriptAsync(BuildApplyAlignmentGapsScript(
                 JsonSerializer.Serialize(gapPlan.Before, _jsonOptions),
-                beforeMeasurement.ScrollTop)),
+                synchronizedScrollTop)),
             afterView.ExecuteScriptAsync(BuildApplyAlignmentGapsScript(
                 JsonSerializer.Serialize(gapPlan.After, _jsonOptions),
-                afterMeasurement.ScrollTop)));
+                synchronizedScrollTop)));
     }
+
+    internal static double ResolveSynchronizedScrollTop(double beforeScrollTop, double afterScrollTop)
+        => Math.Max(Math.Max(0, beforeScrollTop), afterScrollTop);
 
     internal static PreviewDiffAlignmentGapPlan BuildAlignmentGapPlan(
         IReadOnlyList<PreviewDiffChange> changes,

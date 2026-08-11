@@ -781,6 +781,20 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Empty(gaps.After);
     }
 
+    [Theory]
+    [InlineData(720, 1180, 1180)]
+    [InlineData(1180, 720, 1180)]
+    [InlineData(-10, 0, 0)]
+    public void PreviewDiffHighlighter_ResolveSynchronizedScrollTop_Preserves_Unclamped_Position(
+        double beforeScrollTop,
+        double afterScrollTop,
+        double expected)
+    {
+        Assert.Equal(
+            expected,
+            PreviewDiffHighlighter.ResolveSynchronizedScrollTop(beforeScrollTop, afterScrollTop));
+    }
+
     [Fact]
     public void PreviewDiffHighlighter_AlignmentScripts_Measure_Anchors_And_Draw_Striped_Gaps()
     {
