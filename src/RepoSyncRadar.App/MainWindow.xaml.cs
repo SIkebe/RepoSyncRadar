@@ -1212,6 +1212,48 @@ public partial class MainWindow : Window
                 return;
             }
 
+            var synchronizedScrollTop = ResolvePreviewDiffNavigationScrollTop(
+                beforeResult,
+                afterResult);
+            var scrollScript = BuildApplySynchronizedScrollScript(synchronizedScrollTop);
+            var appliedScrollResults = await Task.WhenAll(
+                DocsView.ExecuteScriptAsync(scrollScript),
+                PreviewView.ExecuteScriptAsync(scrollScript));
+            if (!IsPreviewDiffNavigationOperationCurrent(
+                    generation,
+                    _previewDiffGeneration,
+                    operationId,
+                    _previewDiffNavigationOperationId))
+            {
+                return;
+            }
+
+            var beforeAppliedScrollTop =
+                PreviewDiffHighlighter.DeserializeDouble(appliedScrollResults[0]);
+            var afterAppliedScrollTop =
+                PreviewDiffHighlighter.DeserializeDouble(appliedScrollResults[1]);
+            if (beforeAppliedScrollTop is null || afterAppliedScrollTop is null)
+            {
+                throw new InvalidOperationException(
+                    "Preview diff navigation could not read the applied scroll positions.");
+            }
+
+            var reachableScrollTop = PreviewDiffHighlighter.ResolveAppliedSynchronizedScrollTop(
+                beforeAppliedScrollTop.Value,
+                afterAppliedScrollTop.Value);
+            var finalScrollScript = BuildApplySynchronizedScrollScript(reachableScrollTop);
+            await Task.WhenAll(
+                DocsView.ExecuteScriptAsync(finalScrollScript),
+                PreviewView.ExecuteScriptAsync(finalScrollScript));
+            if (!IsPreviewDiffNavigationOperationCurrent(
+                    generation,
+                    _previewDiffGeneration,
+                    operationId,
+                    _previewDiffNavigationOperationId))
+            {
+                return;
+            }
+
             _currentPreviewDiffIndex = targetIndex;
             _requestedPreviewDiffIndex = targetIndex;
             UpdatePreviewDiffNavigationControls();
@@ -1241,6 +1283,24 @@ public partial class MainWindow : Window
                 expectedOperationId,
                 currentOperationId)
             && (beforeResult.Found || afterResult.Found);
+
+    internal static double ResolvePreviewDiffNavigationScrollTop(
+        PreviewDiffNavigationResult beforeResult,
+        PreviewDiffNavigationResult afterResult)
+    {
+        if (beforeResult.Found && afterResult.Found)
+        {
+            return PreviewDiffHighlighter.ResolveSynchronizedScrollTop(
+                beforeResult.ScrollTop,
+                afterResult.ScrollTop);
+        }
+
+        return beforeResult.Found
+            ? Math.Max(0, beforeResult.ScrollTop)
+            : afterResult.Found
+                ? Math.Max(0, afterResult.ScrollTop)
+                : 0;
+    }
 
     internal static bool IsPreviewDiffNavigationOperationCurrent(
         int expectedGeneration,
@@ -2592,7 +2652,7 @@ public partial class MainWindow : Window
         behavior: 'auto'
     });
     window[stateKey].lastScrollTop = getScrollTop();
-    return true;
+    return getScrollTop();
 })();
 """;
         }

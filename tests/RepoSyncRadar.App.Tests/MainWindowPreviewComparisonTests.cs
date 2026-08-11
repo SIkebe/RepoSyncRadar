@@ -373,6 +373,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("Date.now() + 1000", script, StringComparison.Ordinal);
         Assert.Contains("top: Math.min(scrollTop, maxScrollTop)", script, StringComparison.Ordinal);
         Assert.Contains("window[stateKey].lastScrollTop = getScrollTop()", script, StringComparison.Ordinal);
+        Assert.Contains("return getScrollTop()", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1079,6 +1080,26 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Theory]
+    [InlineData(true, 720, true, 1180, 1180)]
+    [InlineData(true, 720, false, 1180, 720)]
+    [InlineData(false, 720, true, 1180, 1180)]
+    [InlineData(false, 720, false, 1180, 0)]
+    public void ResolvePreviewDiffNavigationScrollTop_Uses_Common_Absolute_Position(
+        bool beforeFound,
+        double beforeScrollTop,
+        bool afterFound,
+        double afterScrollTop,
+        double expected)
+    {
+        var beforeResult = new PreviewDiffNavigationResult(beforeFound, beforeScrollTop);
+        var afterResult = new PreviewDiffNavigationResult(afterFound, afterScrollTop);
+
+        Assert.Equal(
+            expected,
+            MainWindow.ResolvePreviewDiffNavigationScrollTop(beforeResult, afterResult));
+    }
+
+    [Theory]
     [InlineData(3, 3, 7, 7, true)]
     [InlineData(3, 4, 7, 7, false)]
     [InlineData(3, 3, 7, 8, false)]
@@ -1163,6 +1184,19 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_NavigateScript_Reports_Applied_Scroll_And_Refreshes_Sync_State()
+    {
+        var script = PreviewDiffHighlighter.BuildNavigateToDiffScript(2);
+
+        Assert.Contains("const appliedScrollTop =", script, StringComparison.Ordinal);
+        Assert.Contains("scrollSyncState.lastScrollTop = appliedScrollTop", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "return { found: true, scrollTop: appliedScrollTop }",
+            script,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_NavigateScript_Draws_One_Overlay_And_Centers_Target()
     {
         var script = PreviewDiffHighlighter.BuildNavigateToDiffScript(2);
@@ -1204,23 +1238,28 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("targetTop - (window.innerHeight - targetHeight) / 2", script, StringComparison.Ordinal);
         Assert.Contains("window.scrollTo({ top: centeredScrollTop, behavior: 'auto' })", script, StringComparison.Ordinal);
         Assert.Contains("__repoSyncRadarPreviewScrollSync", script, StringComparison.Ordinal);
-        Assert.Contains("return { found: true }", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "return { found: true, scrollTop: appliedScrollTop }",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("return { found: false }", script, StringComparison.Ordinal);
         Assert.DoesNotContain("const ratio =", script, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("""{"found":true}""", true)]
-    [InlineData("""{"found":false}""", false)]
-    [InlineData("null", false)]
-    [InlineData("invalid", false)]
+    [InlineData("""{"found":true,"scrollTop":321.5}""", true, 321.5)]
+    [InlineData("""{"found":false}""", false, 0)]
+    [InlineData("null", false, 0)]
+    [InlineData("invalid", false, 0)]
     public void PreviewDiffHighlighter_ParseNavigateResult_Handles_WebView_Result(
         string result,
-        bool expectedFound)
+        bool expectedFound,
+        double expectedScrollTop)
     {
         var parsed = PreviewDiffHighlighter.ParseNavigateResult(result);
 
         Assert.Equal(expectedFound, parsed.Found);
+        Assert.Equal(expectedScrollTop, parsed.ScrollTop);
     }
 
     [Theory]

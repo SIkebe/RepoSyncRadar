@@ -45,7 +45,8 @@ internal sealed record PreviewDiffNavigationTarget(
     [property: JsonPropertyName("navigationIndex")] int NavigationIndex);
 
 internal readonly record struct PreviewDiffNavigationResult(
-    [property: JsonPropertyName("found")] bool Found);
+    [property: JsonPropertyName("found")] bool Found,
+    [property: JsonPropertyName("scrollTop")] double ScrollTop = 0);
 
 internal static class PreviewDiffHighlighter
 {
@@ -1027,7 +1028,7 @@ td.rsr-preview-diff-alignment-gap {
         }
     }
 
-    private static double? DeserializeDouble(string? scriptResult)
+    internal static double? DeserializeDouble(string? scriptResult)
     {
         if (string.IsNullOrWhiteSpace(scriptResult)
             || string.Equals(scriptResult, "null", StringComparison.Ordinal))
@@ -1372,7 +1373,11 @@ td.rsr-preview-diff-alignment-gap {
     scrollSyncState.suppressUntil = Date.now() + 1000;
   }
   window.scrollTo({ top: centeredScrollTop, behavior: 'auto' });
-  return { found: true };
+  const appliedScrollTop = window.scrollY || root?.scrollTop || 0;
+  if (scrollSyncState) {
+    scrollSyncState.lastScrollTop = appliedScrollTop;
+  }
+  return { found: true, scrollTop: appliedScrollTop };
 })();
 """;
     }
