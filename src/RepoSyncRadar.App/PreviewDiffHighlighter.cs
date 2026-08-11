@@ -590,17 +590,42 @@ internal static class PreviewDiffHighlighter
             beforeMeasurement.ScrollTop,
             afterMeasurement.ScrollTop);
 
-        await Task.WhenAll(
+        var appliedScrollTops = await Task.WhenAll(
             beforeView.ExecuteScriptAsync(BuildApplyAlignmentGapsScript(
                 JsonSerializer.Serialize(gapPlan.Before, _jsonOptions),
                 synchronizedScrollTop)),
             afterView.ExecuteScriptAsync(BuildApplyAlignmentGapsScript(
                 JsonSerializer.Serialize(gapPlan.After, _jsonOptions),
                 synchronizedScrollTop)));
+        if (isCurrent is not null && !isCurrent())
+        {
+            return;
+        }
+
+        var beforeAppliedScrollTop = DeserializeDouble(appliedScrollTops[0]);
+        var afterAppliedScrollTop = DeserializeDouble(appliedScrollTops[1]);
+        if (beforeAppliedScrollTop is null || afterAppliedScrollTop is null)
+        {
+            return;
+        }
+
+        var appliedSynchronizedScrollTop = ResolveAppliedSynchronizedScrollTop(
+            beforeAppliedScrollTop.Value,
+            afterAppliedScrollTop.Value);
+        var finalScrollScript = MainWindow.BuildApplySynchronizedScrollScript(
+            appliedSynchronizedScrollTop);
+        await Task.WhenAll(
+            beforeView.ExecuteScriptAsync(finalScrollScript),
+            afterView.ExecuteScriptAsync(finalScrollScript));
     }
 
     internal static double ResolveSynchronizedScrollTop(double beforeScrollTop, double afterScrollTop)
         => Math.Max(Math.Max(0, beforeScrollTop), afterScrollTop);
+
+    internal static double ResolveAppliedSynchronizedScrollTop(
+        double beforeScrollTop,
+        double afterScrollTop)
+        => Math.Min(Math.Max(0, beforeScrollTop), Math.Max(0, afterScrollTop));
 
     internal static PreviewDiffAlignmentGapPlan BuildAlignmentGapPlan(
         IReadOnlyList<PreviewDiffChange> changes,
@@ -727,13 +752,17 @@ internal static class PreviewDiffHighlighter
   --rsr-preview-gap-stripe: rgba(139, 148, 158, 0.42);
   --rsr-preview-gap-border: rgba(139, 148, 158, 0.24);
 }
+html, body {
+  overflow-anchor: none !important;
+}
 .rsr-preview-diff-alignment-gap {
   background-color: var(--rsr-preview-gap-bg) !important;
   background-image: repeating-linear-gradient(
     -45deg,
     transparent 0 6px,
     var(--rsr-preview-gap-stripe) 6px 8px) !important;
-  border-block: 1px solid var(--rsr-preview-gap-border) !important;
+  border-block-start: 1px solid var(--rsr-preview-gap-border) !important;
+  border-block-end: 1px solid transparent !important;
   box-sizing: border-box !important;
   display: block !important;
   list-style: none !important;
@@ -760,7 +789,7 @@ td.rsr-preview-diff-alignment-gap {
     document.querySelector('main') ||
     document.body;
   if (!root) {
-    return 0;
+    return null;
   }
 
   const createGap = (height, navigationIndex, tagName = 'div') => {
@@ -775,18 +804,15 @@ td.rsr-preview-diff-alignment-gap {
   const insertGapBefore = (anchor, gap, desiredHeight) => {
     const anchorTopBefore = anchor.getBoundingClientRect().top;
     anchor.parentNode.insertBefore(gap, anchor);
-    let marginBlockEnd = 0;
+    let renderedHeight = desiredHeight;
     for (let attempt = 0; attempt < 3; attempt++) {
       const actualDisplacement = anchor.getBoundingClientRect().top - anchorTopBefore;
       const correction = desiredHeight - actualDisplacement;
       if (Math.abs(correction) <= 0.1) {
         break;
       }
-      marginBlockEnd += correction;
-      gap.style.setProperty(
-        'margin-block-end',
-        `${marginBlockEnd.toFixed(2)}px`,
-        'important');
+      renderedHeight = Math.max(1, renderedHeight + correction);
+      gap.style.height = `${renderedHeight.toFixed(2)}px`;
     }
   };
   const getTableColumnCount = (table) => {
@@ -877,7 +903,7 @@ td.rsr-preview-diff-alignment-gap {
   if (scrollSyncState) {
     scrollSyncState.lastScrollTop = window.scrollY || scrollingRoot?.scrollTop || 0;
   }
-  return gaps.length;
+  return window.scrollY || scrollingRoot?.scrollTop || 0;
 })();
 """;
     }
@@ -900,6 +926,24 @@ td.rsr-preview-diff-alignment-gap {
         catch (JsonException)
         {
             return new PreviewDiffAlignmentMeasurement(0, []);
+        }
+    }
+
+    private static double? DeserializeDouble(string? scriptResult)
+    {
+        if (string.IsNullOrWhiteSpace(scriptResult)
+            || string.Equals(scriptResult, "null", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<double>(scriptResult, _jsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

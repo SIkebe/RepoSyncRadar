@@ -795,6 +795,22 @@ public sealed class MainWindowPreviewComparisonTests
             PreviewDiffHighlighter.ResolveSynchronizedScrollTop(beforeScrollTop, afterScrollTop));
     }
 
+    [Theory]
+    [InlineData(1180, 1180, 1180)]
+    [InlineData(1180, 720, 720)]
+    [InlineData(-10, 720, 0)]
+    public void PreviewDiffHighlighter_ResolveAppliedSynchronizedScrollTop_Uses_Common_Reachable_Position(
+        double beforeScrollTop,
+        double afterScrollTop,
+        double expected)
+    {
+        Assert.Equal(
+            expected,
+            PreviewDiffHighlighter.ResolveAppliedSynchronizedScrollTop(
+                beforeScrollTop,
+                afterScrollTop));
+    }
+
     [Fact]
     public void PreviewDiffHighlighter_AlignmentScripts_Measure_Anchors_And_Draw_Striped_Gaps()
     {
@@ -826,7 +842,13 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("window.scrollTo", applyScript, StringComparison.Ordinal);
         Assert.Contains("__repoSyncRadarDiffNavigation?.refresh?.()", applyScript, StringComparison.Ordinal);
         Assert.Contains("const actualDisplacement =", applyScript, StringComparison.Ordinal);
-        Assert.Contains("'margin-block-end'", applyScript, StringComparison.Ordinal);
+        Assert.Contains("gap.style.height =", applyScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("'margin-block-end'", applyScript, StringComparison.Ordinal);
+        Assert.Contains("border-block-end: 1px solid transparent", applyScript, StringComparison.Ordinal);
+        Assert.Contains("html, body", applyScript, StringComparison.Ordinal);
+        Assert.Contains("overflow-anchor: none", applyScript, StringComparison.Ordinal);
+        Assert.Contains("if (!root) {\n    return null;", applyScript, StringComparison.Ordinal);
+        Assert.Contains("return window.scrollY || scrollingRoot?.scrollTop || 0", applyScript, StringComparison.Ordinal);
         Assert.Contains("anchor.matches('.rsr-code-line') ? 'span' : 'div'", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("anchor?.closest('.ghd-", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("createGap(height, gap.navigationIndex, 'li')", applyScript, StringComparison.Ordinal);

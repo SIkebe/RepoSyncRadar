@@ -142,6 +142,8 @@ public partial class MainWindow : Window
     private static readonly GridLength _collapsedSplitterColumnWidth = new(0);
     private static readonly TimeSpan _previewFocusLayoutShieldDuration = TimeSpan.FromMilliseconds(120);
     private static readonly TimeSpan _previewAlignmentDebounce = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan _previewAlignmentSettleDelay = TimeSpan.FromMilliseconds(100);
+    private const int _previewAlignmentPassCount = 2;
 
     private readonly UrlAllowList _allowList;
     private readonly PreviewSession _previewSession;
@@ -2089,16 +2091,33 @@ public partial class MainWindow : Window
                 return;
             }
 
-            await PreviewDiffHighlighter.ApplyAlignmentGapsAsync(
-                DocsView,
-                PreviewView,
-                plan.Changes,
-                () => ReferenceEquals(plan, _activePreviewDiffPlan)
-                    && IsPreviewAlignmentOperationCurrent(
+            for (var pass = 0; pass < _previewAlignmentPassCount; pass++)
+            {
+                if (pass > 0)
+                {
+                    await Task.Delay(_previewAlignmentSettleDelay);
+                }
+                if (!ReferenceEquals(plan, _activePreviewDiffPlan)
+                    || !IsPreviewAlignmentOperationCurrent(
                         generation,
                         _previewDiffGeneration,
                         operationId,
-                        _previewAlignmentOperationId));
+                        _previewAlignmentOperationId))
+                {
+                    return;
+                }
+
+                await PreviewDiffHighlighter.ApplyAlignmentGapsAsync(
+                    DocsView,
+                    PreviewView,
+                    plan.Changes,
+                    () => ReferenceEquals(plan, _activePreviewDiffPlan)
+                        && IsPreviewAlignmentOperationCurrent(
+                            generation,
+                            _previewDiffGeneration,
+                            operationId,
+                            _previewAlignmentOperationId));
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
