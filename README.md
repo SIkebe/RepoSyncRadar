@@ -80,7 +80,7 @@ For a full setup walkthrough, OAuth details, local-preview behavior, and release
 
 ## Develop from source
 
-Source builds require the preview .NET SDK pinned in [`global.json`](global.json): `11.0.100-preview.6.26359.118` with prerelease roll-forward enabled.
+Source builds require the preview .NET SDK pinned in [`global.json`](global.json): `11.0.100-preview.7.26381.103` with prerelease roll-forward enabled.
 Agent skills are managed by [APM](https://microsoft.github.io/apm/). Run `apm install` after cloning so the pinned Modern Web Guidance skill in [`apm.yml`](apm.yml) is restored from [`apm.lock.yaml`](apm.lock.yaml).
 
 ```powershell
@@ -116,7 +116,7 @@ docs/
 
 ```powershell
 dotnet build RepoSyncRadar.sln -warnaserror
-dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual
+dotnet test RepoSyncRadar.sln --timeout 10m -- --filter-not-trait Category=Manual
 ```
 
 Manual tests are intentionally excluded from the default test command. Automated WebView/WPF coverage lives in `tests\RepoSyncRadar.App.E2E.Tests` and uses the `Category=E2E` trait.

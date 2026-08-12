@@ -155,7 +155,6 @@
     {
         _authBusy = true;
         _authError = null;
-        StateHasChanged();
         try
         {
             var session = Services.GetRequiredService<IGitHubAuthSession>();
@@ -179,7 +178,6 @@
     {
         _authBusy = true;
         _authError = null;
-        StateHasChanged();
         try
         {
             var session = Services.GetRequiredService<IGitHubAuthSession>();

@@ -688,7 +688,8 @@ public class CommitDetailTests
             navigator,
             new PreviewSession(),
             coordinator);
-        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
+        await cut.InvokeAsync(
+            () => cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click());
 
         cut.WaitForAssertion(() =>
         {
@@ -700,7 +701,8 @@ public class CommitDetailTests
             Assert.Contains("(1/2)", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
         });
 
-        cut.Find("[data-testid=\"commit-detail-reusable-usage\"]").Change(referencePaths[1]);
+        await cut.InvokeAsync(
+            () => cut.Find("[data-testid=\"commit-detail-reusable-usage\"]").Change(referencePaths[1]));
 
         cut.WaitForAssertion(() =>
         {
@@ -742,6 +744,9 @@ public class CommitDetailTests
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(adjacentPath, captured?.FilePath);
+            Assert.All(
+                cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]"),
+                button => Assert.False(button.HasAttribute("disabled")));
         });
         navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous);
         cut.WaitForAssertion(() =>

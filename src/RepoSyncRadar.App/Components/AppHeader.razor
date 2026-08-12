@@ -941,7 +941,6 @@
         _settingsUpdateProgress = null;
         _settingsUpdateStatus = L["AppHeader.Update.Checking"];
         _settingsUpdateError = null;
-        StateHasChanged();
         try
         {
             var updateService = Services.GetRequiredService<IAppUpdateService>();
@@ -1026,7 +1025,6 @@
 
         _appUpdateRestartBusy = true;
         _appUpdateRestartError = null;
-        StateHasChanged();
         try
         {
             await Task.Yield();
@@ -1063,7 +1061,6 @@
         _settingsBoostLoading = true;
         _settingsBoostError = null;
         _settingsBoostDeleteStatus = null;
-        StateHasChanged();
         try
         {
             var repo = Services.GetRequiredService<IRadarRepository>();
@@ -1182,7 +1179,6 @@
         _settingsLoading = true;
         _settingsError = null;
         _settingsDeleteStatus = null;
-        StateHasChanged();
         try
         {
             var repo = Services.GetRequiredService<IRadarRepository>();
