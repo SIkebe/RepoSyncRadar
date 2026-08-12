@@ -294,8 +294,16 @@ public sealed record CopilotSessionUsageMetrics(
             return cost;
         }
 
-        var modelCost = ModelMetrics.Sum(static model => model.RequestCost is { } cost and > 0 ? cost : 0);
-        return modelCost > 0 ? modelCost : null;
+        var modelsWithRequests = ModelMetrics
+            .Where(static model => model.RequestCount > 0)
+            .ToArray();
+        if (modelsWithRequests.Length == 0
+            || modelsWithRequests.Any(static model => model.RequestCost is not > 0))
+        {
+            return null;
+        }
+
+        return modelsWithRequests.Sum(static model => model.RequestCost.GetValueOrDefault());
     }
 
     public CopilotUsageBillingSource BillingSource()
