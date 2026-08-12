@@ -84,7 +84,7 @@ Existing release behavior is intentionally strict:
 - If the tag has an empty draft release, the workflow may reuse it.
 - If the tag has a published release, the workflow fails. Create a new `RepoSyncRadarVersion` and tag for corrected assets. Do not delete the published release with the expectation that the same tag can be reused.
 - If the tag has a draft release with assets and `draft` is disabled, the workflow validates that the attached asset names match the expected Velopack asset set and publishes the existing draft without replacing assets.
-- If the tag has a draft release with assets and `draft` is enabled, the workflow fails. Delete the draft before rerunning if those assets were never published, or rerun with `draft` disabled after smoke validation to publish the existing draft.
+- If the tag has a draft release with assets and `draft` is enabled, the workflow fails. Rerun with `draft` disabled after smoke validation to publish the existing draft, or increment `RepoSyncRadarVersion` and use a new tag for corrected assets.
 
 For rollback, publish a newer corrective version rather than mutating the broken release. For example, if `v0.2.0` is published with bad assets, leave the release as historical record, fix the issue, set `RepoSyncRadarVersion` to `0.2.1`, tag `v0.2.1`, and publish a complete new Velopack feed for the affected channels. Installed clients should move forward to the corrected version through the update feed.
 

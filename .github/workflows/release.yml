@@ -318,7 +318,7 @@ jobs:
 
                 if ($assetCount -gt 0) {
                   if ($env:DRAFT -eq 'true') {
-                    throw "Draft GitHub Release '$env:TAG' already has $assetCount asset(s). Delete the draft before rerunning, or use a new RepoSyncRadarVersion/tag for corrected assets."
+                    throw "Draft GitHub Release '$env:TAG' already has $assetCount asset(s). Rerun with draft=false to publish the validated assets, or increment RepoSyncRadarVersion and use a new tag for corrected assets."
                   }
 
                   $expectedAssetNames = @($assets | ForEach-Object { $_.Name } | Sort-Object)
@@ -326,12 +326,12 @@ jobs:
 
                   $missingAssetNames = @($expectedAssetNames | Where-Object { $releaseAssetNames -notcontains $_ })
                   if ($missingAssetNames.Count -gt 0) {
-                    throw "Draft GitHub Release '$env:TAG' is missing expected asset(s): $($missingAssetNames -join ', '). Delete the draft before rerunning, or upload a complete new version/tag."
+                    throw "Draft GitHub Release '$env:TAG' is missing expected asset(s): $($missingAssetNames -join ', '). The existing asset set cannot be published or replaced; increment RepoSyncRadarVersion and use a new tag."
                   }
 
                   $unexpectedAssetNames = @($releaseAssetNames | Where-Object { $expectedAssetNames -notcontains $_ })
                   if ($unexpectedAssetNames.Count -gt 0) {
-                    throw "Draft GitHub Release '$env:TAG' has unexpected asset(s): $($unexpectedAssetNames -join ', '). Delete the draft before rerunning, or upload a complete new version/tag."
+                    throw "Draft GitHub Release '$env:TAG' has unexpected asset(s): $($unexpectedAssetNames -join ', '). The existing asset set cannot be published or replaced; increment RepoSyncRadarVersion and use a new tag."
                   }
 
                   Write-Host "Existing draft assets match the expected Velopack asset names; publishing without re-uploading assets."
