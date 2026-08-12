@@ -190,7 +190,8 @@ internal static partial class MarkdownPreviewRenderer
             var liquidEvaluated = DocsLiquidEvaluator.Evaluate(
                 content,
                 effectiveLiquidContext,
-                effectiveVersion);
+                effectiveVersion,
+                comparisonContext: diffAgainstLiquidContext);
             var tableFragmentsExpanded = ExpandMarkdownTableFragments(liquidEvaluated);
             var compareAutotitleLabels = diffAgainstLiquidContext is not null;
             var renderedDiffInput = compareAutotitleLabels
@@ -205,6 +206,7 @@ internal static partial class MarkdownPreviewRenderer
                 diffAgainstMarkdown,
                 diffAgainstLiquidContext ?? DocsLiquidContext.Empty,
                 trimmedRepoPath,
+                effectiveLiquidContext,
                 effectiveVersion,
                 compareAutotitleLabels,
                 diffSide);
@@ -2273,6 +2275,7 @@ internal static partial class MarkdownPreviewRenderer
         string? diffAgainstMarkdown,
         DocsLiquidContext diffAgainstLiquidContext,
         string repoPath,
+        DocsLiquidContext currentLiquidContext,
         DocsVersion version,
         bool compareAutotitleLabels,
         RenderedMarkdownDiffSide diffSide)
@@ -2286,7 +2289,8 @@ internal static partial class MarkdownPreviewRenderer
         var comparisonRendered = DocsLiquidEvaluator.Evaluate(
             comparisonContent,
             diffAgainstLiquidContext,
-            version);
+            version,
+            comparisonContext: currentLiquidContext);
         comparisonRendered = ExpandMarkdownTableFragments(comparisonRendered);
         if (compareAutotitleLabels)
         {

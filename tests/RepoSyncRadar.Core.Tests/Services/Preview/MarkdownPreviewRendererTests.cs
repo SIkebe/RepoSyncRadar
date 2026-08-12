@@ -1060,6 +1060,56 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Treats_Reusable_Added_In_Comparison_As_Added_Rendered_Content()
+    {
+        const string reusableKey = "enterprise.repo-policy-rules-manage-bypass-request";
+        const string markdown = """
+            ---
+            title: Governing how people use repositories
+            ---
+
+            ## Managing bypass requests
+
+            {% data reusables.enterprise.repo-policy-rules-manage-bypass-request %}
+            """;
+        var beforeContext = DocsLiquidContext.Empty;
+        var afterContext = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [reusableKey] = "Added reusable content.",
+            });
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/organizations/managing-organization-settings/governing-how-people-use-repositories-in-your-organization.md",
+            markdown,
+            "cedcbb7",
+            "変更前",
+            beforeContext,
+            DocsVersion.Fpt,
+            diffAgainstMarkdown: markdown,
+            diffAgainstLiquidContext: afterContext,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/organizations/managing-organization-settings/governing-how-people-use-repositories-in-your-organization.md",
+            markdown,
+            "5c78377",
+            "PR HEAD",
+            afterContext,
+            DocsVersion.Fpt,
+            diffAgainstMarkdown: markdown,
+            diffAgainstLiquidContext: beforeContext,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.DoesNotContain("repo-policy-rules-manage-bypass-request", beforeHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("Added reusable content.", beforeHtml, StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">Added reusable content.</span>",
+            afterHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Expands_Docs_Security_Page_Liquid_Patterns()
     {
         var context = new DocsLiquidContext(
