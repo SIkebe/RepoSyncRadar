@@ -161,7 +161,8 @@ internal static partial class DocsLiquidEvaluator
         string? source,
         DocsLiquidContext context,
         DocsVersion version,
-        int maxRecursionDepth = _defaultMaxRecursionDepth)
+        int maxRecursionDepth = _defaultMaxRecursionDepth,
+        DocsLiquidContext? comparisonContext = null)
     {
         if (string.IsNullOrEmpty(source))
         {
@@ -199,7 +200,9 @@ internal static partial class DocsLiquidEvaluator
             current = ResolveAssignTagsOutsideForBlocks(current, context, scope);
             current = ResolveForLoops(current, context, version, scope);
             var dataSource = current;
-            current = DataTagRegex().Replace(current, m => ResolveDataExpr(m, context, dataSource));
+            current = DataTagRegex().Replace(
+                current,
+                m => ResolveDataExpr(m, context, dataSource, comparisonContext));
             current = IndentedDataRegex().Replace(current, m => ResolveIndentedDataExpr(m, context));
             current = ResolveCaseBlocks(current, context, scope);
             current = VariableExprRegex().Replace(current, m => ResolveLiquidVariable(m, context, scope));
@@ -244,13 +247,43 @@ internal static partial class DocsLiquidEvaluator
         return CaptureBlockRegex().Replace(current, string.Empty);
     }
 
-    private static string ResolveDataExpr(Match match, DocsLiquidContext context, string source)
+    private static string ResolveDataExpr(
+        Match match,
+        DocsLiquidContext context,
+        string source,
+        DocsLiquidContext? comparisonContext)
     {
         var expr = match.Groups["expr"].Value;
         var resolved = ResolveDataExpr(expr, context, match.Value);
+        if (string.Equals(resolved, match.Value, StringComparison.Ordinal)
+            && IsReusableAvailableOnlyInComparison(expr, context, comparisonContext))
+        {
+            return string.Empty;
+        }
         return string.Equals(resolved, match.Value, StringComparison.Ordinal)
             ? resolved
             : ApplyDataTagContext(match, source, resolved);
+    }
+
+    private static bool IsReusableAvailableOnlyInComparison(
+        string expr,
+        DocsLiquidContext context,
+        DocsLiquidContext? comparisonContext)
+    {
+        if (comparisonContext is null)
+        {
+            return false;
+        }
+
+        var normalized = NormalizeDataExpr(expr);
+        if (!normalized.StartsWith("reusables.", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var key = normalized["reusables.".Length..];
+        return !TryGetValueWithArgumentFallback(context.Reusables, key, out _)
+            && TryGetValueWithArgumentFallback(comparisonContext.Reusables, key, out _);
     }
 
     private static string ResolveDataExpr(string expr, DocsLiquidContext context, string originalTag)

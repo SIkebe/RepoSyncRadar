@@ -118,6 +118,21 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Omits_Missing_Reusable_When_Comparison_Context_Defines_It()
+    {
+        var comparisonContext = WithReusables(
+            ("enterprise.repo-policy-rules-manage-bypass-request", "Added reusable content."));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% data reusables.enterprise.repo-policy-rules-manage-bypass-request %}",
+            DocsLiquidContext.Empty,
+            DocsVersion.Fpt,
+            comparisonContext: comparisonContext);
+
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
     public void Expands_Reusable_Recursively_With_Nested_Variable()
     {
         var ctx = new DocsLiquidContext(
