@@ -94,7 +94,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 5
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Require a new release or empty draft
         env:
@@ -103,26 +103,36 @@ jobs:
           TAG: ${{ needs.prepare.outputs.tag }}
           DRAFT: ${{ needs.prepare.outputs.draft }}
         run: |
-          $releaseJson = gh release view $env:TAG --repo $env:REPOSITORY --json isDraft,assets 2>$null
+          $endpoint = "repos/$env:REPOSITORY/releases/tags/$env:TAG"
+          $releaseJson = gh api $endpoint --jq '{isDraft: .draft, assetNames: [.assets[].name]}' 2>&1
           if ($LASTEXITCODE -ne 0) {
-              Write-Host "No existing GitHub Release found for $env:TAG."
-              exit 0
+              $errorMessage = ($releaseJson | Out-String).Trim()
+              if ($errorMessage -match '\(HTTP 404\)') {
+                  Write-Host "No existing GitHub Release found for $env:TAG."
+                  exit 0
+              }
+
+              Write-Output "::error title=Unable to inspect GitHub Release::Failed to check '$env:TAG' before building. Verify the workflow token and GitHub API availability."
+              Write-Host "GitHub CLI reported: $errorMessage"
+              exit 1
           }
 
           $release = $releaseJson | ConvertFrom-Json
-          $assetCount = @($release.assets).Count
+          $assetCount = @($release.assetNames).Count
 
           if (-not $release.isDraft) {
-              throw "GitHub Release '$env:TAG' is already published. Immutable release policy requires a new RepoSyncRadarVersion/tag for corrected assets."
+              Write-Output "::error title=Release tag is already published::GitHub Release '$env:TAG' is already published. Increment RepoSyncRadarVersion and run the workflow with a new tag; published assets are immutable."
+              exit 1
           }
 
           if ($assetCount -gt 0) {
               if ($env:DRAFT -ne 'true') {
-                Write-Host "Found draft GitHub Release '$env:TAG' with $assetCount asset(s); the publish job will validate and publish it without replacing assets."
-                exit 0
+                  Write-Host "Found draft GitHub Release '$env:TAG' with $assetCount asset(s); the publish job will validate and publish it without replacing assets."
+                  exit 0
               }
 
-              throw "Draft GitHub Release '$env:TAG' already has $assetCount asset(s). Delete the draft before rerunning, or use a new RepoSyncRadarVersion/tag for corrected assets."
+              Write-Output "::error title=Draft release already contains immutable assets::GitHub Release '$env:TAG' is a draft with $assetCount asset(s). To publish those existing assets, rerun with draft=false. To build corrected assets, increment RepoSyncRadarVersion and use a new tag."
+              exit 1
           }
 
           Write-Host "Found an empty draft GitHub Release for $env:TAG; it can be reused."

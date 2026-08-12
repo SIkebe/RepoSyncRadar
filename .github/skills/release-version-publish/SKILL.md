@@ -27,7 +27,7 @@ RepoSyncRadar の app/package version を更新し、Velopack installer/update-f
 6. **Release workflow を勝手に起動しない**。PR が merge 済みでも、ユーザーが明示的に「draft release workflow を実行して」と指示するまで `gh workflow run release.yml` を実行しない。
 7. **official assets は installer/update-feed のみ**。Velopack build は `-NoPortable -NoLegacyManifest` を維持し、portable bundle や legacy Squirrel manifest を公開しない。
 8. **installed package smoke を重視する**。Release workflow の `win-x64` installed smoke が赤なら公開しない。ローカル smoke が必要な場合も uninstaller 経由で cleanup する。
-9. **既存 draft/published release を上書きしない**。draft に assets がある場合は workflow の asset-name validation に従う。失敗したら draft 削除か新 version をユーザーに確認する。
+9. **既存 draft/published release を上書きしない**。draft に assets がある場合、既存 assets を公開するなら `draft=false`、作り直すなら新しい `RepoSyncRadarVersion` を使う。`draft=true` を再実行して assets を置換しない。
 10. **未コミット変更を壊さない**。関係ない dirty files は戻さない。release version bump に必要な差分だけ触る。
 
 ## 手順
