@@ -203,7 +203,9 @@ internal static partial class DocsLiquidEvaluator
             current = DataTagRegex().Replace(
                 current,
                 m => ResolveDataExpr(m, context, dataSource, comparisonContext));
-            current = IndentedDataRegex().Replace(current, m => ResolveIndentedDataExpr(m, context));
+            current = IndentedDataRegex().Replace(
+                current,
+                m => ResolveIndentedDataExpr(m, context, comparisonContext));
             current = ResolveCaseBlocks(current, context, scope);
             current = VariableExprRegex().Replace(current, m => ResolveLiquidVariable(m, context, scope));
             current = ResolveForLoops(current, context, version, scope);
@@ -683,7 +685,10 @@ internal static partial class DocsLiquidEvaluator
         return sb.ToString();
     }
 
-    private static string ResolveIndentedDataExpr(Match m, DocsLiquidContext context)
+    private static string ResolveIndentedDataExpr(
+        Match m,
+        DocsLiquidContext context,
+        DocsLiquidContext? comparisonContext)
     {
         var expr = m.Groups["expr"].Value;
         if (!expr.StartsWith("reusables.", StringComparison.Ordinal))
@@ -693,7 +698,9 @@ internal static partial class DocsLiquidEvaluator
         var key = expr["reusables.".Length..];
         if (!TryGetValueWithArgumentFallback(context.Reusables, key, out var v))
         {
-            return m.Value;
+            return IsReusableAvailableOnlyInComparison(expr, context, comparisonContext)
+                ? string.Empty
+                : m.Value;
         }
 
         var spacesGroup = m.Groups["spaces"];

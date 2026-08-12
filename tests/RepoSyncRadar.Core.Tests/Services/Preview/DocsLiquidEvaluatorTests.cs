@@ -713,6 +713,20 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Omits_Missing_Indented_Data_Reference_When_Comparison_Context_Defines_It()
+    {
+        var comparisonContext = WithReusables(("guide.steps", "step 1\nstep 2"));
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            "{% indented_data_reference reusables.guide.steps spaces=4 %}",
+            DocsLiquidContext.Empty,
+            DocsVersion.Fpt,
+            comparisonContext: comparisonContext);
+
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
     public void Recursive_Expansion_Halts_At_Max_Depth_Without_Stack_Overflow()
     {
         // Cycle: A → B → A. The evaluator must not loop forever.
