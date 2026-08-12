@@ -19,7 +19,6 @@ public interface ICopilotUsageTracker
 public sealed class CopilotUsageTracker : ICopilotUsageTracker
 {
     public const double NanoAiuPerAiCredit = 1_000_000_000d;
-    public const double UsdPerAiCredit = 0.01d;
 
     private const int _maxRecentRecords = 50;
     private readonly object _gate = new();
@@ -217,7 +216,7 @@ public sealed record CopilotUsageRecord(
     public double? EffectiveCost()
         => Cost is { } cost and > 0
             ? cost
-            : AiCredits() * CopilotUsageTracker.UsdPerAiCredit;
+            : null;
 
     public CopilotUsageBillingSource BillingSource()
     {
@@ -295,10 +294,8 @@ public sealed record CopilotSessionUsageMetrics(
             return cost;
         }
 
-        var totalNanoAiu = EffectiveTotalNanoAiu();
-        return totalNanoAiu is { } value
-            ? value / CopilotUsageTracker.NanoAiuPerAiCredit * CopilotUsageTracker.UsdPerAiCredit
-            : null;
+        var modelCost = ModelMetrics.Sum(static model => model.RequestCost is { } cost and > 0 ? cost : 0);
+        return modelCost > 0 ? modelCost : null;
     }
 
     public CopilotUsageBillingSource BillingSource()

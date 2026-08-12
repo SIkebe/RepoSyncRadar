@@ -4,7 +4,7 @@
     RepoSyncRadar のローカル検証スクリプト。CI が無い段階の代替。
 
 .DESCRIPTION
-    `dotnet build -warnaserror` と `dotnet test -- --filter-not-trait Category=Manual` を順に走らせ、
+    `dotnet build -warnaserror` と `dotnet test --timeout 10m -- --filter-not-trait Category=Manual` を順に走らせ、
     どちらかが赤なら non-zero で終了する。実装プラン §0.4 の完了判定に対応。
 #>
 
@@ -25,8 +25,8 @@ try {
         throw "dotnet build failed with exit code $LASTEXITCODE"
     }
 
-    Write-Host '==> dotnet test --no-build -- --filter-not-trait Category=Manual' -ForegroundColor Cyan
-    dotnet test --no-build --configuration $Configuration -- --filter-not-trait Category=Manual
+    Write-Host '==> dotnet test --no-build --timeout 10m -- --filter-not-trait Category=Manual' -ForegroundColor Cyan
+    dotnet test --no-build --configuration $Configuration --timeout 10m -- --filter-not-trait Category=Manual
     if ($LASTEXITCODE -ne 0) {
         throw "dotnet test failed with exit code $LASTEXITCODE"
     }

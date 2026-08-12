@@ -121,7 +121,7 @@ public sealed class PreviewNavigatorTests
     private static Uri AssertUriRequest(PreviewNavigationRequest? request)
     {
         Assert.NotNull(request);
-        return request.Value switch
+        return request switch
         {
             Uri url => url,
             PreviewComparisonRequest => throw new Xunit.Sdk.XunitException("Expected URI navigation request."),
@@ -132,7 +132,7 @@ public sealed class PreviewNavigatorTests
     private static PreviewComparisonRequest AssertComparisonRequest(PreviewNavigationRequest? request)
     {
         Assert.NotNull(request);
-        return request.Value switch
+        return request switch
         {
             Uri => throw new Xunit.Sdk.XunitException("Expected comparison navigation request."),
             PreviewComparisonRequest comparisonRequest => comparisonRequest,

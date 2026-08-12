@@ -21,7 +21,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 
 ## 絶対ルール
 
-1. **ユーザー提供の公式 URL を最初に読む**。ブログ記事、release note、issue、PR、docs URL が渡されたら本文だけでなく、本文からリンクされる詳細 release notes / breaking changes / SDK docs も先に開き、関連項目をチェックリスト化してから package audit に進む。概要記事だけ読んだ扱いにしない。RepoSyncRadar の技術スタックに関係する .NET preview では、SDK だけでなく ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C# の area notes も確認する。該当 area note が存在するか分からない場合は release-notes ディレクトリや公式 docs を探し、存在しないことも根拠として残す。
+1. **ユーザー提供の公式 URL を最初に読む**。ブログ記事、release note、issue、PR、docs URL が渡されたら本文だけでなく、本文からリンクされる詳細 release notes / breaking changes / SDK docs も先に開き、関連項目をチェックリスト化してから package audit に進む。概要記事だけ読んだ扱いにしない。通常の fetch が banner、shell、空本文、途中切れだけを返した場合は読了扱いにせず、同じ公式 site の REST API、raw file、release metadata、GitHub API などで本文を取得し直す。RepoSyncRadar の技術スタックに関係する .NET preview では、SDK だけでなく ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C# の area notes も確認する。該当 area note が存在するか分からない場合は release-notes ディレクトリや公式 docs を探し、存在しないことも根拠として残す。
 2. **target version を明確にする**。ユーザー指定があればそれを使う。未指定なら NuGet prerelease を含めて候補を確認し、最新へ進めてよいか判断する。
 3. **app code と突き合わせる**。SDK の changelog 感想で終えず、`src/RepoSyncRadar.App/Copilot/`、`RepoSyncRadar.Core/Options/`、settings、UI/tests を見る。
 4. **public surface 優先**。内部実装だけにあるものは使える API として扱わない。experimental API は `GHCP001` 等の警告と変更リスクを明示する。
@@ -29,6 +29,8 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 6. **既存の未コミット変更を壊さない**。dirty worktree を前提に、関係ない変更は戻さない。
 7. **実装は小さく根本に当てる**。package bump、version notice、SDK 契約との不一致、設定の未配線、安全な beta 新機能活用に絞る。
 8. **見送りも根拠を残す**。公式 release notes の項目を採用しない場合は、該当コード検索結果と「なぜこのアプリでは不要か」を PR 本文または完了報告に書く。
+9. **調査 gate を通るまで編集しない**。target version、公式本文、repository に関係する linked release notes / breaking changes / API docs / issue・PR の evidence matrix を埋める前に package、`global.json`、source を変更しない。
+10. **Preview / experimental を理由だけで見送らない**。public に利用可能で、この repository に具体的な価値があり、security・privacy・grounding risk を限定して tests で検証できる機能は積極的に採用する。警告抑制、fallback、撤回条件が必要なら変更と同時に明記する。
 
 ## 手順
 
@@ -40,17 +42,19 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 
 ### 2. 現在版と target 版を確認する
 
-1. ユーザーが渡した公式 URL をすべて読む。概要ブログの場合は、記事内の release notes / breaking changes / SDK-specific notes へのリンクも辿る。リンク抽出で公式記事の全 area link を拾い、手で見た項目だけに限定しない。
-2. .NET preview が関係する場合は、次の area notes を明示的に確認する。存在しない/空の場合もその事実を記録する: SDK、ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C#。RepoSyncRadar では WPF + BlazorWebView + EF Core SQLite + WebView2 + release packaging の観点を必ず含める。
-3. 読んだ公式情報から「採用候補」「破壊的変更」「このリポジトリでは対象外」のチェックリストを作る。例: .NET preview なら各 area note の見出しを、`Directory.Build.props`、`.csproj`、release scripts、GitHub Actions、Blazor components、EF migrations、WPF host、docs と突き合わせる。
-4. `Directory.Packages.props` と project references から現在の `GitHub.Copilot.SDK` version を確認する。
-5. `dotnet package search GitHub.Copilot.SDK --exact-match --prerelease --format json` で target 版の存在を確認する。
-6. 変更前後の package metadata を読む。
+1. ユーザーが渡した公式 URL をすべて読む。概要ブログの場合は、記事内の release notes / breaking changes / SDK-specific notes / repository に関係する issue・PR へのリンクも辿る。リンク抽出で公式記事の全 area link を拾い、手で見た項目だけに限定しない。本文を取得できない場合は、同じ公式 site の raw/API/release metadata へ切り替える。
+2. URL ごとに `source URL / 読んだ本文または diff / repository への relevance / 採用・追随・対象外の判断` を evidence matrix に記録する。リンク先を title や検索 snippet だけで判断せず、少なくとも本文、breaking-change contract、または関連 diff/tests を読む。
+3. .NET preview が関係する場合は、公式 release metadata で exact SDK version を確認し、次の area notes を明示的に確認する。存在しない/空の場合もその事実を記録する: SDK、ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C#。RepoSyncRadar では WPF + BlazorWebView + EF Core SQLite + WebView2 + MTP + C# union + release packaging の観点を必ず含め、runtime async、compiler、build semantics、test tooling の主要 issue・PR も追う。Microsoft Learn のまとめが対象 Preview より古い場合は、対象 Preview の release notes と linked PR/tests を優先し、docs の更新遅延を evidence matrix に残す。
+4. 読んだ公式情報から「採用候補」「破壊的変更」「このリポジトリでは対象外」のチェックリストを作る。例: .NET preview なら各 area note の見出しを、`Directory.Build.props`、`.csproj`、release scripts、GitHub Actions、Blazor components、EF migrations、WPF host、docs と突き合わせる。
+5. evidence matrix が埋まり、target と repository への影響が説明できることを確認してから編集へ進む。
+6. `Directory.Packages.props` と project references から現在の `GitHub.Copilot.SDK` version を確認する。
+7. `dotnet package search GitHub.Copilot.SDK --exact-match --prerelease --format json` で target 版の存在を確認する。
+8. 変更前後の package metadata を読む。
    - `.nuspec`: version、repository URL/commit、dependencies
    - `build/GitHub.Copilot.SDK.props`: bundled `CopilotCliVersion`
    - `build/GitHub.Copilot.SDK.targets`: CLI download/copy/publish behavior
    - README / XML docs: public API surface
-7. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。
+9. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。
 
 PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-String` を使う。
 
@@ -121,7 +125,7 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 3. **Observability**: SDK logger、CLI log level、OTel file exporter、request/session IDs、usage metrics、safe lifecycle/error hooks
 4. **Lifecycle / reliability**: stop/force stop、idle cleanup、abort on cancel、session persistence/migration
 5. **Performance / UX**: streaming/subagent streaming、permission round-trip、model fallback
-6. **Future watch**: public preview 変更リスク、experimental APIs、remote sessions、canvas、quota/account APIs
+6. **Preview / experimental opportunity**: structured output、remote sessions、canvas、quota/account APIs、Preview language/runtime/tooling
 
 採用しやすい候補:
 
@@ -130,6 +134,7 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 - `ToolSet().AddCustom(toolName)` など public helper への置換
 - 不要な ambient behavior の明示無効化 (`SkipCustomInstructions`, `CustomAgentsLocalOnly`, `CoauthorEnabled`, `ManageScheduleEnabled` など)
 - version notice / tests / repo instructions の更新
+- Preview / experimental でも、明確な reliability、grounding、observability、performance 改善があり、影響範囲と撤回方法を限定できる機能
 
 慎重に扱う候補:
 
@@ -138,6 +143,9 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 - `skip_permission` の拡大。安全性と auditability を優先する。
 - `CopilotClientMode.Empty` の全面採用。`BaseDirectory` / `SessionFs` / `COPILOT_HOME` / keytar / session persistence への影響を別 PR で設計する。
 - session deletion / CopilotHome migration。既存 session state を壊す可能性がある。
+- experimental cost/quota/account API への依存拡大。ただし nullable/課金 semantics を検証し、既存表示を壊さず段階導入できるなら採用候補に戻す。
+
+Preview / experimental 機能を採用するときは、利用理由、public API status、warning/suppression、失敗時の挙動、focused tests、将来外す条件を変更または PR 本文に残す。
 
 ### 7. 実装とテスト
 
@@ -155,8 +163,10 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 
 ```powershell
 dotnet build RepoSyncRadar.sln -warnaserror
-dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual
+dotnet test RepoSyncRadar.sln --timeout 10m -- --filter-not-trait Category=Manual
 ```
+
+Preview 7 の run-level `--timeout` は `global.json` の `test.runner` が `Microsoft.Testing.Platform` の場合にだけ `--` より前へ置ける。未設定の repository では runner opt-in の影響を先に評価し、採用しない場合は timeout を test application 側へ誤って追加しない。
 
 EF Core / migration 生成物を触った場合は、上記に加えて必ず次を実行する。`has-pending-model-changes` が差分ありを返したら、既存 migration designer / snapshot の target model 欠落を疑い、`dotnet-ef` で生成した probe migration の `Up` と designer を読んでから直す。
 
@@ -180,6 +190,7 @@ dotnet ef migrations has-pending-model-changes --project src\RepoSyncRadar.Core\
    - bundled Copilot CLI version
    - 読んだ SDK 根拠 (package metadata / source commit / major source/tests)
    - 採用した app improvement
+   - source change なしで自動的に享受する runtime、compiler、SDK、test tooling の改善と、この repository で効果がある箇所
    - validation commands
 
 ## 完了レポート
@@ -187,9 +198,10 @@ dotnet ef migrations has-pending-model-changes --project src\RepoSyncRadar.Core\
 最後に日本語で短くまとめる。
 
 - 更新した SDK version と bundled Copilot CLI version
-- 読んだ SDK 根拠: package version、repo commit、主要 source/tests
+- 読んだ SDK 根拠: package version、repo commit、主要 source/tests、公式 URL evidence matrix
 - 見つけた重要 finding 上位 3 件
 - 実装した改善と変更ファイル
+- source change なしで自動的に享受する改善と、その効果がある repository surface
 - 見送った判断事項や future watch
 - 検証コマンドと結果
 - PR を作った場合は URL、branch、commit

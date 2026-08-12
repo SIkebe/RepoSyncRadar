@@ -604,7 +604,6 @@
         var shas = _selectedCommitShas.ToArray();
         StartBatchExplanationProgress();
         _batchExplanationStatus = null;
-        StateHasChanged();
         try
         {
             var generated = await agent.GenerateBatchExplanationAsync(shas, _batchExplanationCts!.Token);
@@ -624,7 +623,6 @@
         finally
         {
             await StopBatchExplanationProgressAsync();
-            StateHasChanged();
         }
     }
 

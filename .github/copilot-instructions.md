@@ -16,11 +16,11 @@ Use these repository instructions as the starting point. When code or validated 
 
 ## Build And Test
 
-- The pinned SDK is in `global.json`: .NET SDK `11.0.100-preview.6.26359.118` with `rollForward: latestFeature` and `allowPrerelease: true`.
+- The pinned SDK is in `global.json`: .NET SDK `11.0.100-preview.7.26381.103` with `rollForward: latestFeature`, `allowPrerelease: true`, and the `Microsoft.Testing.Platform` test runner.
 - Restore/build from the repo root. Prefer PowerShell on Windows.
 - Validate ordinary changes with:
   - `dotnet build RepoSyncRadar.sln -warnaserror`
-  - `dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual`
+  - `dotnet test RepoSyncRadar.sln --timeout 10m -- --filter-not-trait Category=Manual`
 - Validate GitHub Actions workflow changes with `ghalint run`; CI installs the ghalint version tracked in `tools/ghalint/go.mod` so Dependabot can update it.
 - For focused test runs under xUnit v3/Microsoft.Testing.Platform, put filters after `--`. Examples:
   - `dotnet test tests/RepoSyncRadar.App.Tests/RepoSyncRadar.App.Tests.csproj -- --filter-class RepoSyncRadar.App.Tests.Components.AppHeaderTests`
@@ -52,6 +52,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Do not add `System.Security.Cryptography.ProtectedData` as a package; it is already available in the target framework. Use `[SupportedOSPlatform("windows")]` where DPAPI requires it.
 - Avoid `using var _ = ...`; `_` is a real variable in that context and can conflict with later discard assignments.
 - C# 15 union types are enabled with `LangVersion=preview`. Use them only for small closed internal payload choices where exhaustive pattern matching removes duplicated event/result handling. Until the runtime ships `UnionAttribute` / `IUnion`, keep the App-local polyfill in `src/RepoSyncRadar.App/CompilerServices/UnionPolyfill.cs` and remove it when the target framework provides those types.
+- Runtime Async is enabled repository-wide through `Features=runtime-async=on`. If an individual method reports `CS9328`, prefer a documented `RuntimeAsyncMethodGeneration(false)` opt-out on that method over disabling the feature globally.
 - Before finishing C# edits, check language-server diagnostics or run a focused build so IDE naming rules such as IDE1006 are caught before handoff.
 
 ## Copilot SDK And Auth

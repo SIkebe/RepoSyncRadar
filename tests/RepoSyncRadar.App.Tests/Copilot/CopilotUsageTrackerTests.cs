@@ -218,6 +218,7 @@ public sealed class CopilotUsageTrackerTests
         var snapshot = tracker.GetSnapshot();
 
         Assert.Equal(25_000_000, snapshot.TotalNanoAiu);
+        Assert.Null(snapshot.Cost);
         Assert.Equal(CopilotUsageBillingSource.Mixed, snapshot.BillingSource);
     }
 
@@ -299,6 +300,37 @@ public sealed class CopilotUsageTrackerTests
 
         Assert.Equal(50_000_000, snapshot.TotalNanoAiu);
         Assert.Equal(0.05, snapshot.AiCredits());
+        Assert.Null(snapshot.Cost);
+        Assert.Equal(CopilotUsageBillingSource.SdkReported, snapshot.BillingSource);
+    }
+
+    [Fact]
+    public void RecordSessionMetrics_Uses_Model_Level_Premium_Request_Cost_When_Total_Is_Missing()
+    {
+        var tracker = new CopilotUsageTracker();
+        tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+            new DateTimeOffset(2026, 8, 12, 10, 0, 0, TimeSpan.Zero),
+            "session-1",
+            "Triage",
+            "gpt-5",
+            100,
+            10,
+            0,
+            0,
+            0,
+            50_000_000,
+            null,
+            2,
+            90,
+            10,
+            [
+                new CopilotModelUsageMetrics("gpt-5", 50, 5, 0, 0, 0, 25_000_000, 0.5, 1),
+                new CopilotModelUsageMetrics("gpt-5-mini", 50, 5, 0, 0, 0, 25_000_000, 0.25, 1),
+            ]));
+
+        var snapshot = tracker.GetSnapshot();
+
+        Assert.Equal(0.75, snapshot.Cost);
         Assert.Equal(CopilotUsageBillingSource.SdkReported, snapshot.BillingSource);
     }
 

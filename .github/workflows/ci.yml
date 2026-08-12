@@ -86,7 +86,7 @@ jobs:
 
       - name: Test
         run: >
-          dotnet test RepoSyncRadar.sln --no-build --
+          dotnet test RepoSyncRadar.sln --no-build --timeout 10m --
           --filter-not-trait Category=Manual
           --output detailed
           --coverage

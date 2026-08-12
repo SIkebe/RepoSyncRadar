@@ -162,7 +162,7 @@ jobs:
         run: dotnet build RepoSyncRadar.sln --no-restore -warnaserror
 
       - name: Test
-        run: dotnet test RepoSyncRadar.sln --no-build -- --filter-not-trait Category=Manual --output detailed
+        run: dotnet test RepoSyncRadar.sln --no-build --timeout 10m -- --filter-not-trait Category=Manual --output detailed
 
       - name: Upload test result logs
         if: ${{ failure() }}
