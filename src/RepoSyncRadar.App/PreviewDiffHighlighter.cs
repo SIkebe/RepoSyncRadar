@@ -1396,6 +1396,11 @@ td.rsr-preview-diff-alignment-gap {
   if (existingOverlay?.__positionHandler) {
     window.removeEventListener('resize', existingOverlay.__positionHandler);
   }
+  if (existingOverlay?.__scrollTargets && existingOverlay.__positionHandler) {
+    existingOverlay.__scrollTargets.forEach((scrollTarget) => {
+      scrollTarget.removeEventListener('scroll', existingOverlay.__positionHandler);
+    });
+  }
   existingOverlay?.remove();
   window.__repoSyncRadarDiffNavigation = undefined;
 
@@ -1422,6 +1427,20 @@ td.rsr-preview-diff-alignment-gap {
   overlay.id = overlayId;
   overlay.className = 'rsr-preview-diff-active-overlay';
   overlay.setAttribute('aria-hidden', 'true');
+  let scrollTargets = [];
+  const collectScrollTargets = () => {
+    const candidates = new Set();
+    targets.forEach((target) => {
+      let ancestor = target.parentElement;
+      while (ancestor && ancestor !== document.body) {
+        if (window.getComputedStyle(ancestor).overflowX !== 'visible') {
+          candidates.add(ancestor);
+        }
+        ancestor = ancestor.parentElement;
+      }
+    });
+    return Array.from(candidates);
+  };
   const positionOverlay = () => {
     const rects = targets
       .map((target) => target.getBoundingClientRect())
@@ -1432,9 +1451,29 @@ td.rsr-preview-diff-alignment-gap {
     }
     overlay.hidden = false;
     const inlinePadding = 6;
-    const left = Math.min(...rects.map((rect) => rect.left)) + window.scrollX - inlinePadding;
+    let visibleLeft = 0;
+    let visibleRight = document.documentElement.clientWidth;
+    scrollTargets.forEach((scrollTarget) => {
+      const scrollRect = scrollTarget.getBoundingClientRect();
+      const scrollStyle = window.getComputedStyle(scrollTarget);
+      const borderLeft = Number.parseFloat(scrollStyle.borderLeftWidth) || 0;
+      const borderRight = Number.parseFloat(scrollStyle.borderRightWidth) || 0;
+      visibleLeft = Math.max(visibleLeft, scrollRect.left + borderLeft);
+      visibleRight = Math.min(visibleRight, scrollRect.right - borderRight);
+    });
+    const clippedLeft = Math.max(
+      visibleLeft,
+      Math.min(...rects.map((rect) => rect.left)) - inlinePadding);
+    const clippedRight = Math.min(
+      visibleRight,
+      Math.max(...rects.map((rect) => rect.right)) + inlinePadding);
+    if (clippedRight <= clippedLeft) {
+      overlay.hidden = true;
+      return;
+    }
+    const left = clippedLeft + window.scrollX;
     const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
-    const right = Math.max(...rects.map((rect) => rect.right)) + window.scrollX + inlinePadding;
+    const right = clippedRight + window.scrollX;
     const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
     overlay.style.left = `${left.toFixed(1)}px`;
     overlay.style.top = `${top.toFixed(1)}px`;
@@ -1447,6 +1486,14 @@ td.rsr-preview-diff-alignment-gap {
   const refreshTargets = () => {
     targets = Array.from(
       document.querySelectorAll('[data-rsr-diff-navigation-index="{{navigationIndex}}"]'));
+    scrollTargets.forEach((scrollTarget) => {
+      scrollTarget.removeEventListener('scroll', positionOverlay);
+    });
+    scrollTargets = collectScrollTargets();
+    scrollTargets.forEach((scrollTarget) => {
+      scrollTarget.addEventListener('scroll', positionOverlay, { passive: true });
+    });
+    overlay.__scrollTargets = scrollTargets;
     overlay.__resizeObserver?.disconnect();
     positionOverlay();
     if (typeof ResizeObserver === 'function') {
