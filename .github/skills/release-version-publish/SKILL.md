@@ -27,7 +27,7 @@ RepoSyncRadar の app/package version を更新し、Velopack installer/update-f
 6. **Release workflow を勝手に起動しない**。PR が merge 済みでも、ユーザーが明示的に「draft release workflow を実行して」と指示するまで `gh workflow run release.yml` を実行しない。
 7. **official assets は installer/update-feed のみ**。Velopack build は `-NoPortable -NoLegacyManifest` を維持し、portable bundle や legacy Squirrel manifest を公開しない。
 8. **installed package smoke を重視する**。Release workflow の `win-x64` installed smoke が赤なら公開しない。ローカル smoke が必要な場合も uninstaller 経由で cleanup する。
-9. **既存 draft/published release を上書きしない**。draft に assets がある場合は workflow の asset-name validation に従う。失敗したら draft 削除か新 version をユーザーに確認する。
+9. **既存 draft/published release を上書きしない**。draft に assets がある場合、既存 assets を公開するなら `draft=false`、作り直すなら新しい `RepoSyncRadarVersion` を使う。`draft=true` を再実行して assets を置換しない。
 10. **未コミット変更を壊さない**。関係ない dirty files は戻さない。release version bump に必要な差分だけ触る。
 
 ## 手順
@@ -208,7 +208,7 @@ gh release view v0.1.16 --repo SIkebe/RepoSyncRadar --json isDraft,isPrerelease,
 |---|---|
 | build/test が赤 | publish しない。原因を修正して PR/CI からやり直す |
 | release preflight が published release を検出 | 新 version を選ぶ。既存 published release を削除・上書きしない |
-| draft に partial/unexpected assets | draft が未公開なら削除して再実行するか、新 version に進むかユーザー確認 |
+| draft に partial/unexpected assets | 既存 asset set は公開・置換せず、新しい `RepoSyncRadarVersion` で完全な asset set を作る |
 | 明示確認なしに PR merge / draft workflow 実行まで進めてしまった | そこで即停止。追加の publish / delete / rerun は行わず、merge commit、workflow run、draft release 状態、assets 数を報告してユーザー判断を待つ |
 | package / installed smoke が赤 | publish しない。`gh run view --log-failed` と artifact を確認し、修正 PR を作る |
 | publish workflow が asset validation で赤 | release 状態を変えずに停止し、draft asset set と expected names を報告 |
