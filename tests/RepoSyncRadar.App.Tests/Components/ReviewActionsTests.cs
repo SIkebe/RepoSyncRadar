@@ -110,6 +110,25 @@ public sealed class ReviewActionsTests : IDisposable
         Assert.Contains("もう確認したから", reason.TextContent);
     }
 
+    [Theory]
+    [InlineData(ReviewStatus.Adopted, "review-adopt")]
+    [InlineData(ReviewStatus.Later, "review-later")]
+    [InlineData(ReviewStatus.Archived, "review-reject")]
+    public void Current_Review_Action_Is_Not_Shown(ReviewStatus currentStatus, string actionTestId)
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var broadcaster = Substitute.For<IReviewBroadcaster>();
+        var sp = BuildServices(repo, broadcaster);
+        using var ctx = new Bunit.BunitContext();
+
+        var cut = ctx.Render<ReviewActions>(p => p
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.Sha, "abc")
+            .Add(c => c.CurrentStatus, currentStatus));
+
+        Assert.Empty(cut.FindAll($"[data-testid=\"{actionTestId}\"]"));
+    }
+
     [Fact]
     public void Renders_Clear_Action_Groups()
     {

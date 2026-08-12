@@ -20,59 +20,70 @@
     </header>
 
     <div class="review-primary-actions" data-testid="review-primary-actions">
-        <button type="button"
-                data-testid="review-adopt"
-                class="review-button adopt"
-                disabled="@_busy"
-                @onclick="AdoptAsync">
-            @L["ReviewActions.Watch"]
-        </button>
+        @if (CurrentStatus != ReviewStatus.Adopted)
+        {
+            <button type="button"
+                    data-testid="review-adopt"
+                    class="review-button adopt"
+                    disabled="@_busy"
+                    @onclick="AdoptAsync">
+                @L["ReviewActions.Watch"]
+            </button>
+        }
 
-        <button type="button"
-                data-testid="review-later"
-                class="review-button later"
-                disabled="@_busy"
-                @onclick="LaterAsync">
-            @L["ReviewActions.Later"]
-        </button>
+        @if (CurrentStatus != ReviewStatus.Later)
+        {
+            <button type="button"
+                    data-testid="review-later"
+                    class="review-button later"
+                    disabled="@_busy"
+                    @onclick="LaterAsync">
+                @L["ReviewActions.Later"]
+            </button>
+        }
     </div>
 
-    <div class="review-reject-box">
-        <label class="review-field-label" for="review-reject-reason">@L["ReviewActions.ArchiveReason"] <span>@L["ReviewActions.Required"]</span></label>
-        @if (HasArchivedReason)
-        {
+    @if (CurrentStatus != ReviewStatus.Archived)
+    {
+        <div class="review-reject-box">
+            <label class="review-field-label" for="review-reject-reason">@L["ReviewActions.ArchiveReason"] <span>@L["ReviewActions.Required"]</span></label>
+            <div class="review-reject-presets" data-testid="review-reject-reason-options">
+                @foreach (var reason in RejectReasonPresets)
+                {
+                    var reasonLabel = L[reason.ResourceKey].Value;
+                    <button type="button"
+                            class="@BuildRejectReasonPresetClass(reasonLabel)"
+                            data-testid="review-reject-reason-option"
+                            data-reason="@reasonLabel"
+                            disabled="@_busy"
+                            @onclick="() => SelectRejectReason(reasonLabel)">@reasonLabel</button>
+                }
+            </div>
+            <div class="review-input-action">
+                <input id="review-reject-reason"
+                       type="text"
+                       data-testid="review-reject-reason"
+                       placeholder="@L["ReviewActions.ArchiveReasonPlaceholder"]"
+                       value="@_rejectReason"
+                       disabled="@_busy"
+                       @oninput="OnRejectReasonChanged" />
+                <button type="button"
+                        data-testid="review-reject"
+                        class="review-button reject"
+                        disabled="@(_busy || string.IsNullOrWhiteSpace(_rejectReason))"
+                        @onclick="ArchiveAsync">@L["ReviewActions.Archive"]</button>
+            </div>
+        </div>
+    }
+    else if (HasArchivedReason)
+    {
+        <div class="review-reject-box">
             <div class="review-archived-reason" data-testid="review-archived-reason">
                 <span>@L["ReviewActions.ArchivedReason"]</span>
                 <strong>@ArchivedReason</strong>
             </div>
-        }
-        <div class="review-reject-presets" data-testid="review-reject-reason-options">
-            @foreach (var reason in RejectReasonPresets)
-            {
-                var reasonLabel = L[reason.ResourceKey].Value;
-                <button type="button"
-                        class="@BuildRejectReasonPresetClass(reasonLabel)"
-                        data-testid="review-reject-reason-option"
-                        data-reason="@reasonLabel"
-                        disabled="@_busy"
-                        @onclick="() => SelectRejectReason(reasonLabel)">@reasonLabel</button>
-            }
         </div>
-        <div class="review-input-action">
-            <input id="review-reject-reason"
-                   type="text"
-                   data-testid="review-reject-reason"
-                   placeholder="@L["ReviewActions.ArchiveReasonPlaceholder"]"
-                   value="@_rejectReason"
-                   disabled="@_busy"
-                   @oninput="OnRejectReasonChanged" />
-            <button type="button"
-                    data-testid="review-reject"
-                    class="review-button reject"
-                    disabled="@(_busy || string.IsNullOrWhiteSpace(_rejectReason))"
-                    @onclick="ArchiveAsync">@L["ReviewActions.Archive"]</button>
-        </div>
-    </div>
+    }
 
     <details class="review-ignore-panel" data-testid="review-ignore-details">
         <summary>
