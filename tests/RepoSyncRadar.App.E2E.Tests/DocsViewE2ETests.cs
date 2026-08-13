@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using System.Reflection;
 using System.Text.Json;
 using Xunit;
 
@@ -130,6 +131,56 @@ public sealed class DocsViewE2ETests
         Assert.Equal(3, lineHeights.Length);
         Assert.Equal(lineHeights[0], lineHeights[1], precision: 2);
         Assert.Equal(lineHeights[0], lineHeights[2], precision: 2);
+    }
+
+    [Fact]
+    public async Task Preview_Diff_Extractor_Includes_Source_Metadata_But_Excludes_Other_Header_Chrome()
+    {
+        var appAssemblyPath = Path.ChangeExtension(AppHost.ResolveAppExePath(), ".dll");
+        var appAssembly = Assembly.LoadFrom(appAssemblyPath);
+        var highlighterType = appAssembly.GetType(
+            "RepoSyncRadar.App.PreviewDiffHighlighter",
+            throwOnError: true)!;
+        var script = Assert.IsType<string>(
+            highlighterType
+                .GetProperty(
+                    "ExtractBlocksScriptForTests",
+                    BindingFlags.NonPublic | BindingFlags.Static)!
+                .GetValue(null));
+        var context = Assert.Single(_fixture.DocsBrowser.Contexts);
+        var page = await context.NewPageAsync();
+        try
+        {
+            await page.SetContentAsync(
+                """
+                <main>
+                  <article>
+                    <header>
+                      <p>Ordinary preview header chrome</p>
+                      <section class="rsr-source-diff">
+                        <h2>Rendered source metadata</h2>
+                        <p>Hidden Liquid condition details</p>
+                      </section>
+                    </header>
+                    <p>Rendered article body</p>
+                  </article>
+                </main>
+                """);
+
+            var result = await page.EvaluateAsync<JsonElement>(script);
+            var extractedText = result.EnumerateArray()
+                .Select(static block => block.GetProperty("text").GetString())
+                .ToArray();
+
+            Assert.Contains("Rendered source metadata", extractedText);
+            Assert.Contains("Hidden Liquid condition details", extractedText);
+            Assert.Contains("Rendered article body", extractedText);
+            Assert.DoesNotContain("Ordinary preview header chrome", extractedText);
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
     }
 
     private static async Task<string> WaitForPinnedColorModeAsync(IPage page)

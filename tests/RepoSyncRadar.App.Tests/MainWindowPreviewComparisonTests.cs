@@ -987,15 +987,6 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
-    public void PreviewDiffHighlighter_ExtractScript_Includes_Source_Diff_Metadata_Inside_Header()
-    {
-        var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
-
-        Assert.Contains("const sourceDiffContainerSelector = '.rsr-source-diff'", script, StringComparison.Ordinal);
-        Assert.Contains("element.closest(sourceDiffContainerSelector)", script, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void PreviewDiffHighlighter_ExtractScript_Uses_Code_Lines_Inside_Code_Tabs_And_Fences()
     {
         var script = PreviewDiffHighlighter.ExtractBlocksScriptForTests;
