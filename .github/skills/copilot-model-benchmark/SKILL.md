@@ -196,6 +196,17 @@ source/testを読み、モデルの自己評価に依存せず100点で採点す
 6. 公式のモデル用途・価格ページを参考として付ける。
 7. artifact保存先を示すが、機密コードやprompt/outputを外部へ送信しない。
 
+## Issueへの記録
+
+ベンチマーク結果をIssueへ保存する場合は、次の順序を必ず守る。
+
+1. `.github/ISSUE_TEMPLATE/model-benchmark.yml` の項目に沿って、aggregate結果だけを含むIssueタイトルと本文案を作る。
+2. タイトルには比較した全modelまたはeffortを明記する。
+3. raw prompt、model出力、session artifact、ローカルartifact保存先はIssueへ記載しない。
+4. `model-benchmark` ラベルを付ける。ラベルが存在せず作成権限もない場合は、必要なラベル名、説明、推奨色をユーザーへ伝える。
+5. Issueを作成する前に、タイトル、本文、ラベルの下書きをユーザーへ提示し、`ask_user` で承認を得る。承認前にIssueを作成しない。
+6. 承認後にIssueを作成する。修正を求められた場合は下書きを直し、再度承認を得る。
+
 ## 今回の静的コード理解ベンチマーク基準
 
 2026-08-10、RepoSyncRadarのMorning Triageを各3run、`high` / default contextで比較した基準値。実行時HEADは`2720f8b0ebc36f67836790abe3cb1ef97b1ea0c7`、Copilot CLIは`1.0.79-9`。worktreeにはこのPRのmodel・設定・Skill変更が未コミットで存在した。数値は中央値、括弧内はmin-max:

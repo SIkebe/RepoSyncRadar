@@ -1,0 +1,75 @@
+name: Model benchmark report
+description: Record a reproducible comparison between Copilot models or reasoning efforts
+title: "[Model benchmark] "
+labels:
+  - model-benchmark
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Record aggregate benchmark results only. Do not include raw prompts, model outputs, or local artifact paths.
+
+  - type: input
+    id: candidates
+    attributes:
+      label: Compared models or efforts
+      description: Name every compared model and reasoning effort.
+      placeholder: MAI-Code-1.1-Flash / high vs GPT-5.6 Luna / high
+    validations:
+      required: true
+
+  - type: textarea
+    id: conclusion
+    attributes:
+      label: Conclusion
+      description: State the recommendation first.
+    validations:
+      required: true
+
+  - type: textarea
+    id: conditions
+    attributes:
+      label: Benchmark conditions
+      description: Include the task, run count, context tier, CLI version, commit, tool restrictions, and judge.
+    validations:
+      required: true
+
+  - type: textarea
+    id: results
+    attributes:
+      label: Aggregate results
+      description: Include success, quality, AI Credits, token usage, and elapsed time with ranges.
+    validations:
+      required: true
+
+  - type: textarea
+    id: quality
+    attributes:
+      label: Important quality differences
+      description: Explain concrete verified strengths, errors, and omissions.
+    validations:
+      required: true
+
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommended usage
+      description: Distinguish the default, high-complexity, and lightweight use cases.
+    validations:
+      required: true
+
+  - type: textarea
+    id: references
+    attributes:
+      label: Official references
+      description: Link supported-model, model-comparison, and pricing documentation when applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: limitations
+    attributes:
+      label: Limitations
+      description: Explain what the benchmark does not directly measure.
+    validations:
+      required: true
