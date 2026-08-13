@@ -38,6 +38,7 @@ public class SessionConfigBuilderTests
         Assert.Equal(ContextTier.LongContext, config.ContextTier);
         Assert.True(config.Streaming);
         Assert.False(config.EnableSessionTelemetry);
+        Assert.False(config.EnableFileChangeTracking);
         Assert.False(config.EnableSessionStore);
         Assert.False(config.EnableExperimentalMode);
         Assert.NotNull(config.Memory);

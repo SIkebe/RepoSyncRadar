@@ -46,6 +46,7 @@ internal static class SessionConfigBuilder
             },
             OnPermissionRequest = permissionHandler,
             EnableSessionTelemetry = copilot.EnableSessionTelemetry,
+            EnableFileChangeTracking = false,
             EnableSessionStore = false,
             EnableExperimentalMode = false,
             Memory = new MemoryConfiguration { Enabled = false },
