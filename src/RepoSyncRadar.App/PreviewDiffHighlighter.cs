@@ -61,6 +61,7 @@ internal static class PreviewDiffHighlighter
 ((extractCodeLines) => {
   const mediaSelector = 'img,video,audio,iframe,object,embed';
   const structuralContainerSelector = '.ghd-markdown-alert,.ghd-alert,.ghd-tool';
+  const sourceDiffContainerSelector = '.rsr-source-diff';
   const codeLineSelector = 'pre > code > .rsr-code-line';
   const blockSelector =
     `h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,td,th,.ghd-code-tab-label,${extractCodeLines ? `${codeLineSelector},` : ''}${structuralContainerSelector}`;
@@ -181,6 +182,9 @@ internal static class PreviewDiffHighlighter
       element.getClientRects().length > 0;
   };
   const isNavigationOrChrome = (element) => {
+    if (element.closest(sourceDiffContainerSelector)) {
+      return false;
+    }
     if (element.closest(blockedAncestorSelector)) {
       return true;
     }

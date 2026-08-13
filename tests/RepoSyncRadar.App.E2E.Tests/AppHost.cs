@@ -148,7 +148,7 @@ public sealed class AppHost : IAsyncDisposable
         return new AppHost(process, blazorPort, docsPort, webViewUserDataRoot);
     }
 
-    private static string ResolveAppExePath()
+    internal static string ResolveAppExePath()
     {
         var overridePath = Environment.GetEnvironmentVariable("REPOSYNCRADAR_E2E_APP_EXE_PATH");
         if (!string.IsNullOrWhiteSpace(overridePath))
