@@ -5,15 +5,30 @@ namespace RepoSyncRadar.App.E2E.Tests;
 
 internal static class E2EPageHelpers
 {
+    /// <summary>
+    /// Budget for the Blazor shell to render its first component tree after the
+    /// WebView2 CDP endpoint answered <c>/json/version</c>. A cold CI runner has
+    /// to JIT the App, create a fresh WebView2 profile, and run the initial
+    /// Blazor Hybrid render, which can take well over half a minute, so the
+    /// budget is deliberately generous. Individual assertions keep their own
+    /// tighter timeouts, so a genuinely broken UI still fails the test quickly
+    /// once the page is found.
+    /// </summary>
+    private static readonly TimeSpan _blazorReadyTimeout = TimeSpan.FromMinutes(2);
+
     public static async Task<IPage> GetBlazorPageAsync(IBrowser browser)
     {
         ArgumentNullException.ThrowIfNull(browser);
 
-        var context = GetFirstContext(browser, "Blazor");
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
+        var deadline = DateTime.UtcNow + _blazorReadyTimeout;
+        IReadOnlyList<IPage> lastSeenPages = [];
         while (DateTime.UtcNow < deadline)
         {
-            foreach (var page in context.Pages)
+            // Contexts and pages are re-read on every attempt: the Blazor
+            // WebView can attach its target to CDP after we connected, so a
+            // snapshot taken up front may never contain the shell page.
+            lastSeenPages = GetPages(browser);
+            foreach (var page in lastSeenPages)
             {
                 if (await HasSelectorAsync(page, "[data-testid='sidebar']").ConfigureAwait(false))
                 {
@@ -24,19 +39,12 @@ internal static class E2EPageHelpers
             await Task.Delay(250, TestContext.Current.CancellationToken).ConfigureAwait(false);
         }
 
-        throw new InvalidOperationException($"Blazor page not found over CDP. Open pages: {DescribePages(context.Pages)}.");
+        throw new InvalidOperationException(
+            $"Blazor page not found over CDP within {_blazorReadyTimeout.TotalSeconds:F0}s. Open pages: {DescribePages(lastSeenPages)}.");
     }
 
-    private static IBrowserContext GetFirstContext(IBrowser browser, string label)
-    {
-        var contexts = browser.Contexts;
-        if (contexts.Count == 0)
-        {
-            throw new InvalidOperationException($"{label} browser has no contexts.");
-        }
-
-        return contexts[0];
-    }
+    private static IReadOnlyList<IPage> GetPages(IBrowser browser)
+        => [.. browser.Contexts.SelectMany(static context => context.Pages)];
 
     private static async Task<bool> HasSelectorAsync(IPage page, string selector)
     {

@@ -66,6 +66,24 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
             $"http://127.0.0.1:{_host.BlazorCdpPort}").ConfigureAwait(false);
         _docsBrowser = await _playwright.Chromium.ConnectOverCDPAsync(
             $"http://127.0.0.1:{_host.DocsCdpPort}").ConfigureAwait(false);
+
+        // The CDP endpoint answers well before Blazor Hybrid finishes its first
+        // render, so wait for the shell here. Paying the cold-start cost once in
+        // the fixture keeps whichever test happens to run first from absorbing it
+        // and, if the shell never mounts, fails the whole collection immediately
+        // instead of repeating the wait for every test.
+        try
+        {
+            await E2EPageHelpers.GetBlazorPageAsync(_blazorBrowser).ConfigureAwait(false);
+        }
+        catch
+        {
+            // xUnit does not guarantee DisposeAsync runs when InitializeAsync
+            // throws, so tear the app host down here to avoid leaking the WPF
+            // child process and its WebView2 profile.
+            await DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -73,15 +91,19 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
         if (_blazorBrowser is not null)
         {
             await _blazorBrowser.CloseAsync().ConfigureAwait(false);
+            _blazorBrowser = null;
         }
         if (_docsBrowser is not null)
         {
             await _docsBrowser.CloseAsync().ConfigureAwait(false);
+            _docsBrowser = null;
         }
         _playwright?.Dispose();
+        _playwright = null;
         if (_host is not null)
         {
             await _host.DisposeAsync().ConfigureAwait(false);
+            _host = null;
         }
         TryCleanupDb();
     }
