@@ -38,7 +38,7 @@ RepoSyncRadar が GitHub Copilot SDK セッションで使うモデルまたは 
 
 4. **prompt完全性を検証する。**
    - PowerShellから渡すpromptは改行なしの単一文字列にする。複数行here-stringは使用しない。
-   - Windows の `copilot.cmd` は `cmd.exe` の約 8KB コマンドライン上限を受ける。prompt と固定引数の合計が 7,000 文字を超える場合は wrapper を使わず、同じ `GitHub.Copilot.SDK` の新規 session へファイルから prompt を読み込んで送る。wrapper 失敗後に切り替えた場合も初回失敗を記録する。
+   - Windows の `copilot.cmd` は `cmd.exe` の約 8KB コマンドライン上限を受ける。prompt と固定引数の合計が 7,000 文字を超える場合は実行を中止し、全条件で同じ prompt を短縮する。model、effort、context、tool/MCP/custom instruction/remote制限、credit上限、usage取得を固定したversion管理済みrunnerがない限り、ad hocなSDK fallbackやCLI/SDK混在で再実行しない。
    - 回答冒頭に一意なmarkerを要求する。例: `BENCHMARK-7Q`。
    - marker欠落、質問欠落の主張、clarificationだけの回答は品質0点にせず「信頼性失敗」として別記録する。
    - 失敗runを黙って差し替えない。再実行する場合は初回失敗とrerunを両方報告する。
