@@ -99,6 +99,10 @@ public class RadarPermissionPolicyTests
         var result = await policy.HandleAsync(NewCustomTool("tc-1", "radar_list_commits"), _invocation);
 
         Assert.Equal(_approveOnceKind, result.Kind);
+        AssertDecisionContext(
+            result,
+            PermissionDecisionOutcome.AutoApproved,
+            PermissionDecisionSource.HostPolicy);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -224,6 +228,10 @@ public class RadarPermissionPolicyTests
         var result = await policy.HandleAsync(NewUrl("tc-4", "https://example.com/foo"), _invocation);
 
         Assert.Equal(_approveOnceKind, result.Kind);
+        AssertDecisionContext(
+            result,
+            PermissionDecisionOutcome.PromptedUser,
+            PermissionDecisionSource.HumanResponse);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -237,6 +245,10 @@ public class RadarPermissionPolicyTests
         var result = await policy.HandleAsync(NewUrl("tc-5", "https://example.com/foo"), _invocation);
 
         Assert.Equal(_rejectKind, result.Kind);
+        AssertDecisionContext(
+            result,
+            PermissionDecisionOutcome.PromptedUser,
+            PermissionDecisionSource.HumanResponse);
         await prompt.Received(1).ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -275,6 +287,10 @@ public class RadarPermissionPolicyTests
         var result = await policy.HandleAsync(NewShell("tc-8", "rm -rf /"), _invocation);
 
         Assert.Equal(_userNotAvailableKind, result.Kind);
+        AssertDecisionContext(
+            result,
+            PermissionDecisionOutcome.AutopilotDenied,
+            PermissionDecisionSource.HostPolicy);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
@@ -317,6 +333,17 @@ public class RadarPermissionPolicyTests
 
         Assert.Equal(_userNotAvailableKind, result.Kind);
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    private static void AssertDecisionContext(
+        PermissionDecision decision,
+        PermissionDecisionOutcome outcome,
+        PermissionDecisionSource source)
+    {
+        Assert.NotNull(decision.DecisionContext);
+        Assert.Equal(outcome, decision.DecisionContext.Outcome);
+        Assert.Equal(source, decision.DecisionContext.Source);
+        Assert.Equal(PermissionDecisionSurface.Sdk, decision.DecisionContext.Surface);
     }
 }
 #pragma warning restore GHCP001
