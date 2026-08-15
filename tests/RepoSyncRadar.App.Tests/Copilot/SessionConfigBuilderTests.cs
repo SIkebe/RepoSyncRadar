@@ -99,5 +99,34 @@ public class SessionConfigBuilderTests
         Assert.Equal("radar_test", config.Tools.Single().Name);
         Assert.Equal(["custom:radar_test"], config.AvailableTools);
     }
+
+    [Fact]
+    public void Build_For_Adoption_Restricts_Fetching_To_Radar_Tool()
+    {
+        var copilot = new CopilotOptions
+        {
+            DefaultModel = "gpt-5.6-luna",
+            AllowedUrlHosts = ["docs.github.com"],
+        };
+        Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> handler = (_, _) =>
+            Task.FromResult(PermissionDecision.ApproveOnce());
+        var tool = AIFunctionFactory.Create(
+            () => "ok",
+            new AIFunctionFactoryOptions
+            {
+                Name = "radar_fetch_rendered",
+                Description = "test tool",
+            });
+
+        var config = SessionConfigBuilder.Build(
+            SessionPurpose.Adoption,
+            Options.Create(copilot),
+            handler,
+            tools: [tool]);
+
+        Assert.Equal(["custom:radar_fetch_rendered"], config.AvailableTools);
+        Assert.Contains("use radar_fetch_rendered", config.SystemMessage!.Content, StringComparison.Ordinal);
+        Assert.Contains("never use a built-in URL fetch tool", config.SystemMessage.Content, StringComparison.Ordinal);
+    }
 }
 #pragma warning restore GHCP001

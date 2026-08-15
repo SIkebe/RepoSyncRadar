@@ -1,4 +1,5 @@
 using GitHub.Copilot;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.Core.Options;
@@ -80,6 +81,20 @@ public sealed class CopilotSessionFactoryTests
     }
 
     [Fact]
+    public void SelectToolsForPurpose_Adoption_Uses_Only_ReadOnly_Radar_Tools()
+    {
+        var readOnlyTool = CreateTool("radar_fetch_rendered");
+        var writeTool = CreateTool("radar_save_review");
+
+        var tools = CopilotSessionFactory.SelectToolsForPurpose(
+            SessionPurpose.Adoption,
+            [readOnlyTool],
+            [writeTool]);
+
+        Assert.Equal(["radar_fetch_rendered"], tools.Select(static tool => tool.Name));
+    }
+
+    [Fact]
     public void BuildClientOptions_Wires_Sdk_Diagnostics_And_Telemetry()
     {
         var copilot = new CopilotOptions
@@ -137,4 +152,13 @@ public sealed class CopilotSessionFactoryTests
         var stdio = Assert.IsType<StdioRuntimeConnection>(options.Connection);
         Assert.Null(stdio.Path);
     }
+
+    private static AIFunction CreateTool(string name)
+        => AIFunctionFactory.Create(
+            () => "ok",
+            new AIFunctionFactoryOptions
+            {
+                Name = name,
+                Description = "test tool",
+            });
 }
