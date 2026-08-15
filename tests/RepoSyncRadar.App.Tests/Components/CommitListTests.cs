@@ -91,6 +91,25 @@ public class CommitListTests
     }
 
     [Fact]
+    public void CommitList_Renders_Aggregated_Line_Changes()
+    {
+        var commit = MakeCommit("aaaaaaa1", "first");
+        commit.Files.AddRange(
+        [
+            new CommitFile { Sha = commit.Sha, Path = "content/one.md", Status = "modified", Additions = 12, Deletions = 3 },
+            new CommitFile { Sha = commit.Sha, Path = "content/two.md", Status = "added", Additions = 5, Deletions = 0 },
+        ]);
+
+        using var cut = RenderListWith([commit]);
+
+        var stats = cut.Find("[data-testid=\"commit-row-change-stats\"]");
+        Assert.Equal("+17", stats.QuerySelector(".additions")?.TextContent);
+        Assert.Equal("-3", stats.QuerySelector(".deletions")?.TextContent);
+        Assert.Equal("変更行数: 追加 17、削除 3、合計 20", stats.GetAttribute("title"));
+        Assert.Equal(stats.GetAttribute("title"), stats.GetAttribute("aria-label"));
+    }
+
+    [Fact]
     public void CommitList_Message_Hover_Shows_Full_Message()
     {
         const string message = "docs: update Copilot article\n\nExpand details for enterprise setup.";

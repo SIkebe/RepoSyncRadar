@@ -727,7 +727,7 @@ html, body {
     display: grid;
     font: inherit;
     gap: 0.5rem;
-    grid-template-columns: 8ch minmax(0, 1fr) auto auto;
+    grid-template-columns: 8ch minmax(0, 1fr) auto minmax(7ch, auto) auto;
     min-width: 0;
     padding: 0;
     text-align: left;
@@ -768,6 +768,24 @@ html, body {
 .commit-row .score.unscored {
     color: #777;
     font-weight: 600;
+}
+
+.commit-row .change-stats {
+    display: flex;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+    gap: 0.35rem;
+    justify-content: flex-end;
+    white-space: nowrap;
+}
+
+.commit-row .additions {
+    color: var(--radar-success-fg, #1a7f37);
+}
+
+.commit-row .deletions {
+    color: var(--radar-danger-fg, #a40e26);
 }
 
 .radar-commit-detail .commit-header {

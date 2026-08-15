@@ -61,6 +61,13 @@
                         <span class="@BuildScoreClass(commit)"
                               data-testid="commit-row-score"
                               title="@BuildScoreTitle(commit)">@FormatScore(commit)</span>
+                        <span class="change-stats"
+                              data-testid="commit-row-change-stats"
+                              title="@BuildChangeStatsTitle(commit)"
+                              aria-label="@BuildChangeStatsTitle(commit)">
+                            <span class="additions">+@CountAdditions(commit)</span>
+                            <span class="deletions">-@CountDeletions(commit)</span>
+                        </span>
                         <time class="authored" datetime="@commit.AuthoredAt.ToString("O")">
                             @commit.AuthoredAt.ToString("yyyy-MM-dd")
                         </time>
@@ -167,6 +174,19 @@
 
     private static string FormatScore(double score)
         => score.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
+    private string BuildChangeStatsTitle(Commit commit)
+    {
+        var additions = CountAdditions(commit);
+        var deletions = CountDeletions(commit);
+        return L["CommitList.ChangeStatsTitle", additions, deletions, additions + deletions];
+    }
+
+    private static int CountAdditions(Commit commit)
+        => commit.Files.Sum(static file => file.Additions);
+
+    private static int CountDeletions(Commit commit)
+        => commit.Files.Sum(static file => file.Deletions);
 
     private string BuildEmptyTitle()
     {

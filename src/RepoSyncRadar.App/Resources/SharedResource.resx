@@ -91,6 +91,7 @@
   <data name="CommitList.Empty.UnseenTitle" xml:space="preserve"><value>未確認キューは空です。</value></data>
   <data name="CommitList.Empty.WatchHint" xml:space="preserve"><value>追い続けたい候補を注目へ移動するとここに表示されます。</value></data>
   <data name="CommitList.Empty.WatchTitle" xml:space="preserve"><value>注目キューは空です。</value></data>
+  <data name="CommitList.ChangeStatsTitle" xml:space="preserve"><value>変更行数: 追加 {0}、削除 {1}、合計 {2}</value></data>
   <data name="CommitList.ScoreTitle" xml:space="preserve"><value>スコア {0}</value></data>
   <data name="CommitList.SelectCommitAriaLabel" xml:space="preserve"><value>{0} を選択</value></data>
   <data name="CommitList.Sort.Label" xml:space="preserve"><value>並び順</value></data>
