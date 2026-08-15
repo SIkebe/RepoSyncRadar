@@ -212,20 +212,26 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 
     private List<AIFunction> CreateToolsFor(SessionPurpose purpose)
     {
-        return purpose switch
-        {
-            SessionPurpose.Adoption => [.. _radarTools.CreateAll()],
-            SessionPurpose.Triage or SessionPurpose.Maintenance => CreateAllRadarTools(),
-            _ => [],
-        };
+        return SelectToolsForPurpose(
+            purpose,
+            _radarTools.CreateAll(),
+            _radarWriteTools.CreateAll());
     }
 
-    private List<AIFunction> CreateAllRadarTools()
+    internal static List<AIFunction> SelectToolsForPurpose(
+        SessionPurpose purpose,
+        IReadOnlyList<AIFunction> readOnlyTools,
+        IReadOnlyList<AIFunction> writeTools)
     {
-        var tools = new List<AIFunction>();
-        tools.AddRange(_radarTools.CreateAll());
-        tools.AddRange(_radarWriteTools.CreateAll());
-        return tools;
+        ArgumentNullException.ThrowIfNull(readOnlyTools);
+        ArgumentNullException.ThrowIfNull(writeTools);
+
+        return purpose switch
+        {
+            SessionPurpose.Adoption => [.. readOnlyTools],
+            SessionPurpose.Triage or SessionPurpose.Maintenance => [.. readOnlyTools, .. writeTools],
+            _ => [],
+        };
     }
 
     /// <summary>
