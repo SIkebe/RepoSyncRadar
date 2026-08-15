@@ -1,0 +1,21 @@
+instructions: |
+  RepoSyncRadar is a Windows 11 desktop app. Run repository commands from the
+  repository root with the preview .NET SDK pinned in global.json.
+
+scripts:
+  - name: Restore
+    command: dotnet restore RepoSyncRadar.sln
+    triggers:
+      - session.create
+  - name: Run RepoSyncRadar
+    command: dotnet run --project src\RepoSyncRadar.App\RepoSyncRadar.App.csproj
+  - name: Build
+    command: dotnet build RepoSyncRadar.sln -warnaserror
+  - name: Test
+    command: dotnet test RepoSyncRadar.sln --timeout 10m -- --filter-not-trait Category=Manual
+
+auto_open_in_browser: false
+
+automation:
+  auto_issue_session: true
+  remote_control: false

@@ -742,23 +742,47 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
-    public void PreviewDiffHighlighter_BuildPlan_Bounds_Large_Comparisons()
+    public void PreviewDiffHighlighter_BuildPlan_Preserves_Separate_Hunks_After_Coarse_Extraction()
     {
         var beforeBlocks = Enumerable.Range(0, 1000)
             .Select(index => new PreviewDiffBlock(index, $"Shared block {index}"))
             .ToArray();
         var afterBlocks = beforeBlocks
-            .Select(block => block with { })
+            .Take(400)
+            .Append(new PreviewDiffBlock(1000, "Inserted block"))
+            .Concat(beforeBlocks.Skip(400))
+            .Select((block, index) => block with { Index = index })
             .ToArray();
-        afterBlocks[500] = new PreviewDiffBlock(500, "Changed block");
+        afterBlocks[801] = new PreviewDiffBlock(801, "Changed block");
 
         var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
 
-        Assert.Equal([500], plan.BeforeChangedIndexes);
-        Assert.Equal([500], plan.AfterChangedIndexes);
+        Assert.Equal(2, plan.Changes.Count);
+        Assert.Empty(plan.Changes[0].BeforeIndexes);
+        Assert.Equal([400], plan.Changes[0].AfterIndexes);
+        Assert.Equal([800], plan.Changes[1].BeforeIndexes);
+        Assert.Equal([801], plan.Changes[1].AfterIndexes);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Bounds_Very_Large_Comparisons()
+    {
+        var beforeBlocks = Enumerable.Range(0, 2100)
+            .Select(index => new PreviewDiffBlock(index, $"Shared block {index}"))
+            .ToArray();
+        var afterBlocks = beforeBlocks
+            .Select(block => block with { })
+            .ToArray();
+        afterBlocks[500] = new PreviewDiffBlock(500, "First changed block");
+        afterBlocks[1500] = new PreviewDiffBlock(1500, "Second changed block");
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
         var change = Assert.Single(plan.Changes);
-        Assert.Equal(501, change.BeforeAnchorIndex);
-        Assert.Equal(501, change.AfterAnchorIndex);
+        Assert.Equal(500, change.BeforeIndexes[0]);
+        Assert.Equal(1500, change.BeforeIndexes[^1]);
+        Assert.Equal(1501, change.BeforeAnchorIndex);
+        Assert.Equal(1501, change.AfterAnchorIndex);
     }
 
     [Fact]
@@ -1249,6 +1273,15 @@ public sealed class MainWindowPreviewComparisonTests
             StringComparison.Ordinal);
         Assert.Contains("pointer-events: none", script, StringComparison.Ordinal);
         Assert.Contains("overlay.setAttribute('aria-hidden', 'true')", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "!target.classList.contains('rsr-preview-diff-alignment-gap')",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "return substantiveTargets.length > 0 ? substantiveTargets : targets",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("overlayTargets = resolveOverlayTargets()", script, StringComparison.Ordinal);
         Assert.Contains("Math.min(...rects.map((rect) => rect.left))", script, StringComparison.Ordinal);
         Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
         Assert.Contains("const inlinePadding = 6", script, StringComparison.Ordinal);
