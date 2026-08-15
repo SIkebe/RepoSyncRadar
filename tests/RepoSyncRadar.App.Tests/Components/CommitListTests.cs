@@ -106,6 +106,7 @@ public class CommitListTests
         Assert.Equal("+17", stats.QuerySelector(".additions")?.TextContent);
         Assert.Equal("-3", stats.QuerySelector(".deletions")?.TextContent);
         Assert.Equal("変更行数: 追加 17、削除 3、合計 20", stats.GetAttribute("title"));
+        Assert.Equal("img", stats.GetAttribute("role"));
         Assert.Equal(stats.GetAttribute("title"), stats.GetAttribute("aria-label"));
     }
 
