@@ -122,17 +122,46 @@ public sealed partial class RadarPermissionPolicy
     private async Task<PermissionDecision> ConfirmAsync(PermissionRequest request)
     {
         var approved = await _prompt.ConfirmAsync(request).ConfigureAwait(false);
-        return approved ? Approved() : DeniedByUser();
+        return approved ? ApprovedByUser() : DeniedByUser();
     }
 
     private static PermissionDecision Approved() =>
-        PermissionDecision.ApproveOnce();
+        WithDecisionContext(
+            PermissionDecision.ApproveOnce(),
+            PermissionDecisionOutcome.AutoApproved,
+            PermissionDecisionSource.HostPolicy);
+
+    private static PermissionDecision ApprovedByUser() =>
+        WithDecisionContext(
+            PermissionDecision.ApproveOnce(),
+            PermissionDecisionOutcome.PromptedUser,
+            PermissionDecisionSource.HumanResponse);
 
     private static PermissionDecision DeniedByUser() =>
-        PermissionDecision.Reject("Rejected by user.");
+        WithDecisionContext(
+            PermissionDecision.Reject("Rejected by user."),
+            PermissionDecisionOutcome.PromptedUser,
+            PermissionDecisionSource.HumanResponse);
 
     private static PermissionDecision DeniedByRules() =>
-        PermissionDecision.UserNotAvailable();
+        WithDecisionContext(
+            PermissionDecision.UserNotAvailable(),
+            PermissionDecisionOutcome.AutopilotDenied,
+            PermissionDecisionSource.HostPolicy);
+
+    private static PermissionDecision WithDecisionContext(
+        PermissionDecision decision,
+        PermissionDecisionOutcome outcome,
+        PermissionDecisionSource source)
+    {
+        decision.DecisionContext = new PermissionDecisionContext
+        {
+            Outcome = outcome,
+            Source = source,
+            Surface = PermissionDecisionSurface.Sdk,
+        };
+        return decision;
+    }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
         Message = "Approving custom tool {ToolName} (session={SessionId})")]
