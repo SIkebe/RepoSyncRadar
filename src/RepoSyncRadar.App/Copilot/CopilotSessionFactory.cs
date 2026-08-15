@@ -214,6 +214,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     {
         return purpose switch
         {
+            SessionPurpose.Adoption => [.. _radarTools.CreateAll()],
             SessionPurpose.Triage or SessionPurpose.Maintenance => CreateAllRadarTools(),
             _ => [],
         };

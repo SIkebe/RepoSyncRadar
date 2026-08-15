@@ -200,28 +200,14 @@ public class RadarPermissionPolicyTests
     }
 
     [Fact]
-    public async Task Managed_AllowListedUrl_Is_Approved_Without_Prompt()
-    {
-        var prompt = Substitute.For<IPermissionPrompt>();
-        var policy = CreatePolicy(prompt);
-
-        var result = await policy.HandleAsync(
-            NewUrl("tc-managed-url", "https://docs.github.com/en/actions", managedApprovalRequired: true),
-            _invocation);
-
-        Assert.Equal(_approveOnceKind, result.Kind);
-        await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Managed_NotAllowListedUrl_Is_Prompted()
+    public async Task Managed_AllowListedUrl_Is_Prompted_Instead_Of_AutoApproved()
     {
         var prompt = Substitute.For<IPermissionPrompt>();
         prompt.ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>()).Returns(true);
         var policy = CreatePolicy(prompt);
 
         var result = await policy.HandleAsync(
-            NewUrl("tc-managed-url", "https://example.com/foo", managedApprovalRequired: true),
+            NewUrl("tc-managed-url", "https://docs.github.com/en/actions", managedApprovalRequired: true),
             _invocation);
 
         Assert.Equal(_approveOnceKind, result.Kind);

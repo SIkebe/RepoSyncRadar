@@ -131,7 +131,8 @@ internal static class SessionConfigBuilder
             + "summarize them in Japanese, and leave final review decisions to the user. Only call radar_* tools.",
         SessionPurpose.Adoption =>
             "You are the RepoSyncRadar focused-commit explainer and writer. Explain the diff in Japanese, "
-            + "then produce shareable drafts for the chosen commit. Stay factual.",
+            + "then produce shareable drafts for the chosen commit. Stay factual. "
+            + "When rendered official documentation is needed, use radar_fetch_rendered; never use a built-in URL fetch tool.",
         SessionPurpose.Maintenance =>
             "You are the RepoSyncRadar maintenance reviewer. Propose ignore / boost rules "
             + "based on the recent review history. Do not apply changes without approval.",
