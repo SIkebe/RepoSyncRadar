@@ -55,6 +55,7 @@ internal static class PreviewDiffHighlighter
 
     private const int _maxExtractionAttempts = 6;
     private const long _maxGranularPlanCells = 1_000_000;
+    private const long _maxCoarsePlanCells = 4_000_000;
     private const string _extractCodeLinesToken = "__RSR_EXTRACT_CODE_LINES__";
 
     private const string _extractBlocksScriptTemplate = """
@@ -343,7 +344,7 @@ internal static class PreviewDiffHighlighter
 
         var beforeTexts = beforeBlocks.Select(block => NormalizeText(block.Text)).ToArray();
         var afterTexts = afterBlocks.Select(block => NormalizeText(block.Text)).ToArray();
-        if (ExceedsPlanCellBudget(beforeTexts.Length, afterTexts.Length))
+        if (ExceedsPlanCellBudget(beforeTexts.Length, afterTexts.Length, _maxCoarsePlanCells))
         {
             return BuildBoundedPlan(beforeBlocks, afterBlocks, beforeTexts, afterTexts);
         }
@@ -502,8 +503,11 @@ internal static class PreviewDiffHighlighter
         return new PreviewDiffPlan(beforeChangedIndexes, afterChangedIndexes, [change]);
     }
 
-    private static bool ExceedsPlanCellBudget(int beforeBlockCount, int afterBlockCount)
-        => ((long)beforeBlockCount + 1) * (afterBlockCount + 1) > _maxGranularPlanCells;
+    private static bool ExceedsPlanCellBudget(
+        int beforeBlockCount,
+        int afterBlockCount,
+        long maximumCellCount = _maxGranularPlanCells)
+        => ((long)beforeBlockCount + 1) * (afterBlockCount + 1) > maximumCellCount;
 
     private static int? FindAlignmentAnchorIndex(
         IReadOnlyList<PreviewDiffBlock> blocks,
@@ -1413,9 +1417,15 @@ td.rsr-preview-diff-alignment-gap {
   if (targets.length === 0) {
     return { found: false };
   }
+  const resolveOverlayTargets = () => {
+    const substantiveTargets = targets.filter(
+      (target) => !target.classList.contains('rsr-preview-diff-alignment-gap'));
+    return substantiveTargets.length > 0 ? substantiveTargets : targets;
+  };
+  let overlayTargets = resolveOverlayTargets();
   const root = document.scrollingElement || document.documentElement || document.body;
   const maxScrollTop = Math.max(1, (root?.scrollHeight || 0) - window.innerHeight);
-  const targetRects = targets
+  const targetRects = overlayTargets
     .map((target) => target.getBoundingClientRect())
     .filter((rect) => rect.width > 0 && rect.height > 0);
   if (targetRects.length === 0) {
@@ -1434,7 +1444,7 @@ td.rsr-preview-diff-alignment-gap {
   let scrollTargets = [];
   const collectScrollTargets = () => {
     const candidates = new Set();
-    targets.forEach((target) => {
+    overlayTargets.forEach((target) => {
       let ancestor = target.parentElement;
       while (ancestor && ancestor !== document.body) {
         if (window.getComputedStyle(ancestor).overflowX !== 'visible') {
@@ -1446,7 +1456,7 @@ td.rsr-preview-diff-alignment-gap {
     return Array.from(candidates);
   };
   const positionOverlay = () => {
-    const rects = targets
+    const rects = overlayTargets
       .map((target) => target.getBoundingClientRect())
       .filter((rect) => rect.width > 0 && rect.height > 0);
     if (rects.length === 0) {
@@ -1490,6 +1500,7 @@ td.rsr-preview-diff-alignment-gap {
   const refreshTargets = () => {
     targets = Array.from(
       document.querySelectorAll('[data-rsr-diff-navigation-index="{{navigationIndex}}"]'));
+    overlayTargets = resolveOverlayTargets();
     scrollTargets.forEach((scrollTarget) => {
       scrollTarget.removeEventListener('scroll', positionOverlay);
     });
@@ -1502,7 +1513,7 @@ td.rsr-preview-diff-alignment-gap {
     positionOverlay();
     if (typeof ResizeObserver === 'function') {
       const resizeObserver = new ResizeObserver(positionOverlay);
-      targets.forEach((target) => resizeObserver.observe(target));
+      overlayTargets.forEach((target) => resizeObserver.observe(target));
       resizeObserver.observe(document.body);
       overlay.__resizeObserver = resizeObserver;
     }

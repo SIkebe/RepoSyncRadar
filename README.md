@@ -83,6 +83,14 @@ For a full setup walkthrough, OAuth details, local-preview behavior, and release
 Source builds require the preview .NET SDK pinned in [`global.json`](global.json): `11.0.100-preview.7.26381.103` with prerelease roll-forward enabled.
 Agent skills are managed by [APM](https://microsoft.github.io/apm/). Run `apm install` after cloning so the pinned Modern Web Guidance skill in [`apm.yml`](apm.yml) is restored from [`apm.lock.yaml`](apm.lock.yaml).
 
+### GitHub Copilot app
+
+On Windows, add this repository as a project in the GitHub Copilot app and review and accept the repository configuration when prompted. Creating a session automatically restores the solution. Select **Run RepoSyncRadar** from the project scripts to launch the desktop app; **Build** and **Test** are available from the same menu.
+
+The project scripts are defined in [`.github/github-app.yml`](.github/github-app.yml). The app intentionally does not auto-open a browser because RepoSyncRadar is a WPF desktop application.
+
+### Terminal
+
 ```powershell
 git clone <this-repo-url> C:\github\RepoSyncRadar
 cd C:\github\RepoSyncRadar
