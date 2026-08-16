@@ -91,6 +91,7 @@
   <data name="CommitList.Empty.UnseenTitle" xml:space="preserve"><value>The unseen queue is empty.</value></data>
   <data name="CommitList.Empty.WatchHint" xml:space="preserve"><value>Move candidates you want to track into Watch to see them here.</value></data>
   <data name="CommitList.Empty.WatchTitle" xml:space="preserve"><value>The watch queue is empty.</value></data>
+  <data name="CommitList.ChangeStatsTitle" xml:space="preserve"><value>Changed lines: {0} added, {1} deleted, {2} total</value></data>
   <data name="CommitList.ScoreTitle" xml:space="preserve"><value>Score {0}</value></data>
   <data name="CommitList.SelectCommitAriaLabel" xml:space="preserve"><value>Select {0}</value></data>
   <data name="CommitList.Sort.Label" xml:space="preserve"><value>Sort</value></data>
