@@ -650,6 +650,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             assetBasePath: _markdownBeforeAssetRoute,
             diffAgainstMarkdown: afterMarkdown,
             diffAgainstLiquidContext: afterLiquid,
+            diffAgainstRepoPath: renderedFilePath,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -668,6 +669,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             assetBasePath: _markdownAfterAssetRoute,
             diffAgainstMarkdown: beforeMarkdown,
             diffAgainstLiquidContext: beforeLiquid,
+            diffAgainstRepoPath: sources.BeforeFilePath,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
         cancellationToken.ThrowIfCancellationRequested();
