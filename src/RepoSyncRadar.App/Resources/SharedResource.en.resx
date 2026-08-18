@@ -112,6 +112,9 @@
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>Evidence, impact, and checks</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>Select a commit.</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>Files</value></data>
+  <data name="CommitDetail.FileChange.NoBodyChanges" xml:space="preserve"><value>No body changes</value></data>
+  <data name="CommitDetail.FileChange.Renamed" xml:space="preserve"><value>Renamed</value></data>
+  <data name="CommitDetail.FileChange.RenamedFrom" xml:space="preserve"><value>Renamed from {0}</value></data>
   <data name="CommitDetail.FileViewed" xml:space="preserve"><value>Viewed</value></data>
   <data name="CommitDetail.FileViewed.MarkTitle" xml:space="preserve"><value>Mark {0} as viewed</value></data>
   <data name="CommitDetail.FileViewed.UnmarkTitle" xml:space="preserve"><value>Unmark {0} as viewed</value></data>

@@ -145,6 +145,7 @@ internal static partial class MarkdownPreviewRenderer
         string? assetBasePath = null,
         string? diffAgainstMarkdown = null,
         DocsLiquidContext? diffAgainstLiquidContext = null,
+        string? diffAgainstRepoPath = null,
         RenderedMarkdownDiffSide diffSide = RenderedMarkdownDiffSide.None)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(repoPath);
@@ -206,6 +207,7 @@ internal static partial class MarkdownPreviewRenderer
                 diffAgainstMarkdown,
                 diffAgainstLiquidContext ?? DocsLiquidContext.Empty,
                 trimmedRepoPath,
+                diffAgainstRepoPath?.Trim() ?? trimmedRepoPath,
                 effectiveLiquidContext,
                 effectiveVersion,
                 compareAutotitleLabels,
@@ -1089,7 +1091,7 @@ internal static partial class MarkdownPreviewRenderer
         });
     }
 
-    private static string RewriteAutotitleMarkdownLinks(
+    internal static string RewriteAutotitleMarkdownLinks(
         string markdown,
         string repoPath,
         DocsLiquidContext liquidContext,
@@ -2275,6 +2277,7 @@ internal static partial class MarkdownPreviewRenderer
         string? diffAgainstMarkdown,
         DocsLiquidContext diffAgainstLiquidContext,
         string repoPath,
+        string diffAgainstRepoPath,
         DocsLiquidContext currentLiquidContext,
         DocsVersion version,
         bool compareAutotitleLabels,
@@ -2296,7 +2299,7 @@ internal static partial class MarkdownPreviewRenderer
         {
             comparisonRendered = RewriteAutotitleMarkdownLinks(
                 comparisonRendered,
-                repoPath,
+                diffAgainstRepoPath,
                 diffAgainstLiquidContext,
                 version);
         }

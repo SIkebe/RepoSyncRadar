@@ -64,6 +64,16 @@ public interface IPreviewCoordinator
         IReadOnlyList<string> changedFilePaths,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Analyzes a Markdown file without starting the preview server so the file list can
+    /// identify renames and rendered-body changes before the user opens the comparison.
+    /// </summary>
+    Task<MarkdownFileChangeSummary?> AnalyzeMarkdownFileChangeAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Stops the running preview server (if any) and clears the active session.</summary>
     Task StopAsync(CancellationToken cancellationToken = default);
 
@@ -159,6 +169,13 @@ public sealed record PreviewComparisonLink(
     public IReadOnlyList<string> ReusableReferencePaths { get; init; } = [];
 }
 
+/// <summary>Lightweight Markdown change information available before opening a preview.</summary>
+public sealed record MarkdownFileChangeSummary(
+    bool IsRenamed,
+    string? PreviousPath,
+    bool HasRenderedBodyChanges,
+    int FrontmatterChangeCount);
+
 internal sealed record ReusablePreviewTarget(
     string FilePath,
     IReadOnlyList<string> ReferencePaths);
@@ -208,7 +225,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         string VersionSlug,
         string ChangedFilePathsKey);
 
-    private sealed record PreparedMarkdownSession(string BeforeSha);
+    private sealed record PreparedMarkdownSession(
+        string BeforeSha,
+        IReadOnlyDictionary<string, string> PreviousPaths);
 
     private sealed record PreparedMarkdownPage(
         string BeforeSha,
@@ -220,6 +239,13 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         int SourceChangeCount,
         string BeforeHtml,
         string AfterHtml);
+
+    private sealed record MarkdownComparisonSources(
+        string BeforeFilePath,
+        string? BeforeMarkdown,
+        string? AfterMarkdown,
+        DocsLiquidContext BeforeLiquid,
+        DocsLiquidContext AfterLiquid);
 
     public PreviewCoordinator(
         DocsWorktreeManager worktree,
@@ -387,6 +413,69 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         };
     }
 
+    public async Task<MarkdownFileChangeSummary?> AnalyzeMarkdownFileChangeAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(prNumber);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        if (!_worktree.IsEnabled || !PreviewPathMapper.IsMarkdown(filePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var session = await EnsurePreparedSessionAsync(
+                    prNumber,
+                    sha,
+                    progress: null,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (session is null)
+            {
+                return null;
+            }
+
+            var sources = await LoadMarkdownComparisonSourcesAsync(
+                    session,
+                    sha,
+                    filePath.Trim(),
+                    progress: null,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetails(
+                sources.BeforeMarkdown,
+                sources.BeforeLiquid,
+                sources.AfterMarkdown,
+                sources.AfterLiquid,
+                sources.BeforeFilePath,
+                filePath.Trim());
+            var previousPath = string.Equals(sources.BeforeFilePath, filePath, StringComparison.Ordinal)
+                ? null
+                : sources.BeforeFilePath;
+            return new MarkdownFileChangeSummary(
+                IsRenamed: previousPath is not null,
+                PreviousPath: previousPath,
+                HasRenderedBodyChanges: versionImpacts.Count > 0,
+                FrontmatterChangeCount: MarkdownFrontmatterDiffAnalyzer
+                    .Analyze(sources.BeforeMarkdown, sources.AfterMarkdown)
+                    .Count);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            LogMarkdownFileChangeAnalysisFailed(_logger, prNumber, sha, filePath, ex);
+            return null;
+        }
+    }
+
     private static PreparedPageKey BuildPreparedPageKey(
         int prNumber,
         string sha,
@@ -515,32 +604,26 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             progress?.Report($"{requestedFilePath} は使用箇所 {renderedFilePath} でプレビューします");
         }
 
-        progress?.Report($"{renderedFilePath} の変更前 Markdown を bare clone から読み込み中…");
-        var beforeMarkdown = await _worktree.ReadFileTextAsync(session.BeforeSha, renderedFilePath, cancellationToken).ConfigureAwait(false);
-        progress?.Report($"{renderedFilePath} の PR HEAD Markdown を bare clone から読み込み中…");
-        var afterMarkdown = await _worktree.ReadFileTextAsync(sha, renderedFilePath, cancellationToken).ConfigureAwait(false);
-
-        progress?.Report("変更前 Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
-        var beforeLiquid = await LoadLiquidContextCachedAsync(
-                session.BeforeSha,
-                renderedFilePath,
-                beforeMarkdown,
-                cancellationToken)
-            .ConfigureAwait(false);
-        progress?.Report("PR HEAD Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
-        var afterLiquid = await LoadLiquidContextCachedAsync(
+        var sources = await LoadMarkdownComparisonSourcesAsync(
+                session,
                 sha,
                 renderedFilePath,
-                afterMarkdown,
+                progress,
                 cancellationToken)
             .ConfigureAwait(false);
+        var beforeMarkdown = sources.BeforeMarkdown;
+        var afterMarkdown = sources.AfterMarkdown;
+        var beforeLiquid = sources.BeforeLiquid;
+        var afterLiquid = sources.AfterLiquid;
 
         progress?.Report("公式版 (fpt/ghec/ghes) で差分の出る版を解析中…");
         var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetails(
             beforeMarkdown,
             beforeLiquid,
             afterMarkdown,
-            afterLiquid);
+            afterLiquid,
+            sources.BeforeFilePath,
+            renderedFilePath);
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
         var effectiveVersion = version ?? ResolveInitialMarkdownPreviewVersion(affectedVersions);
         progress?.Report("フロントマターの変更点を解析中…");
@@ -554,7 +637,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report("変更前 Markdown を HTML に変換中…");
         var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
-            renderedFilePath,
+            sources.BeforeFilePath,
             beforeMarkdown,
             session.BeforeSha,
             "変更前",
@@ -567,6 +650,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             assetBasePath: _markdownBeforeAssetRoute,
             diffAgainstMarkdown: afterMarkdown,
             diffAgainstLiquidContext: afterLiquid,
+            diffAgainstRepoPath: renderedFilePath,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -585,6 +669,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             assetBasePath: _markdownAfterAssetRoute,
             diffAgainstMarkdown: beforeMarkdown,
             diffAgainstLiquidContext: beforeLiquid,
+            diffAgainstRepoPath: sources.BeforeFilePath,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -598,6 +683,56 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             sourceChangeCount,
             beforeHtml,
             afterHtml);
+    }
+
+    private async Task<MarkdownComparisonSources> LoadMarkdownComparisonSourcesAsync(
+        PreparedMarkdownSession session,
+        string afterSha,
+        string afterFilePath,
+        IProgress<string>? progress,
+        CancellationToken cancellationToken)
+    {
+        progress?.Report($"{afterFilePath} の変更前 Markdown を bare clone から読み込み中…");
+        var beforeMarkdown = await _worktree
+            .ReadFileTextAsync(session.BeforeSha, afterFilePath, cancellationToken)
+            .ConfigureAwait(false);
+        progress?.Report($"{afterFilePath} の PR HEAD Markdown を bare clone から読み込み中…");
+        var afterMarkdown = await _worktree
+            .ReadFileTextAsync(afterSha, afterFilePath, cancellationToken)
+            .ConfigureAwait(false);
+        var beforeFilePath = afterFilePath;
+        if (beforeMarkdown is null && afterMarkdown is not null)
+        {
+            if (session.PreviousPaths.TryGetValue(afterFilePath, out var previousPath))
+            {
+                beforeFilePath = previousPath;
+                progress?.Report($"{afterFilePath} の変更前パス {previousPath} を読み込み中…");
+                beforeMarkdown = await _worktree
+                    .ReadFileTextAsync(session.BeforeSha, previousPath, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        progress?.Report("変更前 Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
+        var beforeLiquid = await LoadLiquidContextCachedAsync(
+                session.BeforeSha,
+                beforeFilePath,
+                beforeMarkdown,
+                cancellationToken)
+            .ConfigureAwait(false);
+        progress?.Report("PR HEAD Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
+        var afterLiquid = await LoadLiquidContextCachedAsync(
+                afterSha,
+                afterFilePath,
+                afterMarkdown,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new MarkdownComparisonSources(
+            beforeFilePath,
+            beforeMarkdown,
+            afterMarkdown,
+            beforeLiquid,
+            afterLiquid);
     }
 
     private static string BuildMarkdownPreviewQuery(
@@ -859,7 +994,12 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 throw new InvalidOperationException("比較元になる親コミットを解決できませんでした。");
             }
 
-            var session = new PreparedMarkdownSession(beforeSha);
+            var previousPaths = await _worktree.ResolvePreviousPathsAsync(
+                    beforeSha,
+                    sha,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var session = new PreparedMarkdownSession(beforeSha, previousPaths);
             _preparedSessions[key] = session;
             return session;
         }
@@ -1256,6 +1396,15 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     [LoggerMessage(EventId = 8, Level = LogLevel.Debug,
         Message = "Predictive file preview prewarm failed for PR #{PrNumber} (sha {Sha}), file {FilePath}; the regular navigation path will retry.")]
     private static partial void LogPredictiveFilePrewarmFailed(
+        ILogger logger,
+        int prNumber,
+        string sha,
+        string filePath,
+        Exception exception);
+
+    [LoggerMessage(EventId = 9, Level = LogLevel.Debug,
+        Message = "Markdown file change analysis failed for PR #{PrNumber} (sha {Sha}), file {FilePath}; the file list will omit the pre-preview summary.")]
+    private static partial void LogMarkdownFileChangeAnalysisFailed(
         ILogger logger,
         int prNumber,
         string sha,

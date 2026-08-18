@@ -851,6 +851,46 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void RenderedDiff_Marks_Relative_Autotitle_Changes_Caused_By_Rename()
+    {
+        const string markdown = "See [AUTOTITLE](../target.md).";
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["content/target.md"] = "Root target",
+                ["content/area/target.md"] = "Area target",
+            });
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/area/source.md",
+            markdown,
+            "501a9d1",
+            "変更前",
+            context,
+            diffAgainstMarkdown: markdown,
+            diffAgainstLiquidContext: context,
+            diffAgainstRepoPath: "content/area/sub/source.md",
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/area/sub/source.md",
+            markdown,
+            "c19e3ad",
+            "PR HEAD",
+            context,
+            diffAgainstMarkdown: markdown,
+            diffAgainstLiquidContext: context,
+            diffAgainstRepoPath: "content/area/source.md",
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("rsr-rendered-diff-removed", beforeHtml, StringComparison.Ordinal);
+        Assert.Contains("Root", beforeHtml, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("Area", afterHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderedDiff_Does_Not_Insert_Span_Into_Autotitle_Href_With_Comparison_Contexts()
     {
         const string beforeMarkdown = "See [AUTOTITLE](/old-target).";

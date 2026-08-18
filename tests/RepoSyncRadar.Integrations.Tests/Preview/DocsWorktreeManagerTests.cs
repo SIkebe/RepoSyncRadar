@@ -62,6 +62,35 @@ public sealed class DocsWorktreeManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task ResolvePreviousPathAsync_Returns_Renamed_Source_Path()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare.git");
+        Directory.CreateDirectory(bare);
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(args => args.Contains("--git-dir ", StringComparison.Ordinal)
+                    && args.Contains('"' + bare + '"', StringComparison.Ordinal)
+                    && args.EndsWith(" diff --name-status --find-renames -z parentsha headsha", StringComparison.Ordinal)),
+                Path.GetDirectoryName(bare)!,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(
+                0,
+                "R098\0content/old.md\0content/new.md\0",
+                string.Empty)));
+        var sut = BuildSut(runner, bareCloneDir: bare, cloneUrl: "https://example.invalid/docs.git");
+
+        var previousPath = await sut.ResolvePreviousPathAsync(
+            "parentsha",
+            "headsha",
+            "content/new.md",
+            ct);
+
+        Assert.Equal("content/old.md", previousPath);
+    }
+
+    [Fact]
     public async Task PruneAllAsync_Removes_Restored_And_Untracked_Worktrees()
     {
         var ct = TestContext.Current.CancellationToken;

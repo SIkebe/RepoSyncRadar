@@ -205,8 +205,23 @@
                             <span class="preview-active-badge">@L["CommitDetail.Showing"]</span>
                         }
                     </span>
-                    <span class="stats"
-                          data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
+                    <div class="file-change-meta">
+                        <span class="stats"
+                              data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
+                        @if (IsRenamedFile(file))
+                        {
+                            _markdownChangeSummariesByFile.TryGetValue(file.Path, out var changeSummary);
+                            <span class="file-change-summary"
+                                  data-testid="commit-detail-file-change-summary"
+                                  title="@BuildRenameTitle(changeSummary)">
+                                <span class="file-change-badge file-change-badge-rename">@L["CommitDetail.FileChange.Renamed"]</span>
+                                @if (changeSummary is { HasRenderedBodyChanges: false })
+                                {
+                                    <span class="file-change-badge file-change-badge-no-body">@L["CommitDetail.FileChange.NoBodyChanges"]</span>
+                                }
+                            </span>
+                        }
+                    </div>
                     <div class="preview-file-action">
                         @if (canOpenPreview)
                         {
@@ -302,6 +317,7 @@
 
 @code {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+    private const int MaxConcurrentMarkdownChangeAnalyses = 2;
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
@@ -317,6 +333,8 @@
     private readonly Dictionary<string, IReadOnlyList<string>> _reusableReferencePathsByFile =
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _selectedReusableReferenceByFile =
+        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, MarkdownFileChangeSummary> _markdownChangeSummariesByFile =
         new(StringComparer.Ordinal);
 
     private string? _resolvedForSha;
@@ -340,6 +358,7 @@
     private PreviewOperation? _previewOperation;
     private CancellationTokenSource? _predictivePrewarmCts;
     private CancellationTokenSource? _predictiveFilePrewarmCts;
+    private CancellationTokenSource? _markdownChangeSummaryCts;
     private string? _predictiveFilePrewarmPath;
     private string? _historyForSha;
     private IReadOnlyList<CommitHistoryTimelineEntry> _historyEntries = [];
@@ -395,6 +414,7 @@
         _previewOperation = null;
         CancelPredictivePrewarm();
         CancelPredictiveFilePrewarm();
+        CancelMarkdownChangeSummaryAnalysis();
     }
 
     /// <summary>
@@ -457,6 +477,7 @@
             _urlsByPath.Clear();
             _reusableReferencePathsByFile.Clear();
             _selectedReusableReferenceByFile.Clear();
+            _markdownChangeSummariesByFile.Clear();
             _resolvedForSha = null;
             _activePreviewSha = null;
             CancelCurrentPreviewOperation();
@@ -467,6 +488,7 @@
             _historyIsLegacyReviewOnly = false;
             CancelPredictivePrewarm();
             CancelPredictiveFilePrewarm();
+            CancelMarkdownChangeSummaryAnalysis();
             return;
         }
 
@@ -477,8 +499,10 @@
             _activeVersion = null;
             _reusableReferencePathsByFile.Clear();
             _selectedReusableReferenceByFile.Clear();
+            _markdownChangeSummariesByFile.Clear();
             CancelPredictiveFilePrewarm();
             StartPredictivePrewarm(Commit);
+            StartMarkdownChangeSummaryAnalysis(Commit);
         }
 
         if (!string.Equals(_historyForSha, Commit.Sha, StringComparison.Ordinal))
@@ -500,6 +524,104 @@
         }
         _resolvedForSha = Commit.Sha;
     }
+
+    private void StartMarkdownChangeSummaryAnalysis(Commit commit)
+    {
+        CancelMarkdownChangeSummaryAnalysis();
+        if (Services.GetService<IPreviewCoordinator>() is not { } coordinator)
+        {
+            return;
+        }
+
+        var renamedMarkdownFiles = commit.Files
+            .Where(static file => IsRenamedFile(file) && PreviewPathMapper.IsMarkdown(file.Path))
+            .ToArray();
+        if (renamedMarkdownFiles.Length == 0)
+        {
+            return;
+        }
+
+        _markdownChangeSummaryCts = new CancellationTokenSource();
+        _ = AnalyzeMarkdownChangesAsync(
+            coordinator,
+            commit,
+            renamedMarkdownFiles,
+            _markdownChangeSummaryCts.Token);
+    }
+
+    private async Task AnalyzeMarkdownChangesAsync(
+        IPreviewCoordinator coordinator,
+        Commit commit,
+        IReadOnlyList<CommitFile> files,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var results = new MarkdownFileChangeSummary?[files.Count];
+            await Parallel.ForEachAsync(
+                Enumerable.Range(0, files.Count),
+                new ParallelOptions
+                {
+                    CancellationToken = cancellationToken,
+                    MaxDegreeOfParallelism = MaxConcurrentMarkdownChangeAnalyses,
+                },
+                async (index, token) =>
+                {
+                    var file = files[index];
+                    results[index] = await coordinator.AnalyzeMarkdownFileChangeAsync(
+                    commit.PrNumber,
+                    commit.Sha,
+                    file.Path,
+                    token);
+                });
+            cancellationToken.ThrowIfCancellationRequested();
+            await InvokeAsync(() =>
+            {
+                if (!string.Equals(Commit?.Sha, commit.Sha, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                for (var index = 0; index < results.Length; index++)
+                {
+                    if (results[index] is { } summary)
+                    {
+                        _markdownChangeSummariesByFile[files[index].Path] = summary;
+                    }
+                }
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void CancelMarkdownChangeSummaryAnalysis()
+    {
+        if (_markdownChangeSummaryCts is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _markdownChangeSummaryCts.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        _markdownChangeSummaryCts.Dispose();
+        _markdownChangeSummaryCts = null;
+    }
+
+    private static bool IsRenamedFile(CommitFile file)
+        => string.Equals(file.Status, "renamed", StringComparison.OrdinalIgnoreCase);
+
+    private LocalizedString BuildRenameTitle(MarkdownFileChangeSummary? summary)
+        => summary?.PreviousPath is { Length: > 0 } previousPath
+            ? L["CommitDetail.FileChange.RenamedFrom", previousPath]
+            : L["CommitDetail.FileChange.Renamed"];
 
     private async Task LoadHistoryAsync(Commit commit)
     {

@@ -179,6 +179,87 @@ public sealed partial class DocsWorktreeManager
         return result.ExitCode == 0 ? result.StandardOutput : null;
     }
 
+    /// <summary>
+    /// Resolves the path that a renamed file used at <paramref name="beforeSha"/>.
+    /// Returns <c>null</c> when <paramref name="afterPath"/> was not introduced by a rename.
+    /// </summary>
+    public async Task<string?> ResolvePreviousPathAsync(
+        string beforeSha,
+        string afterSha,
+        string afterPath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(beforeSha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(afterSha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(afterPath);
+        if (!IsEnabled)
+        {
+            return null;
+        }
+
+        var normalizedAfterPath = NormalizeRepoPath(afterPath);
+        var previousPaths = await ResolvePreviousPathsAsync(
+                beforeSha,
+                afterSha,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return previousPaths.TryGetValue(normalizedAfterPath, out var previousPath)
+            ? previousPath
+            : null;
+    }
+
+    /// <summary>Returns all rename destinations and their parent-side paths for a commit pair.</summary>
+    public async Task<IReadOnlyDictionary<string, string>> ResolvePreviousPathsAsync(
+        string beforeSha,
+        string afterSha,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(beforeSha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(afterSha);
+        if (!IsEnabled)
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
+        var args = string.Create(
+            CultureInfo.InvariantCulture,
+            $"diff --name-status --find-renames -z {beforeSha} {afterSha}");
+        var result = await RunBareGitAsync(args, cancellationToken).ConfigureAwait(false);
+        if (result.ExitCode != 0 || string.IsNullOrEmpty(result.StandardOutput))
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
+        var previousPaths = new Dictionary<string, string>(StringComparer.Ordinal);
+        var fields = result.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        for (var index = 0; index < fields.Length;)
+        {
+            var status = fields[index++];
+            if (status.StartsWith('R'))
+            {
+                if (index + 1 >= fields.Length)
+                {
+                    break;
+                }
+
+                var previousPath = fields[index++];
+                var currentPath = fields[index++];
+                previousPaths[currentPath] = previousPath;
+                continue;
+            }
+
+            if (status.StartsWith('C'))
+            {
+                index += Math.Min(2, fields.Length - index);
+                continue;
+            }
+
+            index++;
+        }
+
+        return previousPaths;
+    }
+
     public async Task<IReadOnlyList<string>> ListFilesAsync(
         string commitSha,
         string repoDirectory,

@@ -112,6 +112,9 @@
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>根拠・影響・確認観点</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>コミットを選択してください。</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>ファイル</value></data>
+  <data name="CommitDetail.FileChange.NoBodyChanges" xml:space="preserve"><value>本文変更なし</value></data>
+  <data name="CommitDetail.FileChange.Renamed" xml:space="preserve"><value>リネーム</value></data>
+  <data name="CommitDetail.FileChange.RenamedFrom" xml:space="preserve"><value>{0} からリネームされました</value></data>
   <data name="CommitDetail.FileViewed" xml:space="preserve"><value>確認済み</value></data>
   <data name="CommitDetail.FileViewed.MarkTitle" xml:space="preserve"><value>{0} を確認済みにします</value></data>
   <data name="CommitDetail.FileViewed.UnmarkTitle" xml:space="preserve"><value>{0} の確認済みを解除します</value></data>

@@ -53,14 +53,17 @@ public static class DocsVersionImpactAnalyzer
         string? beforeMarkdown,
         DocsLiquidContext beforeContext,
         string? afterMarkdown,
-        DocsLiquidContext afterContext)
+        DocsLiquidContext afterContext,
+        string? beforeRepoPath = null,
+        string? afterRepoPath = null)
     {
         ArgumentNullException.ThrowIfNull(beforeContext);
         ArgumentNullException.ThrowIfNull(afterContext);
 
         // 完全一致なら全版で影響なし — 早期 return。
         if (string.Equals(beforeMarkdown, afterMarkdown, StringComparison.Ordinal)
-            && ReferenceEquals(beforeContext, afterContext))
+            && ReferenceEquals(beforeContext, afterContext)
+            && string.Equals(beforeRepoPath, afterRepoPath, StringComparison.Ordinal))
         {
             return Array.Empty<DocsVersionImpactDetail>();
         }
@@ -72,6 +75,20 @@ public static class DocsVersionImpactAnalyzer
         {
             var beforeRendered = DocsLiquidEvaluator.Evaluate(beforeRenderable, beforeContext, version);
             var afterRendered = DocsLiquidEvaluator.Evaluate(afterRenderable, afterContext, version);
+            if (!string.IsNullOrWhiteSpace(beforeRepoPath)
+                && !string.IsNullOrWhiteSpace(afterRepoPath))
+            {
+                beforeRendered = MarkdownPreviewRenderer.RewriteAutotitleMarkdownLinks(
+                    beforeRendered,
+                    beforeRepoPath,
+                    beforeContext,
+                    version);
+                afterRendered = MarkdownPreviewRenderer.RewriteAutotitleMarkdownLinks(
+                    afterRendered,
+                    afterRepoPath,
+                    afterContext,
+                    version);
+            }
             if (!string.Equals(NormalizeForComparison(beforeRendered), NormalizeForComparison(afterRendered), StringComparison.Ordinal))
             {
                 var changes = BuildChangeSnippets(beforeRendered, afterRendered);
