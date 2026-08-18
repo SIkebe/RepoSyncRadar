@@ -419,6 +419,23 @@ public sealed class PreviewCoordinatorTests : IDisposable
                     $"---\ntitle: Same title\nredirect_from:\n{addedRedirect}  - /copilot/existing-location\n---\n\nUnchanged body.");
             });
 
+        var summary = await sut.AnalyzeMarkdownFileChangeAsync(
+            123,
+            "headsha",
+            "content/copilot/new-location.md",
+            ct);
+
+        Assert.NotNull(summary);
+        Assert.True(summary!.IsRenamed);
+        Assert.False(summary.HasRenderedBodyChanges);
+        Assert.Equal("content/copilot/old-location.md", summary.PreviousPath);
+        Assert.Equal(1, summary.FrontmatterChangeCount);
+        await contentServer.DidNotReceiveWithAnyArgs().StartAsync(
+            default,
+            default!,
+            default!,
+            Arg.Any<CancellationToken>());
+
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(
             123,
             "headsha",
