@@ -364,6 +364,76 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task PrepareMarkdownComparisonPreviewAsync_Uses_Previous_Path_For_Renamed_File()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-renamed-file.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-renamed-file");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(a => StartsWithBareGitCommand(a, bare, "diff --name-status --find-renames -z parentsha headsha")),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(
+                0,
+                "R100\0content/copilot/old-location.md\0content/copilot/new-location.md\0",
+                string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            previewBasePort: 4500,
+            contentServer: contentServer,
+            onObjectSourceMaterialized: (path, sha) =>
+            {
+                var repoPath = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "content/copilot/old-location.md"
+                    : "content/copilot/new-location.md";
+                var addedRedirect = string.Equals(sha, "headsha", StringComparison.Ordinal)
+                    ? "  - /copilot/old-location\n"
+                    : string.Empty;
+                WriteRepoFile(
+                    path,
+                    repoPath,
+                    $"---\ntitle: Same title\nredirect_from:\n{addedRedirect}  - /copilot/existing-location\n---\n\nUnchanged body.");
+            });
+
+        var link = await sut.PrepareMarkdownComparisonPreviewAsync(
+            123,
+            "headsha",
+            "content/copilot/new-location.md",
+            cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Equal(1, link!.SourceChangeCount);
+        Assert.DoesNotContain("この時点にはファイルがありません", capturedPages["/markdown/before"], StringComparison.Ordinal);
+        Assert.Contains("Unchanged body.", capturedPages["/markdown/before"], StringComparison.Ordinal);
+        Assert.Contains("/copilot/old-location", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"", capturedPages["/markdown/after"], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PrepareMarkdownComparisonPreviewAsync_Rewrites_Autotitle_After_Conditional_Version_Prefix()
     {
         var ct = TestContext.Current.CancellationToken;

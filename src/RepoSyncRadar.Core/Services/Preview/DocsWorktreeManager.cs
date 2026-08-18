@@ -179,6 +179,66 @@ public sealed partial class DocsWorktreeManager
         return result.ExitCode == 0 ? result.StandardOutput : null;
     }
 
+    /// <summary>
+    /// Resolves the path that a renamed file used at <paramref name="beforeSha"/>.
+    /// Returns <c>null</c> when <paramref name="afterPath"/> was not introduced by a rename.
+    /// </summary>
+    public async Task<string?> ResolvePreviousPathAsync(
+        string beforeSha,
+        string afterSha,
+        string afterPath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(beforeSha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(afterSha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(afterPath);
+        if (!IsEnabled)
+        {
+            return null;
+        }
+
+        var normalizedAfterPath = NormalizeRepoPath(afterPath);
+        var args = string.Create(
+            CultureInfo.InvariantCulture,
+            $"diff --name-status --find-renames -z {beforeSha} {afterSha}");
+        var result = await RunBareGitAsync(args, cancellationToken).ConfigureAwait(false);
+        if (result.ExitCode != 0 || string.IsNullOrEmpty(result.StandardOutput))
+        {
+            return null;
+        }
+
+        var fields = result.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        for (var index = 0; index < fields.Length;)
+        {
+            var status = fields[index++];
+            if (status.StartsWith('R'))
+            {
+                if (index + 1 >= fields.Length)
+                {
+                    return null;
+                }
+
+                var previousPath = fields[index++];
+                var currentPath = fields[index++];
+                if (string.Equals(currentPath, normalizedAfterPath, StringComparison.Ordinal))
+                {
+                    return previousPath;
+                }
+                continue;
+            }
+
+            if (status.StartsWith('C'))
+            {
+                index += Math.Min(2, fields.Length - index);
+                continue;
+            }
+
+            index++;
+        }
+
+        return null;
+    }
+
     public async Task<IReadOnlyList<string>> ListFilesAsync(
         string commitSha,
         string repoDirectory,

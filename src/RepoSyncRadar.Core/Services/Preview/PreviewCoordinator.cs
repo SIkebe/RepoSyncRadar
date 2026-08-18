@@ -519,11 +519,31 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         var beforeMarkdown = await _worktree.ReadFileTextAsync(session.BeforeSha, renderedFilePath, cancellationToken).ConfigureAwait(false);
         progress?.Report($"{renderedFilePath} の PR HEAD Markdown を bare clone から読み込み中…");
         var afterMarkdown = await _worktree.ReadFileTextAsync(sha, renderedFilePath, cancellationToken).ConfigureAwait(false);
+        var beforeRenderedFilePath = renderedFilePath;
+        if (beforeMarkdown is null && afterMarkdown is not null)
+        {
+            var previousPath = await _worktree.ResolvePreviousPathAsync(
+                    session.BeforeSha,
+                    sha,
+                    renderedFilePath,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (previousPath is not null)
+            {
+                beforeRenderedFilePath = previousPath;
+                progress?.Report($"{renderedFilePath} の変更前パス {previousPath} を読み込み中…");
+                beforeMarkdown = await _worktree.ReadFileTextAsync(
+                        session.BeforeSha,
+                        previousPath,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+        }
 
         progress?.Report("変更前 Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
         var beforeLiquid = await LoadLiquidContextCachedAsync(
                 session.BeforeSha,
-                renderedFilePath,
+                beforeRenderedFilePath,
                 beforeMarkdown,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -554,7 +574,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report("変更前 Markdown を HTML に変換中…");
         var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
-            renderedFilePath,
+            beforeRenderedFilePath,
             beforeMarkdown,
             session.BeforeSha,
             "変更前",
