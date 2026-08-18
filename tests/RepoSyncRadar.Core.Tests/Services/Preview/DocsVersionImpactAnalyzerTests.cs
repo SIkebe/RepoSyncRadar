@@ -26,6 +26,36 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Detects_Relative_Autotitle_Label_Changes_Caused_By_Rename()
+    {
+        const string markdown = "See [AUTOTITLE](../target.md).";
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["content/target.md"] = "Root target",
+                ["content/area/target.md"] = "Area target",
+            });
+
+        var affected = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            markdown,
+            context,
+            markdown,
+            context,
+            "content/area/source.md",
+            "content/area/sub/source.md");
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+        Assert.All(affected, detail =>
+        {
+            var change = Assert.Single(detail.Changes);
+            Assert.Contains("Root target", change.BeforeExcerpt, StringComparison.Ordinal);
+            Assert.Contains("Area target", change.AfterExcerpt, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void Returns_All_Versions_When_Plain_Text_Changes_Outside_Any_Ifversion()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(

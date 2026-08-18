@@ -1089,7 +1089,7 @@ internal static partial class MarkdownPreviewRenderer
         });
     }
 
-    private static string RewriteAutotitleMarkdownLinks(
+    internal static string RewriteAutotitleMarkdownLinks(
         string markdown,
         string repoPath,
         DocsLiquidContext liquidContext,

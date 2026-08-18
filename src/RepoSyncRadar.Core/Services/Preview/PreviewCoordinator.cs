@@ -225,7 +225,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         string VersionSlug,
         string ChangedFilePathsKey);
 
-    private sealed record PreparedMarkdownSession(string BeforeSha);
+    private sealed record PreparedMarkdownSession(
+        string BeforeSha,
+        IReadOnlyDictionary<string, string> PreviousPaths);
 
     private sealed record PreparedMarkdownPage(
         string BeforeSha,
@@ -449,7 +451,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 sources.BeforeMarkdown,
                 sources.BeforeLiquid,
                 sources.AfterMarkdown,
-                sources.AfterLiquid);
+                sources.AfterLiquid,
+                sources.BeforeFilePath,
+                filePath.Trim());
             var previousPath = string.Equals(sources.BeforeFilePath, filePath, StringComparison.Ordinal)
                 ? null
                 : sources.BeforeFilePath;
@@ -617,7 +621,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             beforeMarkdown,
             beforeLiquid,
             afterMarkdown,
-            afterLiquid);
+            afterLiquid,
+            sources.BeforeFilePath,
+            renderedFilePath);
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
         var effectiveVersion = version ?? ResolveInitialMarkdownPreviewVersion(affectedVersions);
         progress?.Report("フロントマターの変更点を解析中…");
@@ -695,13 +701,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         var beforeFilePath = afterFilePath;
         if (beforeMarkdown is null && afterMarkdown is not null)
         {
-            var previousPath = await _worktree.ResolvePreviousPathAsync(
-                    session.BeforeSha,
-                    afterSha,
-                    afterFilePath,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (previousPath is not null)
+            if (session.PreviousPaths.TryGetValue(afterFilePath, out var previousPath))
             {
                 beforeFilePath = previousPath;
                 progress?.Report($"{afterFilePath} の変更前パス {previousPath} を読み込み中…");
@@ -992,7 +992,12 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 throw new InvalidOperationException("比較元になる親コミットを解決できませんでした。");
             }
 
-            var session = new PreparedMarkdownSession(beforeSha);
+            var previousPaths = await _worktree.ResolvePreviousPathsAsync(
+                    beforeSha,
+                    sha,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var session = new PreparedMarkdownSession(beforeSha, previousPaths);
             _preparedSessions[key] = session;
             return session;
         }

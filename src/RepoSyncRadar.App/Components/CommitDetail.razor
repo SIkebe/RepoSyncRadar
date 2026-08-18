@@ -317,6 +317,7 @@
 
 @code {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+    private const int MaxConcurrentMarkdownChangeAnalyses = 2;
 
     [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
 
@@ -556,16 +557,23 @@
     {
         try
         {
-            var analyses = files.Select(async file => new
-            {
-                file.Path,
-                Summary = await coordinator.AnalyzeMarkdownFileChangeAsync(
+            var results = new MarkdownFileChangeSummary?[files.Count];
+            await Parallel.ForEachAsync(
+                Enumerable.Range(0, files.Count),
+                new ParallelOptions
+                {
+                    CancellationToken = cancellationToken,
+                    MaxDegreeOfParallelism = MaxConcurrentMarkdownChangeAnalyses,
+                },
+                async (index, token) =>
+                {
+                    var file = files[index];
+                    results[index] = await coordinator.AnalyzeMarkdownFileChangeAsync(
                     commit.PrNumber,
                     commit.Sha,
                     file.Path,
-                    cancellationToken),
-            });
-            var results = await Task.WhenAll(analyses);
+                    token);
+                });
             cancellationToken.ThrowIfCancellationRequested();
             await InvokeAsync(() =>
             {
@@ -574,11 +582,11 @@
                     return;
                 }
 
-                foreach (var result in results)
+                for (var index = 0; index < results.Length; index++)
                 {
-                    if (result.Summary is not null)
+                    if (results[index] is { } summary)
                     {
-                        _markdownChangeSummariesByFile[result.Path] = result.Summary;
+                        _markdownChangeSummariesByFile[files[index].Path] = summary;
                     }
                 }
                 StateHasChanged();

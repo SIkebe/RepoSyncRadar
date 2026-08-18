@@ -198,15 +198,39 @@ public sealed partial class DocsWorktreeManager
         }
 
         var normalizedAfterPath = NormalizeRepoPath(afterPath);
+        var previousPaths = await ResolvePreviousPathsAsync(
+                beforeSha,
+                afterSha,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return previousPaths.TryGetValue(normalizedAfterPath, out var previousPath)
+            ? previousPath
+            : null;
+    }
+
+    /// <summary>Returns all rename destinations and their parent-side paths for a commit pair.</summary>
+    public async Task<IReadOnlyDictionary<string, string>> ResolvePreviousPathsAsync(
+        string beforeSha,
+        string afterSha,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(beforeSha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(afterSha);
+        if (!IsEnabled)
+        {
+            return new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
         var args = string.Create(
             CultureInfo.InvariantCulture,
             $"diff --name-status --find-renames -z {beforeSha} {afterSha}");
         var result = await RunBareGitAsync(args, cancellationToken).ConfigureAwait(false);
         if (result.ExitCode != 0 || string.IsNullOrEmpty(result.StandardOutput))
         {
-            return null;
+            return new Dictionary<string, string>(StringComparer.Ordinal);
         }
 
+        var previousPaths = new Dictionary<string, string>(StringComparer.Ordinal);
         var fields = result.StandardOutput.Split('\0', StringSplitOptions.RemoveEmptyEntries);
         for (var index = 0; index < fields.Length;)
         {
@@ -215,15 +239,12 @@ public sealed partial class DocsWorktreeManager
             {
                 if (index + 1 >= fields.Length)
                 {
-                    return null;
+                    break;
                 }
 
                 var previousPath = fields[index++];
                 var currentPath = fields[index++];
-                if (string.Equals(currentPath, normalizedAfterPath, StringComparison.Ordinal))
-                {
-                    return previousPath;
-                }
+                previousPaths[currentPath] = previousPath;
                 continue;
             }
 
@@ -236,7 +257,7 @@ public sealed partial class DocsWorktreeManager
             index++;
         }
 
-        return null;
+        return previousPaths;
     }
 
     public async Task<IReadOnlyList<string>> ListFilesAsync(

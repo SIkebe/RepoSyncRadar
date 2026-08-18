@@ -448,6 +448,11 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Contains("Unchanged body.", capturedPages["/markdown/before"], StringComparison.Ordinal);
         Assert.Contains("/copilot/old-location", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        await runner.Received(1).RunAsync(
+            "git",
+            Arg.Is<string>(a => StartsWithBareGitCommand(a, bare, "diff --name-status --find-renames -z parentsha headsha")),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
