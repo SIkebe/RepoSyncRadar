@@ -21,7 +21,7 @@
     <Company>RepoSyncRadar</Company>
     <Copyright>Copyright (c) SIkebe</Copyright>
     <NeutralLanguage>ja-JP</NeutralLanguage>
-    <RepoSyncRadarVersion Condition="'$(RepoSyncRadarVersion)' == ''">0.1.26</RepoSyncRadarVersion>
+    <RepoSyncRadarVersion Condition="'$(RepoSyncRadarVersion)' == ''">0.1.27</RepoSyncRadarVersion>
     <Version>$(RepoSyncRadarVersion)</Version>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
