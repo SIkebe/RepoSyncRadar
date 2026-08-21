@@ -581,7 +581,7 @@ public static class DocsVersionImpactAnalyzer
     private static bool HtmlTagExposesWhitespaceBoundary(
         string tagName,
         ReadOnlySpan<char> tag)
-        => tagName is "a" or "b" or "code" or "del" or "em" or "i" or "ins"
+        => tagName is "a" or "b" or "button" or "code" or "del" or "em" or "i" or "ins"
             or "kbd" or "mark" or "q" or "s" or "samp" or "small" or "strike"
             or "strong" or "sub" or "sup" or "u" or "var"
             || GetHtmlAttributeValue(tag, "style") is not null
@@ -680,8 +680,9 @@ public static class DocsVersionImpactAnalyzer
             return mode;
         }
 
+        var styleWithoutComments = RemoveCssComments(style);
         var winningDeclarationIsImportant = false;
-        foreach (var declaration in style.Split(';'))
+        foreach (var declaration in styleWithoutComments.Split(';'))
         {
             var separator = declaration.IndexOf(':');
             if (separator < 0)
@@ -701,6 +702,59 @@ public static class DocsVersionImpactAnalyzer
             }
         }
         return mode;
+    }
+
+    private static string RemoveCssComments(string value)
+    {
+        var commentStart = value.IndexOf("/*", StringComparison.Ordinal);
+        if (commentStart < 0)
+        {
+            return value;
+        }
+
+        var result = new StringBuilder(value.Length);
+        var quote = '\0';
+        var escaping = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var current = value[index];
+            if (quote != '\0')
+            {
+                result.Append(current);
+                if (escaping)
+                {
+                    escaping = false;
+                }
+                else if (current == '\\')
+                {
+                    escaping = true;
+                }
+                else if (current == quote)
+                {
+                    quote = '\0';
+                }
+                continue;
+            }
+
+            if (current is '\'' or '"')
+            {
+                quote = current;
+                result.Append(current);
+                continue;
+            }
+            if (current == '/' && index + 1 < value.Length && value[index + 1] == '*')
+            {
+                var commentEnd = value.IndexOf("*/", index + 2, StringComparison.Ordinal);
+                if (commentEnd < 0)
+                {
+                    break;
+                }
+                index = commentEnd + 1;
+                continue;
+            }
+            result.Append(current);
+        }
+        return result.ToString();
     }
 
     private static bool TryResolveWhiteSpaceDeclaration(

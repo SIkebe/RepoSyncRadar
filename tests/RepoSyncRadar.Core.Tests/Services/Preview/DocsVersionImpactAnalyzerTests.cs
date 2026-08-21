@@ -355,6 +355,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Preserves_Whitespace_When_Inline_Style_Contains_Css_Comments()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre /* keep */">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre /* keep */">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Reads_Slashes_Inside_Unquoted_Html_Attribute_Values()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
@@ -563,6 +575,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             """<a href="x">A </a>B""",
             DocsLiquidContext.Empty,
             """<a href="x">A</a> B""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Ownership_Across_Button_Boundaries()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<button>A </button>B",
+            DocsLiquidContext.Empty,
+            "<button>A</button> B",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
