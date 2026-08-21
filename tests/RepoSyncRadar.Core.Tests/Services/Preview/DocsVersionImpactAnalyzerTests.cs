@@ -174,6 +174,18 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
+    [Fact]
+    public void Preserves_Whitespace_When_Inline_Style_Disables_Collapsing()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
     [Theory]
     [InlineData("""<input value="<!-- old -->">""", """<input value="<!-- new -->">""")]
     [InlineData("<textarea><!-- old --></textarea>", "<textarea><!-- new --></textarea>")]
@@ -183,6 +195,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             before,
             DocsLiquidContext.Empty,
             after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Restores_Nested_Whitespace_Sensitive_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<pre><textarea><!-- old --></textarea></pre>",
+            DocsLiquidContext.Empty,
+            "<pre><textarea><!-- new --></textarea></pre>",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);

@@ -54,6 +54,11 @@ public static partial class DocsVersionImpactAnalyzer
     [GeneratedRegex(@"[ \t\n\f\r]+")]
     private static partial Regex CollapsibleWhitespaceRegex();
 
+    [GeneratedRegex(
+        @"<[^>]*\bstyle\s*=\s*(?:""[^""]*\bwhite-space\s*:|'[^']*\bwhite-space\s*:)",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex InlineWhiteSpaceStyleRegex();
+
     /// <summary>
     /// 全版で評価し、before/after が一致しない版だけを <see cref="DocsVersionCatalog.All"/>
     /// の順序で返す。差分がない場合は空配列。
@@ -321,8 +326,10 @@ public static partial class DocsVersionImpactAnalyzer
         var protectedHtml = ProtectElements(html, RawTextElementRegex(), sensitiveElements);
         var withoutComments = StripActualHtmlComments(protectedHtml);
         protectedHtml = ProtectElements(withoutComments, WhitespaceSensitiveElementRegex(), sensitiveElements);
-        var normalized = NormalizeCollapsibleTextWhitespace(protectedHtml);
-        for (var index = 0; index < sensitiveElements.Count; index++)
+        var normalized = InlineWhiteSpaceStyleRegex().IsMatch(html)
+            ? protectedHtml.Trim()
+            : NormalizeCollapsibleTextWhitespace(protectedHtml);
+        for (var index = sensitiveElements.Count - 1; index >= 0; index--)
         {
             normalized = normalized.Replace(
                 $"\uE000RSR{index}\uE001",
