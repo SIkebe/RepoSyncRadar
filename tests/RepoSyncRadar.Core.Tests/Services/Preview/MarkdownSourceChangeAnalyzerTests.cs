@@ -24,6 +24,26 @@ public sealed class MarkdownSourceChangeAnalyzerTests
         Assert.Equal(1, summary.ChangeCount);
     }
 
+    [Theory]
+    [InlineData(
+        "{{ variables.code-quality.workflow_name_actions }}",
+        "{{ variables.product.prodname_code_quality_short }}")]
+    [InlineData(
+        "{{ site.data.variables.code-quality.workflow_name_actions }}",
+        "{{ site.data.variables.product.prodname_code_quality_short }}")]
+    public void Detects_Liquid_Interpolation_Reference_Replacement(string beforeReference, string afterReference)
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(
+            $"The workflow is {beforeReference}.",
+            $"The workflow is {afterReference}.");
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.LiquidVariableReference, summary!.Kind);
+        Assert.Equal("code-quality.workflow_name_actions", summary.Before);
+        Assert.Equal("product.prodname_code_quality_short", summary.After);
+        Assert.Equal(1, summary.ChangeCount);
+    }
+
     [Fact]
     public void Detects_Frontmatter_Only_Change()
     {

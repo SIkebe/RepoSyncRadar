@@ -110,6 +110,20 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Empty(affected);
     }
 
+    [Theory]
+    [InlineData("`<!-- old note -->`", "`<!-- new note -->`")]
+    [InlineData("```html\n<!-- old note -->\n```", "```html\n<!-- new note -->\n```")]
+    public void Detects_Html_Comment_Syntax_Changes_Inside_Code(string before, string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
     [Fact]
     public void Flags_Only_Fpt_When_Change_Lives_Inside_Ifversion_Fpt_Block()
     {

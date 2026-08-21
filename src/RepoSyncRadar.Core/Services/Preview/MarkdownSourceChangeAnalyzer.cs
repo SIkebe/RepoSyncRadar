@@ -19,8 +19,10 @@ public static partial class MarkdownSourceChangeAnalyzer
 {
     private const int _maxExcerptLength = 160;
 
-    [GeneratedRegex(@"\{%-?\s*data\s+variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+)\s*-?%\}", RegexOptions.IgnoreCase)]
-    private static partial Regex DataVariableReferenceRegex();
+    [GeneratedRegex(
+        @"(?:\{%-?\s*data\s+variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+)\s*-?%\}|\{\{-?\s*(?:site\.data\.)?variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+)\s*-?\}\})",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex VariableReferenceRegex();
 
     public static MarkdownSourceChangeSummary? Analyze(
         string? beforeMarkdown,
@@ -71,17 +73,17 @@ public static partial class MarkdownSourceChangeAnalyzer
         summary = null;
         var beforeSource = before ?? string.Empty;
         var afterSource = after ?? string.Empty;
-        var beforeMatches = DataVariableReferenceRegex().Matches(beforeSource);
-        var afterMatches = DataVariableReferenceRegex().Matches(afterSource);
+        var beforeMatches = VariableReferenceRegex().Matches(beforeSource);
+        var afterMatches = VariableReferenceRegex().Matches(afterSource);
         if (beforeMatches.Count == 0 || beforeMatches.Count != afterMatches.Count)
         {
             return false;
         }
 
-        const string placeholder = "{% data variables.__rsr__ %}";
+        const string placeholder = "{rsr-variable}";
         if (!string.Equals(
-                DataVariableReferenceRegex().Replace(beforeSource, placeholder),
-                DataVariableReferenceRegex().Replace(afterSource, placeholder),
+                VariableReferenceRegex().Replace(beforeSource, placeholder),
+                VariableReferenceRegex().Replace(afterSource, placeholder),
                 StringComparison.Ordinal))
         {
             return false;

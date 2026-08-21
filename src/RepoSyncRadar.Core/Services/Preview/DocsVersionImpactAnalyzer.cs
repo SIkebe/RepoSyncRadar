@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Markdig;
 
 namespace RepoSyncRadar.Core.Services.Preview;
 
@@ -35,6 +36,11 @@ public sealed record DocsVersionImpactDetail(
 /// </summary>
 public static partial class DocsVersionImpactAnalyzer
 {
+    private static readonly MarkdownPipeline _comparisonPipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .UseRepoSyncRadarSyntaxHighlighting()
+        .Build();
+
     [GeneratedRegex(@"<!--.*?-->", RegexOptions.Singleline)]
     private static partial Regex HtmlCommentRegex();
 
@@ -295,7 +301,10 @@ public static partial class DocsVersionImpactAnalyzer
     }
 
     private static string NormalizeForComparison(string? rendered)
-        => string.Join('\n', SplitBlocks(HtmlCommentRegex().Replace(rendered ?? string.Empty, string.Empty)));
+    {
+        var html = Markdown.ToHtml(rendered ?? string.Empty, _comparisonPipeline);
+        return HtmlCommentRegex().Replace(html, string.Empty).Trim();
+    }
 
     private static void AddCurrentBlock(List<string> blocks, List<string> current)
     {
