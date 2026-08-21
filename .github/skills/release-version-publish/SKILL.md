@@ -160,7 +160,7 @@ gh release view v0.1.16 `
 - `win-x64-stable` / `win-arm64-stable` など対象 channel の installer、`.nupkg`、`releases.<channel>.json`、`assets.<channel>.json` が揃っている
 - unexpected asset や portable / legacy `RELEASES-*` がない
 - Release workflow の build/test/package/installed smoke が緑
-- 必要なら draft installer をダウンロードして手元で起動 smoke。cleanup は Velopack uninstaller を使う
+- 必要なら draft installer を GitHub-hosted runner などの使い捨て Windows 環境で起動 smoke。production と同じ Velopack identity を使うため、普段使いの RepoSyncRadar が入ったローカル環境では実行しない
 
 ### 8. publish 前の最終確認
 
@@ -224,6 +224,7 @@ gh release view v0.1.16 --repo SIkebe/RepoSyncRadar --json isDraft,isPrerelease,
 - `draft=false` をユーザー確認なしに実行
 - release workflow を tag push trigger に変更
 - installer cleanup で `%LOCALAPPDATA%\SIkebe.RepoSyncRadar` を直接削除して済ませる
+- 既存の RepoSyncRadar が入ったローカル環境で `Test-VelopackInstalledE2E.ps1` を実行する。例外的に意図して置換する場合だけ `-AllowLocalInstalledAppReplacement` を明示する
 
 ## 完了レポート
 

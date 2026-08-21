@@ -5,7 +5,9 @@ param(
 
     [string]$ReleaseDir = '',
 
-    [switch]$CleanInstallRoot
+    [switch]$CleanInstallRoot,
+
+    [switch]$AllowLocalInstalledAppReplacement
 )
 
 Set-StrictMode -Version Latest
@@ -39,6 +41,41 @@ function Invoke-ProcessCommand {
     if ($process.ExitCode -ne 0) {
         throw "$FilePath failed with exit code $($process.ExitCode)."
     }
+}
+
+function Assert-LocalInstalledAppReplacementAllowed {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$InstallRoot,
+
+        [switch]$AllowReplacement
+    )
+
+    if ($AllowReplacement) {
+        return
+    }
+
+    $installedState = @()
+    if (Test-Path $InstallRoot) {
+        $installedState += "install root '$InstallRoot'"
+    }
+
+    $registryPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\SIkebe.RepoSyncRadar'
+    if (Test-Path $registryPath) {
+        $installedState += "uninstall registration '$registryPath'"
+    }
+
+    $startMenuPath = Join-Path ([System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs)) 'RepoSyncRadar.lnk'
+    if (Test-Path $startMenuPath) {
+        $installedState += "Start Menu shortcut '$startMenuPath'"
+    }
+
+    if ($installedState.Count -eq 0) {
+        return
+    }
+
+    $stateDescription = $installedState -join ', '
+    throw "Refusing to replace an existing local RepoSyncRadar installation ($stateDescription). Installed-package E2E uses the production Velopack identity and its cleanup uninstalls that identity. Run this test on a disposable Windows environment, or pass -AllowLocalInstalledAppReplacement only when replacing the local installation is intentional."
 }
 
 function Remove-DirectoryBestEffort {
@@ -334,6 +371,11 @@ function Add-StaleStartMenuShortcutForSmoke {
     return @($staleShortcutPath, $sameNameStaleShortcutPath)
 }
 
+$installRoot = Join-Path $env:LOCALAPPDATA 'SIkebe.RepoSyncRadar'
+Assert-LocalInstalledAppReplacementAllowed `
+    -InstallRoot $installRoot `
+    -AllowReplacement:$AllowLocalInstalledAppReplacement
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $e2eProjectPath = [System.IO.Path]::Combine($repoRoot, 'tests', 'RepoSyncRadar.App.E2E.Tests', 'RepoSyncRadar.App.E2E.Tests.csproj')
 if ([string]::IsNullOrWhiteSpace($ReleaseDir)) {
@@ -350,8 +392,6 @@ if ($setupCandidates.Count -gt 1) {
 }
 
 $setupExe = $setupCandidates[0]
-
-$installRoot = Join-Path $env:LOCALAPPDATA 'SIkebe.RepoSyncRadar'
 
 Get-Process RepoSyncRadar -ErrorAction SilentlyContinue | Stop-Process -Force
 if ($CleanInstallRoot) {
