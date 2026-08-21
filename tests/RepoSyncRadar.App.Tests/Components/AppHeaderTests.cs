@@ -1344,6 +1344,49 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Header_Dismisses_Background_Update_Failure_Until_Activity_Changes()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session.GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session.GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var updateService = new FakeAppUpdateService();
+        var sp = BuildServices(session, out _, out _, updateService: updateService);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        updateService.Publish(new AppUpdateActivity(
+            AppUpdateActivityStatus.Failed,
+            Message: "rate limit exceeded"));
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(
+                "アップデート確認に失敗しました: rate limit exceeded",
+                cut.Find("[data-testid=\"app-header-update-status\"]").TextContent,
+                StringComparison.Ordinal);
+            var dismissButton = cut.Find("[data-testid=\"app-header-update-dismiss\"]");
+            Assert.Equal("×", dismissButton.TextContent);
+            Assert.Equal("閉じる", dismissButton.GetAttribute("aria-label"));
+        });
+
+        cut.Find("[data-testid=\"app-header-update-dismiss\"]").Click();
+
+        cut.WaitForAssertion(() =>
+            Assert.Empty(cut.FindAll("[data-testid=\"app-header-update-status\"]")));
+
+        updateService.Publish(new AppUpdateActivity(AppUpdateActivityStatus.Checking));
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(
+                "アップデートを確認中",
+                cut.Find("[data-testid=\"app-header-update-status\"]").TextContent,
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Header_Shows_Restart_Prompt_When_Update_Downloaded()
     {
         var session = Substitute.For<IGitHubAuthSession>();

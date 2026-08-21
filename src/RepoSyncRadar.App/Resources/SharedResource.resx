@@ -63,6 +63,7 @@
   <data name="AppHeader.Update.DownloadedWithVersion" xml:space="preserve"><value>アップデート {0} をダウンロードしました。次回起動時に適用されます。</value></data>
   <data name="AppHeader.Update.Downloading" xml:space="preserve"><value>アップデートをダウンロード中…</value></data>
   <data name="AppHeader.Update.DownloadingPercent" xml:space="preserve"><value>アップデートをダウンロード中 {0}%</value></data>
+  <data name="AppHeader.Update.Dismiss" xml:space="preserve"><value>閉じる</value></data>
   <data name="AppHeader.Update.FeedNotConfigured" xml:space="preserve"><value>アップデートフィードが設定されていません。</value></data>
   <data name="AppHeader.Update.Later" xml:space="preserve"><value>後で</value></data>
   <data name="AppHeader.Update.NoUpdate" xml:space="preserve"><value>利用可能なアップデートはありません。</value></data>
