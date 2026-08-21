@@ -2409,6 +2409,46 @@ var value = 1;
             StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("""<div src="images/file.png"></div>""")]
+    [InlineData("""<div poster="images/file.png"></div>""")]
+    [InlineData("""<div srcset="images/file.png 1x"></div>""")]
+    public void Does_Not_Rewrite_Url_Attributes_Unsupported_By_The_Element(string html)
+    {
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Equal(html, rewritten);
+    }
+
+    [Fact]
+    public void Rewrites_Area_Href_For_Comparison()
+    {
+        const string html = "<map><area href=guides/next.md></map>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains(
+            "href=/markdown-links/content/code-security/guides/next.md",
+            rewritten,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Rewrite_Area_Href_In_Svg_Namespace()
+    {
+        const string html = "<svg><area href=guides/next.md></area></svg>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Equal(html, rewritten);
+    }
+
     [Fact]
     public void Rewrites_Reference_After_SolidusTerminated_Raw_Text_End_Tag()
     {

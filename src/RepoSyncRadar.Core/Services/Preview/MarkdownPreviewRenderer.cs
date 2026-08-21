@@ -1552,9 +1552,11 @@ internal static partial class MarkdownPreviewRenderer
             {
                 tag = RewriteTagAttributes(
                     tag,
+                    tagName,
+                    elementNamespace == ElementNamespace.Html,
                     repoPath,
                     assetBasePath,
-                    ShouldRewriteHref(tagName, tag) ? linkBasePath : null);
+                    ShouldRewriteHref(tagName, tag, elementNamespace) ? linkBasePath : null);
             }
             rewritten.Append(tag);
             index = tagEnd;
@@ -1578,6 +1580,8 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string RewriteTagAttributes(
         string tag,
+        string tagName,
+        bool usesHtmlUrlAttributes,
         string repoPath,
         string assetBasePath,
         string? linkBasePath)
@@ -1660,8 +1664,12 @@ internal static partial class MarkdownPreviewRenderer
             var decodedValue = WebUtility.HtmlDecode(tag[valueStart..valueEnd]);
             var next = attributeName.ToLowerInvariant() switch
             {
-                "src" or "poster" => RewriteAssetUrl(decodedValue, repoPath, assetBasePath),
-                "srcset" => RewriteSrcSet(decodedValue, repoPath, assetBasePath),
+                "src" when usesHtmlUrlAttributes && ShouldRewriteSrc(tagName, tag)
+                    => RewriteAssetUrl(decodedValue, repoPath, assetBasePath),
+                "poster" when usesHtmlUrlAttributes && tagName == "video"
+                    => RewriteAssetUrl(decodedValue, repoPath, assetBasePath),
+                "srcset" when usesHtmlUrlAttributes && tagName is "img" or "source"
+                    => RewriteSrcSet(decodedValue, repoPath, assetBasePath),
                 "href" when linkBasePath is not null => RewriteAssetUrl(decodedValue, repoPath, linkBasePath),
                 _ => decodedValue,
             };
@@ -1682,9 +1690,20 @@ internal static partial class MarkdownPreviewRenderer
             : rewritten.Append(tag, copiedThrough, tag.Length - copiedThrough).ToString();
     }
 
-    private static bool ShouldRewriteHref(string tagName, string tag)
+    private static bool ShouldRewriteSrc(string tagName, string tag)
+        => tagName is "audio" or "embed" or "iframe" or "img" or "script" or "source"
+            or "track" or "video"
+            || tagName == "input" && TagAttributeEquals(tag, "type", "image");
+
+    private static bool ShouldRewriteHref(
+        string tagName,
+        string tag,
+        ElementNamespace elementNamespace)
         => tagName == "a"
-            || tagName == "link" && TagAttributeContainsToken(tag, "rel", "stylesheet");
+            || elementNamespace == ElementNamespace.Html
+                && (tagName == "area"
+                    || tagName == "link"
+                        && TagAttributeContainsToken(tag, "rel", "stylesheet"));
 
     private static bool TagAttributeContainsToken(
         string tag,

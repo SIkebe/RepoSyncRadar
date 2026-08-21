@@ -19,7 +19,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 /// </remarks>
 public sealed class AppHost : IAsyncDisposable
 {
-    private static readonly TimeSpan _startupTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan _startupTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan _shutdownTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>

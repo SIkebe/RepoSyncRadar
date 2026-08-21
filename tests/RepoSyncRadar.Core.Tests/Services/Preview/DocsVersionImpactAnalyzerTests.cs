@@ -111,6 +111,7 @@ public sealed class DocsVersionImpactAnalyzerTests
     [Theory]
     [InlineData("[Guide](../guide.md)")]
     [InlineData("<a href=../guide.md>Guide</a>")]
+    [InlineData("<map><area href=../guide.md></map>")]
     public void Detects_Relative_Link_Changes_Caused_By_Rename(string markdown)
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
@@ -195,6 +196,39 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData("""<img data-srcset="small.png 1x, large.png 2x">""")]
     public void Returns_Empty_When_Rename_Only_Rebases_Custom_Data_Attributes(string markdown)
     {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("""<div src="images/diagram.png"></div>""")]
+    [InlineData("""<div poster="images/diagram.png"></div>""")]
+    [InlineData("""<div srcset="images/diagram.png 1x"></div>""")]
+    public void Returns_Empty_When_Rename_Only_Rebases_Unsupported_Url_Attributes(
+        string markdown)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Rename_Only_Rebases_Svg_Area_Href()
+    {
+        const string markdown = "<svg><area href=guides/next.md></area></svg>";
         var affected = DocsVersionImpactAnalyzer.Analyze(
             markdown,
             DocsLiquidContext.Empty,
