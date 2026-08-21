@@ -123,29 +123,82 @@ public static partial class MarkdownSourceChangeAnalyzer
     {
         var beforeLines = SplitLines(before);
         var afterLines = SplitLines(after);
-        var commonPrefix = 0;
-        while (commonPrefix < beforeLines.Length
-               && commonPrefix < afterLines.Length
-               && string.Equals(beforeLines[commonPrefix], afterLines[commonPrefix], StringComparison.Ordinal))
+        var lcs = BuildLineLcsTable(beforeLines, afterLines);
+        var firstRemoved = new List<string>();
+        var firstAdded = new List<string>();
+        var currentRemoved = new List<string>();
+        var currentAdded = new List<string>();
+        var removedCount = 0;
+        var addedCount = 0;
+        var beforeIndex = 0;
+        var afterIndex = 0;
+
+        while (beforeIndex < beforeLines.Length || afterIndex < afterLines.Length)
         {
-            commonPrefix++;
+            if (beforeIndex < beforeLines.Length
+                && afterIndex < afterLines.Length
+                && string.Equals(beforeLines[beforeIndex], afterLines[afterIndex], StringComparison.Ordinal))
+            {
+                CaptureFirstHunk(firstRemoved, firstAdded, currentRemoved, currentAdded);
+                beforeIndex++;
+                afterIndex++;
+            }
+            else if (afterIndex < afterLines.Length
+                && (beforeIndex == beforeLines.Length
+                    || lcs[beforeIndex, afterIndex + 1] >= lcs[beforeIndex + 1, afterIndex]))
+            {
+                currentAdded.Add(afterLines[afterIndex]);
+                addedCount++;
+                afterIndex++;
+            }
+            else
+            {
+                currentRemoved.Add(beforeLines[beforeIndex]);
+                removedCount++;
+                beforeIndex++;
+            }
         }
 
-        var beforeEnd = beforeLines.Length - 1;
-        var afterEnd = afterLines.Length - 1;
-        while (beforeEnd >= commonPrefix
-               && afterEnd >= commonPrefix
-               && string.Equals(beforeLines[beforeEnd], afterLines[afterEnd], StringComparison.Ordinal))
-        {
-            beforeEnd--;
-            afterEnd--;
-        }
-
+        CaptureFirstHunk(firstRemoved, firstAdded, currentRemoved, currentAdded);
         var excerpts = AbbreviatePair(
-            commonPrefix <= beforeEnd ? beforeLines[commonPrefix] : null,
-            commonPrefix <= afterEnd ? afterLines[commonPrefix] : null);
-        var changeCount = Math.Max(beforeEnd - commonPrefix + 1, afterEnd - commonPrefix + 1);
-        return (excerpts.Before, excerpts.After, Math.Max(changeCount, 1));
+            firstRemoved.Count > 0 ? firstRemoved[0] : null,
+            firstAdded.Count > 0 ? firstAdded[0] : null);
+        return (excerpts.Before, excerpts.After, Math.Max(Math.Max(removedCount, addedCount), 1));
+    }
+
+    private static int[,] BuildLineLcsTable(string[] beforeLines, string[] afterLines)
+    {
+        var table = new int[beforeLines.Length + 1, afterLines.Length + 1];
+        for (var beforeIndex = beforeLines.Length - 1; beforeIndex >= 0; beforeIndex--)
+        {
+            for (var afterIndex = afterLines.Length - 1; afterIndex >= 0; afterIndex--)
+            {
+                table[beforeIndex, afterIndex] = string.Equals(
+                    beforeLines[beforeIndex],
+                    afterLines[afterIndex],
+                    StringComparison.Ordinal)
+                    ? table[beforeIndex + 1, afterIndex + 1] + 1
+                    : Math.Max(table[beforeIndex + 1, afterIndex], table[beforeIndex, afterIndex + 1]);
+            }
+        }
+        return table;
+    }
+
+    private static void CaptureFirstHunk(
+        List<string> firstRemoved,
+        List<string> firstAdded,
+        List<string> currentRemoved,
+        List<string> currentAdded)
+    {
+        if (firstRemoved.Count == 0
+            && firstAdded.Count == 0
+            && (currentRemoved.Count > 0 || currentAdded.Count > 0))
+        {
+            firstRemoved.AddRange(currentRemoved);
+            firstAdded.AddRange(currentAdded);
+        }
+        currentRemoved.Clear();
+        currentAdded.Clear();
     }
 
     private static string[] SplitLines(string? source)

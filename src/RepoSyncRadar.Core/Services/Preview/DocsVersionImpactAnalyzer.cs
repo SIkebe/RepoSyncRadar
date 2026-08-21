@@ -477,6 +477,7 @@ public static class DocsVersionImpactAnalyzer
             return mode;
         }
 
+        var winningDeclarationIsImportant = false;
         foreach (var declaration in style.Split(';'))
         {
             var separator = declaration.IndexOf(':');
@@ -490,9 +491,12 @@ public static class DocsVersionImpactAnalyzer
 
             if (TryResolveDeclaredWhiteSpaceMode(
                     declaration.AsSpan(separator + 1),
-                    out var declaredMode))
+                    out var declaredMode,
+                    out var declarationIsImportant)
+                && (!winningDeclarationIsImportant || declarationIsImportant))
             {
                 mode = declaredMode;
+                winningDeclarationIsImportant = declarationIsImportant;
             }
         }
         return mode;
@@ -500,14 +504,16 @@ public static class DocsVersionImpactAnalyzer
 
     private static bool TryResolveDeclaredWhiteSpaceMode(
         ReadOnlySpan<char> value,
-        out HtmlWhiteSpaceMode mode)
+        out HtmlWhiteSpaceMode mode,
+        out bool isImportant)
     {
         value = value.Trim();
         var importantSeparator = value.LastIndexOf('!');
-        if (importantSeparator >= 0
+        isImportant = importantSeparator >= 0
             && value[(importantSeparator + 1)..].Trim().Equals(
                 "important",
-                StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase);
+        if (isImportant)
         {
             value = value[..importantSeparator].TrimEnd();
         }
@@ -538,6 +544,7 @@ public static class DocsVersionImpactAnalyzer
         }
 
         mode = default;
+        isImportant = false;
         return false;
     }
 

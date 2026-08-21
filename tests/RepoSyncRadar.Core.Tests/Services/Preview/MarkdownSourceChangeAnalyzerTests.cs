@@ -151,6 +151,19 @@ public sealed class MarkdownSourceChangeAnalyzerTests
     }
 
     [Fact]
+    public void Uses_Line_Diff_Hunk_When_Content_Is_Moved_And_Replaced()
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(
+            "Same\n<!-- old -->\nKeep",
+            "Same\nKeep\n<!-- new -->");
+
+        Assert.NotNull(summary);
+        Assert.Equal("<!-- old -->", summary!.Before);
+        Assert.Null(summary.After);
+        Assert.DoesNotContain("Keep", summary.Before, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Returns_Null_For_Identical_Source()
     {
         Assert.Null(MarkdownSourceChangeAnalyzer.Analyze("Same.", "Same."));
