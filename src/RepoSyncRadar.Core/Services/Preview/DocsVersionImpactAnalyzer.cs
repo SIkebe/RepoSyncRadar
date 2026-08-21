@@ -494,16 +494,15 @@ public static class DocsVersionImpactAnalyzer
         var html = Markdown.ToHtml(preprocessed, _comparisonPipeline);
         if (!string.IsNullOrWhiteSpace(repoPath))
         {
-            html = MarkdownPreviewRenderer.RewriteAssetReferences(
+            html = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
                 html,
-                repoPath,
-                "/markdown-assets");
+                repoPath);
         }
         cancellationToken.ThrowIfCancellationRequested();
         var normalized = new StringBuilder(html.Length);
         var elements = new List<HtmlElementContext>();
         var hasStylesheetDrivenWhitespace = ContainsHtmlStartTag(html, "style")
-            || ContainsHtmlStartTag(html, "link");
+            || ContainsStylesheetLink(html);
         var index = 0;
         var lastCancellationCheckIndex = 0;
         var pendingCollapsibleSpace = false;
@@ -666,7 +665,7 @@ public static class DocsVersionImpactAnalyzer
         int nextIndex,
         IReadOnlyList<HtmlElementContext> elements)
     {
-        if (isForeign || !isClosing || tagName != "li")
+        if (isForeign || !isClosing || tagName is not ("li" or "p"))
         {
             return false;
         }
@@ -674,18 +673,18 @@ public static class DocsVersionImpactAnalyzer
         string? parentTagName = null;
         for (var i = elements.Count - 1; i >= 0; i--)
         {
-            if (elements[i].TagName != "li")
+            if (elements[i].TagName != tagName)
             {
                 continue;
             }
 
-            if (i > 0 && elements[i - 1].TagName is "ol" or "ul")
+            if (i > 0)
             {
                 parentTagName = elements[i - 1].TagName;
             }
             break;
         }
-        if (parentTagName is null)
+        if (tagName == "li" && parentTagName is not ("ol" or "ul"))
         {
             return false;
         }
@@ -725,7 +724,12 @@ public static class DocsVersionImpactAnalyzer
             nextTag,
             out var nextIsClosing,
             out _);
-        return !nextIsClosing && nextTagName == "li"
+        if (tagName == "li")
+        {
+            return !nextIsClosing && nextTagName == "li"
+                || nextIsClosing && nextTagName == parentTagName;
+        }
+        return !nextIsClosing && ClosesOpenParagraph(nextTagName)
             || nextIsClosing && nextTagName == parentTagName;
     }
 
@@ -733,24 +737,42 @@ public static class DocsVersionImpactAnalyzer
         List<HtmlElementContext> elements,
         string openingTagName)
     {
-        if (openingTagName != "li")
+        if (openingTagName == "li")
+        {
+            for (var i = elements.Count - 1; i >= 0; i--)
+            {
+                if (elements[i].TagName == "li")
+                {
+                    elements.RemoveRange(i, elements.Count - i);
+                    return;
+                }
+                if (elements[i].TagName is "ol" or "ul")
+                {
+                    return;
+                }
+            }
+            return;
+        }
+        if (!ClosesOpenParagraph(openingTagName))
         {
             return;
         }
-
         for (var i = elements.Count - 1; i >= 0; i--)
         {
-            if (elements[i].TagName == "li")
+            if (elements[i].TagName == "p")
             {
                 elements.RemoveRange(i, elements.Count - i);
                 return;
             }
-            if (elements[i].TagName is "ol" or "ul")
-            {
-                return;
-            }
         }
     }
+
+    private static bool ClosesOpenParagraph(string tagName)
+        => tagName is "address" or "article" or "aside" or "blockquote" or "details"
+            or "div" or "dl" or "fieldset" or "figcaption" or "figure" or "footer"
+            or "form" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6" or "header"
+            or "hgroup" or "hr" or "main" or "menu" or "nav" or "ol" or "p" or "pre"
+            or "search" or "section" or "table" or "ul";
 
     private static bool HasHtmlAttributes(ReadOnlySpan<char> tag)
     {
@@ -791,6 +813,43 @@ public static class DocsVersionImpactAnalyzer
                 return true;
             }
             index = afterName;
+        }
+        return false;
+    }
+
+    private static bool ContainsStylesheetLink(string html)
+    {
+        const string search = "<link";
+        var index = 0;
+        while ((index = html.IndexOf(search, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            var afterName = index + search.Length;
+            if (afterName < html.Length
+                && html[afterName] != '>'
+                && html[afterName] != '/'
+                && !IsCollapsibleHtmlWhitespace(html[afterName]))
+            {
+                index = afterName;
+                continue;
+            }
+
+            var tagEnd = FindHtmlTagEnd(html, index);
+            var tag = html.AsSpan(index, tagEnd - index);
+            var rel = GetHtmlAttributeValue(tag, "rel");
+            if (rel is not null)
+            {
+                var decodedRel = DecodeHtmlCharacterReferences(rel);
+                foreach (var token in decodedRel.Split(
+                             [' ', '\t', '\n', '\f', '\r'],
+                             StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (token.Equals("stylesheet", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            index = tagEnd;
         }
         return false;
     }

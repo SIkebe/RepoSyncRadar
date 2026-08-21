@@ -96,6 +96,9 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""\bhref\s*=\s*(?<quote>["'])(?<href>.*?)\k<quote>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex AnchorHrefRegex();
 
+    [GeneratedRegex("""(?<attr>\bhref\s*=\s*)(?:(?<quote>["'])(?<url>.*?)\k<quote>|(?<url>[^\s"'=<>`]+))""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex HtmlHrefRegex();
+
     [GeneratedRegex("""<span\b(?<attrs>[^>]*)>\s*AUTOTITLE\s*</span>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex AutotitleSpanRegex();
 
@@ -1454,7 +1457,27 @@ internal static partial class MarkdownPreviewRenderer
         yield return "content/" + trimmed;
     }
 
-    internal static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
+    internal static string RewriteLocalReferencesForComparison(string html, string repoPath)
+    {
+        var rewritten = RewriteAssetReferences(html, repoPath, "/markdown-assets");
+        return AnchorRegex().Replace(rewritten, match =>
+        {
+            var attrs = HtmlHrefRegex().Replace(match.Groups["attrs"].Value, hrefMatch =>
+            {
+                var quote = hrefMatch.Groups["quote"].Value;
+                var href = WebUtility.HtmlDecode(hrefMatch.Groups["url"].Value);
+                var next = RewriteAssetUrl(href, repoPath, "/markdown-links");
+                return string.Concat(
+                    hrefMatch.Groups["attr"].Value,
+                    quote,
+                    WebUtility.HtmlEncode(next),
+                    quote);
+            });
+            return string.Concat("<a", attrs, ">", match.Groups["body"].Value, "</a>");
+        });
+    }
+
+    private static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
     {
         if (string.IsNullOrWhiteSpace(assetBasePath) || string.IsNullOrEmpty(html))
         {

@@ -105,6 +105,55 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Empty(affected);
     }
 
+    [Theory]
+    [InlineData("[Guide](../guide.md)")]
+    [InlineData("<a href=../guide.md>Guide</a>")]
+    public void Detects_Relative_Link_Changes_Caused_By_Rename(string markdown)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/deeper/page.md");
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/deeper/page.md");
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+        Assert.All(details, detail =>
+        {
+            var change = Assert.Single(detail.Changes);
+            Assert.Contains(
+                "/markdown-links/content/guide.md",
+                change.BeforeExcerpt,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "/markdown-links/content/new/guide.md",
+                change.AfterExcerpt,
+                StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Renamed_File_Still_Resolves_The_Same_Link()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "[Guide](guide.md)",
+            DocsLiquidContext.Empty,
+            "[Guide](../old/guide.md)",
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
     [Fact]
     public void Returns_All_Versions_When_Plain_Text_Changes_Outside_Any_Ifversion()
     {
@@ -240,6 +289,9 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData(
         "<ul><li>One<li>Two</ul>",
         "<ul><li>One</li><li>Two</li></ul>")]
+    [InlineData(
+        "<p>A<div>B</div>",
+        "<p>A</p><div>B</div>")]
     public void Returns_Empty_When_Only_Browser_Equivalent_Html_Syntax_Changes(
         string before,
         string after)
@@ -272,6 +324,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             "<ul><li>A</li>B</ul>",
             DocsLiquidContext.Empty,
             "<ul><li>AB</li></ul>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Paragraph_Boundary_Before_Text()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<p>A</p>B",
+            DocsLiquidContext.Empty,
+            "<p>AB</p>",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
@@ -663,6 +727,32 @@ public sealed class DocsVersionImpactAnalyzerTests
             $"{style}<span class=\"preserve\">a  b</span>",
             DocsLiquidContext.Empty,
             $"{style}<span class=\"preserve\">a b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Collapses_Whitespace_When_A_NonStylesheet_Link_Is_Present()
+    {
+        const string link = """<link rel="icon" href="icon.png">""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{link}<span>a  b</span>",
+            DocsLiquidContext.Empty,
+            $"{link}<span>a b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_When_A_Linked_Stylesheet_May_Apply_Rules()
+    {
+        const string link = """<link rel="alternate stylesheet" href="theme.css">""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{link}<span>a  b</span>",
+            DocsLiquidContext.Empty,
+            $"{link}<span>a b</span>",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
