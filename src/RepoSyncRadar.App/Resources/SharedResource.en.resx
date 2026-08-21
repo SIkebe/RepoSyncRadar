@@ -63,6 +63,7 @@
   <data name="AppHeader.Update.DownloadedWithVersion" xml:space="preserve"><value>Update {0} downloaded. It will be applied on the next launch.</value></data>
   <data name="AppHeader.Update.Downloading" xml:space="preserve"><value>Downloading update...</value></data>
   <data name="AppHeader.Update.DownloadingPercent" xml:space="preserve"><value>Downloading update {0}%</value></data>
+  <data name="AppHeader.Update.Dismiss" xml:space="preserve"><value>Dismiss</value></data>
   <data name="AppHeader.Update.FeedNotConfigured" xml:space="preserve"><value>Update feed is not configured.</value></data>
   <data name="AppHeader.Update.Later" xml:space="preserve"><value>Later</value></data>
   <data name="AppHeader.Update.NoUpdate" xml:space="preserve"><value>No update is available.</value></data>

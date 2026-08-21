@@ -58,6 +58,15 @@
                             disabled="@_appUpdateRestartBusy"
                                 @onclick="DismissUpdatePrompt">@L["AppHeader.Update.Later"]</button>
                 }
+                else if (_appUpdateActivity is { Status: AppUpdateActivityStatus.Failed } failedUpdateActivity)
+                {
+                    <button type="button"
+                            class="toolbar-button compact secondary icon-only"
+                            data-testid="app-header-update-dismiss"
+                            aria-label="@L["AppHeader.Update.Dismiss"]"
+                            title="@L["AppHeader.Update.Dismiss"]"
+                            @onclick="() => DismissFailedUpdate(failedUpdateActivity)"><span aria-hidden="true">&times;</span></button>
+                }
             </span>
         }
         @if (!string.IsNullOrWhiteSpace(_appUpdateRestartError))
@@ -606,6 +615,7 @@
     private bool _appUpdateRestartBusy;
     private string? _appUpdateRestartError;
     private string? _dismissedDownloadedUpdateVersion;
+    private AppUpdateActivity? _dismissedFailedUpdateActivity;
     private int _observedAuthStateVersion;
     private SettingsSection _activeSettingsSection = SettingsSection.General;
 
@@ -714,6 +724,11 @@
         if (_appUpdateActivity?.Status != AppUpdateActivityStatus.Downloaded)
         {
             _dismissedDownloadedUpdateVersion = null;
+        }
+
+        if (_appUpdateActivity?.Status != AppUpdateActivityStatus.Failed)
+        {
+            _dismissedFailedUpdateActivity = null;
         }
 
         _ = InvokeAsync(StateHasChanged);
@@ -991,7 +1006,8 @@
 
         if (activity.Status != AppUpdateActivityStatus.Downloaded)
         {
-            return true;
+            return activity.Status != AppUpdateActivityStatus.Failed
+                || !ReferenceEquals(_dismissedFailedUpdateActivity, activity);
         }
 
         return !string.Equals(
@@ -1051,6 +1067,12 @@
         }
 
         _appUpdateRestartError = null;
+    }
+
+    internal void DismissFailedUpdate(AppUpdateActivity activity)
+    {
+        _dismissedFailedUpdateActivity = activity;
+        StateHasChanged();
     }
 
     private static string BuildDownloadedUpdateDismissKey(AppUpdateActivity activity)

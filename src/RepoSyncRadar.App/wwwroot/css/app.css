@@ -1457,6 +1457,16 @@ html, body {
     padding: 0.25rem 0.6rem;
 }
 
+.toolbar-button.icon-only {
+    align-items: center;
+    display: inline-flex;
+    font-size: 1.1rem;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    width: 1.9rem;
+}
+
 .toolbar-button.primary,
 .review-button.adopt {
     background: #0969da;
