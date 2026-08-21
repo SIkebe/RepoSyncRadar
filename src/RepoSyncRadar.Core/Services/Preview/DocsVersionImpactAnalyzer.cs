@@ -618,6 +618,9 @@ public static class DocsVersionImpactAnalyzer
                 mode = HtmlWhiteSpaceMode.Preserve;
                 return true;
             }
+            mode = default;
+            isImportant = false;
+            return false;
         }
         else if (!property.Equals("white-space", StringComparison.OrdinalIgnoreCase))
         {

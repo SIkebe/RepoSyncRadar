@@ -358,6 +358,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Ignores_Invalid_WhiteSpaceCollapse_Value()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<pre style="white-space-collapse: nowrap">a  b</pre>""",
+            DocsLiquidContext.Empty,
+            """<pre style="white-space-collapse: nowrap">a b</pre>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Important_WhiteSpace_Declaration_Beats_Later_NonImportant_Declaration()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
