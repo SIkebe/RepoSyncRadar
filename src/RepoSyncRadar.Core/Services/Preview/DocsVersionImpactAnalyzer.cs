@@ -115,6 +115,17 @@ public static class DocsVersionImpactAnalyzer
         var beforeRenderable = StripFrontmatter(beforeMarkdown);
         var afterRenderable = StripFrontmatter(afterMarkdown);
         var affected = new List<DocsVersion>(DocsVersionCatalog.All.Count);
+        var normalizationCache = new Dictionary<string, string>(StringComparer.Ordinal);
+        string NormalizeCached(string? rendered)
+        {
+            var cacheKey = rendered ?? string.Empty;
+            if (!normalizationCache.TryGetValue(cacheKey, out var normalized))
+            {
+                normalized = NormalizeForComparison(cacheKey, cancellationToken);
+                normalizationCache.Add(cacheKey, normalized);
+            }
+            return normalized;
+        }
         foreach (var version in DocsVersionCatalog.All)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -139,8 +150,8 @@ public static class DocsVersionImpactAnalyzer
                 continue;
             }
             if (!string.Equals(
-                    NormalizeForComparison(beforeRendered, cancellationToken),
-                    NormalizeForComparison(afterRendered, cancellationToken),
+                    NormalizeCached(beforeRendered),
+                    NormalizeCached(afterRendered),
                     StringComparison.Ordinal))
             {
                 affected.Add(version);
@@ -941,6 +952,8 @@ public static class DocsVersionImpactAnalyzer
         ReadOnlySpan<char> value,
         out HtmlWhiteSpaceMode mode)
     {
+        var normalizedValue = NormalizeCssWhitespace(value);
+        value = normalizedValue.AsSpan();
         if (value.Equals("normal", StringComparison.OrdinalIgnoreCase)
             || value.Equals("nowrap", StringComparison.OrdinalIgnoreCase)
             || value.Equals("collapse wrap", StringComparison.OrdinalIgnoreCase)
@@ -972,6 +985,27 @@ public static class DocsVersionImpactAnalyzer
 
         mode = default;
         return false;
+    }
+
+    private static string NormalizeCssWhitespace(ReadOnlySpan<char> value)
+    {
+        var normalized = new StringBuilder(value.Length);
+        var pendingSpace = false;
+        foreach (var current in value)
+        {
+            if (IsCollapsibleHtmlWhitespace(current))
+            {
+                pendingSpace = normalized.Length > 0;
+                continue;
+            }
+            if (pendingSpace)
+            {
+                normalized.Append(' ');
+                pendingSpace = false;
+            }
+            normalized.Append(current);
+        }
+        return normalized.ToString();
     }
 
     private static bool ContainsComputedCssValue(ReadOnlySpan<char> value)
