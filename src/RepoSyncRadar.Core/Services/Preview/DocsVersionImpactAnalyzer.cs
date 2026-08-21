@@ -43,6 +43,14 @@ public static partial class DocsVersionImpactAnalyzer
     [GeneratedRegex(@"<!--.*?-->", RegexOptions.Singleline)]
     private static partial Regex HtmlCommentRegex();
 
+    [GeneratedRegex(
+        @"<(?<tag>pre|code|textarea|script|style)\b[^>]*>.*?</\k<tag>\s*>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex WhitespaceSensitiveElementRegex();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex CollapsibleWhitespaceRegex();
+
     /// <summary>
     /// 全版で評価し、before/after が一致しない版だけを <see cref="DocsVersionCatalog.All"/>
     /// の順序で返す。差分がない場合は空配列。
@@ -302,7 +310,25 @@ public static partial class DocsVersionImpactAnalyzer
     private static string NormalizeForComparison(string? rendered)
     {
         var html = Markdown.ToHtml(rendered ?? string.Empty, _comparisonPipeline);
-        return HtmlCommentRegex().Replace(html, string.Empty).Trim();
+        var withoutComments = HtmlCommentRegex().Replace(html, string.Empty);
+        var sensitiveElements = new List<string>();
+        var protectedHtml = WhitespaceSensitiveElementRegex().Replace(
+            withoutComments,
+            match =>
+            {
+                var index = sensitiveElements.Count;
+                sensitiveElements.Add(match.Value);
+                return $"\uE000RSR{index}\uE001";
+            });
+        var normalized = CollapsibleWhitespaceRegex().Replace(protectedHtml, " ").Trim();
+        for (var index = 0; index < sensitiveElements.Count; index++)
+        {
+            normalized = normalized.Replace(
+                $"\uE000RSR{index}\uE001",
+                sensitiveElements[index],
+                StringComparison.Ordinal);
+        }
+        return normalized;
     }
 
     private static void AddCurrentBlock(List<string> blocks, List<string> current)

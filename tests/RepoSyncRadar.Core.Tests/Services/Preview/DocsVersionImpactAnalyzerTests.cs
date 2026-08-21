@@ -125,6 +125,32 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Returns_Empty_When_Only_Collapsible_Text_Whitespace_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "Same text.",
+            DocsLiquidContext.Empty,
+            "Same  text.",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("`a  b`", "`a b`")]
+    [InlineData("```\na  b\n```", "```\na b\n```")]
+    public void Preserves_Whitespace_Differences_Inside_Code(string before, string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Flags_Only_Fpt_When_Change_Lives_Inside_Ifversion_Fpt_Block()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
