@@ -151,6 +151,23 @@ public sealed class MarkdownSourceChangeAnalyzerTests
         Assert.Equal("title: New title", summary.After);
     }
 
+    [Theory]
+    [InlineData("---\ntitle: Same \n---\nBody.", "---\ntitle: Same\n---\nBody.", "title: Same ", "title: Same")]
+    [InlineData("---\ntitle: Same\n---\nBody.", "---\ntitle: Same\n\n---\nBody.", null, "")]
+    public void Preserves_Frontmatter_Source_Differences_Normalized_By_The_Structured_Diff(
+        string before,
+        string after,
+        string? expectedBefore,
+        string? expectedAfter)
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(before, after);
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.Frontmatter, summary!.Kind);
+        Assert.Equal(expectedBefore, summary.Before);
+        Assert.Equal(expectedAfter, summary.After);
+    }
+
     [Fact]
     public void Describes_First_Generic_Source_Only_Change()
     {

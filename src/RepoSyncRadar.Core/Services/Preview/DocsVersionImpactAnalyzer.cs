@@ -767,7 +767,7 @@ public static class DocsVersionImpactAnalyzer
             {
                 while (index < tag.Length
                        && !IsCollapsibleHtmlWhitespace(tag[index])
-                       && tag[index] is not '>' and not '/')
+                       && tag[index] != '>')
                 {
                     index++;
                 }

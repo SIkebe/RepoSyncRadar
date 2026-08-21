@@ -20,7 +20,7 @@ public static class MarkdownFrontmatterDiffAnalyzer
 
         var table = BuildLcsTableIfBounded(beforeLines, afterLines);
         return table is null
-            ? AnalyzeLinear(beforeLines, afterLines)
+            ? AnalyzeFirstMismatch(beforeLines, afterLines)
             : AnalyzeWithLcs(beforeLines, afterLines, table);
     }
 
@@ -62,70 +62,51 @@ public static class MarkdownFrontmatterDiffAnalyzer
         return changes;
     }
 
-    private static List<MarkdownFrontmatterChange> AnalyzeLinear(
+    private static List<MarkdownFrontmatterChange> AnalyzeFirstMismatch(
         string[] beforeLines,
         string[] afterLines)
     {
-        var removed = new List<string>();
-        var added = new List<string>();
-        var changes = new List<MarkdownFrontmatterChange>();
-        var afterIndexesByLine = BuildLineIndexQueues(afterLines);
-        var beforeIndex = 0;
-        var afterIndex = 0;
-
-        while (beforeIndex < beforeLines.Length)
+        var commonPrefix = 0;
+        while (commonPrefix < beforeLines.Length
+               && commonPrefix < afterLines.Length
+               && string.Equals(
+                   beforeLines[commonPrefix],
+                   afterLines[commonPrefix],
+                   StringComparison.Ordinal))
         {
-            var beforeLine = beforeLines[beforeIndex];
-            if (!afterIndexesByLine.TryGetValue(beforeLine, out var matchingAfterIndexes))
-            {
-                removed.Add(beforeLine);
-                beforeIndex++;
-                continue;
-            }
-            while (matchingAfterIndexes.Count > 0 && matchingAfterIndexes.Peek() < afterIndex)
-            {
-                matchingAfterIndexes.Dequeue();
-            }
-            if (matchingAfterIndexes.Count == 0)
-            {
-                removed.Add(beforeLine);
-                beforeIndex++;
-                continue;
-            }
-
-            var matchingAfterIndex = matchingAfterIndexes.Dequeue();
-            while (afterIndex < matchingAfterIndex)
-            {
-                added.Add(afterLines[afterIndex]);
-                afterIndex++;
-            }
-            FlushPending(changes, removed, added);
-            beforeIndex++;
-            afterIndex++;
-        }
-        while (afterIndex < afterLines.Length)
-        {
-            added.Add(afterLines[afterIndex]);
-            afterIndex++;
+            commonPrefix++;
         }
 
-        FlushPending(changes, removed, added);
-        return changes;
-    }
-
-    private static Dictionary<string, Queue<int>> BuildLineIndexQueues(string[] lines)
-    {
-        var indexesByLine = new Dictionary<string, Queue<int>>(StringComparer.Ordinal);
-        for (var index = 0; index < lines.Length; index++)
+        var beforeEnd = beforeLines.Length;
+        var afterEnd = afterLines.Length;
+        while (beforeEnd > commonPrefix
+               && afterEnd > commonPrefix
+               && string.Equals(
+                   beforeLines[beforeEnd - 1],
+                   afterLines[afterEnd - 1],
+                   StringComparison.Ordinal))
         {
-            if (!indexesByLine.TryGetValue(lines[index], out var indexes))
-            {
-                indexes = new Queue<int>();
-                indexesByLine.Add(lines[index], indexes);
-            }
-            indexes.Enqueue(index);
+            beforeEnd--;
+            afterEnd--;
         }
-        return indexesByLine;
+
+        var hasBefore = commonPrefix < beforeEnd;
+        var hasAfter = commonPrefix < afterEnd;
+        if (!hasBefore && !hasAfter)
+        {
+            return [];
+        }
+        return
+        [
+            new MarkdownFrontmatterChange(
+                hasBefore && hasAfter
+                    ? DocsVersionChangeKind.Updated
+                    : hasBefore
+                        ? DocsVersionChangeKind.Removed
+                        : DocsVersionChangeKind.Added,
+                hasBefore ? beforeLines[commonPrefix] : null,
+                hasAfter ? afterLines[commonPrefix] : null),
+        ];
     }
 
     private static int[,]? BuildLcsTableIfBounded(
@@ -172,7 +153,7 @@ public static class MarkdownFrontmatterDiffAnalyzer
             .ToArray();
     }
 
-    private static string ExtractFrontmatter(string markdown)
+    internal static string ExtractFrontmatter(string markdown)
     {
         if (!markdown.StartsWith("---", StringComparison.Ordinal))
         {

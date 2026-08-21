@@ -484,8 +484,25 @@ public sealed partial class MarkdownPreviewRendererTests
 
         var changes = MarkdownFrontmatterDiffAnalyzer.Analyze(before, after);
 
-        Assert.Equal(10_000, changes.Count);
-        Assert.All(changes, change => Assert.Equal(DocsVersionChangeKind.Updated, change.Kind));
+        var change = Assert.Single(changes);
+        Assert.Equal(DocsVersionChangeKind.Updated, change.Kind);
+        Assert.Equal("before-0: value", change.BeforeLine);
+        Assert.Equal("after-0: value", change.AfterLine);
+    }
+
+    [Fact]
+    public void Frontmatter_Diff_Analyzer_Reports_Only_First_Mismatch_For_Large_Moves()
+    {
+        var lines = Enumerable.Range(0, 1_000).Select(static index => $"line-{index}: value").ToArray();
+        var before = $"---\n{string.Join('\n', lines)}\n---";
+        var after = $"---\n{string.Join('\n', lines.Skip(1).Append(lines[0]))}\n---";
+
+        var changes = MarkdownFrontmatterDiffAnalyzer.Analyze(before, after);
+
+        var change = Assert.Single(changes);
+        Assert.Equal(DocsVersionChangeKind.Updated, change.Kind);
+        Assert.Equal("line-0: value", change.BeforeLine);
+        Assert.Equal("line-1: value", change.AfterLine);
     }
 
     [Fact]

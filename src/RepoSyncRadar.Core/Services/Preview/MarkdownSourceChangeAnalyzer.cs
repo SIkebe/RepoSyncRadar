@@ -73,6 +73,21 @@ public static partial class MarkdownSourceChangeAnalyzer
         var changes = frontmatterChanges ?? MarkdownFrontmatterDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
         if (changes.Count == 0)
         {
+            var rawFrontmatterChange = FindFirstChangedLine(
+                string.IsNullOrEmpty(beforeMarkdown)
+                    ? null
+                    : MarkdownFrontmatterDiffAnalyzer.ExtractFrontmatter(beforeMarkdown),
+                string.IsNullOrEmpty(afterMarkdown)
+                    ? null
+                    : MarkdownFrontmatterDiffAnalyzer.ExtractFrontmatter(afterMarkdown));
+            if (rawFrontmatterChange.Before is not null || rawFrontmatterChange.After is not null)
+            {
+                return new MarkdownSourceChangeSummary(
+                    MarkdownSourceChangeKind.Frontmatter,
+                    rawFrontmatterChange.Before,
+                    rawFrontmatterChange.After,
+                    rawFrontmatterChange.ChangeCount);
+            }
             return null;
         }
 
