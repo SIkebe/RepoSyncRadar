@@ -2,12 +2,18 @@ name: Change scope
 
 on:
   workflow_call:
+    inputs:
+      previous_workflow:
+        description: Workflow file whose previous-head result must have succeeded.
+        required: true
+        type: string
     outputs:
       run_ci:
         description: Whether the triggering change includes a non-Markdown file.
         value: ${{ jobs.detect.outputs.run_ci }}
 
 permissions:
+  actions: read
   contents: read
 
 defaults:
@@ -34,17 +40,36 @@ jobs:
         env:
           EVENT_ACTION: ${{ github.event.action }}
           EVENT_BEFORE_SHA: ${{ github.event.before }}
+          GH_TOKEN: ${{ github.token }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PREVIOUS_WORKFLOW: ${{ inputs.previous_workflow }}
         run: |
           $fromSha = $null
           $toSha = $null
 
           if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
-            $fromSha = if ($env:EVENT_ACTION -eq 'synchronize') {
-              $env:EVENT_BEFORE_SHA
-            } else {
-              $env:PR_BASE_SHA
+            $fromSha = $env:PR_BASE_SHA
+            if ($env:EVENT_ACTION -eq 'synchronize' -and
+                -not [string]::IsNullOrWhiteSpace($env:EVENT_BEFORE_SHA)) {
+              $runsJson = gh api --method GET "repos/$env:GITHUB_REPOSITORY/actions/workflows/$env:PREVIOUS_WORKFLOW/runs?head_sha=$env:EVENT_BEFORE_SHA&event=pull_request&per_page=10" 2>&1
+              if ($LASTEXITCODE -eq 0) {
+                $latestRun = ($runsJson | ConvertFrom-Json).workflow_runs |
+                  Sort-Object -Property @(
+                    @{ Expression = 'run_number'; Descending = $true },
+                    @{ Expression = 'run_attempt'; Descending = $true }
+                  ) |
+                  Select-Object -First 1
+                if ($null -ne $latestRun -and
+                    $latestRun.status -eq 'completed' -and
+                    $latestRun.conclusion -eq 'success') {
+                  $fromSha = $env:EVENT_BEFORE_SHA
+                } else {
+                  Write-Warning "The previous $env:PREVIOUS_WORKFLOW run did not succeed; comparing the full pull request."
+                }
+              } else {
+                Write-Warning "Unable to read the previous $env:PREVIOUS_WORKFLOW run; comparing the full pull request."
+              }
             }
             $toSha = $env:PR_HEAD_SHA
           } elseif ($env:GITHUB_EVENT_NAME -eq 'push') {

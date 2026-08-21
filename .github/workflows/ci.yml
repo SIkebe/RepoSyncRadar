@@ -23,7 +23,10 @@ jobs:
   change-scope:
     name: Change scope
     uses: ./.github/workflows/change-scope.yml
+    with:
+      previous_workflow: ci.yml
     permissions:
+      actions: read
       contents: read
 
   ghalint:

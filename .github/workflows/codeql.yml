@@ -22,7 +22,10 @@ jobs:
   change-scope:
     name: Change scope
     uses: ./.github/workflows/change-scope.yml
+    with:
+      previous_workflow: codeql.yml
     permissions:
+      actions: read
       contents: read
 
   analyze:
