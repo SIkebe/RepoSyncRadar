@@ -249,10 +249,15 @@ public static class DocsVersionImpactAnalyzer
             {
                 continue;
             }
-            if (!string.Equals(
-                    NormalizeForComparison(beforeRendered, beforeRepoPath, cancellationToken),
-                    NormalizeForComparison(afterRendered, afterRepoPath, cancellationToken),
-                    StringComparison.Ordinal))
+            var beforeNormalized = NormalizeForComparison(
+                beforeRendered,
+                beforeRepoPath,
+                cancellationToken);
+            var afterNormalized = NormalizeForComparison(
+                afterRendered,
+                afterRepoPath,
+                cancellationToken);
+            if (!string.Equals(beforeNormalized, afterNormalized, StringComparison.Ordinal))
             {
                 var changes = BuildChangeSnippets(
                     beforeRendered,
@@ -262,8 +267,8 @@ public static class DocsVersionImpactAnalyzer
                 {
                     changes.Add(new DocsVersionChangeSnippet(
                         DocsVersionChangeKind.Updated,
-                        TrimExcerpt(Markdown.ToHtml(beforeRendered ?? string.Empty, _comparisonPipeline)),
-                        TrimExcerpt(Markdown.ToHtml(afterRendered ?? string.Empty, _comparisonPipeline))));
+                        TrimExcerpt(beforeNormalized),
+                        TrimExcerpt(afterNormalized)));
                 }
                 affected.Add(new DocsVersionImpactDetail(version, changes));
             }
@@ -595,7 +600,13 @@ public static class DocsVersionImpactAnalyzer
             }
 
             if (!IsImpliedHtmlContainerSyntax(tagName, tag, isForeign)
-                && !IsOptionalHtmlEndTagSyntax(tagName, isClosing, isForeign))
+                && !IsOptionalHtmlEndTagSyntax(
+                    tagName,
+                    isClosing,
+                    isForeign,
+                    html,
+                    tagEnd,
+                    elements))
             {
                 normalized.Append(NormalizeHtmlTagSyntax(
                     tag,
@@ -650,8 +661,73 @@ public static class DocsVersionImpactAnalyzer
     private static bool IsOptionalHtmlEndTagSyntax(
         string tagName,
         bool isClosing,
-        bool isForeign)
-        => !isForeign && isClosing && tagName == "li";
+        bool isForeign,
+        string html,
+        int nextIndex,
+        IReadOnlyList<HtmlElementContext> elements)
+    {
+        if (isForeign || !isClosing || tagName != "li")
+        {
+            return false;
+        }
+
+        string? parentTagName = null;
+        for (var i = elements.Count - 1; i >= 0; i--)
+        {
+            if (elements[i].TagName != "li")
+            {
+                continue;
+            }
+
+            if (i > 0 && elements[i - 1].TagName is "ol" or "ul")
+            {
+                parentTagName = elements[i - 1].TagName;
+            }
+            break;
+        }
+        if (parentTagName is null)
+        {
+            return false;
+        }
+
+        while (nextIndex < html.Length)
+        {
+            while (nextIndex < html.Length
+                   && IsCollapsibleHtmlWhitespace(html[nextIndex]))
+            {
+                nextIndex++;
+            }
+            if (!html.AsSpan(nextIndex).StartsWith("<!--", StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            var commentEnd = html.IndexOf("-->", nextIndex + 4, StringComparison.Ordinal);
+            if (commentEnd < 0)
+            {
+                return true;
+            }
+            nextIndex = commentEnd + 3;
+        }
+
+        if (nextIndex >= html.Length)
+        {
+            return true;
+        }
+        if (html[nextIndex] != '<')
+        {
+            return false;
+        }
+
+        var nextTagEnd = FindHtmlTagEnd(html, nextIndex);
+        var nextTag = html.AsSpan(nextIndex, nextTagEnd - nextIndex);
+        var nextTagName = GetHtmlTagName(
+            nextTag,
+            out var nextIsClosing,
+            out _);
+        return !nextIsClosing && nextTagName == "li"
+            || nextIsClosing && nextTagName == parentTagName;
+    }
 
     private static void ApplyImpliedHtmlEndTags(
         List<HtmlElementContext> elements,

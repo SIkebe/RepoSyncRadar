@@ -77,6 +77,18 @@ public sealed class DocsVersionImpactAnalyzerTests
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
         Assert.Equal(DocsVersionCatalog.All.Count, details.Count);
+        Assert.All(details, detail =>
+        {
+            var change = Assert.Single(detail.Changes);
+            Assert.Contains(
+                "/markdown-assets/content/old/images/diagram.png",
+                change.BeforeExcerpt,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "/markdown-assets/content/new/images/diagram.png",
+                change.AfterExcerpt,
+                StringComparison.Ordinal);
+        });
     }
 
     [Fact]
@@ -248,6 +260,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             """<span title="first" title="second">Same text.</span>""",
             DocsLiquidContext.Empty,
             """<span title="second" title="first">Same text.</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_List_Item_Boundary_Before_Text()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<ul><li>A</li>B</ul>",
+            DocsLiquidContext.Empty,
+            "<ul><li>AB</li></ul>",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
