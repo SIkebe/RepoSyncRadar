@@ -71,6 +71,14 @@ public sealed partial class AppCssContrastTests
     [Fact]
     public void SourceChange_Badges_Meet_NormalTextContrast()
     {
+        var css = ReadAppCss();
+        var lightBadge = GetExactRuleBlock(css, ".radar-commit-detail .file-change-badge-source");
+        var darkBadge = GetExactRuleBlock(css, ".radar-theme-dark .radar-commit-detail .file-change-badge-source");
+
+        Assert.Contains("background: #fff8c5", lightBadge, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("color: #633c01", lightBadge, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("background: #3b2e10", darkBadge, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("color: #f2cc60", darkBadge, StringComparison.OrdinalIgnoreCase);
         AssertContrast("source change badge", "#633c01", "#fff8c5");
         AssertContrast("dark source change badge", "#f2cc60", "#3b2e10");
     }

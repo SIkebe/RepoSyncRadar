@@ -99,6 +99,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Returns_Empty_When_Only_Html_Comment_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "Same text.\n<!-- old note -->",
+            DocsLiquidContext.Empty,
+            "Same text.\n<!-- new note -->",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
     public void Flags_Only_Fpt_When_Change_Lives_Inside_Ifversion_Fpt_Block()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(

@@ -32,8 +32,8 @@ public static partial class MarkdownSourceChangeAnalyzer
             return null;
         }
 
-        var beforeBody = StripFrontmatter(beforeMarkdown);
-        var afterBody = StripFrontmatter(afterMarkdown);
+        var beforeBody = DocsVersionImpactAnalyzer.StripFrontmatter(beforeMarkdown);
+        var afterBody = DocsVersionImpactAnalyzer.StripFrontmatter(afterMarkdown);
         if (!string.Equals(beforeBody, afterBody, StringComparison.Ordinal))
         {
             if (TryAnalyzeLiquidVariableReferenceChanges(beforeBody, afterBody, out var liquidSummary))
@@ -159,19 +159,4 @@ public static partial class MarkdownSourceChangeAnalyzer
         return string.Concat(value.AsSpan(0, _maxExcerptLength - 3), "...");
     }
 
-    private static string? StripFrontmatter(string? markdown)
-    {
-        if (string.IsNullOrEmpty(markdown) || !markdown.StartsWith("---", StringComparison.Ordinal))
-        {
-            return markdown;
-        }
-
-        var normalized = markdown
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
-        var closingDelimiter = normalized.IndexOf("\n---\n", 3, StringComparison.Ordinal);
-        return closingDelimiter < 0
-            ? markdown
-            : normalized[(closingDelimiter + 5)..];
-    }
 }

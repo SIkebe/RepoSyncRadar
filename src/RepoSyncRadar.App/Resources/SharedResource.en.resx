@@ -113,6 +113,7 @@
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>Evidence, impact, and checks</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>Select a commit.</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>Files</value></data>
+  <data name="CommitDetail.FileChange.ChangedTo" xml:space="preserve"><value>changed to</value></data>
   <data name="CommitDetail.FileChange.EmptyValue" xml:space="preserve"><value>(none)</value></data>
   <data name="CommitDetail.FileChange.Frontmatter" xml:space="preserve"><value>Frontmatter</value></data>
   <data name="CommitDetail.FileChange.LiquidVariableReference" xml:space="preserve"><value>Liquid variable reference</value></data>

@@ -460,6 +460,39 @@ public sealed class PreviewCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task AnalyzeMarkdownFileChangeAsync_Reports_Html_Comment_As_Source_Only()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const string filePath = "content/copilot/commented.md";
+        var bare = Path.Combine(_tempRoot, "bare-comment-only.git");
+        var wtRoot = Path.Combine(_tempRoot, "worktrees-comment-only");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        var sut = BuildSut(
+            runner,
+            bareCloneDir: bare,
+            cloneUrl: "https://example.invalid/docs.git",
+            worktreeRoot: wtRoot,
+            onObjectSourceMaterialized: (path, sha) =>
+            {
+                var note = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "old note"
+                    : "new note";
+                WriteRepoFile(path, filePath, $"Same text.\n<!-- {note} -->");
+            });
+
+        var summary = await sut.AnalyzeMarkdownFileChangeAsync(123, "headsha", filePath, ct);
+
+        Assert.NotNull(summary);
+        Assert.False(summary!.HasRenderedBodyChanges);
+        Assert.NotNull(summary.SourceChange);
+        Assert.Equal(MarkdownSourceChangeKind.SourceOnly, summary.SourceChange!.Kind);
+        Assert.Equal("<!-- old note -->", summary.SourceChange.Before);
+        Assert.Equal("<!-- new note -->", summary.SourceChange.After);
+    }
+
+    [Fact]
     public async Task PrepareMarkdownComparisonPreviewAsync_Rewrites_Autotitle_After_Conditional_Version_Prefix()
     {
         var ct = TestContext.Current.CancellationToken;

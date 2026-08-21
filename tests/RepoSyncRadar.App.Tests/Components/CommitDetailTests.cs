@@ -175,6 +175,8 @@ public class CommitDetailTests
             Assert.Contains("Liquid 変数参照", changeSummary.TextContent, StringComparison.Ordinal);
             var sourceChange = cut.Find("[data-testid=\"commit-detail-source-change\"]");
             Assert.Contains("code-quality.workflow_name_actions", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.Contains("変更後:", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.NotNull(sourceChange.QuerySelector(".file-change-visually-hidden"));
             Assert.Contains("product.prodname_code_quality_short", sourceChange.TextContent, StringComparison.Ordinal);
         });
     }

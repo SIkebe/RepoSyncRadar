@@ -50,6 +50,22 @@ public sealed class MarkdownSourceChangeAnalyzerTests
         Assert.Equal("title: New title", summary.After);
     }
 
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void Detects_Frontmatter_Only_Change_When_Closing_Delimiter_Is_At_Eof(string newline)
+    {
+        var before = $"---{newline}title: Old title{newline}---";
+        var after = $"---{newline}title: New title{newline}---";
+
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(before, after);
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.Frontmatter, summary!.Kind);
+        Assert.Equal("title: Old title", summary.Before);
+        Assert.Equal("title: New title", summary.After);
+    }
+
     [Fact]
     public void Describes_First_Generic_Source_Only_Change()
     {

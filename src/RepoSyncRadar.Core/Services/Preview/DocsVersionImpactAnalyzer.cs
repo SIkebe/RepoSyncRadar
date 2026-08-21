@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace RepoSyncRadar.Core.Services.Preview;
 
 public enum DocsVersionChangeKind
@@ -31,8 +33,11 @@ public sealed record DocsVersionImpactDetail(
 /// 性能は版数 (現状 8) × Liquid 評価コスト程度で十分小さい。
 /// </para>
 /// </summary>
-public static class DocsVersionImpactAnalyzer
+public static partial class DocsVersionImpactAnalyzer
 {
+    [GeneratedRegex(@"<!--.*?-->", RegexOptions.Singleline)]
+    private static partial Regex HtmlCommentRegex();
+
     /// <summary>
     /// 全版で評価し、before/after が一致しない版だけを <see cref="DocsVersionCatalog.All"/>
     /// の順序で返す。差分がない場合は空配列。
@@ -101,7 +106,7 @@ public static class DocsVersionImpactAnalyzer
         return affected;
     }
 
-    private static string? StripFrontmatter(string? markdown)
+    internal static string? StripFrontmatter(string? markdown)
     {
         if (string.IsNullOrEmpty(markdown) || !markdown.StartsWith("---", StringComparison.Ordinal))
         {
@@ -290,7 +295,7 @@ public static class DocsVersionImpactAnalyzer
     }
 
     private static string NormalizeForComparison(string? rendered)
-        => string.Join('\n', SplitBlocks(rendered));
+        => string.Join('\n', SplitBlocks(HtmlCommentRegex().Replace(rendered ?? string.Empty, string.Empty)));
 
     private static void AddCurrentBlock(List<string> blocks, List<string> current)
     {

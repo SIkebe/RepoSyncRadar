@@ -113,6 +113,7 @@
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>根拠・影響・確認観点</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>コミットを選択してください。</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>ファイル</value></data>
+  <data name="CommitDetail.FileChange.ChangedTo" xml:space="preserve"><value>変更後:</value></data>
   <data name="CommitDetail.FileChange.EmptyValue" xml:space="preserve"><value>（なし）</value></data>
   <data name="CommitDetail.FileChange.Frontmatter" xml:space="preserve"><value>フロントマター変更</value></data>
   <data name="CommitDetail.FileChange.LiquidVariableReference" xml:space="preserve"><value>Liquid 変数参照</value></data>
