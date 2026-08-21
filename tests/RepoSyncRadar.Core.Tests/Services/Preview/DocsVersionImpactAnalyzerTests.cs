@@ -213,6 +213,24 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Preserves_Line_Breaks_But_Collapses_Spaces_For_PreLine()
+    {
+        var spaces = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre-line">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre-line">a b</span>""",
+            DocsLiquidContext.Empty);
+        var lineBreak = DocsVersionImpactAnalyzer.Analyze(
+            "<span style=\"white-space: pre-line\">a\r\nb</span>",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre-line">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(spaces);
+        Assert.Equal(DocsVersionCatalog.All.Count, lineBreak.Count);
+    }
+
+    [Fact]
     public void Still_Collapses_Unrelated_Text_When_Page_Contains_Preformatted_Style()
     {
         const string fixedSpan = """<span style="white-space: pre">fixed</span>""";
@@ -220,6 +238,42 @@ public sealed class DocsVersionImpactAnalyzerTests
             $"{fixedSpan}\n\nSame text.",
             DocsLiquidContext.Empty,
             $"{fixedSpan}\n\nSame  text.",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Honors_Nested_WhiteSpace_Overrides()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<div style="white-space: normal"><span style="white-space: pre">a  b</span></div>""",
+            DocsLiquidContext.Empty,
+            """<div style="white-space: normal"><span style="white-space: pre">a b</span></div>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Collapses_Whitespace_Across_Adjacent_Inline_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<span>a </span><span>b</span>",
+            DocsLiquidContext.Empty,
+            "<span>a</span><span> b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Ignores_Comments_Inside_Styled_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre"><!-- old --></span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre"><!-- new --></span>""",
             DocsLiquidContext.Empty);
 
         Assert.Empty(affected);
