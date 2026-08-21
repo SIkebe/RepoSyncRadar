@@ -20,8 +20,19 @@ defaults:
     shell: pwsh
 
 jobs:
+  change-scope:
+    name: Change scope
+    uses: ./.github/workflows/change-scope.yml
+    with:
+      previous_workflow: ci.yml
+    permissions:
+      actions: read
+      contents: read
+
   ghalint:
     name: ghalint
+    needs: change-scope
+    if: ${{ needs.change-scope.outputs.run_ci == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -50,6 +61,8 @@ jobs:
 
   build-test:
     name: Build and test
+    needs: change-scope
+    if: ${{ needs.change-scope.outputs.run_ci == 'true' }}
     runs-on: windows-latest
     timeout-minutes: 20
     permissions:

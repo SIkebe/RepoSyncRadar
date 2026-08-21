@@ -19,8 +19,19 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  change-scope:
+    name: Change scope
+    uses: ./.github/workflows/change-scope.yml
+    with:
+      previous_workflow: codeql.yml
+    permissions:
+      actions: read
+      contents: read
+
   analyze:
     name: Analyze (${{ matrix.language }})
+    needs: change-scope
+    if: ${{ needs.change-scope.outputs.run_ci == 'true' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     permissions:
