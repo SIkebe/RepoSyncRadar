@@ -520,7 +520,9 @@ public static class DocsVersionImpactAnalyzer
             if (elements.Count > 0 && elements[^1].IsRawText)
             {
                 var context = elements[^1];
-                var closingTag = FindRawTextClosingTag(html, index, context.TagName);
+                var closingTag = context.TagName == "plaintext"
+                    ? -1
+                    : FindRawTextClosingTag(html, index, context.TagName);
                 if (closingTag != index)
                 {
                     var textEnd = closingTag < 0 ? html.Length : closingTag;
@@ -1225,7 +1227,7 @@ public static class DocsVersionImpactAnalyzer
         ReadOnlySpan<char> tag,
         HtmlWhiteSpaceMode inheritedMode)
     {
-        var mode = tagName is "pre" or "textarea" or "script" or "style" or "xmp"
+        var mode = tagName is "pre" or "textarea" or "script" or "style" or "xmp" or "plaintext"
             ? HtmlWhiteSpaceMode.Preserve
             : inheritedMode;
         var style = GetHtmlAttributeValue(tag, "style");
@@ -1688,6 +1690,7 @@ public static class DocsVersionImpactAnalyzer
             var afterName = index + search.Length;
             if (afterName >= html.Length
                 || html[afterName] == '>'
+                || html[afterName] == '/'
                 || IsCollapsibleHtmlWhitespace(html[afterName]))
             {
                 return index;
@@ -1698,7 +1701,8 @@ public static class DocsVersionImpactAnalyzer
     }
 
     private static bool IsRawTextElement(string tagName)
-        => IsRcDataElement(tagName) || tagName is "script" or "style" or "xmp" or "iframe";
+        => IsRcDataElement(tagName)
+            || tagName is "script" or "style" or "xmp" or "iframe" or "plaintext";
 
     private static bool IsRcDataElement(string tagName)
         => tagName is "textarea" or "title";
@@ -1717,7 +1721,7 @@ public static class DocsVersionImpactAnalyzer
             or "footer" or "form" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6"
             or "header" or "hgroup" or "hr" or "li" or "main" or "nav" or "ol" or "p"
             or "pre" or "section" or "summary" or "table" or "tbody" or "td" or "tfoot" or "th"
-            or "thead" or "tr" or "ul" or "xmp";
+            or "thead" or "tr" or "ul" or "xmp" or "plaintext";
 
     private static string NormalizeHtmlTagSyntax(
         ReadOnlySpan<char> tag,

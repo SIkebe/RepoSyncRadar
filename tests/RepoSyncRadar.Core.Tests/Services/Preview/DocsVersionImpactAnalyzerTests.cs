@@ -324,6 +324,30 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Detects_Visible_Comment_Syntax_After_Plaintext_Start()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<plaintext>\n<!-- old -->",
+            DocsLiquidContext.Empty,
+            "<plaintext>\n<!-- new -->",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Detects_Visible_Content_Changes_After_SolidusTerminated_Iframe_End_Tag()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<iframe></iframe/><p>old</p>",
+            DocsLiquidContext.Empty,
+            "<iframe></iframe/><p>new</p>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Returns_Empty_When_Only_Collapsible_Text_Whitespace_Changes()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(

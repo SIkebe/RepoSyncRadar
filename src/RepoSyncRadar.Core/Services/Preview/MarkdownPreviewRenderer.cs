@@ -21,6 +21,25 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 internal static partial class MarkdownPreviewRenderer
 {
+    private enum ElementNamespace
+    {
+        Html,
+        Svg,
+        MathMl,
+    }
+
+    private enum ForeignIntegrationKind
+    {
+        None,
+        Html,
+        MathText,
+    }
+
+    private readonly record struct HtmlElementContext(
+        string TagName,
+        ElementNamespace Namespace,
+        ForeignIntegrationKind IntegrationKind);
+
     public enum RenderedMarkdownDiffSide
     {
         None,
@@ -63,6 +82,20 @@ internal static partial class MarkdownPreviewRenderer
         "while",
         "would",
         "your",
+    };
+
+    private static readonly HashSet<string> _htmlSpecialElementNames = new(StringComparer.Ordinal)
+    {
+        "address", "applet", "area", "article", "aside", "base", "basefont", "bgsound",
+        "blockquote", "body", "br", "button", "caption", "center", "col", "colgroup",
+        "dd", "details", "dir", "div", "dl", "dt", "embed", "fieldset", "figcaption",
+        "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4",
+        "h5", "h6", "head", "header", "hgroup", "hr", "html", "iframe", "img",
+        "input", "keygen", "li", "link", "listing", "main", "marquee", "menu", "meta",
+        "nav", "noembed", "noframes", "noscript", "object", "ol", "p", "param",
+        "plaintext", "pre", "script", "search", "section", "select", "source", "style",
+        "summary", "table", "tbody", "td", "template", "textarea", "tfoot", "th",
+        "thead", "title", "tr", "track", "ul", "wbr", "xmp",
     };
 
     // Liquid block / variable syntax used pervasively in github/docs content.
@@ -1472,6 +1505,7 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var rewritten = new StringBuilder(html.Length + 128);
+        var elements = new List<HtmlElementContext>();
         string? rawTextTagName = null;
         var index = 0;
         while (index < html.Length)
@@ -1509,6 +1543,11 @@ internal static partial class MarkdownPreviewRenderer
             var tagEnd = FindHtmlTagEnd(html, tagStart);
             var tag = html[tagStart..tagEnd];
             var tagName = GetHtmlTagName(tag, out var isClosing);
+            var elementNamespace = ResolveElementNamespace(
+                elements,
+                tagName,
+                tag,
+                isClosing);
             if (!isClosing && tagName.Length > 0)
             {
                 tag = RewriteTagAttributes(
@@ -1521,11 +1560,18 @@ internal static partial class MarkdownPreviewRenderer
             index = tagEnd;
 
             if (!isClosing
-                && IsRawTextElement(tagName)
-                && !tag.AsSpan().TrimEnd().EndsWith("/>", StringComparison.Ordinal))
+                && elementNamespace == ElementNamespace.Html
+                && IsRawTextElement(tagName))
             {
                 rawTextTagName = tagName;
             }
+            UpdateHtmlElementStack(
+                elements,
+                tagName,
+                tag,
+                isClosing,
+                tag.AsSpan().TrimEnd().EndsWith("/>", StringComparison.Ordinal),
+                elementNamespace);
         }
         return rewritten.ToString();
     }
@@ -1645,6 +1691,25 @@ internal static partial class MarkdownPreviewRenderer
         string attributeName,
         string expectedToken)
     {
+        var value = GetTagAttributeValue(tag, attributeName);
+        return value is not null
+            && value.Split(
+                    [' ', '\t', '\n', '\f', '\r'],
+                    StringSplitOptions.RemoveEmptyEntries)
+                .Contains(expectedToken, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool TagAttributeEquals(
+        string tag,
+        string attributeName,
+        string expectedValue)
+        => string.Equals(
+            GetTagAttributeValue(tag, attributeName),
+            expectedValue,
+            StringComparison.OrdinalIgnoreCase);
+
+    private static string? GetTagAttributeValue(string tag, string attributeName)
+    {
         var index = 1;
         while (index < tag.Length && !char.IsWhiteSpace(tag[index]) && tag[index] != '>')
         {
@@ -1659,7 +1724,7 @@ internal static partial class MarkdownPreviewRenderer
             }
             if (index >= tag.Length || tag[index] is '>' or '/')
             {
-                return false;
+                return null;
             }
 
             var nameStart = index;
@@ -1713,13 +1778,9 @@ internal static partial class MarkdownPreviewRenderer
                 continue;
             }
 
-            var decodedValue = WebUtility.HtmlDecode(tag[valueStart..valueEnd]);
-            return decodedValue.Split(
-                    [' ', '\t', '\n', '\f', '\r'],
-                    StringSplitOptions.RemoveEmptyEntries)
-                .Contains(expectedToken, StringComparer.OrdinalIgnoreCase);
+            return WebUtility.HtmlDecode(tag[valueStart..valueEnd]);
         }
-        return false;
+        return null;
     }
 
     private static bool IsRawTextElement(string tagName)
@@ -1779,6 +1840,11 @@ internal static partial class MarkdownPreviewRenderer
 
     private static int FindRawTextClosingTag(string html, int startIndex, string tagName)
     {
+        if (tagName == "plaintext")
+        {
+            return -1;
+        }
+
         var search = $"</{tagName}";
         var index = startIndex;
         while ((index = html.IndexOf(search, index, StringComparison.OrdinalIgnoreCase)) >= 0)
@@ -1786,6 +1852,7 @@ internal static partial class MarkdownPreviewRenderer
             var afterName = index + search.Length;
             if (afterName >= html.Length
                 || html[afterName] == '>'
+                || html[afterName] == '/'
                 || char.IsWhiteSpace(html[afterName]))
             {
                 return index;
@@ -1794,6 +1861,158 @@ internal static partial class MarkdownPreviewRenderer
         }
         return -1;
     }
+
+    private static ElementNamespace ResolveElementNamespace(
+        List<HtmlElementContext> elements,
+        string tagName,
+        string tag,
+        bool isClosing)
+    {
+        if (isClosing)
+        {
+            for (var index = elements.Count - 1; index >= 0; index--)
+            {
+                if (string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal))
+                {
+                    return elements[index].Namespace;
+                }
+            }
+            return elements.Count == 0 ? ElementNamespace.Html : elements[^1].Namespace;
+        }
+
+        if (elements.Count == 0 || elements[^1].Namespace == ElementNamespace.Html)
+        {
+            return tagName switch
+            {
+                "svg" => ElementNamespace.Svg,
+                "math" => ElementNamespace.MathMl,
+                _ => ElementNamespace.Html,
+            };
+        }
+
+        if (ForeignParentUsesHtmlParsing(elements[^1], tagName))
+        {
+            return tagName switch
+            {
+                "svg" => ElementNamespace.Svg,
+                "math" => ElementNamespace.MathMl,
+                _ => ElementNamespace.Html,
+            };
+        }
+
+        if (IsForeignContentBreakoutTag(tagName, tag))
+        {
+            while (elements.Count > 0 &&
+                   elements[^1].Namespace != ElementNamespace.Html &&
+                   elements[^1].IntegrationKind == ForeignIntegrationKind.None)
+            {
+                elements.RemoveAt(elements.Count - 1);
+            }
+            return ElementNamespace.Html;
+        }
+        return elements[^1].Namespace;
+    }
+
+    private static void UpdateHtmlElementStack(
+        List<HtmlElementContext> elements,
+        string tagName,
+        string tag,
+        bool isClosing,
+        bool hasSelfClosingSyntax,
+        ElementNamespace elementNamespace)
+    {
+        if (isClosing)
+        {
+            for (var index = elements.Count - 1; index >= 0; index--)
+            {
+                if (!string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (elements[index].Namespace != ElementNamespace.Html &&
+                    HasHtmlScopeBarrier(elements, index))
+                {
+                    return;
+                }
+
+                elements.RemoveRange(index, elements.Count - index);
+                return;
+            }
+            return;
+        }
+
+        var isSelfClosing = elementNamespace == ElementNamespace.Html
+            ? IsHtmlVoidElement(tagName)
+            : hasSelfClosingSyntax;
+        if (!isSelfClosing)
+        {
+            elements.Add(new HtmlElementContext(
+                tagName,
+                elementNamespace,
+                GetForeignIntegrationKind(elementNamespace, tagName, tag)));
+        }
+    }
+
+    private static bool HasHtmlScopeBarrier(
+        List<HtmlElementContext> elements,
+        int matchingElementIndex)
+    {
+        for (var index = elements.Count - 1; index > matchingElementIndex; index--)
+        {
+            var candidate = elements[index];
+            if (candidate.Namespace == ElementNamespace.Html &&
+                _htmlSpecialElementNames.Contains(candidate.TagName))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ForeignParentUsesHtmlParsing(
+        HtmlElementContext parent,
+        string tagName)
+        => parent.IntegrationKind switch
+        {
+            ForeignIntegrationKind.Html => true,
+            ForeignIntegrationKind.MathText => tagName is not ("mglyph" or "malignmark"),
+            _ => false,
+        };
+
+    private static ForeignIntegrationKind GetForeignIntegrationKind(
+        ElementNamespace elementNamespace,
+        string tagName,
+        string tag)
+        => elementNamespace switch
+        {
+            ElementNamespace.Svg when tagName is "foreignobject" or "desc" or "title"
+                => ForeignIntegrationKind.Html,
+            ElementNamespace.MathMl when tagName is "mi" or "mo" or "mn" or "ms" or "mtext"
+                => ForeignIntegrationKind.MathText,
+            ElementNamespace.MathMl when tagName == "annotation-xml"
+                && (TagAttributeEquals(tag, "encoding", "text/html")
+                    || TagAttributeEquals(tag, "encoding", "application/xhtml+xml"))
+                => ForeignIntegrationKind.Html,
+            _ => ForeignIntegrationKind.None,
+        };
+
+    private static bool IsForeignContentBreakoutTag(string tagName, string tag)
+        => tagName is "b" or "big" or "blockquote" or "body" or "br" or "center" or "code"
+            or "dd" or "div" or "dl" or "dt" or "em" or "embed" or "h1" or "h2" or "h3"
+            or "h4" or "h5" or "h6" or "head" or "hr" or "i" or "img" or "li"
+            or "listing" or "menu" or "meta" or "nobr" or "ol" or "p" or "pre" or "ruby"
+            or "s" or "small" or "span" or "strong" or "strike" or "sub" or "sup"
+            or "table" or "tt" or "u" or "ul" or "var"
+            || tagName == "font"
+                && (GetTagAttributeValue(tag, "color") is not null
+                    || GetTagAttributeValue(tag, "face") is not null
+                    || GetTagAttributeValue(tag, "size") is not null);
+
+    private static bool IsHtmlVoidElement(string tagName)
+        => tagName is "area" or "base" or "br" or "col" or "embed" or "hr" or "img"
+            or "input" or "link" or "meta" or "param" or "source" or "track" or "wbr";
 
     private static string RewriteSrcSet(string srcset, string repoPath, string assetBasePath)
     {
