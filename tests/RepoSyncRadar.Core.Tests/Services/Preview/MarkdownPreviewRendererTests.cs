@@ -477,6 +477,18 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Frontmatter_Diff_Analyzer_Handles_Large_Rewrites_In_Linear_Memory()
+    {
+        var before = $"---\n{string.Join('\n', Enumerable.Range(0, 10_000).Select(static index => $"before-{index}: value"))}\n---";
+        var after = $"---\n{string.Join('\n', Enumerable.Range(0, 10_000).Select(static index => $"after-{index}: value"))}\n---";
+
+        var changes = MarkdownFrontmatterDiffAnalyzer.Analyze(before, after);
+
+        Assert.Equal(10_000, changes.Count);
+        Assert.All(changes, change => Assert.Equal(DocsVersionChangeKind.Updated, change.Kind));
+    }
+
+    [Fact]
     public void Strips_Frontmatter_Block_From_Body()
     {
         var markdown = """

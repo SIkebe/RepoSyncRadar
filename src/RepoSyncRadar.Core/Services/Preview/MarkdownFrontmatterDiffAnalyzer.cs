@@ -7,6 +7,8 @@ public sealed record MarkdownFrontmatterChange(
 
 public static class MarkdownFrontmatterDiffAnalyzer
 {
+    private const int MaxLcsCells = 1_000_000;
+
     public static IReadOnlyList<MarkdownFrontmatterChange> Analyze(string? beforeMarkdown, string? afterMarkdown)
     {
         var beforeLines = SplitFrontmatterLines(beforeMarkdown);
@@ -16,7 +18,17 @@ public static class MarkdownFrontmatterDiffAnalyzer
             return Array.Empty<MarkdownFrontmatterChange>();
         }
 
-        var table = BuildLcsTable(beforeLines, afterLines);
+        var table = BuildLcsTableIfBounded(beforeLines, afterLines);
+        return table is null
+            ? AnalyzeLinear(beforeLines, afterLines)
+            : AnalyzeWithLcs(beforeLines, afterLines, table);
+    }
+
+    private static List<MarkdownFrontmatterChange> AnalyzeWithLcs(
+        string[] beforeLines,
+        string[] afterLines,
+        int[,] table)
+    {
         var removed = new List<string>();
         var added = new List<string>();
         var changes = new List<MarkdownFrontmatterChange>();
@@ -48,6 +60,94 @@ public static class MarkdownFrontmatterDiffAnalyzer
 
         FlushPending(changes, removed, added);
         return changes;
+    }
+
+    private static List<MarkdownFrontmatterChange> AnalyzeLinear(
+        string[] beforeLines,
+        string[] afterLines)
+    {
+        var removed = new List<string>();
+        var added = new List<string>();
+        var changes = new List<MarkdownFrontmatterChange>();
+        var afterIndexesByLine = BuildLineIndexQueues(afterLines);
+        var beforeIndex = 0;
+        var afterIndex = 0;
+
+        while (beforeIndex < beforeLines.Length)
+        {
+            var beforeLine = beforeLines[beforeIndex];
+            if (!afterIndexesByLine.TryGetValue(beforeLine, out var matchingAfterIndexes))
+            {
+                removed.Add(beforeLine);
+                beforeIndex++;
+                continue;
+            }
+            while (matchingAfterIndexes.Count > 0 && matchingAfterIndexes.Peek() < afterIndex)
+            {
+                matchingAfterIndexes.Dequeue();
+            }
+            if (matchingAfterIndexes.Count == 0)
+            {
+                removed.Add(beforeLine);
+                beforeIndex++;
+                continue;
+            }
+
+            var matchingAfterIndex = matchingAfterIndexes.Dequeue();
+            while (afterIndex < matchingAfterIndex)
+            {
+                added.Add(afterLines[afterIndex]);
+                afterIndex++;
+            }
+            FlushPending(changes, removed, added);
+            beforeIndex++;
+            afterIndex++;
+        }
+        while (afterIndex < afterLines.Length)
+        {
+            added.Add(afterLines[afterIndex]);
+            afterIndex++;
+        }
+
+        FlushPending(changes, removed, added);
+        return changes;
+    }
+
+    private static Dictionary<string, Queue<int>> BuildLineIndexQueues(string[] lines)
+    {
+        var indexesByLine = new Dictionary<string, Queue<int>>(StringComparer.Ordinal);
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (!indexesByLine.TryGetValue(lines[index], out var indexes))
+            {
+                indexes = new Queue<int>();
+                indexesByLine.Add(lines[index], indexes);
+            }
+            indexes.Enqueue(index);
+        }
+        return indexesByLine;
+    }
+
+    private static int[,]? BuildLcsTableIfBounded(
+        string[] beforeLines,
+        string[] afterLines)
+    {
+        if ((long)(beforeLines.Length + 1) * (afterLines.Length + 1) > MaxLcsCells)
+        {
+            return null;
+        }
+
+        var table = new int[beforeLines.Length + 1, afterLines.Length + 1];
+        for (var beforeIndex = beforeLines.Length - 1; beforeIndex >= 0; beforeIndex--)
+        {
+            for (var afterIndex = afterLines.Length - 1; afterIndex >= 0; afterIndex--)
+            {
+                table[beforeIndex, afterIndex] = string.Equals(beforeLines[beforeIndex], afterLines[afterIndex], StringComparison.Ordinal)
+                    ? table[beforeIndex + 1, afterIndex + 1] + 1
+                    : Math.Max(table[beforeIndex + 1, afterIndex], table[beforeIndex, afterIndex + 1]);
+            }
+        }
+        return table;
     }
 
     private static string[] SplitFrontmatterLines(string? markdown)
@@ -112,21 +212,6 @@ public static class MarkdownFrontmatterDiffAnalyzer
         }
 
         return string.Empty;
-    }
-
-    private static int[,] BuildLcsTable(string[] beforeLines, string[] afterLines)
-    {
-        var table = new int[beforeLines.Length + 1, afterLines.Length + 1];
-        for (var beforeIndex = beforeLines.Length - 1; beforeIndex >= 0; beforeIndex--)
-        {
-            for (var afterIndex = afterLines.Length - 1; afterIndex >= 0; afterIndex--)
-            {
-                table[beforeIndex, afterIndex] = string.Equals(beforeLines[beforeIndex], afterLines[afterIndex], StringComparison.Ordinal)
-                    ? table[beforeIndex + 1, afterIndex + 1] + 1
-                    : Math.Max(table[beforeIndex + 1, afterIndex], table[beforeIndex, afterIndex + 1]);
-            }
-        }
-        return table;
     }
 
     private static void FlushPending(

@@ -33,6 +33,22 @@ public static partial class MarkdownSourceChangeAnalyzer
         {
             return null;
         }
+        if (beforeMarkdown is null && afterMarkdown == string.Empty)
+        {
+            return new MarkdownSourceChangeSummary(
+                MarkdownSourceChangeKind.SourceOnly,
+                null,
+                string.Empty,
+                1);
+        }
+        if (beforeMarkdown == string.Empty && afterMarkdown is null)
+        {
+            return new MarkdownSourceChangeSummary(
+                MarkdownSourceChangeKind.SourceOnly,
+                string.Empty,
+                null,
+                1);
+        }
 
         var beforeBody = DocsVersionImpactAnalyzer.StripFrontmatter(beforeMarkdown) ?? string.Empty;
         var afterBody = DocsVersionImpactAnalyzer.StripFrontmatter(afterMarkdown) ?? string.Empty;

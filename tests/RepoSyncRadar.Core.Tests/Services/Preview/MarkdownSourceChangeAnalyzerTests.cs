@@ -123,6 +123,20 @@ public sealed class MarkdownSourceChangeAnalyzerTests
             "First line.\nSecond line."));
     }
 
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData("", null)]
+    public void Preserves_Missing_Versus_ZeroByte_File(string? before, string? after)
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(before, after);
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.SourceOnly, summary!.Kind);
+        Assert.Equal(before, summary.Before);
+        Assert.Equal(after, summary.After);
+        Assert.Equal(1, summary.ChangeCount);
+    }
+
     [Fact]
     public void Detects_Frontmatter_When_Body_Only_Changes_Line_Endings()
     {
