@@ -184,6 +184,9 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData(
         "<textarea>&CounterClockwiseContourIntegral;</textarea>",
         "<textarea>∳</textarea>")]
+    [InlineData(
+        "<table><tr><td>Same text.</td></tr></table>",
+        "<table><tbody><tr><td>Same text.</td></tr></tbody></table>")]
     public void Returns_Empty_When_Only_Browser_Equivalent_Html_Syntax_Changes(
         string before,
         string after)
@@ -204,6 +207,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             """<span title="first" title="second">Same text.</span>""",
             DocsLiquidContext.Empty,
             """<span title="second" title="first">Same text.</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Attributed_Tbody_Semantics()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<table><tr><td>Same text.</td></tr></table>",
+            DocsLiquidContext.Empty,
+            """<table><tbody class="highlight"><tr><td>Same text.</td></tr></tbody></table>""",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);

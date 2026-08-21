@@ -575,12 +575,15 @@ public static class DocsVersionImpactAnalyzer
                 pendingCollapsibleSpace = false;
             }
 
-            normalized.Append(NormalizeHtmlTagSyntax(
-                tag,
-                tagName,
-                isClosing,
-                isSelfClosing,
-                isForeign));
+            if (!IsImpliedHtmlContainerSyntax(tagName, tag, isForeign))
+            {
+                normalized.Append(NormalizeHtmlTagSyntax(
+                    tag,
+                    tagName,
+                    isClosing,
+                    isSelfClosing,
+                    isForeign));
+            }
             if (isClosing)
             {
                 PopHtmlElement(elements, tagName);
@@ -617,6 +620,12 @@ public static class DocsVersionImpactAnalyzer
             or "kbd" or "mark" or "q" or "s" or "samp" or "small" or "strike"
             or "strong" or "sub" or "sup" or "u" or "var"
             || HasHtmlAttributes(tag);
+
+    private static bool IsImpliedHtmlContainerSyntax(
+        string tagName,
+        ReadOnlySpan<char> tag,
+        bool isForeign)
+        => !isForeign && tagName == "tbody" && !HasHtmlAttributes(tag);
 
     private static bool HasHtmlAttributes(ReadOnlySpan<char> tag)
     {
