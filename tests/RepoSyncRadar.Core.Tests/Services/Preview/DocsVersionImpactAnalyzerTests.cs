@@ -628,6 +628,56 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
+    [Theory]
+    [InlineData("<div hidden>old</div>", "<div hidden>new</div>")]
+    [InlineData(
+        """<div style="display:none">old</div>""",
+        """<div style="display:none">new</div>""")]
+    [InlineData("<template>old</template>", "<template>new</template>")]
+    [InlineData(
+        "<div hidden><span><textarea>old</textarea></span></div>",
+        "<div hidden><span><textarea>new</textarea></span></div>")]
+    public void Ignores_Text_Changes_Inside_NonRendering_Subtrees(
+        string before,
+        string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Suppressed_Void_Element_Does_Not_Create_Inline_Whitespace()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<img hidden> X",
+            DocsLiquidContext.Empty,
+            "<img hidden>X",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("<div hidden>Same text.</div>", "<div>Same text.</div>")]
+    [InlineData(
+        """<div style="display:none">Same text.</div>""",
+        """<div style="display:block">Same text.</div>""")]
+    public void Preserves_Visibility_Changes(string before, string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
     [Fact]
     public void Ignores_Closing_Tags_For_Html_Void_Elements()
     {
@@ -1028,6 +1078,19 @@ public sealed class DocsVersionImpactAnalyzerTests
             $"Same  text.\n{math}",
             DocsLiquidContext.Empty,
             $"Same text.\n{math}",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Ignores_Stylesheets_Inside_Template_Content()
+    {
+        const string template = "<template><style>.preserve { white-space: pre }</style></template>";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{template}<span>a  b</span>",
+            DocsLiquidContext.Empty,
+            $"{template}<span>a b</span>",
             DocsLiquidContext.Empty);
 
         Assert.Empty(affected);

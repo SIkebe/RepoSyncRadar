@@ -71,6 +71,8 @@ public static class DocsVersionImpactAnalyzer
         HtmlElementNamespace Namespace,
         bool ExposesWhitespaceBoundary,
         bool MayRenderEmptyInlineBox = false,
+        bool SuppressesRenderedContent = false,
+        bool IsTemplateContent = false,
         bool IsImplied = false,
         HtmlForeignIntegrationKind IntegrationKind = HtmlForeignIntegrationKind.None)
     {
@@ -543,7 +545,8 @@ public static class DocsVersionImpactAnalyzer
                 if (closingTag != index)
                 {
                     var textEnd = closingTag < 0 ? html.Length : closingTag;
-                    if (context.TagName != "iframe")
+                    if (context.TagName != "iframe"
+                        && !context.SuppressesRenderedContent)
                     {
                         AppendHtmlText(
                             html.AsSpan(index, textEnd - index),
@@ -579,13 +582,16 @@ public static class DocsVersionImpactAnalyzer
                 {
                     mode = HtmlWhiteSpaceMode.Preserve;
                 }
-                AppendHtmlText(
-                    html.AsSpan(index, textEnd - index),
-                    mode,
-                    decodeCharacterReferences: true,
-                    normalized,
-                    ref pendingCollapsibleSpace,
-                    ref hasInlineContent);
+                if (elements.Count == 0 || !elements[^1].SuppressesRenderedContent)
+                {
+                    AppendHtmlText(
+                        html.AsSpan(index, textEnd - index),
+                        mode,
+                        decodeCharacterReferences: true,
+                        normalized,
+                        ref pendingCollapsibleSpace,
+                        ref hasInlineContent);
+                }
                 index = textEnd;
                 continue;
             }
@@ -626,13 +632,30 @@ public static class DocsVersionImpactAnalyzer
             var isSelfClosing = !isForeign && IsVoidElement(tagName)
                 || isForeign && hasSelfClosingSyntax;
             var isBlock = IsBlockElement(tagName);
-            var isWhitespaceBoundary = isBlock || tagName == "br";
             var matchingElement = isClosing
                 ? FindHtmlElement(elements, tagName, elementNamespace)
                 : null;
+            var parentIsTemplateContent = elements.Count > 0
+                && elements[^1].IsTemplateContent;
+            var isTemplateContent = isClosing
+                ? matchingElement?.IsTemplateContent == true
+                : parentIsTemplateContent
+                    || !isForeign && tagName == "template";
+            var suppressesRenderedContent = isClosing
+                ? matchingElement?.SuppressesRenderedContent == true
+                : ResolveRenderedContentSuppression(
+                    elements,
+                    tagName,
+                    tag,
+                    elementNamespace,
+                    isTemplateContent);
+            var isWhitespaceBoundary = !suppressesRenderedContent
+                && (isBlock || tagName == "br");
             var exposesWhitespaceBoundary = isClosing
-                ? matchingElement?.ExposesWhitespaceBoundary == true
-                : HtmlTagExposesWhitespaceBoundary(tagName, tag);
+                ? !suppressesRenderedContent
+                    && matchingElement?.ExposesWhitespaceBoundary == true
+                : !suppressesRenderedContent
+                    && HtmlTagExposesWhitespaceBoundary(tagName, tag);
             if (isWhitespaceBoundary)
             {
                 pendingCollapsibleSpace = false;
@@ -664,8 +687,11 @@ public static class DocsVersionImpactAnalyzer
             if (isClosing)
             {
                 PopHtmlElement(elements, tagName, elementNamespace);
-                hasInlineContent |= IsInlineBoxElement(tagName)
-                    || matchingElement?.MayRenderEmptyInlineBox == true;
+                if (!suppressesRenderedContent)
+                {
+                    hasInlineContent |= IsInlineBoxElement(tagName)
+                        || matchingElement?.MayRenderEmptyInlineBox == true;
+                }
             }
             else if (!isSelfClosing)
             {
@@ -680,12 +706,14 @@ public static class DocsVersionImpactAnalyzer
                     elementNamespace,
                     exposesWhitespaceBoundary,
                     MayRenderEmptyInlineBox(tagName, tag),
+                    suppressesRenderedContent,
+                    isTemplateContent,
                     IntegrationKind: GetHtmlForeignIntegrationKind(
                         elementNamespace,
                         tagName,
                         tag)));
             }
-            else if (!isWhitespaceBoundary)
+            else if (!isWhitespaceBoundary && !suppressesRenderedContent)
             {
                 hasInlineContent = true;
             }
@@ -704,6 +732,64 @@ public static class DocsVersionImpactAnalyzer
             or "kbd" or "mark" or "q" or "s" or "samp" or "small" or "strike"
             or "strong" or "sub" or "sup" or "u" or "var"
             || HasHtmlAttributes(tag);
+
+    private static bool ResolveRenderedContentSuppression(
+        IReadOnlyList<HtmlElementContext> elements,
+        string tagName,
+        ReadOnlySpan<char> tag,
+        HtmlElementNamespace elementNamespace,
+        bool isTemplateContent)
+    {
+        if (isTemplateContent)
+        {
+            return true;
+        }
+
+        if (tagName is "style" or "script"
+            && elementNamespace is HtmlElementNamespace.Html or HtmlElementNamespace.Svg)
+        {
+            return false;
+        }
+
+        return elements.Count > 0 && elements[^1].SuppressesRenderedContent
+            || elementNamespace == HtmlElementNamespace.Html
+                && HasHtmlAttribute(tag, "hidden")
+            || InlineStyleSuppressesRenderedContent(tag);
+    }
+
+    private static bool InlineStyleSuppressesRenderedContent(ReadOnlySpan<char> tag)
+    {
+        var style = GetHtmlAttributeValue(tag, "style");
+        if (style is null)
+        {
+            return false;
+        }
+
+        string? display = null;
+        var displayIsImportant = false;
+        var styleWithoutComments = RemoveCssComments(DecodeHtmlCharacterReferences(style));
+        foreach (var declaration in SplitCssDeclarations(styleWithoutComments))
+        {
+            var separator = declaration.IndexOf(':');
+            if (separator <= 0
+                || !declaration.AsSpan(0, separator).Trim()
+                    .Equals("display", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var value = StripImportant(declaration.AsSpan(separator + 1), out var isImportant);
+            if (displayIsImportant && !isImportant)
+            {
+                continue;
+            }
+
+            display = NormalizeCssWhitespace(value);
+            displayIsImportant = isImportant;
+        }
+
+        return string.Equals(display, "none", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool MayRenderEmptyInlineBox(string tagName, ReadOnlySpan<char> tag)
     {
@@ -1152,6 +1238,85 @@ public static class DocsVersionImpactAnalyzer
         return index < tag.Length && tag[index] is not '>' and not '/';
     }
 
+    private static bool HasHtmlAttribute(ReadOnlySpan<char> tag, string attributeName)
+    {
+        var index = 1;
+        while (index < tag.Length
+               && tag[index] is not ' ' and not '\t' and not '\n' and not '\f' and not '\r'
+               and not '>')
+        {
+            index++;
+        }
+
+        while (index < tag.Length)
+        {
+            while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] is '>' or '/')
+            {
+                return false;
+            }
+
+            var nameStart = index;
+            while (index < tag.Length
+                   && !IsCollapsibleHtmlWhitespace(tag[index])
+                   && tag[index] is not '=' and not '>' and not '/')
+            {
+                index++;
+            }
+            var name = tag[nameStart..index];
+            if (name.Equals(attributeName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] != '=')
+            {
+                continue;
+            }
+
+            index++;
+            while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length)
+            {
+                return false;
+            }
+
+            var quote = tag[index] is '\'' or '"' ? tag[index++] : '\0';
+            if (quote == '\0')
+            {
+                while (index < tag.Length
+                       && !IsCollapsibleHtmlWhitespace(tag[index])
+                       && tag[index] != '>')
+                {
+                    index++;
+                }
+            }
+            else
+            {
+                while (index < tag.Length && tag[index] != quote)
+                {
+                    index++;
+                }
+                if (index < tag.Length)
+                {
+                    index++;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static bool ContainsStylesheetSource(string html)
     {
         var elements = new List<HtmlElementContext>();
@@ -1201,7 +1366,11 @@ public static class DocsVersionImpactAnalyzer
                 tag,
                 isClosing);
             var isForeign = elementNamespace != HtmlElementNamespace.Html;
+            var isTemplateContent = elements.Count > 0
+                && elements[^1].IsTemplateContent
+                || !isClosing && !isForeign && tagName == "template";
             if (!isClosing
+                && !isTemplateContent
                 && (tagName == "style"
                         && elementNamespace is HtmlElementNamespace.Html or HtmlElementNamespace.Svg
                     || !isForeign && tagName == "link" && HasStylesheetRel(tag)))
@@ -1225,6 +1394,7 @@ public static class DocsVersionImpactAnalyzer
                         !isForeign && IsRawTextElement(tagName),
                         elementNamespace,
                         ExposesWhitespaceBoundary: false,
+                        IsTemplateContent: isTemplateContent,
                         IntegrationKind: GetHtmlForeignIntegrationKind(
                             elementNamespace,
                             tagName,
