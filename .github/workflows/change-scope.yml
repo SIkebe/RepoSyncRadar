@@ -1,0 +1,72 @@
+name: Change scope
+
+on:
+  workflow_call:
+    outputs:
+      run_ci:
+        description: Whether the triggering change includes a non-Markdown file.
+        value: ${{ jobs.detect.outputs.run_ci }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  detect:
+    name: Detect non-Markdown changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run_ci: ${{ steps.scope.outputs.run_ci }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve change scope
+        id: scope
+        env:
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          $fromSha = $null
+          $toSha = $null
+
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+            $fromSha = if ($env:EVENT_ACTION -eq 'synchronize') {
+              $env:EVENT_BEFORE_SHA
+            } else {
+              $env:PR_BASE_SHA
+            }
+            $toSha = $env:PR_HEAD_SHA
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'push') {
+            $fromSha = $env:EVENT_BEFORE_SHA
+            $toSha = $env:GITHUB_SHA
+          }
+
+          $runCi = $true
+          if (-not [string]::IsNullOrWhiteSpace($fromSha) -and
+              -not [string]::IsNullOrWhiteSpace($toSha) -and
+              $fromSha -notmatch '^0+$') {
+            git cat-file -e "${fromSha}^{commit}" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              git diff --quiet $fromSha $toSha -- . ':(exclude,icase,glob)**/*.md'
+              if ($LASTEXITCODE -eq 0) {
+                $runCi = $false
+              } elseif ($LASTEXITCODE -ne 1) {
+                throw "Unable to compare changes between $fromSha and $toSha."
+              }
+            } else {
+              Write-Warning "Commit $fromSha is unavailable; running CI conservatively."
+            }
+          }
+
+          "run_ci=$($runCi.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
