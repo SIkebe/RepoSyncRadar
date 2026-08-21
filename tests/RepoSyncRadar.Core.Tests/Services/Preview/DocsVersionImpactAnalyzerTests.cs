@@ -209,6 +209,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Equates_Valueless_And_Empty_NonBoolean_Html_Attributes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<input value>",
+            DocsLiquidContext.Empty,
+            """<input value="">""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
     public void Preserves_Hidden_UntilFound_Semantics()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
@@ -406,6 +418,7 @@ public sealed class DocsVersionImpactAnalyzerTests
 
     [Theory]
     [InlineData("""<span style="white-space-collapse: preserve">a  b</span>""")]
+    [InlineData("""<span style="white-space: preserve">a  b</span>""")]
     [InlineData("""<span style="--mode: pre; white-space: var(--mode)">a  b</span>""")]
     public void Preserves_Whitespace_For_Longhand_Or_Computed_Css(string before)
     {
@@ -480,6 +493,27 @@ public sealed class DocsVersionImpactAnalyzerTests
             "<span style=\"white-space: pre-line\">a\r\nb</span>",
             DocsLiquidContext.Empty,
             """<span style="white-space: pre-line">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(spaces);
+        Assert.Equal(DocsVersionCatalog.All.Count, lineBreak.Count);
+    }
+
+    [Theory]
+    [InlineData("preserve-breaks")]
+    [InlineData("preserve-breaks nowrap")]
+    public void Preserves_Line_Breaks_But_Collapses_Spaces_For_Modern_PreserveBreaks(
+        string whiteSpace)
+    {
+        var spaces = DocsVersionImpactAnalyzer.Analyze(
+            $"""<span style="white-space: {whiteSpace}">a  b</span>""",
+            DocsLiquidContext.Empty,
+            $"""<span style="white-space: {whiteSpace}">a b</span>""",
+            DocsLiquidContext.Empty);
+        var lineBreak = DocsVersionImpactAnalyzer.Analyze(
+            $"<span style=\"white-space: {whiteSpace}\">a\r\nb</span>",
+            DocsLiquidContext.Empty,
+            $"""<span style="white-space: {whiteSpace}">a b</span>""",
             DocsLiquidContext.Empty);
 
         Assert.Empty(spaces);
@@ -587,6 +621,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             "<button>A </button>B",
             DocsLiquidContext.Empty,
             "<button>A</button> B",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_After_Empty_Inline_Controls()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<button></button>X",
+            DocsLiquidContext.Empty,
+            "<button></button> X",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);

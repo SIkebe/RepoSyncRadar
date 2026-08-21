@@ -553,6 +553,7 @@ public static class DocsVersionImpactAnalyzer
             if (isClosing)
             {
                 PopHtmlElement(elements, tagName);
+                hasInlineContent |= IsInlineBoxElement(tagName);
             }
             else if (!isSelfClosing && !IsVoidElement(tagName))
             {
@@ -845,7 +846,9 @@ public static class DocsVersionImpactAnalyzer
             return true;
         }
         if (value.Equals("pre-line", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("preserve-breaks wrap", StringComparison.OrdinalIgnoreCase))
+            || value.Equals("preserve-breaks", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("preserve-breaks wrap", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("preserve-breaks nowrap", StringComparison.OrdinalIgnoreCase))
         {
             mode = HtmlWhiteSpaceMode.PreLine;
             return true;
@@ -853,6 +856,7 @@ public static class DocsVersionImpactAnalyzer
         if (value.Equals("pre", StringComparison.OrdinalIgnoreCase)
             || value.Equals("pre-wrap", StringComparison.OrdinalIgnoreCase)
             || value.Equals("break-spaces", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("preserve", StringComparison.OrdinalIgnoreCase)
             || value.Equals("preserve nowrap", StringComparison.OrdinalIgnoreCase)
             || value.Equals("preserve wrap", StringComparison.OrdinalIgnoreCase)
             || value.Equals("break-spaces wrap", StringComparison.OrdinalIgnoreCase))
@@ -1028,6 +1032,10 @@ public static class DocsVersionImpactAnalyzer
     private static bool IsRawTextElement(string tagName)
         => tagName is "textarea" or "script" or "style";
 
+    private static bool IsInlineBoxElement(string tagName)
+        => tagName is "audio" or "button" or "canvas" or "iframe" or "meter"
+            or "object" or "progress" or "select" or "textarea" or "video";
+
     private static bool IsVoidElement(string tagName)
         => tagName is "area" or "base" or "br" or "col" or "embed" or "hr" or "img"
             or "input" or "link" or "meta" or "param" or "source" or "track" or "wbr";
@@ -1104,7 +1112,7 @@ public static class DocsVersionImpactAnalyzer
                 index++;
             }
 
-            string? attributeValue = null;
+            string? attributeValue = string.Empty;
             if (index < tag.Length && tag[index] == '=')
             {
                 index++;

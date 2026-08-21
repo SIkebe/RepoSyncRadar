@@ -348,6 +348,14 @@ public class CommitDetailTests
                 commit.Files[2].Path,
                 Arg.Any<CancellationToken>());
         }, TimeSpan.FromSeconds(10));
+        var analysisStatuses = cut.FindAll("[data-testid=\"commit-detail-file-change-summary\"]");
+        Assert.Equal(3, analysisStatuses.Count);
+        Assert.All(analysisStatuses, status =>
+        {
+            Assert.Equal("status", status.GetAttribute("role"));
+            Assert.Equal("polite", status.GetAttribute("aria-live"));
+            Assert.Equal("true", status.GetAttribute("aria-atomic"));
+        });
 
         firstResult.SetResult(new MarkdownFileChangeSummary(
             IsRenamed: false,

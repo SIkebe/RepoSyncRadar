@@ -210,12 +210,17 @@
                               data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
                         @{
                             _markdownChangeSummariesByFile.TryGetValue(file.Path, out var changeSummary);
+                            var showChangeSummary = IsRenamedFile(file)
+                                || changeSummary is { HasRenderedBodyChanges: false };
                         }
-                        @if (IsRenamedFile(file) || changeSummary is { HasRenderedBodyChanges: false })
-                        {
-                            <span class="file-change-summary"
-                                  data-testid="commit-detail-file-change-summary"
-                                  title="@BuildFileChangeTitle(file, changeSummary)">
+                        <span class="file-change-summary"
+                              data-testid="commit-detail-file-change-summary"
+                              role="status"
+                              aria-live="polite"
+                              aria-atomic="true"
+                              title="@(showChangeSummary ? BuildFileChangeTitle(file, changeSummary).Value : null)">
+                            @if (showChangeSummary)
+                            {
                                 @if (IsRenamedFile(file))
                                 {
                                     <span class="file-change-badge file-change-badge-rename">@L["CommitDetail.FileChange.Renamed"]</span>
@@ -235,8 +240,8 @@
                                         </span>
                                     }
                                 }
-                            </span>
-                        }
+                            }
+                        </span>
                     </div>
                     <div class="preview-file-action">
                         @if (canOpenPreview)
