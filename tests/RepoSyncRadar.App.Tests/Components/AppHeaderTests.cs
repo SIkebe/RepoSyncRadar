@@ -1377,9 +1377,23 @@ public sealed class AppHeaderTests
         cut.WaitForAssertion(() =>
             Assert.Empty(cut.FindAll("[data-testid=\"app-header-update-status\"]")));
 
-        updateService.Publish(new AppUpdateActivity(
+        var secondFailure = new AppUpdateActivity(
             AppUpdateActivityStatus.Failed,
-            Message: "rate limit exceeded"));
+            Message: "rate limit exceeded");
+        updateService.Publish(secondFailure);
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(
+                "アップデート確認に失敗しました: rate limit exceeded",
+                cut.Find("[data-testid=\"app-header-update-status\"]").TextContent,
+                StringComparison.Ordinal));
+
+        var thirdFailure = new AppUpdateActivity(
+            AppUpdateActivityStatus.Failed,
+            Message: "rate limit exceeded");
+        updateService.Publish(thirdFailure);
+
+        cut.InvokeAsync(() => cut.Instance.DismissFailedUpdate(secondFailure));
 
         cut.WaitForAssertion(() =>
             Assert.Contains(

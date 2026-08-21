@@ -58,14 +58,14 @@
                             disabled="@_appUpdateRestartBusy"
                                 @onclick="DismissUpdatePrompt">@L["AppHeader.Update.Later"]</button>
                 }
-                else if (_appUpdateActivity?.Status == AppUpdateActivityStatus.Failed)
+                else if (_appUpdateActivity is { Status: AppUpdateActivityStatus.Failed } failedUpdateActivity)
                 {
                     <button type="button"
                             class="toolbar-button compact secondary icon-only"
                             data-testid="app-header-update-dismiss"
                             aria-label="@L["AppHeader.Update.Dismiss"]"
                             title="@L["AppHeader.Update.Dismiss"]"
-                            @onclick="DismissFailedUpdate"><span aria-hidden="true">&times;</span></button>
+                            @onclick="() => DismissFailedUpdate(failedUpdateActivity)"><span aria-hidden="true">&times;</span></button>
                 }
             </span>
         }
@@ -615,7 +615,7 @@
     private bool _appUpdateRestartBusy;
     private string? _appUpdateRestartError;
     private string? _dismissedDownloadedUpdateVersion;
-    private string? _dismissedFailedUpdateKey;
+    private AppUpdateActivity? _dismissedFailedUpdateActivity;
     private int _observedAuthStateVersion;
     private SettingsSection _activeSettingsSection = SettingsSection.General;
 
@@ -720,17 +720,15 @@
             return;
         }
 
-        var previousActivity = _appUpdateActivity;
         _appUpdateActivity = _updateService.CurrentActivity;
         if (_appUpdateActivity?.Status != AppUpdateActivityStatus.Downloaded)
         {
             _dismissedDownloadedUpdateVersion = null;
         }
 
-        if (_appUpdateActivity?.Status != AppUpdateActivityStatus.Failed
-            || !ReferenceEquals(previousActivity, _appUpdateActivity))
+        if (_appUpdateActivity?.Status != AppUpdateActivityStatus.Failed)
         {
-            _dismissedFailedUpdateKey = null;
+            _dismissedFailedUpdateActivity = null;
         }
 
         _ = InvokeAsync(StateHasChanged);
@@ -1009,10 +1007,7 @@
         if (activity.Status != AppUpdateActivityStatus.Downloaded)
         {
             return activity.Status != AppUpdateActivityStatus.Failed
-                || !string.Equals(
-                    _dismissedFailedUpdateKey,
-                    BuildFailedUpdateDismissKey(activity),
-                    StringComparison.Ordinal);
+                || !ReferenceEquals(_dismissedFailedUpdateActivity, activity);
         }
 
         return !string.Equals(
@@ -1074,19 +1069,14 @@
         _appUpdateRestartError = null;
     }
 
-    private void DismissFailedUpdate()
+    internal void DismissFailedUpdate(AppUpdateActivity activity)
     {
-        if (_appUpdateActivity is not null)
-        {
-            _dismissedFailedUpdateKey = BuildFailedUpdateDismissKey(_appUpdateActivity);
-        }
+        _dismissedFailedUpdateActivity = activity;
+        StateHasChanged();
     }
 
     private static string BuildDownloadedUpdateDismissKey(AppUpdateActivity activity)
         => activity.AvailableVersion ?? activity.Message ?? activity.Status.ToString();
-
-    private static string BuildFailedUpdateDismissKey(AppUpdateActivity activity)
-        => activity.Message ?? activity.Status.ToString();
 
     private async Task LoadBoostRulesAsync()
     {
