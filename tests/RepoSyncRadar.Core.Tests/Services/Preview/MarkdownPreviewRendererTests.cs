@@ -484,14 +484,15 @@ public sealed partial class MarkdownPreviewRendererTests
 
         var changes = MarkdownFrontmatterDiffAnalyzer.Analyze(before, after);
 
-        var change = Assert.Single(changes);
-        Assert.Equal(DocsVersionChangeKind.Updated, change.Kind);
-        Assert.Equal("before-0: value", change.BeforeLine);
-        Assert.Equal("after-0: value", change.AfterLine);
+        Assert.Equal(10_000, changes.Count);
+        Assert.Equal("before-0: value", changes[0].BeforeLine);
+        Assert.Equal("after-0: value", changes[0].AfterLine);
+        Assert.Equal("before-9999: value", changes[^1].BeforeLine);
+        Assert.Equal("after-9999: value", changes[^1].AfterLine);
     }
 
     [Fact]
-    public void Frontmatter_Diff_Analyzer_Reports_Only_First_Mismatch_For_Large_Moves()
+    public void Frontmatter_Diff_Analyzer_Reports_Complete_Large_Moves()
     {
         var lines = Enumerable.Range(0, 1_000).Select(static index => $"line-{index}: value").ToArray();
         var before = $"---\n{string.Join('\n', lines)}\n---";
@@ -499,10 +500,20 @@ public sealed partial class MarkdownPreviewRendererTests
 
         var changes = MarkdownFrontmatterDiffAnalyzer.Analyze(before, after);
 
-        var change = Assert.Single(changes);
-        Assert.Equal(DocsVersionChangeKind.Updated, change.Kind);
-        Assert.Equal("line-0: value", change.BeforeLine);
-        Assert.Equal("line-1: value", change.AfterLine);
+        Assert.Collection(
+            changes,
+            change =>
+            {
+                Assert.Equal(DocsVersionChangeKind.Removed, change.Kind);
+                Assert.Equal("line-0: value", change.BeforeLine);
+                Assert.Null(change.AfterLine);
+            },
+            change =>
+            {
+                Assert.Equal(DocsVersionChangeKind.Added, change.Kind);
+                Assert.Null(change.BeforeLine);
+                Assert.Equal("line-0: value", change.AfterLine);
+            });
     }
 
     [Fact]
@@ -2317,6 +2328,56 @@ var value = 1;
         Assert.Contains("img,video{max-width:100%;height:auto;}", html, StringComparison.Ordinal);
         Assert.DoesNotContain("src=\"/assets/images", html, StringComparison.Ordinal);
         Assert.DoesNotContain("srcset=\"/assets/images", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Rewrite_Asset_Syntax_Inside_Code()
+    {
+        const string markdown = """
+            Inline `<img src=images/inline.png>`.
+
+            ```html
+            <img src=images/fenced.png>
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains("&lt;img src=images/inline.png&gt;", html, StringComparison.Ordinal);
+        Assert.Contains("images/fenced.png", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("/markdown-assets/after/content/code-security/images/", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rewrites_Only_Real_Attributes_Outside_Raw_Text()
+    {
+        const string renderedHtml = """
+            <img alt="example src=images/in-alt.png" data-note="poster=images/in-data.png" src=images/actual.png>
+            <a title="href=other.md" href=guide.md>Guide</a>
+            <iframe><img src=images/in-iframe.png></iframe>
+            """;
+
+        var html = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            renderedHtml,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/in-alt.png", html, StringComparison.Ordinal);
+        Assert.Contains("poster=images/in-data.png", html, StringComparison.Ordinal);
+        Assert.Contains("href=other.md", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "src=/markdown-assets/content/code-security/images/actual.png",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "href=/markdown-links/content/code-security/guide.md",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains("<img src=images/in-iframe.png>", html, StringComparison.Ordinal);
     }
 
     [Fact]

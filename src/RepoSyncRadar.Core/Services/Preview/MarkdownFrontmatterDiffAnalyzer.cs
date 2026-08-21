@@ -8,6 +8,7 @@ public sealed record MarkdownFrontmatterChange(
 public static class MarkdownFrontmatterDiffAnalyzer
 {
     private const int MaxLcsCells = 1_000_000;
+    private readonly record struct LineAnchor(int BeforeIndex, int AfterIndex);
 
     public static IReadOnlyList<MarkdownFrontmatterChange> Analyze(string? beforeMarkdown, string? afterMarkdown)
     {
@@ -20,7 +21,7 @@ public static class MarkdownFrontmatterDiffAnalyzer
 
         var table = BuildLcsTableIfBounded(beforeLines, afterLines);
         return table is null
-            ? AnalyzeFirstMismatch(beforeLines, afterLines)
+            ? AnalyzeLinearSpace(beforeLines, afterLines)
             : AnalyzeWithLcs(beforeLines, afterLines, table);
     }
 
@@ -62,7 +63,7 @@ public static class MarkdownFrontmatterDiffAnalyzer
         return changes;
     }
 
-    private static List<MarkdownFrontmatterChange> AnalyzeFirstMismatch(
+    private static List<MarkdownFrontmatterChange> AnalyzeLinearSpace(
         string[] beforeLines,
         string[] afterLines)
     {
@@ -90,23 +91,155 @@ public static class MarkdownFrontmatterDiffAnalyzer
             afterEnd--;
         }
 
-        var hasBefore = commonPrefix < beforeEnd;
-        var hasAfter = commonPrefix < afterEnd;
-        if (!hasBefore && !hasAfter)
+        var changes = new List<MarkdownFrontmatterChange>();
+        var beforeIndex = commonPrefix;
+        var afterIndex = commonPrefix;
+        foreach (var anchor in FindPatienceAnchors(
+                     beforeLines,
+                     commonPrefix,
+                     beforeEnd,
+                     afterLines,
+                     commonPrefix,
+                     afterEnd))
         {
-            return [];
+            AppendChangeRange(
+                changes,
+                beforeLines,
+                beforeIndex,
+                anchor.BeforeIndex,
+                afterLines,
+                afterIndex,
+                anchor.AfterIndex);
+            beforeIndex = anchor.BeforeIndex + 1;
+            afterIndex = anchor.AfterIndex + 1;
         }
-        return
-        [
-            new MarkdownFrontmatterChange(
-                hasBefore && hasAfter
-                    ? DocsVersionChangeKind.Updated
-                    : hasBefore
-                        ? DocsVersionChangeKind.Removed
-                        : DocsVersionChangeKind.Added,
-                hasBefore ? beforeLines[commonPrefix] : null,
-                hasAfter ? afterLines[commonPrefix] : null),
-        ];
+        AppendChangeRange(
+            changes,
+            beforeLines,
+            beforeIndex,
+            beforeEnd,
+            afterLines,
+            afterIndex,
+            afterEnd);
+        return changes;
+    }
+
+    private static List<LineAnchor> FindPatienceAnchors(
+        string[] beforeLines,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterLines,
+        int afterStart,
+        int afterEnd)
+    {
+        var beforeOccurrences = BuildLineOccurrences(beforeLines, beforeStart, beforeEnd);
+        var afterOccurrences = BuildLineOccurrences(afterLines, afterStart, afterEnd);
+        var candidates = new List<LineAnchor>();
+        for (var index = beforeStart; index < beforeEnd; index++)
+        {
+            var line = beforeLines[index];
+            if (beforeOccurrences[line].Count == 1
+                && afterOccurrences.TryGetValue(line, out var afterOccurrence)
+                && afterOccurrence.Count == 1)
+            {
+                candidates.Add(new LineAnchor(index, afterOccurrence.Index));
+            }
+        }
+        if (candidates.Count <= 1)
+        {
+            return candidates;
+        }
+
+        var tails = new int[candidates.Count];
+        var predecessors = new int[candidates.Count];
+        Array.Fill(predecessors, -1);
+        var length = 0;
+        for (var candidateIndex = 0; candidateIndex < candidates.Count; candidateIndex++)
+        {
+            var low = 0;
+            var high = length;
+            while (low < high)
+            {
+                var middle = low + ((high - low) / 2);
+                if (candidates[tails[middle]].AfterIndex < candidates[candidateIndex].AfterIndex)
+                {
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+
+            if (low > 0)
+            {
+                predecessors[candidateIndex] = tails[low - 1];
+            }
+            tails[low] = candidateIndex;
+            if (low == length)
+            {
+                length++;
+            }
+        }
+
+        var anchors = new List<LineAnchor>(length);
+        var current = tails[length - 1];
+        while (current >= 0)
+        {
+            anchors.Add(candidates[current]);
+            current = predecessors[current];
+        }
+        anchors.Reverse();
+        return anchors;
+    }
+
+    private static Dictionary<string, (int Count, int Index)> BuildLineOccurrences(
+        string[] lines,
+        int start,
+        int end)
+    {
+        var occurrences = new Dictionary<string, (int Count, int Index)>(StringComparer.Ordinal);
+        for (var index = start; index < end; index++)
+        {
+            var line = lines[index];
+            occurrences[line] = occurrences.TryGetValue(line, out var occurrence)
+                ? (occurrence.Count + 1, occurrence.Index)
+                : (1, index);
+        }
+        return occurrences;
+    }
+
+    private static void AppendChangeRange(
+        List<MarkdownFrontmatterChange> changes,
+        string[] beforeLines,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterLines,
+        int afterStart,
+        int afterEnd)
+    {
+        var pairCount = Math.Min(beforeEnd - beforeStart, afterEnd - afterStart);
+        for (var index = 0; index < pairCount; index++)
+        {
+            changes.Add(new MarkdownFrontmatterChange(
+                DocsVersionChangeKind.Updated,
+                beforeLines[beforeStart + index],
+                afterLines[afterStart + index]));
+        }
+        for (var index = beforeStart + pairCount; index < beforeEnd; index++)
+        {
+            changes.Add(new MarkdownFrontmatterChange(
+                DocsVersionChangeKind.Removed,
+                beforeLines[index],
+                null));
+        }
+        for (var index = afterStart + pairCount; index < afterEnd; index++)
+        {
+            changes.Add(new MarkdownFrontmatterChange(
+                DocsVersionChangeKind.Added,
+                null,
+                afterLines[index]));
+        }
     }
 
     private static int[,]? BuildLcsTableIfBounded(

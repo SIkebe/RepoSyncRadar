@@ -186,11 +186,27 @@
                 }
             </div>
         </div>
-        <span class="file-change-visually-hidden"
-              data-testid="commit-detail-file-change-analysis-status"
-              role="status"
-              aria-live="polite"
-              aria-atomic="true">@_markdownChangeAnalysisStatus</span>
+        @if (_markdownChangeAnalysisHasFailures)
+        {
+            <div class="file-change-analysis-feedback">
+                <span data-testid="commit-detail-file-change-analysis-status"
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true">@_markdownChangeAnalysisStatus</span>
+                <button type="button"
+                        class="file-change-analysis-retry"
+                        data-testid="commit-detail-file-change-analysis-retry"
+                        @onclick="RetryMarkdownChangeSummaryAnalysis">@L["CommitDetail.FileChange.RetryAnalysis"]</button>
+            </div>
+        }
+        else
+        {
+            <span class="file-change-visually-hidden"
+                  data-testid="commit-detail-file-change-analysis-status"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true">@_markdownChangeAnalysisStatus</span>
+        }
         <ul class="files">
             @foreach (var file in Commit.Files)
             {
@@ -383,6 +399,7 @@
     private CancellationTokenSource? _predictiveFilePrewarmCts;
     private CancellationTokenSource? _markdownChangeSummaryCts;
     private string? _markdownChangeAnalysisStatus;
+    private bool _markdownChangeAnalysisHasFailures;
     private string? _predictiveFilePrewarmPath;
     private string? _historyForSha;
     private IReadOnlyList<CommitHistoryTimelineEntry> _historyEntries = [];
@@ -503,6 +520,7 @@
             _selectedReusableReferenceByFile.Clear();
             _markdownChangeSummariesByFile.Clear();
             _markdownChangeAnalysisStatus = null;
+            _markdownChangeAnalysisHasFailures = false;
             _resolvedForSha = null;
             _activePreviewSha = null;
             CancelCurrentPreviewOperation();
@@ -526,6 +544,7 @@
             _selectedReusableReferenceByFile.Clear();
             _markdownChangeSummariesByFile.Clear();
             _markdownChangeAnalysisStatus = null;
+            _markdownChangeAnalysisHasFailures = false;
             CancelPredictiveFilePrewarm();
             StartPredictivePrewarm(Commit);
             StartMarkdownChangeSummaryAnalysis(Commit);
@@ -554,6 +573,8 @@
     private void StartMarkdownChangeSummaryAnalysis(Commit commit)
     {
         CancelMarkdownChangeSummaryAnalysis();
+        _markdownChangeAnalysisStatus = null;
+        _markdownChangeAnalysisHasFailures = false;
         if (Services.GetService<IPreviewCoordinator>() is not { } coordinator)
         {
             return;
@@ -645,6 +666,7 @@
                             "CommitDetail.FileChange.AnalysisCompleted",
                             files.Count],
                     };
+                    _markdownChangeAnalysisHasFailures = successfulAnalysisCount < files.Count;
                     StateHasChanged();
                 }
             });
@@ -652,6 +674,17 @@
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
+    }
+
+    private void RetryMarkdownChangeSummaryAnalysis()
+    {
+        if (Commit is null)
+        {
+            return;
+        }
+
+        _markdownChangeSummariesByFile.Clear();
+        StartMarkdownChangeSummaryAnalysis(Commit);
     }
 
     private void CancelMarkdownChangeSummaryAnalysis()

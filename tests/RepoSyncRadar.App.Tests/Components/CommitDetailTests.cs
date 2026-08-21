@@ -388,27 +388,37 @@ public class CommitDetailTests
         secondResult.SetResult(null);
         thirdResult.SetResult(null);
         cut.WaitForAssertion(() =>
-            Assert.Contains(
-                "3 件中 1 件",
-                cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]").TextContent,
-                StringComparison.Ordinal));
+        {
+            var partialStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
+            Assert.Contains("3 件中 1 件", partialStatus.TextContent, StringComparison.Ordinal);
+            Assert.True(partialStatus.ParentElement?.ClassList.Contains("file-change-analysis-feedback"));
+            Assert.NotNull(cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]"));
+        });
     }
 
     [Fact]
-    public void CommitDetail_Announces_When_Source_Summary_Analysis_Is_Unavailable()
+    public async Task CommitDetail_Shows_Unavailable_Analysis_And_Retries()
     {
         var commit = MakeCommit(("content/copilot/unavailable.md", 1, 1));
         var resolver = Substitute.For<IPathToUrlResolver>();
         resolver
             .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var analysisAttempt = 0;
         var coordinator = Substitute.For<IPreviewCoordinator>();
         coordinator.AnalyzeMarkdownFileChangeAsync(
                 commit.PrNumber,
                 commit.Sha,
                 commit.Files[0].Path,
                 Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<MarkdownFileChangeSummary?>(null));
+            .Returns(_ => Task.FromResult<MarkdownFileChangeSummary?>(
+                Interlocked.Increment(ref analysisAttempt) == 1
+                    ? null
+                    : new MarkdownFileChangeSummary(
+                        IsRenamed: false,
+                        PreviousPath: null,
+                        HasRenderedBodyChanges: true,
+                        FrontmatterChangeCount: 0)));
 
         using var cut = RenderDetailWith(
             commit,
@@ -418,10 +428,31 @@ public class CommitDetailTests
             coordinator: coordinator);
 
         cut.WaitForAssertion(() =>
+        {
+            var unavailableStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
             Assert.Contains(
                 "解析できませんでした",
+                unavailableStatus.TextContent,
+                StringComparison.Ordinal);
+            Assert.True(unavailableStatus.ParentElement?.ClassList.Contains("file-change-analysis-feedback"));
+        });
+
+        await cut.InvokeAsync(
+            () => cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]").Click());
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Contains(
+                "解析が完了しました",
                 cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]").TextContent,
-                StringComparison.Ordinal));
+                StringComparison.Ordinal);
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-file-change-analysis-retry\"]"));
+            coordinator.Received(2).AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>());
+        });
     }
 
     [Fact]

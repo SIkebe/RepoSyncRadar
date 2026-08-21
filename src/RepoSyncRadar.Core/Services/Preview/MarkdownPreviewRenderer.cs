@@ -96,9 +96,6 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""\bhref\s*=\s*(?<quote>["'])(?<href>.*?)\k<quote>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex AnchorHrefRegex();
 
-    [GeneratedRegex("""(?<prefix>^|[ \t\n\f\r])(?<attr>href\s*=\s*)(?:(?<quote>["'])(?<url>.*?)\k<quote>|(?<url>[^\s"'=<>`]+))""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
-    private static partial Regex HtmlHrefRegex();
-
     [GeneratedRegex("""<span\b(?<attrs>[^>]*)>\s*AUTOTITLE\s*</span>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex AutotitleSpanRegex();
 
@@ -110,12 +107,6 @@ internal static partial class MarkdownPreviewRenderer
 
     [GeneratedRegex("""<[^>]+>""", RegexOptions.Singleline)]
     private static partial Regex HtmlTagRegex();
-
-    [GeneratedRegex("""(?<prefix>[ \t\n\f\r])(?<attr>(?:src|poster)\s*=\s*)(?:(?<quote>["'])(?<url>.*?)\k<quote>|(?<url>[^\s"'=<>`]+))""", RegexOptions.IgnoreCase)]
-    private static partial Regex HtmlAssetUrlRegex();
-
-    [GeneratedRegex("""(?<prefix>[ \t\n\f\r])(?<attr>srcset\s*=\s*)(?:(?<quote>["'])(?<value>.*?)\k<quote>|(?<value>[^\s"'=<>`]+))""", RegexOptions.IgnoreCase)]
-    private static partial Regex HtmlSrcSetRegex();
 
     [GeneratedRegex("""<!--.*?-->""", RegexOptions.Singleline)]
     private static partial Regex HtmlCommentRegex();
@@ -1458,58 +1449,264 @@ internal static partial class MarkdownPreviewRenderer
     }
 
     internal static string RewriteLocalReferencesForComparison(string html, string repoPath)
-    {
-        var rewritten = RewriteAssetReferences(html, repoPath, "/markdown-assets");
-        return AnchorRegex().Replace(rewritten, match =>
-        {
-            var attrs = HtmlHrefRegex().Replace(match.Groups["attrs"].Value, hrefMatch =>
-            {
-                var quote = hrefMatch.Groups["quote"].Value;
-                var href = WebUtility.HtmlDecode(hrefMatch.Groups["url"].Value);
-                var next = RewriteAssetUrl(href, repoPath, "/markdown-links");
-                return string.Concat(
-                    hrefMatch.Groups["prefix"].Value,
-                    hrefMatch.Groups["attr"].Value,
-                    quote,
-                    WebUtility.HtmlEncode(next),
-                    quote);
-            });
-            return string.Concat("<a", attrs, ">", match.Groups["body"].Value, "</a>");
-        });
-    }
+        => RewriteHtmlReferences(
+            html,
+            repoPath,
+            "/markdown-assets",
+            "/markdown-links");
 
     private static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
+        => string.IsNullOrWhiteSpace(assetBasePath)
+            ? html
+            : RewriteHtmlReferences(html, repoPath, assetBasePath, linkBasePath: null);
+
+    private static string RewriteHtmlReferences(
+        string html,
+        string repoPath,
+        string assetBasePath,
+        string? linkBasePath)
     {
-        if (string.IsNullOrWhiteSpace(assetBasePath) || string.IsNullOrEmpty(html))
+        if (string.IsNullOrEmpty(html))
         {
             return html;
         }
 
-        var rewritten = HtmlAssetUrlRegex().Replace(html, m =>
+        var rewritten = new StringBuilder(html.Length + 128);
+        string? rawTextTagName = null;
+        var index = 0;
+        while (index < html.Length)
         {
-            var quote = m.Groups["quote"].Value;
-            var url = WebUtility.HtmlDecode(m.Groups["url"].Value);
-            var next = RewriteAssetUrl(url, repoPath, assetBasePath);
-            return string.Concat(
-                m.Groups["prefix"].Value,
-                m.Groups["attr"].Value,
-                quote,
-                WebUtility.HtmlEncode(next),
-                quote);
-        });
+            if (rawTextTagName is not null)
+            {
+                var rawTextEnd = FindRawTextClosingTag(html, index, rawTextTagName);
+                if (rawTextEnd < 0)
+                {
+                    rewritten.Append(html, index, html.Length - index);
+                    break;
+                }
+                rewritten.Append(html, index, rawTextEnd - index);
+                index = rawTextEnd;
+                rawTextTagName = null;
+            }
 
-        return HtmlSrcSetRegex().Replace(rewritten, m =>
+            var tagStart = html.IndexOf('<', index);
+            if (tagStart < 0)
+            {
+                rewritten.Append(html, index, html.Length - index);
+                break;
+            }
+            rewritten.Append(html, index, tagStart - index);
+
+            if (html.AsSpan(tagStart).StartsWith("<!--", StringComparison.Ordinal))
+            {
+                var commentEnd = html.IndexOf("-->", tagStart + 4, StringComparison.Ordinal);
+                var nextIndex = commentEnd < 0 ? html.Length : commentEnd + 3;
+                rewritten.Append(html, tagStart, nextIndex - tagStart);
+                index = nextIndex;
+                continue;
+            }
+
+            var tagEnd = FindHtmlTagEnd(html, tagStart);
+            var tag = html[tagStart..tagEnd];
+            var tagName = GetHtmlTagName(tag, out var isClosing);
+            if (!isClosing && tagName.Length > 0)
+            {
+                tag = RewriteTagAttributes(
+                    tag,
+                    repoPath,
+                    assetBasePath,
+                    tagName == "a" ? linkBasePath : null);
+            }
+            rewritten.Append(tag);
+            index = tagEnd;
+
+            if (!isClosing
+                && IsRawTextElement(tagName)
+                && !tag.AsSpan().TrimEnd().EndsWith("/>", StringComparison.Ordinal))
+            {
+                rawTextTagName = tagName;
+            }
+        }
+        return rewritten.ToString();
+    }
+
+    private static string RewriteTagAttributes(
+        string tag,
+        string repoPath,
+        string assetBasePath,
+        string? linkBasePath)
+    {
+        StringBuilder? rewritten = null;
+        var copiedThrough = 0;
+        var index = 1;
+        while (index < tag.Length && tag[index] is '/' or '!')
         {
-            var quote = m.Groups["quote"].Value;
-            var value = WebUtility.HtmlDecode(m.Groups["value"].Value);
-            var next = RewriteSrcSet(value, repoPath, assetBasePath);
-            return string.Concat(
-                m.Groups["prefix"].Value,
-                m.Groups["attr"].Value,
-                quote,
-                WebUtility.HtmlEncode(next),
-                quote);
-        });
+            index++;
+        }
+        while (index < tag.Length && !char.IsWhiteSpace(tag[index]) && tag[index] != '>')
+        {
+            index++;
+        }
+
+        while (index < tag.Length)
+        {
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] is '>' or '/')
+            {
+                break;
+            }
+
+            var nameStart = index;
+            while (index < tag.Length
+                   && !char.IsWhiteSpace(tag[index])
+                   && tag[index] is not '=' and not '>' and not '/')
+            {
+                index++;
+            }
+            if (index == nameStart)
+            {
+                index++;
+                continue;
+            }
+
+            var attributeName = tag[nameStart..index];
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] != '=')
+            {
+                continue;
+            }
+            index++;
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+
+            var quote = index < tag.Length && tag[index] is '\'' or '"' ? tag[index++] : '\0';
+            var valueStart = index;
+            if (quote == '\0')
+            {
+                while (index < tag.Length
+                       && !char.IsWhiteSpace(tag[index])
+                       && tag[index] != '>')
+                {
+                    index++;
+                }
+            }
+            else
+            {
+                while (index < tag.Length && tag[index] != quote)
+                {
+                    index++;
+                }
+            }
+            var valueEnd = index;
+            if (index < tag.Length && quote != '\0')
+            {
+                index++;
+            }
+
+            var decodedValue = WebUtility.HtmlDecode(tag[valueStart..valueEnd]);
+            var next = attributeName.ToLowerInvariant() switch
+            {
+                "src" or "poster" => RewriteAssetUrl(decodedValue, repoPath, assetBasePath),
+                "srcset" => RewriteSrcSet(decodedValue, repoPath, assetBasePath),
+                "href" when linkBasePath is not null => RewriteAssetUrl(decodedValue, repoPath, linkBasePath),
+                _ => decodedValue,
+            };
+            if (string.Equals(next, decodedValue, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            rewritten ??= new StringBuilder(tag.Length + 64);
+            rewritten
+                .Append(tag, copiedThrough, valueStart - copiedThrough)
+                .Append(WebUtility.HtmlEncode(next));
+            copiedThrough = valueEnd;
+        }
+
+        return rewritten is null
+            ? tag
+            : rewritten.Append(tag, copiedThrough, tag.Length - copiedThrough).ToString();
+    }
+
+    private static bool IsRawTextElement(string tagName)
+        => tagName is "script"
+            or "style"
+            or "textarea"
+            or "title"
+            or "iframe"
+            or "noembed"
+            or "noframes"
+            or "xmp"
+            or "plaintext";
+
+    private static int FindHtmlTagEnd(string html, int startIndex)
+    {
+        var quote = '\0';
+        for (var index = startIndex; index < html.Length; index++)
+        {
+            var current = html[index];
+            if (quote == '\0' && current is '\'' or '"')
+            {
+                quote = current;
+            }
+            else if (current == quote)
+            {
+                quote = '\0';
+            }
+            else if (current == '>' && quote == '\0')
+            {
+                return index + 1;
+            }
+        }
+        return html.Length;
+    }
+
+    private static string GetHtmlTagName(string tag, out bool isClosing)
+    {
+        var index = 1;
+        isClosing = index < tag.Length && tag[index] == '/';
+        if (isClosing)
+        {
+            index++;
+        }
+        while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+        {
+            index++;
+        }
+        var nameStart = index;
+        while (index < tag.Length
+               && !char.IsWhiteSpace(tag[index])
+               && tag[index] is not '>' and not '/')
+        {
+            index++;
+        }
+        return tag[nameStart..index].ToLowerInvariant();
+    }
+
+    private static int FindRawTextClosingTag(string html, int startIndex, string tagName)
+    {
+        var search = $"</{tagName}";
+        var index = startIndex;
+        while ((index = html.IndexOf(search, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            var afterName = index + search.Length;
+            if (afterName >= html.Length
+                || html[afterName] == '>'
+                || char.IsWhiteSpace(html[afterName]))
+            {
+                return index;
+            }
+            index = afterName;
+        }
+        return -1;
     }
 
     private static string RewriteSrcSet(string srcset, string repoPath, string assetBasePath)

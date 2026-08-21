@@ -1156,6 +1156,41 @@ html, body {
     white-space: nowrap;
 }
 
+.radar-commit-detail .file-change-analysis-feedback {
+    align-items: center;
+    background: var(--radar-warning-bg, #fff8c5);
+    border: 1px solid #d4a72c;
+    border-radius: 6px;
+    color: var(--radar-warning-fg, #7d4e00);
+    display: flex;
+    font-size: 0.78rem;
+    gap: 0.65rem;
+    justify-content: space-between;
+    margin: 0.5rem 0;
+    padding: 0.45rem 0.6rem;
+}
+
+.radar-commit-detail .file-change-analysis-retry {
+    background: transparent;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    color: inherit;
+    cursor: pointer;
+    flex: 0 0 auto;
+    font: inherit;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+}
+
+.radar-commit-detail .file-change-analysis-retry:hover {
+    background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.radar-commit-detail .file-change-analysis-retry:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
 .radar-commit-detail .file-viewed-toggle {
     align-items: center;
     color: #57606a;

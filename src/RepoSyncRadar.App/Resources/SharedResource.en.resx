@@ -117,6 +117,7 @@
   <data name="CommitDetail.FileChange.AnalysisCompleted" xml:space="preserve"><value>Completed Markdown change-reason analysis (files analyzed: {0})</value></data>
   <data name="CommitDetail.FileChange.AnalysisPartiallyCompleted" xml:space="preserve"><value>Analyzed change reasons for {0} of {1} Markdown files; the remaining files were unavailable</value></data>
   <data name="CommitDetail.FileChange.AnalysisUnavailable" xml:space="preserve"><value>Markdown change-reason analysis was unavailable (files affected: {0})</value></data>
+  <data name="CommitDetail.FileChange.RetryAnalysis" xml:space="preserve"><value>Retry analysis</value></data>
   <data name="CommitDetail.FileChange.EmptyValue" xml:space="preserve"><value>(blank)</value></data>
   <data name="CommitDetail.FileChange.Frontmatter" xml:space="preserve"><value>Frontmatter</value></data>
   <data name="CommitDetail.FileChange.LiquidVariableReference" xml:space="preserve"><value>Liquid variable reference</value></data>
