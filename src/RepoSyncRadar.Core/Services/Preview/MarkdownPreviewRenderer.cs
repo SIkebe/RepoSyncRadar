@@ -756,6 +756,9 @@ internal static partial class MarkdownPreviewRenderer
         return current;
     }
 
+    internal static string RenderOfficialLiquidBlocksForComparison(string content)
+        => RenderOfficialLiquidBlocks(content);
+
     private static string ProtectRenderedHtml(
         string html,
         RenderedHtmlPlaceholderStore? protectedHtmlFragments)

@@ -519,6 +519,30 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Preserves_Whitespace_Ownership_Across_Link_Boundaries()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<a href="x">A </a>B""",
+            DocsLiquidContext.Empty,
+            """<a href="x">A</a> B""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Prompt_Whitespace_That_Changes_The_Copilot_Link()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "{% prompt %}Explain  this{% endprompt %}",
+            DocsLiquidContext.Empty,
+            "{% prompt %}Explain this{% endprompt %}",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Ignores_Comments_Inside_Styled_Elements()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(

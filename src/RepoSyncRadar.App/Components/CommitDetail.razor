@@ -670,9 +670,45 @@
     private LocalizedString DisplaySourceValue(string? value)
         => value is null
             ? L["CommitDetail.FileChange.MissingValue"]
-            : string.IsNullOrWhiteSpace(value)
+            : value.Length == 0
             ? L["CommitDetail.FileChange.EmptyValue"]
+            : string.IsNullOrWhiteSpace(value)
+            ? DisplayWhitespaceValue(value)
             : new LocalizedString(value, value);
+
+    private LocalizedString DisplayWhitespaceValue(string value)
+    {
+        var spaces = 0;
+        var tabs = 0;
+        var lineBreaks = 0;
+        var other = 0;
+        for (var index = 0; index < value.Length; index++)
+        {
+            switch (value[index])
+            {
+                case ' ':
+                    spaces++;
+                    break;
+                case '\t':
+                    tabs++;
+                    break;
+                case '\r':
+                    lineBreaks++;
+                    if (index + 1 < value.Length && value[index + 1] == '\n')
+                    {
+                        index++;
+                    }
+                    break;
+                case '\n':
+                    lineBreaks++;
+                    break;
+                default:
+                    other++;
+                    break;
+            }
+        }
+        return L["CommitDetail.FileChange.WhitespaceValue", spaces, tabs, lineBreaks, other];
+    }
 
     private async Task LoadHistoryAsync(Commit commit)
     {

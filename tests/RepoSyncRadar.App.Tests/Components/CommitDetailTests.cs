@@ -241,6 +241,48 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void CommitDetail_Describes_Whitespace_Only_Source_Values()
+    {
+        var commit = MakeCommit(("content/copilot/whitespace.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<MarkdownFileChangeSummary?>(
+                new MarkdownFileChangeSummary(
+                    IsRenamed: false,
+                    PreviousPath: null,
+                    HasRenderedBodyChanges: false,
+                    FrontmatterChangeCount: 0,
+                    SourceChange: new MarkdownSourceChangeSummary(
+                        MarkdownSourceChangeKind.SourceOnly,
+                        Before: " ",
+                        After: "  ",
+                        ChangeCount: 1))));
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+
+        cut.WaitForAssertion(() =>
+        {
+            var sourceChange = cut.Find("[data-testid=\"commit-detail-source-change\"]");
+            Assert.Contains("スペース 1", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.Contains("スペース 2", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("（空白）", sourceChange.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task CommitDetail_Publishes_Source_Summaries_As_Each_File_Completes()
     {
         var commit = MakeCommit(

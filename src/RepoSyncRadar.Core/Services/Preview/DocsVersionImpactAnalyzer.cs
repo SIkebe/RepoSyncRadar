@@ -359,7 +359,9 @@ public static class DocsVersionImpactAnalyzer
 
     private static string NormalizeForComparison(string? rendered)
     {
-        var html = Markdown.ToHtml(rendered ?? string.Empty, _comparisonPipeline);
+        var liquidBlocksRendered = MarkdownPreviewRenderer.RenderOfficialLiquidBlocksForComparison(
+            rendered ?? string.Empty);
+        var html = Markdown.ToHtml(liquidBlocksRendered, _comparisonPipeline);
         var normalized = new StringBuilder(html.Length);
         var elements = new List<HtmlElementContext>();
         var hasStylesheetDrivenWhitespace = ContainsHtmlStartTag(html, "style")
@@ -481,7 +483,7 @@ public static class DocsVersionImpactAnalyzer
     private static bool HtmlTagExposesWhitespaceBoundary(
         string tagName,
         ReadOnlySpan<char> tag)
-        => tagName == "code"
+        => tagName is "a" or "code"
             || GetHtmlAttributeValue(tag, "style") is not null
             || GetHtmlAttributeValue(tag, "class") is not null
             || GetHtmlAttributeValue(tag, "id") is not null;
