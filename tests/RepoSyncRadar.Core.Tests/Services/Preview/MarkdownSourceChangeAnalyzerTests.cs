@@ -87,6 +87,27 @@ public sealed class MarkdownSourceChangeAnalyzerTests
     }
 
     [Fact]
+    public void Detects_Added_Metadata_Only_File_As_Frontmatter()
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(
+            null,
+            "---\ntitle: New title\n---");
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.Frontmatter, summary!.Kind);
+        Assert.Null(summary.Before);
+        Assert.Equal("title: New title", summary.After);
+    }
+
+    [Fact]
+    public void Returns_Null_When_Only_Line_Endings_Change()
+    {
+        Assert.Null(MarkdownSourceChangeAnalyzer.Analyze(
+            "First line.\r\nSecond line.",
+            "First line.\nSecond line."));
+    }
+
+    [Fact]
     public void Describes_First_Generic_Source_Only_Change()
     {
         var summary = MarkdownSourceChangeAnalyzer.Analyze(

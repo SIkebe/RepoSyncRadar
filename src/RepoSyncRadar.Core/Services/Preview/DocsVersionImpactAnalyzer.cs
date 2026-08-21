@@ -38,7 +38,6 @@ public static partial class DocsVersionImpactAnalyzer
 {
     private static readonly MarkdownPipeline _comparisonPipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
-        .UseRepoSyncRadarSyntaxHighlighting()
         .Build();
 
     [GeneratedRegex(@"<!--.*?-->", RegexOptions.Singleline)]

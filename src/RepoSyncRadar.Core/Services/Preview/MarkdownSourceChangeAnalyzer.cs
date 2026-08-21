@@ -34,8 +34,8 @@ public static partial class MarkdownSourceChangeAnalyzer
             return null;
         }
 
-        var beforeBody = DocsVersionImpactAnalyzer.StripFrontmatter(beforeMarkdown);
-        var afterBody = DocsVersionImpactAnalyzer.StripFrontmatter(afterMarkdown);
+        var beforeBody = DocsVersionImpactAnalyzer.StripFrontmatter(beforeMarkdown) ?? string.Empty;
+        var afterBody = DocsVersionImpactAnalyzer.StripFrontmatter(afterMarkdown) ?? string.Empty;
         if (!string.Equals(beforeBody, afterBody, StringComparison.Ordinal))
         {
             if (TryAnalyzeLiquidVariableReferenceChanges(beforeBody, afterBody, out var liquidSummary))
@@ -44,6 +44,10 @@ public static partial class MarkdownSourceChangeAnalyzer
             }
 
             var bodyChange = FindFirstChangedLine(beforeBody, afterBody);
+            if (bodyChange.Before is null && bodyChange.After is null)
+            {
+                return null;
+            }
             return new MarkdownSourceChangeSummary(
                 MarkdownSourceChangeKind.SourceOnly,
                 bodyChange.Before,

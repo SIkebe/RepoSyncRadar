@@ -666,7 +666,9 @@
         };
 
     private LocalizedString DisplaySourceValue(string? value)
-        => string.IsNullOrWhiteSpace(value)
+        => value is null
+            ? L["CommitDetail.FileChange.MissingValue"]
+            : string.IsNullOrWhiteSpace(value)
             ? L["CommitDetail.FileChange.EmptyValue"]
             : new LocalizedString(value, value);
 
