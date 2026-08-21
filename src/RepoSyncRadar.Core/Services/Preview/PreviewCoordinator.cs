@@ -66,7 +66,8 @@ public interface IPreviewCoordinator
 
     /// <summary>
     /// Analyzes a Markdown file without starting the preview server so the file list can
-    /// identify renames and rendered-body changes before the user opens the comparison.
+    /// identify renames, rendered-body changes, and source-only changes before the user
+    /// opens the comparison.
     /// </summary>
     Task<MarkdownFileChangeSummary?> AnalyzeMarkdownFileChangeAsync(
         int prNumber,
@@ -174,7 +175,8 @@ public sealed record MarkdownFileChangeSummary(
     bool IsRenamed,
     string? PreviousPath,
     bool HasRenderedBodyChanges,
-    int FrontmatterChangeCount);
+    int FrontmatterChangeCount,
+    MarkdownSourceChangeSummary? SourceChange = null);
 
 internal sealed record ReusablePreviewTarget(
     string FilePath,
@@ -454,6 +456,8 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 sources.AfterLiquid,
                 sources.BeforeFilePath,
                 filePath.Trim());
+            var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer
+                .Analyze(sources.BeforeMarkdown, sources.AfterMarkdown);
             var previousPath = string.Equals(sources.BeforeFilePath, filePath, StringComparison.Ordinal)
                 ? null
                 : sources.BeforeFilePath;
@@ -461,9 +465,13 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 IsRenamed: previousPath is not null,
                 PreviousPath: previousPath,
                 HasRenderedBodyChanges: versionImpacts.Count > 0,
-                FrontmatterChangeCount: MarkdownFrontmatterDiffAnalyzer
-                    .Analyze(sources.BeforeMarkdown, sources.AfterMarkdown)
-                    .Count);
+                FrontmatterChangeCount: frontmatterChanges.Count,
+                SourceChange: versionImpacts.Count == 0
+                    ? MarkdownSourceChangeAnalyzer.Analyze(
+                        sources.BeforeMarkdown,
+                        sources.AfterMarkdown,
+                        frontmatterChanges)
+                    : null);
         }
         catch (OperationCanceledException)
         {

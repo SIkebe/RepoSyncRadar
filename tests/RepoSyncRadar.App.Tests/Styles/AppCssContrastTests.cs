@@ -69,6 +69,13 @@ public sealed partial class AppCssContrastTests
     }
 
     [Fact]
+    public void SourceChange_Badges_Meet_NormalTextContrast()
+    {
+        AssertContrast("source change badge", "#633c01", "#fff8c5");
+        AssertContrast("dark source change badge", "#f2cc60", "#3b2e10");
+    }
+
+    [Fact]
     public void DarkTheme_ReusableUsagePicker_Uses_ThemeAware_LabelColor()
     {
         var pickerBlock = GetExactRuleBlock(

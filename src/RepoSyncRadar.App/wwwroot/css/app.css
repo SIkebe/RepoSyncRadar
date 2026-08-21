@@ -1116,6 +1116,33 @@ html, body {
     color: #116329;
 }
 
+.radar-commit-detail .file-change-badge-source {
+    background: #fff8c5;
+    border-color: #d4a72c;
+    color: #633c01;
+}
+
+.radar-commit-detail .file-change-description {
+    align-items: center;
+    color: #57606a;
+    display: inline-flex;
+    flex-wrap: wrap;
+    font-size: 0.72rem;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.radar-commit-detail .file-change-description code {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 3px;
+    color: #24292f;
+    font-size: inherit;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    padding: 0.05rem 0.25rem;
+}
+
 .radar-commit-detail .file-viewed-toggle {
     align-items: center;
     color: #57606a;
@@ -3111,6 +3138,22 @@ html, body {
     background: #173b25;
     border-color: #2f7d46;
     color: #aff5b4;
+}
+
+.radar-theme-dark .radar-commit-detail .file-change-badge-source {
+    background: #3b2e10;
+    border-color: #9e6a03;
+    color: #f2cc60;
+}
+
+.radar-theme-dark .radar-commit-detail .file-change-description {
+    color: var(--radar-muted);
+}
+
+.radar-theme-dark .radar-commit-detail .file-change-description code {
+    background: #161b22;
+    border-color: var(--radar-border);
+    color: var(--radar-fg);
 }
 
 .radar-theme-dark .review-suggestion-state {

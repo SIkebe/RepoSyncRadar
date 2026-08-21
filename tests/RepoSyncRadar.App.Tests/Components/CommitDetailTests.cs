@@ -119,6 +119,67 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void CommitDetail_Shows_Rename_Before_Source_Analysis()
+    {
+        var commit = MakeCommit(("content/copilot/new-location.md", 0, 0));
+        commit.Files[0].Status = "renamed";
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        var changeSummary = cut.Find("[data-testid=\"commit-detail-file-change-summary\"]");
+        Assert.Contains("リネーム", changeSummary.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("本文変更なし", changeSummary.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CommitDetail_Shows_Liquid_Variable_Change_Before_Preview()
+    {
+        var commit = MakeCommit(("content/code-security/set-pr-thresholds.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<MarkdownFileChangeSummary?>(
+                new MarkdownFileChangeSummary(
+                    IsRenamed: false,
+                    PreviousPath: null,
+                    HasRenderedBodyChanges: false,
+                    FrontmatterChangeCount: 0,
+                    SourceChange: new MarkdownSourceChangeSummary(
+                        MarkdownSourceChangeKind.LiquidVariableReference,
+                        "code-quality.workflow_name_actions",
+                        "product.prodname_code_quality_short",
+                        1))));
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+
+        cut.WaitForAssertion(() =>
+        {
+            var changeSummary = cut.Find("[data-testid=\"commit-detail-file-change-summary\"]");
+            Assert.Contains("本文変更なし", changeSummary.TextContent, StringComparison.Ordinal);
+            Assert.Contains("Liquid 変数参照", changeSummary.TextContent, StringComparison.Ordinal);
+            var sourceChange = cut.Find("[data-testid=\"commit-detail-source-change\"]");
+            Assert.Contains("code-quality.workflow_name_actions", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.Contains("product.prodname_code_quality_short", sourceChange.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public void CommitDetail_Shows_Viewed_Count_From_File_State()
     {
         var commit = MakeCommit(

@@ -430,6 +430,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.False(summary.HasRenderedBodyChanges);
         Assert.Equal("content/copilot/old-location.md", summary.PreviousPath);
         Assert.Equal(1, summary.FrontmatterChangeCount);
+        Assert.NotNull(summary.SourceChange);
+        Assert.Equal(MarkdownSourceChangeKind.Frontmatter, summary.SourceChange!.Kind);
+        Assert.Null(summary.SourceChange.Before);
+        Assert.Equal("  - /copilot/old-location", summary.SourceChange.After);
         await contentServer.DidNotReceiveWithAnyArgs().StartAsync(
             default,
             default!,

@@ -208,16 +208,31 @@
                     <div class="file-change-meta">
                         <span class="stats"
                               data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
-                        @if (IsRenamedFile(file))
-                        {
+                        @{
                             _markdownChangeSummariesByFile.TryGetValue(file.Path, out var changeSummary);
+                        }
+                        @if (IsRenamedFile(file) || changeSummary is { HasRenderedBodyChanges: false })
+                        {
                             <span class="file-change-summary"
                                   data-testid="commit-detail-file-change-summary"
-                                  title="@BuildRenameTitle(changeSummary)">
-                                <span class="file-change-badge file-change-badge-rename">@L["CommitDetail.FileChange.Renamed"]</span>
+                                  title="@BuildFileChangeTitle(file, changeSummary)">
+                                @if (IsRenamedFile(file))
+                                {
+                                    <span class="file-change-badge file-change-badge-rename">@L["CommitDetail.FileChange.Renamed"]</span>
+                                }
                                 @if (changeSummary is { HasRenderedBodyChanges: false })
                                 {
                                     <span class="file-change-badge file-change-badge-no-body">@L["CommitDetail.FileChange.NoBodyChanges"]</span>
+                                    @if (changeSummary.SourceChange is { } sourceChange)
+                                    {
+                                        <span class="file-change-badge file-change-badge-source">@BuildSourceChangeLabel(sourceChange.Kind)</span>
+                                        <span class="file-change-description"
+                                              data-testid="commit-detail-source-change">
+                                            <code>@DisplaySourceValue(sourceChange.Before)</code>
+                                            <span aria-hidden="true">→</span>
+                                            <code>@DisplaySourceValue(sourceChange.After)</code>
+                                        </span>
+                                    }
                                 }
                             </span>
                         }
@@ -533,10 +548,10 @@
             return;
         }
 
-        var renamedMarkdownFiles = commit.Files
-            .Where(static file => IsRenamedFile(file) && PreviewPathMapper.IsMarkdown(file.Path))
+        var markdownFiles = commit.Files
+            .Where(static file => PreviewPathMapper.IsMarkdown(file.Path))
             .ToArray();
-        if (renamedMarkdownFiles.Length == 0)
+        if (markdownFiles.Length == 0)
         {
             return;
         }
@@ -545,7 +560,7 @@
         _ = AnalyzeMarkdownChangesAsync(
             coordinator,
             commit,
-            renamedMarkdownFiles,
+            markdownFiles,
             _markdownChangeSummaryCts.Token);
     }
 
@@ -582,14 +597,19 @@
                     return;
                 }
 
+                var hasUpdates = false;
                 for (var index = 0; index < results.Length; index++)
                 {
                     if (results[index] is { } summary)
                     {
                         _markdownChangeSummariesByFile[files[index].Path] = summary;
+                        hasUpdates = true;
                     }
                 }
-                StateHasChanged();
+                if (hasUpdates)
+                {
+                    StateHasChanged();
+                }
             });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -618,10 +638,36 @@
     private static bool IsRenamedFile(CommitFile file)
         => string.Equals(file.Status, "renamed", StringComparison.OrdinalIgnoreCase);
 
-    private LocalizedString BuildRenameTitle(MarkdownFileChangeSummary? summary)
-        => summary?.PreviousPath is { Length: > 0 } previousPath
-            ? L["CommitDetail.FileChange.RenamedFrom", previousPath]
-            : L["CommitDetail.FileChange.Renamed"];
+    private LocalizedString BuildFileChangeTitle(CommitFile file, MarkdownFileChangeSummary? summary)
+    {
+        if (IsRenamedFile(file))
+        {
+            return summary?.PreviousPath is { Length: > 0 } previousPath
+                ? L["CommitDetail.FileChange.RenamedFrom", previousPath]
+                : L["CommitDetail.FileChange.Renamed"];
+        }
+
+        return summary?.SourceChange is { } sourceChange
+            ? L[
+                "CommitDetail.FileChange.SourceDetail",
+                BuildSourceChangeLabel(sourceChange.Kind),
+                DisplaySourceValue(sourceChange.Before),
+                DisplaySourceValue(sourceChange.After)]
+            : L["CommitDetail.FileChange.NoBodyChanges"];
+    }
+
+    private LocalizedString BuildSourceChangeLabel(MarkdownSourceChangeKind kind)
+        => kind switch
+        {
+            MarkdownSourceChangeKind.LiquidVariableReference => L["CommitDetail.FileChange.LiquidVariableReference"],
+            MarkdownSourceChangeKind.Frontmatter => L["CommitDetail.FileChange.Frontmatter"],
+            _ => L["CommitDetail.FileChange.SourceOnly"],
+        };
+
+    private LocalizedString DisplaySourceValue(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? L["CommitDetail.FileChange.EmptyValue"]
+            : new LocalizedString(value, value);
 
     private async Task LoadHistoryAsync(Commit commit)
     {

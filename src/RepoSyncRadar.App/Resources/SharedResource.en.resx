@@ -113,9 +113,14 @@
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>Evidence, impact, and checks</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>Select a commit.</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>Files</value></data>
+  <data name="CommitDetail.FileChange.EmptyValue" xml:space="preserve"><value>(none)</value></data>
+  <data name="CommitDetail.FileChange.Frontmatter" xml:space="preserve"><value>Frontmatter</value></data>
+  <data name="CommitDetail.FileChange.LiquidVariableReference" xml:space="preserve"><value>Liquid variable reference</value></data>
   <data name="CommitDetail.FileChange.NoBodyChanges" xml:space="preserve"><value>No body changes</value></data>
   <data name="CommitDetail.FileChange.Renamed" xml:space="preserve"><value>Renamed</value></data>
   <data name="CommitDetail.FileChange.RenamedFrom" xml:space="preserve"><value>Renamed from {0}</value></data>
+  <data name="CommitDetail.FileChange.SourceDetail" xml:space="preserve"><value>{0}: {1} → {2}</value></data>
+  <data name="CommitDetail.FileChange.SourceOnly" xml:space="preserve"><value>Source only</value></data>
   <data name="CommitDetail.FileViewed" xml:space="preserve"><value>Viewed</value></data>
   <data name="CommitDetail.FileViewed.MarkTitle" xml:space="preserve"><value>Mark {0} as viewed</value></data>
   <data name="CommitDetail.FileViewed.UnmarkTitle" xml:space="preserve"><value>Unmark {0} as viewed</value></data>
