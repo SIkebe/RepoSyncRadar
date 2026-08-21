@@ -111,10 +111,10 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""<[^>]+>""", RegexOptions.Singleline)]
     private static partial Regex HtmlTagRegex();
 
-    [GeneratedRegex("""(?<prefix>[ \t\n\f\r])(?<attr>(?:src|poster)\s*=\s*)(?<quote>["'])(?<url>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
+    [GeneratedRegex("""(?<prefix>[ \t\n\f\r])(?<attr>(?:src|poster)\s*=\s*)(?:(?<quote>["'])(?<url>.*?)\k<quote>|(?<url>[^\s"'=<>`]+))""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlAssetUrlRegex();
 
-    [GeneratedRegex("""(?<prefix>[ \t\n\f\r])(?<attr>srcset\s*=\s*)(?<quote>["'])(?<value>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
+    [GeneratedRegex("""(?<prefix>[ \t\n\f\r])(?<attr>srcset\s*=\s*)(?:(?<quote>["'])(?<value>.*?)\k<quote>|(?<value>[^\s"'=<>`]+))""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlSrcSetRegex();
 
     [GeneratedRegex("""<!--.*?-->""", RegexOptions.Singleline)]

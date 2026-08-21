@@ -55,11 +55,13 @@ public sealed class DocsVersionImpactAnalyzerTests
         });
     }
 
-    [Fact]
-    public void Detects_Relative_Asset_Changes_Caused_By_Rename()
+    [Theory]
+    [InlineData("![Diagram](images/diagram.png)")]
+    [InlineData("<img src=images/diagram.png>")]
+    [InlineData("<video poster=images/diagram.png></video>")]
+    [InlineData("<img srcset=images/diagram.png>")]
+    public void Detects_Relative_Asset_Changes_Caused_By_Rename(string markdown)
     {
-        const string markdown = "![Diagram](images/diagram.png)";
-
         var affected = DocsVersionImpactAnalyzer.Analyze(
             markdown,
             DocsLiquidContext.Empty,
@@ -365,6 +367,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             "<table><tr><td>Same text.</td></tr></table>",
             DocsLiquidContext.Empty,
             """<table><tbody class="highlight"><tr><td>Same text.</td></tr></tbody></table>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Explicit_Tbody_Group_Boundaries()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<table><tbody><tr><td>A</td></tr></tbody><tbody><tr><td>B</td></tr></tbody></table>",
+            DocsLiquidContext.Empty,
+            "<table><tbody><tr><td>A</td></tr><tr><td>B</td></tr></tbody></table>",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);

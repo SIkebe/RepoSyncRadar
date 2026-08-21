@@ -54,7 +54,8 @@ public static class DocsVersionImpactAnalyzer
         HtmlWhiteSpaceMode WhiteSpaceMode,
         bool IsRawText,
         bool IsForeignContent,
-        bool ExposesWhitespaceBoundary);
+        bool ExposesWhitespaceBoundary,
+        bool IsImplied = false);
 
     /// <summary>
     /// 全版で評価し、before/after が一致しない版だけを <see cref="DocsVersionCatalog.All"/>
@@ -573,12 +574,23 @@ public static class DocsVersionImpactAnalyzer
                 index = tagEnd;
                 continue;
             }
+            CloseImpliedTableBodyIfNeeded(
+                elements,
+                normalized,
+                tagName,
+                isClosing);
             var parentIsForeign = elements.Count > 0 && elements[^1].IsForeignContent;
             var isForeign = parentIsForeign || (!isClosing && tagName is "svg" or "math");
             if (!isClosing && !isForeign)
             {
                 ApplyImpliedHtmlEndTags(elements, tagName);
             }
+            OpenImpliedTableBodyIfNeeded(
+                elements,
+                normalized,
+                tagName,
+                isClosing,
+                isForeign);
             var isSelfClosing = IsVoidElement(tagName) || (isForeign && hasSelfClosingSyntax);
             var isBlock = IsBlockElement(tagName);
             var isWhitespaceBoundary = isBlock || tagName == "br";
@@ -598,8 +610,7 @@ public static class DocsVersionImpactAnalyzer
                 pendingCollapsibleSpace = false;
             }
 
-            if (!IsImpliedHtmlContainerSyntax(tagName, tag, isForeign)
-                && !IsOptionalHtmlEndTagSyntax(
+            if (!IsOptionalHtmlEndTagSyntax(
                     tagName,
                     isClosing,
                     isForeign,
@@ -651,11 +662,50 @@ public static class DocsVersionImpactAnalyzer
             or "strong" or "sub" or "sup" or "u" or "var"
             || HasHtmlAttributes(tag);
 
-    private static bool IsImpliedHtmlContainerSyntax(
+    private static void OpenImpliedTableBodyIfNeeded(
+        List<HtmlElementContext> elements,
+        StringBuilder normalized,
         string tagName,
-        ReadOnlySpan<char> tag,
+        bool isClosing,
         bool isForeign)
-        => !isForeign && tagName == "tbody" && !HasHtmlAttributes(tag);
+    {
+        if (isClosing
+            || isForeign
+            || tagName != "tr"
+            || elements.Count == 0
+            || elements[^1].TagName != "table")
+        {
+            return;
+        }
+
+        normalized.Append("<tbody>");
+        elements.Add(new HtmlElementContext(
+            "tbody",
+            elements[^1].WhiteSpaceMode,
+            IsRawText: false,
+            IsForeignContent: false,
+            ExposesWhitespaceBoundary: false,
+            IsImplied: true));
+    }
+
+    private static void CloseImpliedTableBodyIfNeeded(
+        List<HtmlElementContext> elements,
+        StringBuilder normalized,
+        string tagName,
+        bool isClosing)
+    {
+        var endsCurrentRowGroup = isClosing && tagName == "table"
+            || !isClosing && tagName is "caption" or "colgroup" or "tbody" or "tfoot" or "thead";
+        if (!endsCurrentRowGroup
+            || elements.Count == 0
+            || elements[^1] is not { TagName: "tbody", IsImplied: true })
+        {
+            return;
+        }
+
+        normalized.Append("</tbody>");
+        elements.RemoveAt(elements.Count - 1);
+    }
 
     private static bool IsOptionalHtmlEndTagSyntax(
         string tagName,
