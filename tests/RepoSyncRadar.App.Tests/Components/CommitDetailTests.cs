@@ -223,6 +223,76 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void CommitDetail_Publishes_Source_Summaries_As_Each_File_Completes()
+    {
+        var commit = MakeCommit(
+            ("content/copilot/first.md", 1, 1),
+            ("content/copilot/second.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var firstResult = new TaskCompletionSource<MarkdownFileChangeSummary?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondResult = new TaskCompletionSource<MarkdownFileChangeSummary?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(firstResult.Task);
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[1].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(secondResult.Task);
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+        cut.WaitForAssertion(() =>
+        {
+            coordinator.Received(1).AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>());
+            coordinator.Received(1).AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[1].Path,
+                Arg.Any<CancellationToken>());
+        }, TimeSpan.FromSeconds(10));
+
+        firstResult.SetResult(new MarkdownFileChangeSummary(
+            IsRenamed: false,
+            PreviousPath: null,
+            HasRenderedBodyChanges: false,
+            FrontmatterChangeCount: 0,
+            SourceChange: new MarkdownSourceChangeSummary(
+                MarkdownSourceChangeKind.SourceOnly,
+                "old",
+                "new",
+                1)));
+
+        cut.WaitForAssertion(() =>
+        {
+            var sourceChanges = cut.FindAll("[data-testid=\"commit-detail-source-change\"]");
+            Assert.Single(sourceChanges);
+            Assert.Contains("old", sourceChanges[0].TextContent, StringComparison.Ordinal);
+            Assert.False(secondResult.Task.IsCompleted);
+        }, TimeSpan.FromSeconds(10));
+
+        secondResult.SetResult(null);
+    }
+
+    [Fact]
     public void CommitDetail_Shows_Viewed_Count_From_File_State()
     {
         var commit = MakeCommit(

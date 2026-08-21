@@ -573,45 +573,44 @@
     {
         try
         {
-            var results = new MarkdownFileChangeSummary?[files.Count];
-            await Parallel.ForEachAsync(
-                Enumerable.Range(0, files.Count),
-                new ParallelOptions
-                {
-                    CancellationToken = cancellationToken,
-                    MaxDegreeOfParallelism = MaxConcurrentMarkdownChangeAnalyses,
-                },
-                async (index, token) =>
-                {
-                    var file = files[index];
-                    results[index] = await coordinator.AnalyzeMarkdownFileChangeAsync(
-                    commit.PrNumber,
-                    commit.Sha,
-                    file.Path,
-                    token);
-                });
-            cancellationToken.ThrowIfCancellationRequested();
-            await InvokeAsync(() =>
+            var nextFileIndex = -1;
+            async Task AnalyzeNextFilesAsync()
             {
-                if (!string.Equals(Commit?.Sha, commit.Sha, StringComparison.Ordinal))
+                while (true)
                 {
-                    return;
-                }
-
-                var hasUpdates = false;
-                for (var index = 0; index < results.Length; index++)
-                {
-                    if (results[index] is { } summary)
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var fileIndex = Interlocked.Increment(ref nextFileIndex);
+                    if (fileIndex >= files.Count)
                     {
-                        _markdownChangeSummariesByFile[files[index].Path] = summary;
-                        hasUpdates = true;
+                        return;
                     }
+
+                    var file = files[fileIndex];
+                    var summary = await coordinator.AnalyzeMarkdownFileChangeAsync(
+                        commit.PrNumber,
+                        commit.Sha,
+                        file.Path,
+                        cancellationToken);
+                    if (summary is null)
+                    {
+                        continue;
+                    }
+
+                    await InvokeAsync(() =>
+                    {
+                        if (!cancellationToken.IsCancellationRequested
+                            && string.Equals(Commit?.Sha, commit.Sha, StringComparison.Ordinal))
+                        {
+                            _markdownChangeSummariesByFile[file.Path] = summary;
+                            StateHasChanged();
+                        }
+                    });
                 }
-                if (hasUpdates)
-                {
-                    StateHasChanged();
-                }
-            });
+            }
+
+            var workerCount = Math.Min(MaxConcurrentMarkdownChangeAnalyses, files.Count);
+            await Task.WhenAll(Enumerable.Range(0, workerCount).Select(_ => AnalyzeNextFilesAsync()));
+            cancellationToken.ThrowIfCancellationRequested();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
