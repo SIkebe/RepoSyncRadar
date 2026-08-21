@@ -247,7 +247,10 @@ public static class DocsVersionImpactAnalyzer
                     NormalizeForComparison(afterRendered, cancellationToken),
                     StringComparison.Ordinal))
             {
-                var changes = BuildChangeSnippets(beforeRendered, afterRendered);
+                var changes = BuildChangeSnippets(
+                    beforeRendered,
+                    afterRendered,
+                    cancellationToken);
                 if (changes.Count == 0)
                 {
                     changes.Add(new DocsVersionChangeSnippet(
@@ -315,24 +318,29 @@ public static class DocsVersionImpactAnalyzer
         return affected.Count == DocsVersionCatalog.All.Count;
     }
 
-    private static List<DocsVersionChangeSnippet> BuildChangeSnippets(string? beforeRendered, string? afterRendered)
+    private static List<DocsVersionChangeSnippet> BuildChangeSnippets(
+        string? beforeRendered,
+        string? afterRendered,
+        CancellationToken cancellationToken)
     {
         var beforeBlocks = SplitBlocks(beforeRendered);
         var afterBlocks = SplitBlocks(afterRendered);
+        cancellationToken.ThrowIfCancellationRequested();
         var snippets = new List<DocsVersionChangeSnippet>();
         var removed = new List<string>();
         var added = new List<string>();
-        var table = BuildLcsTable(beforeBlocks, afterBlocks);
+        var table = BuildLcsTable(beforeBlocks, afterBlocks, cancellationToken);
         var beforeIndex = 0;
         var afterIndex = 0;
 
         while (beforeIndex < beforeBlocks.Count || afterIndex < afterBlocks.Count)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (beforeIndex < beforeBlocks.Count
                 && afterIndex < afterBlocks.Count
                 && string.Equals(beforeBlocks[beforeIndex], afterBlocks[afterIndex], StringComparison.Ordinal))
             {
-                FlushPending(snippets, removed, added);
+                FlushPending(snippets, removed, added, cancellationToken);
                 beforeIndex++;
                 afterIndex++;
             }
@@ -349,17 +357,25 @@ public static class DocsVersionImpactAnalyzer
             }
         }
 
-        FlushPending(snippets, removed, added);
+        FlushPending(snippets, removed, added, cancellationToken);
         return snippets;
     }
 
-    private static int[,] BuildLcsTable(IReadOnlyList<string> beforeBlocks, IReadOnlyList<string> afterBlocks)
+    private static int[,] BuildLcsTable(
+        IReadOnlyList<string> beforeBlocks,
+        IReadOnlyList<string> afterBlocks,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var table = new int[beforeBlocks.Count + 1, afterBlocks.Count + 1];
         for (var beforeIndex = beforeBlocks.Count - 1; beforeIndex >= 0; beforeIndex--)
         {
             for (var afterIndex = afterBlocks.Count - 1; afterIndex >= 0; afterIndex--)
             {
+                if ((afterIndex & 1023) == 0)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
                 table[beforeIndex, afterIndex] = string.Equals(beforeBlocks[beforeIndex], afterBlocks[afterIndex], StringComparison.Ordinal)
                     ? table[beforeIndex + 1, afterIndex + 1] + 1
                     : Math.Max(table[beforeIndex + 1, afterIndex], table[beforeIndex, afterIndex + 1]);
@@ -371,11 +387,13 @@ public static class DocsVersionImpactAnalyzer
     private static void FlushPending(
         List<DocsVersionChangeSnippet> snippets,
         List<string> removed,
-        List<string> added)
+        List<string> added,
+        CancellationToken cancellationToken)
     {
         var pairCount = Math.Min(removed.Count, added.Count);
         for (var index = 0; index < pairCount; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             snippets.Add(new DocsVersionChangeSnippet(
                 DocsVersionChangeKind.Updated,
                 TrimExcerpt(removed[index]),
@@ -384,6 +402,7 @@ public static class DocsVersionImpactAnalyzer
 
         for (var index = pairCount; index < removed.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             snippets.Add(new DocsVersionChangeSnippet(
                 DocsVersionChangeKind.Removed,
                 TrimExcerpt(removed[index]),
@@ -392,6 +411,7 @@ public static class DocsVersionImpactAnalyzer
 
         for (var index = pairCount; index < added.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             snippets.Add(new DocsVersionChangeSnippet(
                 DocsVersionChangeKind.Added,
                 null,
@@ -1187,7 +1207,7 @@ public static class DocsVersionImpactAnalyzer
             or "dialog" or "div" or "dl" or "dt" or "fieldset" or "figcaption" or "figure"
             or "footer" or "form" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6"
             or "header" or "hgroup" or "hr" or "li" or "main" or "nav" or "ol" or "p"
-            or "pre" or "section" or "table" or "tbody" or "td" or "tfoot" or "th"
+            or "pre" or "section" or "summary" or "table" or "tbody" or "td" or "tfoot" or "th"
             or "thead" or "tr" or "ul";
 
     private static string NormalizeHtmlTagSyntax(

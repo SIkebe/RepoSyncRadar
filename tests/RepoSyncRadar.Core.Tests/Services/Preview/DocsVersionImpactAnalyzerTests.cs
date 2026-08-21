@@ -733,6 +733,35 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Stops_Detailed_Analysis_When_Cancelled()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            DocsVersionImpactAnalyzer.AnalyzeDetailsCancellable(
+                "Before.",
+                DocsLiquidContext.Empty,
+                "After.",
+                DocsLiquidContext.Empty,
+                beforeRepoPath: null,
+                afterRepoPath: null,
+                cancellation.Token));
+    }
+
+    [Fact]
+    public void Ignores_Collapsible_Whitespace_After_Summary_Block()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<details><summary>Title</summary>\nBody</details>",
+            DocsLiquidContext.Empty,
+            "<details><summary>Title</summary>Body</details>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
     public void Preserves_Prompt_Whitespace_That_Changes_The_Copilot_Link()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
