@@ -1141,6 +1141,7 @@ html, body {
     max-width: 100%;
     overflow-wrap: anywhere;
     padding: 0.05rem 0.25rem;
+    white-space: break-spaces;
 }
 
 .radar-commit-detail .file-change-visually-hidden {

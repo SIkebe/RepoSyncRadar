@@ -148,6 +148,25 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Empty(affected);
     }
 
+    [Fact]
+    public void Analyze_Handles_A_Large_Rendered_Rewrite_Without_Building_Snippets()
+    {
+        var before = string.Join(
+            "\n\n",
+            Enumerable.Range(0, 10_000).Select(static index => $"Before paragraph {index}."));
+        var after = string.Join(
+            "\n\n",
+            Enumerable.Range(0, 10_000).Select(static index => $"After paragraph {index}."));
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
     [Theory]
     [InlineData("A&#32;B", "A B")]
     [InlineData("""<SPAN title='x'>Same text.</SPAN>""", """<span title="x">Same text.</span>""")]

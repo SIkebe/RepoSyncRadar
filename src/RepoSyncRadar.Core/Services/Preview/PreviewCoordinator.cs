@@ -450,7 +450,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                     cacheLiquidContexts: false,
                     cancellationToken)
                 .ConfigureAwait(false);
-            var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            var affectedVersions = DocsVersionImpactAnalyzer.Analyze(
                 sources.BeforeMarkdown,
                 sources.BeforeLiquid,
                 sources.AfterMarkdown,
@@ -465,9 +465,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             return new MarkdownFileChangeSummary(
                 IsRenamed: previousPath is not null,
                 PreviousPath: previousPath,
-                HasRenderedBodyChanges: versionImpacts.Count > 0,
+                HasRenderedBodyChanges: affectedVersions.Count > 0,
                 FrontmatterChangeCount: frontmatterChanges.Count,
-                SourceChange: versionImpacts.Count == 0
+                SourceChange: affectedVersions.Count == 0
                     ? MarkdownSourceChangeAnalyzer.Analyze(
                         sources.BeforeMarkdown,
                         sources.AfterMarkdown,

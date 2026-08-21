@@ -62,10 +62,51 @@ public static class DocsVersionImpactAnalyzer
         string? beforeMarkdown,
         DocsLiquidContext beforeContext,
         string? afterMarkdown,
-        DocsLiquidContext afterContext)
-        => AnalyzeDetails(beforeMarkdown, beforeContext, afterMarkdown, afterContext)
-            .Select(static detail => detail.Version)
-            .ToArray();
+        DocsLiquidContext afterContext,
+        string? beforeRepoPath = null,
+        string? afterRepoPath = null)
+    {
+        ArgumentNullException.ThrowIfNull(beforeContext);
+        ArgumentNullException.ThrowIfNull(afterContext);
+
+        if (string.Equals(beforeMarkdown, afterMarkdown, StringComparison.Ordinal)
+            && ReferenceEquals(beforeContext, afterContext)
+            && string.Equals(beforeRepoPath, afterRepoPath, StringComparison.Ordinal))
+        {
+            return Array.Empty<DocsVersion>();
+        }
+
+        var beforeRenderable = StripFrontmatter(beforeMarkdown);
+        var afterRenderable = StripFrontmatter(afterMarkdown);
+        var affected = new List<DocsVersion>(DocsVersionCatalog.All.Count);
+        foreach (var version in DocsVersionCatalog.All)
+        {
+            var beforeRendered = DocsLiquidEvaluator.Evaluate(beforeRenderable, beforeContext, version);
+            var afterRendered = DocsLiquidEvaluator.Evaluate(afterRenderable, afterContext, version);
+            if (!string.IsNullOrWhiteSpace(beforeRepoPath)
+                && !string.IsNullOrWhiteSpace(afterRepoPath))
+            {
+                beforeRendered = MarkdownPreviewRenderer.RewriteAutotitleMarkdownLinks(
+                    beforeRendered,
+                    beforeRepoPath,
+                    beforeContext,
+                    version);
+                afterRendered = MarkdownPreviewRenderer.RewriteAutotitleMarkdownLinks(
+                    afterRendered,
+                    afterRepoPath,
+                    afterContext,
+                    version);
+            }
+            if (!string.Equals(
+                    NormalizeForComparison(beforeRendered),
+                    NormalizeForComparison(afterRendered),
+                    StringComparison.Ordinal))
+            {
+                affected.Add(version);
+            }
+        }
+        return affected;
+    }
 
     /// <summary>
     /// 全版で評価し、before/after の本文差分の抜粋を版ごとに返す。

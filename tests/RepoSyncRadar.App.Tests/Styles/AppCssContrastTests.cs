@@ -104,6 +104,17 @@ public sealed partial class AppCssContrastTests
     }
 
     [Fact]
+    public void FileChangeExcerpts_Preserve_Whitespace_While_Wrapping()
+    {
+        var excerptBlock = GetExactRuleBlock(
+            ReadAppCss(),
+            ".radar-commit-detail .file-change-description code");
+
+        Assert.Contains("overflow-wrap: anywhere", excerptBlock, StringComparison.Ordinal);
+        Assert.Contains("white-space: break-spaces", excerptBlock, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AppHeader_Uses_Theme_Surface_Tokens()
     {
         var headerBlock = GetRuleBlock(ReadAppCss(), ".app-header");
