@@ -70,3 +70,4 @@ jobs:
           }
 
           "run_ci=$($runCi.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          exit 0
