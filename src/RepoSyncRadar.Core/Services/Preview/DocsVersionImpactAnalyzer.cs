@@ -430,7 +430,7 @@ public static class DocsVersionImpactAnalyzer
             var isWhitespaceBoundary = isBlock || tagName == "br";
             var exposesWhitespaceBoundary = isClosing
                 ? FindHtmlElement(elements, tagName)?.ExposesWhitespaceBoundary == true
-                : HtmlTagExposesWhitespaceBoundary(tag);
+                : HtmlTagExposesWhitespaceBoundary(tagName, tag);
             if (isWhitespaceBoundary)
             {
                 pendingCollapsibleSpace = false;
@@ -478,8 +478,11 @@ public static class DocsVersionImpactAnalyzer
         return normalized.ToString().Trim();
     }
 
-    private static bool HtmlTagExposesWhitespaceBoundary(ReadOnlySpan<char> tag)
-        => GetHtmlAttributeValue(tag, "style") is not null
+    private static bool HtmlTagExposesWhitespaceBoundary(
+        string tagName,
+        ReadOnlySpan<char> tag)
+        => tagName == "code"
+            || GetHtmlAttributeValue(tag, "style") is not null
             || GetHtmlAttributeValue(tag, "class") is not null
             || GetHtmlAttributeValue(tag, "id") is not null;
 
@@ -983,12 +986,22 @@ public static class DocsVersionImpactAnalyzer
                 : attributeName.ToLowerInvariant();
             if (attributeNames.Add(canonicalAttributeName))
             {
+                var canonicalAttributeValue = attributeValue is null
+                    ? null
+                    : DecodeHtmlCharacterReferences(attributeValue);
+                if (!isForeign
+                    && (IsHtmlBooleanAttribute(canonicalAttributeName)
+                        || (canonicalAttributeName == "hidden"
+                            && !string.Equals(
+                                canonicalAttributeValue,
+                                "until-found",
+                                StringComparison.OrdinalIgnoreCase))))
+                {
+                    canonicalAttributeValue = null;
+                }
                 attributes.Add((
                     canonicalAttributeName,
-                    attributeValue is null
-                    || (!isForeign && IsHtmlBooleanAttribute(canonicalAttributeName))
-                        ? null
-                        : DecodeHtmlCharacterReferences(attributeValue)));
+                    canonicalAttributeValue));
             }
         }
         foreach (var attribute in attributes.OrderBy(static attribute => attribute.Name, StringComparer.Ordinal))

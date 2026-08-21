@@ -177,6 +177,7 @@ public sealed class DocsVersionImpactAnalyzerTests
         """<span class="y" title="x">Same text.</span>""")]
     [InlineData("""<input disabled>""", """<input disabled="">""")]
     [InlineData("""<input disabled="false">""", """<input disabled>""")]
+    [InlineData("""<div hidden="false">Same text.</div>""", """<div hidden>Same text.</div>""")]
     [InlineData("<textarea>A&#32;B</textarea>", "<textarea>A B</textarea>")]
     [InlineData("<textarea>&#128;</textarea>", "<textarea>€</textarea>")]
     [InlineData(
@@ -202,6 +203,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             """<span title="first" title="second">Same text.</span>""",
             DocsLiquidContext.Empty,
             """<span title="second" title="first">Same text.</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Hidden_UntilFound_Semantics()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<div hidden="until-found">Same text.</div>""",
+            DocsLiquidContext.Empty,
+            """<div hidden>Same text.</div>""",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
@@ -488,6 +501,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             before,
             DocsLiquidContext.Empty,
             after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Ownership_Across_Inline_Code_Boundaries()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<code>A </code>B",
+            DocsLiquidContext.Empty,
+            "<code>A</code> B",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
