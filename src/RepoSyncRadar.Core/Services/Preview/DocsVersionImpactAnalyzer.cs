@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using Markdig;
 
@@ -320,7 +321,7 @@ public static partial class DocsVersionImpactAnalyzer
                 sensitiveElements.Add(match.Value);
                 return $"\uE000RSR{index}\uE001";
             });
-        var normalized = CollapsibleWhitespaceRegex().Replace(protectedHtml, " ").Trim();
+        var normalized = NormalizeCollapsibleTextWhitespace(protectedHtml);
         for (var index = 0; index < sensitiveElements.Count; index++)
         {
             normalized = normalized.Replace(
@@ -329,6 +330,45 @@ public static partial class DocsVersionImpactAnalyzer
                 StringComparison.Ordinal);
         }
         return normalized;
+    }
+
+    private static string NormalizeCollapsibleTextWhitespace(string html)
+    {
+        var normalized = new StringBuilder(html.Length);
+        var index = 0;
+        while (index < html.Length)
+        {
+            if (html[index] != '<')
+            {
+                var textEnd = html.IndexOf('<', index);
+                if (textEnd < 0)
+                {
+                    textEnd = html.Length;
+                }
+                normalized.Append(CollapsibleWhitespaceRegex().Replace(html[index..textEnd], " "));
+                index = textEnd;
+                continue;
+            }
+
+            var quote = '\0';
+            do
+            {
+                var current = html[index];
+                normalized.Append(current);
+                index++;
+                if (quote == '\0' && current is '\'' or '"')
+                {
+                    quote = current;
+                }
+                else if (current == quote)
+                {
+                    quote = '\0';
+                }
+            }
+            while (index < html.Length && (html[index - 1] != '>' || quote != '\0'));
+        }
+
+        return normalized.ToString().Trim();
     }
 
     private static void AddCurrentBlock(List<string> blocks, List<string> current)

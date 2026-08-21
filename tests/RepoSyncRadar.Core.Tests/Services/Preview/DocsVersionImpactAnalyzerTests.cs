@@ -151,6 +151,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Preserves_Whitespace_Differences_Inside_Raw_Html_Attributes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<input value="a  b">""",
+            DocsLiquidContext.Empty,
+            """<input value="a b">""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Flags_Only_Fpt_When_Change_Lives_Inside_Ifversion_Fpt_Block()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
