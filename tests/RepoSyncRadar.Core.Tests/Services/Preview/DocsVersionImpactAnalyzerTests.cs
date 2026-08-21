@@ -60,6 +60,7 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData("<img src=images/diagram.png>")]
     [InlineData("<video poster=images/diagram.png></video>")]
     [InlineData("<img srcset=images/diagram.png>")]
+    [InlineData("""<img srcset="data:image/png;base64,AAAA 1x, images/diagram.png 2x">""")]
     public void Detects_Relative_Asset_Changes_Caused_By_Rename(string markdown)
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
@@ -272,6 +273,30 @@ public sealed class DocsVersionImpactAnalyzerTests
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Detects_Visible_Comment_Syntax_Changes_Inside_Xmp()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<xmp><!-- old --></xmp>",
+            DocsLiquidContext.Empty,
+            "<xmp><!-- new --></xmp>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Only_Whitespace_Around_Xmp_Block_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "Before\n<xmp>Same</xmp>\nAfter",
+            DocsLiquidContext.Empty,
+            "Before<xmp>Same</xmp>After",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
     }
 
     [Fact]

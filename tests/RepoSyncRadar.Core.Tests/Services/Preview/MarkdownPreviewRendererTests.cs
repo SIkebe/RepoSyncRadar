@@ -2381,6 +2381,46 @@ var value = 1;
     }
 
     [Fact]
+    public void Rewrites_Relative_Candidate_In_Mixed_Data_SrcSet()
+    {
+        const string markdown =
+            """<img srcset="data:image/png;base64,AAAA 1x, images/diagram.png 2x">""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(
+            "srcset=\"data:image/png;base64,AAAA 1x, /markdown-assets/after/content/code-security/images/diagram.png 2x\"",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(
+        "data:image/png;base64,AAAA future(foo(bar), images/diagram.png 2x",
+        "/markdown-assets/after/content/code-security/images/diagram.png 2x")]
+    [InlineData(
+        "images/\u00a0file.png 1x",
+        "/markdown-assets/after/content/code-security/images/%C2%A0file.png 1x")]
+    public void Rewrites_SrcSet_Using_Browser_Tokenization(string srcset, string expected)
+    {
+        var markdown = $"""<img srcset="{srcset}">""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(expected, html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Renders_Plain_Markdown_Without_Frontmatter()
     {
         var markdown = "# Hello\n\nWorld";

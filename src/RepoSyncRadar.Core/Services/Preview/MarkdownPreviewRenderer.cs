@@ -1797,43 +1797,73 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string RewriteSrcSet(string srcset, string repoPath, string assetBasePath)
     {
-        if (srcset.Contains("data:", StringComparison.OrdinalIgnoreCase))
+        StringBuilder? rewritten = null;
+        var copiedThrough = 0;
+        var index = 0;
+        while (index < srcset.Length)
         {
-            return srcset;
-        }
-
-        var candidates = srcset.Split(',', StringSplitOptions.None);
-        var rewritten = new StringBuilder(srcset.Length + 64);
-        for (var i = 0; i < candidates.Length; i++)
-        {
-            if (i > 0)
+            while (index < srcset.Length
+                   && (IsAsciiWhitespace(srcset[index]) || srcset[index] == ','))
             {
-                rewritten.Append(',');
+                index++;
+            }
+            if (index >= srcset.Length)
+            {
+                break;
             }
 
-            var candidate = candidates[i];
-            var leadingLength = candidate.Length - candidate.TrimStart().Length;
-            var trailingLength = candidate.Length - candidate.TrimEnd().Length;
-            var leading = candidate[..leadingLength];
-            var core = candidate[leadingLength..(candidate.Length - trailingLength)];
-            var trailing = candidate[(candidate.Length - trailingLength)..];
-            if (core.Length == 0)
+            var urlStart = index;
+            while (index < srcset.Length && !IsAsciiWhitespace(srcset[index]))
             {
-                rewritten.Append(candidate);
+                index++;
+            }
+            var tokenEnd = index;
+            var urlEnd = tokenEnd;
+            while (urlEnd > urlStart && srcset[urlEnd - 1] == ',')
+            {
+                urlEnd--;
+            }
+
+            var url = srcset[urlStart..urlEnd];
+            var next = RewriteAssetUrl(url, repoPath, assetBasePath);
+            if (!string.Equals(url, next, StringComparison.Ordinal))
+            {
+                rewritten ??= new StringBuilder(srcset.Length + 64);
+                rewritten
+                    .Append(srcset, copiedThrough, urlStart - copiedThrough)
+                    .Append(next);
+                copiedThrough = urlEnd;
+            }
+
+            if (urlEnd < tokenEnd)
+            {
                 continue;
             }
-
-            var descriptorStart = FindFirstWhitespace(core);
-            var url = descriptorStart < 0 ? core : core[..descriptorStart];
-            var descriptor = descriptorStart < 0 ? string.Empty : core[descriptorStart..];
-            rewritten
-                .Append(leading)
-                .Append(RewriteAssetUrl(url, repoPath, assetBasePath))
-                .Append(descriptor)
-                .Append(trailing);
+            var isInsideParentheses = false;
+            while (index < srcset.Length)
+            {
+                var current = srcset[index++];
+                if (!isInsideParentheses && current == '(')
+                {
+                    isInsideParentheses = true;
+                }
+                else if (isInsideParentheses && current == ')')
+                {
+                    isInsideParentheses = false;
+                }
+                else if (!isInsideParentheses && current == ',')
+                {
+                    break;
+                }
+            }
         }
-        return rewritten.ToString();
+        return rewritten is null
+            ? srcset
+            : rewritten.Append(srcset, copiedThrough, srcset.Length - copiedThrough).ToString();
     }
+
+    private static bool IsAsciiWhitespace(char value)
+        => value is '\t' or '\n' or '\f' or '\r' or ' ';
 
     private static string RewriteAssetUrl(string url, string repoPath, string assetBasePath)
     {
@@ -1896,18 +1926,6 @@ internal static partial class MarkdownPreviewRenderer
         var normalized = repoPath.Replace('\\', '/');
         var lastSlash = normalized.LastIndexOf('/');
         return lastSlash < 0 ? string.Empty : normalized[..lastSlash];
-    }
-
-    private static int FindFirstWhitespace(string value)
-    {
-        for (var i = 0; i < value.Length; i++)
-        {
-            if (char.IsWhiteSpace(value[i]))
-            {
-                return i;
-            }
-        }
-        return -1;
     }
 
     private static string CombineAssetPath(string basePath, string relativePath)

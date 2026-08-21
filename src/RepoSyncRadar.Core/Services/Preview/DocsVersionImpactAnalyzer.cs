@@ -1221,7 +1221,7 @@ public static class DocsVersionImpactAnalyzer
         ReadOnlySpan<char> tag,
         HtmlWhiteSpaceMode inheritedMode)
     {
-        var mode = tagName is "pre" or "textarea" or "script" or "style"
+        var mode = tagName is "pre" or "textarea" or "script" or "style" or "xmp"
             ? HtmlWhiteSpaceMode.Preserve
             : inheritedMode;
         var style = GetHtmlAttributeValue(tag, "style");
@@ -1694,7 +1694,7 @@ public static class DocsVersionImpactAnalyzer
     }
 
     private static bool IsRawTextElement(string tagName)
-        => IsRcDataElement(tagName) || tagName is "script" or "style";
+        => IsRcDataElement(tagName) || tagName is "script" or "style" or "xmp";
 
     private static bool IsRcDataElement(string tagName)
         => tagName is "textarea" or "title";
@@ -1713,7 +1713,7 @@ public static class DocsVersionImpactAnalyzer
             or "footer" or "form" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6"
             or "header" or "hgroup" or "hr" or "li" or "main" or "nav" or "ol" or "p"
             or "pre" or "section" or "summary" or "table" or "tbody" or "td" or "tfoot" or "th"
-            or "thead" or "tr" or "ul";
+            or "thead" or "tr" or "ul" or "xmp";
 
     private static string NormalizeHtmlTagSyntax(
         ReadOnlySpan<char> tag,
