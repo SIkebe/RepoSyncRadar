@@ -135,6 +135,22 @@ public sealed class MarkdownSourceChangeAnalyzerTests
     }
 
     [Fact]
+    public void Centers_Long_Source_Excerpts_On_First_Difference()
+    {
+        var prefix = new string('a', 157);
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(
+            prefix + "old ending",
+            prefix + "new ending");
+
+        Assert.NotNull(summary);
+        Assert.NotEqual(summary!.Before, summary.After);
+        Assert.Contains("old ending", summary.Before, StringComparison.Ordinal);
+        Assert.Contains("new ending", summary.After, StringComparison.Ordinal);
+        Assert.True(summary.Before!.Length <= 160);
+        Assert.True(summary.After!.Length <= 160);
+    }
+
+    [Fact]
     public void Returns_Null_For_Identical_Source()
     {
         Assert.Null(MarkdownSourceChangeAnalyzer.Analyze("Same.", "Same."));

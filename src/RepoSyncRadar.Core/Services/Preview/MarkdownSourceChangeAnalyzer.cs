@@ -61,10 +61,11 @@ public static partial class MarkdownSourceChangeAnalyzer
         }
 
         var first = changes[0];
+        var excerpts = AbbreviatePair(first.BeforeLine, first.AfterLine);
         return new MarkdownSourceChangeSummary(
             MarkdownSourceChangeKind.Frontmatter,
-            Abbreviate(first.BeforeLine),
-            Abbreviate(first.AfterLine),
+            excerpts.Before,
+            excerpts.After,
             changes.Count);
     }
 
@@ -140,10 +141,11 @@ public static partial class MarkdownSourceChangeAnalyzer
             afterEnd--;
         }
 
-        var beforeExcerpt = commonPrefix <= beforeEnd ? Abbreviate(beforeLines[commonPrefix]) : null;
-        var afterExcerpt = commonPrefix <= afterEnd ? Abbreviate(afterLines[commonPrefix]) : null;
+        var excerpts = AbbreviatePair(
+            commonPrefix <= beforeEnd ? beforeLines[commonPrefix] : null,
+            commonPrefix <= afterEnd ? afterLines[commonPrefix] : null);
         var changeCount = Math.Max(beforeEnd - commonPrefix + 1, afterEnd - commonPrefix + 1);
-        return (beforeExcerpt, afterExcerpt, Math.Max(changeCount, 1));
+        return (excerpts.Before, excerpts.After, Math.Max(changeCount, 1));
     }
 
     private static string[] SplitLines(string? source)
@@ -162,6 +164,50 @@ public static partial class MarkdownSourceChangeAnalyzer
         }
 
         return string.Concat(value.AsSpan(0, _maxExcerptLength - 3), "...");
+    }
+
+    private static (string? Before, string? After) AbbreviatePair(string? before, string? after)
+    {
+        if (before is null || after is null)
+        {
+            return (Abbreviate(before), Abbreviate(after));
+        }
+
+        var differenceIndex = 0;
+        while (differenceIndex < before.Length
+               && differenceIndex < after.Length
+               && before[differenceIndex] == after[differenceIndex])
+        {
+            differenceIndex++;
+        }
+
+        return (
+            AbbreviateAround(before, differenceIndex),
+            AbbreviateAround(after, differenceIndex));
+    }
+
+    private static string AbbreviateAround(string value, int center)
+    {
+        if (value.Length <= _maxExcerptLength)
+        {
+            return value;
+        }
+
+        const int ellipsisLength = 3;
+        const int leadingContextLength = 60;
+        var start = Math.Max(0, center - leadingContextLength);
+        var hasLeadingEllipsis = start > 0;
+        var availableLength = _maxExcerptLength - (hasLeadingEllipsis ? ellipsisLength : 0);
+        var hasTrailingEllipsis = value.Length - start > availableLength;
+        if (hasTrailingEllipsis)
+        {
+            availableLength -= ellipsisLength;
+        }
+
+        return string.Concat(
+            hasLeadingEllipsis ? "..." : string.Empty,
+            value.AsSpan(start, Math.Min(availableLength, value.Length - start)),
+            hasTrailingEllipsis ? "..." : string.Empty);
     }
 
 }

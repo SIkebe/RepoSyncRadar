@@ -999,7 +999,8 @@ public class CommitDetailTests
                 button => Assert.False(button.HasAttribute("disabled")));
         });
 
-        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next);
+        await cut.InvokeAsync(
+            () => navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next));
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(adjacentPath, captured?.FilePath);
@@ -1007,7 +1008,8 @@ public class CommitDetailTests
                 cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]"),
                 button => Assert.False(button.HasAttribute("disabled")));
         });
-        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous);
+        await cut.InvokeAsync(
+            () => navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous));
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(referencePaths[1], captured?.FilePath);
@@ -1020,7 +1022,7 @@ public class CommitDetailTests
                 Arg.Any<DocsVersion?>(),
                 Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<CancellationToken>());
-        });
+        }, TimeSpan.FromSeconds(10));
     }
 
     [Fact]

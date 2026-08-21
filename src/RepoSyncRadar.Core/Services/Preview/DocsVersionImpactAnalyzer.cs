@@ -55,9 +55,12 @@ public static partial class DocsVersionImpactAnalyzer
     private static partial Regex CollapsibleWhitespaceRegex();
 
     [GeneratedRegex(
-        @"<[^>]*\bstyle\s*=\s*(?:""[^""]*\bwhite-space\s*:|'[^']*\bwhite-space\s*:)",
-        RegexOptions.IgnoreCase)]
-    private static partial Regex InlineWhiteSpaceStyleRegex();
+        @"<(?<tag>[A-Za-z][A-Za-z0-9:-]*)\b(?=[^>]*\bstyle\s*=\s*(?:""[^""]*\bwhite-space\s*:|'[^']*\bwhite-space\s*:))(?:[^>""']|""[^""]*""|'[^']*')*>.*?</\k<tag>\s*>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex InlineWhiteSpaceElementRegex();
+
+    [GeneratedRegex(@"\bwhite-space\s*:\s*(?<value>[^;""']+)", RegexOptions.IgnoreCase)]
+    private static partial Regex InlineWhiteSpaceDeclarationRegex();
 
     /// <summary>
     /// 全版で評価し、before/after が一致しない版だけを <see cref="DocsVersionCatalog.All"/>
@@ -323,12 +326,11 @@ public static partial class DocsVersionImpactAnalyzer
     {
         var html = Markdown.ToHtml(rendered ?? string.Empty, _comparisonPipeline);
         var sensitiveElements = new List<string>();
-        var protectedHtml = ProtectElements(html, RawTextElementRegex(), sensitiveElements);
+        var protectedHtml = ProtectInlineWhitespaceElements(html, sensitiveElements);
+        protectedHtml = ProtectElements(protectedHtml, RawTextElementRegex(), sensitiveElements);
         var withoutComments = StripActualHtmlComments(protectedHtml);
         protectedHtml = ProtectElements(withoutComments, WhitespaceSensitiveElementRegex(), sensitiveElements);
-        var normalized = InlineWhiteSpaceStyleRegex().IsMatch(html)
-            ? protectedHtml.Trim()
-            : NormalizeCollapsibleTextWhitespace(protectedHtml);
+        var normalized = NormalizeCollapsibleTextWhitespace(protectedHtml);
         for (var index = sensitiveElements.Count - 1; index >= 0; index--)
         {
             normalized = normalized.Replace(
@@ -344,6 +346,24 @@ public static partial class DocsVersionImpactAnalyzer
             html,
             match =>
             {
+                var index = elements.Count;
+                elements.Add(match.Value);
+                return $"\uE000RSR{index}\uE001";
+            });
+
+    private static string ProtectInlineWhitespaceElements(string html, List<string> elements)
+        => InlineWhiteSpaceElementRegex().Replace(
+            html,
+            match =>
+            {
+                var declaration = InlineWhiteSpaceDeclarationRegex().Match(match.Value);
+                var value = declaration.Groups["value"].Value.TrimStart();
+                if (value.StartsWith("normal", StringComparison.OrdinalIgnoreCase)
+                    || value.StartsWith("nowrap", StringComparison.OrdinalIgnoreCase))
+                {
+                    return match.Value;
+                }
+
                 var index = elements.Count;
                 elements.Add(match.Value);
                 return $"\uE000RSR{index}\uE001";
@@ -395,11 +415,58 @@ public static partial class DocsVersionImpactAnalyzer
             }
 
             var tagEnd = FindHtmlTagEnd(html, index);
-            normalized.Append(html, index, tagEnd - index);
+            normalized.Append(NormalizeHtmlTagSyntax(html.AsSpan(index, tagEnd - index)));
             index = tagEnd;
         }
 
         return normalized.ToString().Trim();
+    }
+
+    private static string NormalizeHtmlTagSyntax(ReadOnlySpan<char> tag)
+    {
+        var normalized = new StringBuilder(tag.Length);
+        var quote = '\0';
+        var pendingWhitespace = false;
+        for (var index = 0; index < tag.Length; index++)
+        {
+            var current = tag[index];
+            if (quote != '\0')
+            {
+                normalized.Append(current);
+                if (current == quote)
+                {
+                    quote = '\0';
+                }
+                continue;
+            }
+
+            if (current is '\'' or '"')
+            {
+                quote = current;
+                normalized.Append(current);
+                pendingWhitespace = false;
+                continue;
+            }
+
+            if (current is ' ' or '\t' or '\n' or '\f' or '\r')
+            {
+                pendingWhitespace = true;
+                continue;
+            }
+
+            if (pendingWhitespace
+                && normalized.Length > 0
+                && normalized[^1] is not '<' and not '='
+                && current is not '>' and not '='
+                && !(current == '/' && index + 1 < tag.Length && tag[index + 1] == '>'))
+            {
+                normalized.Append(' ');
+            }
+            normalized.Append(current);
+            pendingWhitespace = false;
+        }
+
+        return normalized.ToString();
     }
 
     private static int FindHtmlTagEnd(string html, int startIndex)

@@ -137,6 +137,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Returns_Empty_When_Only_Raw_Html_Tag_Spacing_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span  title = "x">Same text.</span>""",
+            DocsLiquidContext.Empty,
+            """<span title="x">Same text.</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
     public void Preserves_NonBreaking_Space_Differences()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
@@ -184,6 +196,33 @@ public sealed class DocsVersionImpactAnalyzerTests
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("normal")]
+    [InlineData("nowrap")]
+    public void Collapses_Whitespace_For_Collapsing_Inline_Styles(string whiteSpace)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"""<span style="white-space: {whiteSpace}">a  b</span>""",
+            DocsLiquidContext.Empty,
+            $"""<span style="white-space: {whiteSpace}">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Still_Collapses_Unrelated_Text_When_Page_Contains_Preformatted_Style()
+    {
+        const string fixedSpan = """<span style="white-space: pre">fixed</span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{fixedSpan}\n\nSame text.",
+            DocsLiquidContext.Empty,
+            $"{fixedSpan}\n\nSame  text.",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
     }
 
     [Theory]
