@@ -163,43 +163,28 @@ public static partial class MarkdownSourceChangeAnalyzer
 
     private static int CalculateLineChangeCount(string[] beforeLines, string[] afterLines)
     {
-        var maximumEditDistance = beforeLines.Length + afterLines.Length;
-        var offset = maximumEditDistance + 1;
-        var frontier = new int[(maximumEditDistance * 2) + 3];
-        frontier[offset + 1] = 0;
-
-        for (var editDistance = 0; editDistance <= maximumEditDistance; editDistance++)
+        var remainingBeforeOccurrences = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var line in beforeLines)
         {
-            for (var diagonal = -editDistance; diagonal <= editDistance; diagonal += 2)
-            {
-                var frontierIndex = offset + diagonal;
-                var beforeIndex = diagonal == -editDistance
-                                  || (diagonal != editDistance
-                                      && frontier[frontierIndex - 1] < frontier[frontierIndex + 1])
-                    ? frontier[frontierIndex + 1]
-                    : frontier[frontierIndex - 1] + 1;
-                var afterIndex = beforeIndex - diagonal;
-                while (beforeIndex < beforeLines.Length
-                       && afterIndex < afterLines.Length
-                       && string.Equals(
-                           beforeLines[beforeIndex],
-                           afterLines[afterIndex],
-                           StringComparison.Ordinal))
-                {
-                    beforeIndex++;
-                    afterIndex++;
-                }
-                frontier[frontierIndex] = beforeIndex;
-                if (beforeIndex >= beforeLines.Length && afterIndex >= afterLines.Length)
-                {
-                    return (editDistance
-                            + Math.Abs(afterLines.Length - beforeLines.Length))
-                           / 2;
-                }
-            }
+            remainingBeforeOccurrences.TryGetValue(line, out var occurrenceCount);
+            remainingBeforeOccurrences[line] = occurrenceCount + 1;
         }
 
-        return Math.Max(beforeLines.Length, afterLines.Length);
+        var unchangedLineCount = 0;
+        foreach (var line in afterLines)
+        {
+            if (!remainingBeforeOccurrences.TryGetValue(line, out var occurrenceCount)
+                || occurrenceCount == 0)
+            {
+                continue;
+            }
+            remainingBeforeOccurrences[line] = occurrenceCount - 1;
+            unchangedLineCount++;
+        }
+
+        return Math.Max(
+            beforeLines.Length - unchangedLineCount,
+            afterLines.Length - unchangedLineCount);
     }
 
     private static (int BeforeIndex, int AfterIndex) FindNextCommonLine(

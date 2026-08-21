@@ -153,6 +153,9 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData("""<SPAN title='x'>Same text.</SPAN>""", """<span title="x">Same text.</span>""")]
     [InlineData("""<span TITLE=x>Same text.</span>""", """<span title="x">Same text.</span>""")]
     [InlineData("""<span title="A&#32;B">Same text.</span>""", """<span title="A B">Same text.</span>""")]
+    [InlineData(
+        """<span title="x" class="y">Same text.</span>""",
+        """<span class="y" title="x">Same text.</span>""")]
     [InlineData("<textarea>A&#32;B</textarea>", "<textarea>A B</textarea>")]
     [InlineData("<textarea>&#128;</textarea>", "<textarea>€</textarea>")]
     public void Returns_Empty_When_Only_Browser_Equivalent_Html_Syntax_Changes(
@@ -166,6 +169,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             DocsLiquidContext.Empty);
 
         Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_First_Duplicate_Html_Attribute_Value()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span title="first" title="second">Same text.</span>""",
+            DocsLiquidContext.Empty,
+            """<span title="second" title="first">Same text.</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
     [Fact]

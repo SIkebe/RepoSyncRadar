@@ -185,6 +185,24 @@ public sealed class MarkdownSourceChangeAnalyzerTests
     }
 
     [Fact]
+    public void Counts_A_Large_Complete_Rewrite_In_Linear_Time()
+    {
+        var before = string.Join(
+            '\n',
+            Enumerable.Range(0, 10_000).Select(static index => $"Before {index}"));
+        var after = string.Join(
+            '\n',
+            Enumerable.Range(0, 10_000).Select(static index => $"After {index}"));
+
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(before, after);
+
+        Assert.NotNull(summary);
+        Assert.Equal("Before 0", summary!.Before);
+        Assert.Equal("After 0", summary.After);
+        Assert.Equal(10_000, summary.ChangeCount);
+    }
+
+    [Fact]
     public void Returns_Null_For_Identical_Source()
     {
         Assert.Null(MarkdownSourceChangeAnalyzer.Analyze("Same.", "Same."));

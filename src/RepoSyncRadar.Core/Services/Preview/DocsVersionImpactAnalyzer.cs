@@ -760,6 +760,9 @@ public static class DocsVersionImpactAnalyzer
 
         var normalized = new StringBuilder(tag.Length);
         normalized.Append('<').Append(canonicalTagName);
+        var attributes = new List<(string Name, string? Value)>();
+        var attributeNames = new HashSet<string>(
+            isForeign ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
         while (index < tag.Length)
         {
             while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
@@ -820,12 +823,23 @@ public static class DocsVersionImpactAnalyzer
             var canonicalAttributeName = isForeign
                 ? attributeName
                 : attributeName.ToLowerInvariant();
-            normalized.Append(' ').Append(canonicalAttributeName);
-            if (attributeValue is not null)
+            if (attributeNames.Add(canonicalAttributeName))
+            {
+                attributes.Add((
+                    canonicalAttributeName,
+                    attributeValue is null
+                        ? null
+                        : DecodeHtmlCharacterReferences(attributeValue)));
+            }
+        }
+        foreach (var attribute in attributes.OrderBy(static attribute => attribute.Name, StringComparer.Ordinal))
+        {
+            normalized.Append(' ').Append(attribute.Name);
+            if (attribute.Value is not null)
             {
                 normalized
                     .Append("=\"")
-                    .Append(WebUtility.HtmlEncode(DecodeHtmlCharacterReferences(attributeValue)))
+                    .Append(WebUtility.HtmlEncode(attribute.Value))
                     .Append('"');
             }
         }
