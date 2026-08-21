@@ -175,6 +175,8 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData(
         """<span title="x" class="y">Same text.</span>""",
         """<span class="y" title="x">Same text.</span>""")]
+    [InlineData("""<input disabled>""", """<input disabled="">""")]
+    [InlineData("""<input disabled="false">""", """<input disabled>""")]
     [InlineData("<textarea>A&#32;B</textarea>", "<textarea>A B</textarea>")]
     [InlineData("<textarea>&#128;</textarea>", "<textarea>€</textarea>")]
     public void Returns_Empty_When_Only_Browser_Equivalent_Html_Syntax_Changes(

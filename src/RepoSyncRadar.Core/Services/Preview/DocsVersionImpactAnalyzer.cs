@@ -869,6 +869,7 @@ public static class DocsVersionImpactAnalyzer
                 attributes.Add((
                     canonicalAttributeName,
                     attributeValue is null
+                    || (!isForeign && IsHtmlBooleanAttribute(canonicalAttributeName))
                         ? null
                         : DecodeHtmlCharacterReferences(attributeValue)));
             }
@@ -887,6 +888,13 @@ public static class DocsVersionImpactAnalyzer
         normalized.Append(isSelfClosing && isForeign ? "/>" : ">");
         return normalized.ToString();
     }
+
+    private static bool IsHtmlBooleanAttribute(string attributeName)
+        => attributeName is "allowfullscreen" or "async" or "autofocus" or "autoplay"
+            or "checked" or "controls" or "default" or "defer" or "disabled"
+            or "formnovalidate" or "inert" or "ismap" or "itemscope" or "loop"
+            or "multiple" or "muted" or "nomodule" or "novalidate" or "open"
+            or "playsinline" or "readonly" or "required" or "reversed" or "selected";
 
     private static string DecodeHtmlCharacterReferences(string value)
     {
