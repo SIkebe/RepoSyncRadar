@@ -56,6 +56,44 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Detects_Relative_Asset_Changes_Caused_By_Rename()
+    {
+        const string markdown = "![Diagram](images/diagram.png)";
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+        Assert.Equal(DocsVersionCatalog.All.Count, details.Count);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Renamed_File_Still_Resolves_The_Same_Asset()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "![Diagram](images/diagram.png)",
+            DocsLiquidContext.Empty,
+            "![Diagram](../old/images/diagram.png)",
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
     public void Returns_All_Versions_When_Plain_Text_Changes_Outside_Any_Ifversion()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
@@ -187,6 +225,9 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData(
         "<table><tr><td>Same text.</td></tr></table>",
         "<table><tbody><tr><td>Same text.</td></tr></tbody></table>")]
+    [InlineData(
+        "<ul><li>One<li>Two</ul>",
+        "<ul><li>One</li><li>Two</li></ul>")]
     public void Returns_Empty_When_Only_Browser_Equivalent_Html_Syntax_Changes(
         string before,
         string after)

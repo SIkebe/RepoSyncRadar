@@ -115,13 +115,18 @@ public static class DocsVersionImpactAnalyzer
         var beforeRenderable = StripFrontmatter(beforeMarkdown);
         var afterRenderable = StripFrontmatter(afterMarkdown);
         var affected = new List<DocsVersion>(DocsVersionCatalog.All.Count);
-        var normalizationCache = new Dictionary<string, string>(StringComparer.Ordinal);
-        string NormalizeCached(string? rendered)
+        var normalizationCache = new Dictionary<(string Rendered, string RepoPath), string>();
+        string NormalizeCached(string? rendered, string? repoPath)
         {
-            var cacheKey = rendered ?? string.Empty;
+            var cacheKey = (
+                Rendered: rendered ?? string.Empty,
+                RepoPath: repoPath ?? string.Empty);
             if (!normalizationCache.TryGetValue(cacheKey, out var normalized))
             {
-                normalized = NormalizeForComparison(cacheKey, cancellationToken);
+                normalized = NormalizeForComparison(
+                    cacheKey.Rendered,
+                    cacheKey.RepoPath,
+                    cancellationToken);
                 normalizationCache.Add(cacheKey, normalized);
             }
             return normalized;
@@ -145,13 +150,14 @@ public static class DocsVersionImpactAnalyzer
                     afterContext,
                     version);
             }
-            if (string.Equals(beforeRendered, afterRendered, StringComparison.Ordinal))
+            if (string.Equals(beforeRendered, afterRendered, StringComparison.Ordinal)
+                && string.Equals(beforeRepoPath, afterRepoPath, StringComparison.Ordinal))
             {
                 continue;
             }
             if (!string.Equals(
-                    NormalizeCached(beforeRendered),
-                    NormalizeCached(afterRendered),
+                    NormalizeCached(beforeRendered, beforeRepoPath),
+                    NormalizeCached(afterRendered, afterRepoPath),
                     StringComparison.Ordinal))
             {
                 affected.Add(version);
@@ -238,13 +244,14 @@ public static class DocsVersionImpactAnalyzer
                     afterContext,
                     version);
             }
-            if (string.Equals(beforeRendered, afterRendered, StringComparison.Ordinal))
+            if (string.Equals(beforeRendered, afterRendered, StringComparison.Ordinal)
+                && string.Equals(beforeRepoPath, afterRepoPath, StringComparison.Ordinal))
             {
                 continue;
             }
             if (!string.Equals(
-                    NormalizeForComparison(beforeRendered, cancellationToken),
-                    NormalizeForComparison(afterRendered, cancellationToken),
+                    NormalizeForComparison(beforeRendered, beforeRepoPath, cancellationToken),
+                    NormalizeForComparison(afterRendered, afterRepoPath, cancellationToken),
                     StringComparison.Ordinal))
             {
                 var changes = BuildChangeSnippets(
@@ -471,6 +478,7 @@ public static class DocsVersionImpactAnalyzer
 
     private static string NormalizeForComparison(
         string? rendered,
+        string? repoPath,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -479,6 +487,13 @@ public static class DocsVersionImpactAnalyzer
             cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         var html = Markdown.ToHtml(preprocessed, _comparisonPipeline);
+        if (!string.IsNullOrWhiteSpace(repoPath))
+        {
+            html = MarkdownPreviewRenderer.RewriteAssetReferences(
+                html,
+                repoPath,
+                "/markdown-assets");
+        }
         cancellationToken.ThrowIfCancellationRequested();
         var normalized = new StringBuilder(html.Length);
         var elements = new List<HtmlElementContext>();
@@ -556,6 +571,10 @@ public static class DocsVersionImpactAnalyzer
             }
             var parentIsForeign = elements.Count > 0 && elements[^1].IsForeignContent;
             var isForeign = parentIsForeign || (!isClosing && tagName is "svg" or "math");
+            if (!isClosing && !isForeign)
+            {
+                ApplyImpliedHtmlEndTags(elements, tagName);
+            }
             var isSelfClosing = IsVoidElement(tagName) || (isForeign && hasSelfClosingSyntax);
             var isBlock = IsBlockElement(tagName);
             var isWhitespaceBoundary = isBlock || tagName == "br";
@@ -575,7 +594,8 @@ public static class DocsVersionImpactAnalyzer
                 pendingCollapsibleSpace = false;
             }
 
-            if (!IsImpliedHtmlContainerSyntax(tagName, tag, isForeign))
+            if (!IsImpliedHtmlContainerSyntax(tagName, tag, isForeign)
+                && !IsOptionalHtmlEndTagSyntax(tagName, isClosing, isForeign))
             {
                 normalized.Append(NormalizeHtmlTagSyntax(
                     tag,
@@ -626,6 +646,35 @@ public static class DocsVersionImpactAnalyzer
         ReadOnlySpan<char> tag,
         bool isForeign)
         => !isForeign && tagName == "tbody" && !HasHtmlAttributes(tag);
+
+    private static bool IsOptionalHtmlEndTagSyntax(
+        string tagName,
+        bool isClosing,
+        bool isForeign)
+        => !isForeign && isClosing && tagName == "li";
+
+    private static void ApplyImpliedHtmlEndTags(
+        List<HtmlElementContext> elements,
+        string openingTagName)
+    {
+        if (openingTagName != "li")
+        {
+            return;
+        }
+
+        for (var i = elements.Count - 1; i >= 0; i--)
+        {
+            if (elements[i].TagName == "li")
+            {
+                elements.RemoveRange(i, elements.Count - i);
+                return;
+            }
+            if (elements[i].TagName is "ol" or "ul")
+            {
+                return;
+            }
+        }
+    }
 
     private static bool HasHtmlAttributes(ReadOnlySpan<char> tag)
     {

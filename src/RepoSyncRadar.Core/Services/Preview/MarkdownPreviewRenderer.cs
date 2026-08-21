@@ -1454,7 +1454,7 @@ internal static partial class MarkdownPreviewRenderer
         yield return "content/" + trimmed;
     }
 
-    private static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
+    internal static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
     {
         if (string.IsNullOrWhiteSpace(assetBasePath) || string.IsNullOrEmpty(html))
         {
