@@ -1165,7 +1165,7 @@ Step 19.7 で `content/**/*.md` が Markdig + in-process でサブ秒描画で�
 | 全 E2E クラスで 1 アプリ共有 | `E2ETests` (`[CollectionDefinition]`) | テスト実行毎に WPF を 1 回だけ起動。WebView2 の UDF ロック残留に起因する 2 回目起動失敗を回避 |
 | App 側の CDP 注入 hook | `MainWindow.xaml.cs` | 環境変数 `REPOSYNCRADAR_BLAZOR_CDP_PORT` / `REPOSYNCRADAR_DOCS_CDP_PORT` が **セットされた時だけ** `--remote-debugging-port=N` を WebView2 に渡す。本番ビルドは何も渡さない |
 | インストール済み exe の起動 override | `REPOSYNCRADAR_E2E_APP_EXE_PATH` | 通常は開発ビルドの `RepoSyncRadar.exe` を起動する。PR CI / Release workflow では Velopack インストール後の `current\RepoSyncRadar.exe` を指定して、実利用に近い経路を検証する |
-| インストール版 smoke wrapper | `scripts/Test-VelopackInstalledE2E.ps1` | `win-x64` の Setup.exe をサイレントインストールし、`REPOSYNCRADAR_E2E_APP_EXE_PATH` を設定して `Category=E2E` を実行する |
+| インストール版 smoke wrapper | `scripts/Test-VelopackInstalledE2E.ps1` | `win-x64` の Setup.exe をサイレントインストールし、`REPOSYNCRADAR_E2E_APP_EXE_PATH` を設定して `Category=E2E` を実行する。production と同じ Velopack identity を使うため、既存のローカルインストールがある環境では既定で停止する |
 
 ### C.2 セキュリティ (Production との分離)
 
@@ -1205,14 +1205,14 @@ dotnet test tests/RepoSyncRadar.App.E2E.Tests -- --filter-trait Category=E2E
 # E2E を明示的にスキップしたい環境
 dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual --filter-not-trait Category=E2E
 
-# インストール版 smoke (win-x64 の Velopack package 作成後)
+# インストール版 smoke (win-x64 の Velopack package 作成後、使い捨て Windows 環境で実行)
 ./scripts/Test-VelopackInstalledE2E.ps1 `
   -Runtime win-x64 `
   -ReleaseDir artifacts/ci-release/velopack/win-x64 `
   -CleanInstallRoot
 ```
 
-E2E は WebView2 の OS window を実際に開くため、Windows のデスクトップセッションが必要です。GitHub Actions の `windows-latest` runner では現在の PR CI / Release workflow で実行できるため必須 gate にしています。自己ホスト runner やローカル環境でデスクトップセッションを用意できない場合だけ `Category=E2E` を明示的に除外してください。
+E2E は WebView2 の OS window を実際に開くため、Windows のデスクトップセッションが必要です。GitHub Actions の `windows-latest` runner では現在の PR CI / Release workflow で実行できるため必須 gate にしています。インストール版 smoke は production と同じ Velopack identity をインストール後にアンインストールするため、普段使いの RepoSyncRadar が入ったローカル環境では実行せず、GitHub-hosted runner などの使い捨て環境を使ってください。例外的に既存インストールを意図して置換する場合だけ `-AllowLocalInstalledAppReplacement` を明示します。自己ホスト runner やローカル環境でデスクトップセッションを用意できない場合は `Category=E2E` を明示的に除外してください。
 
 ### C.6 Playwright ドライバ
 
