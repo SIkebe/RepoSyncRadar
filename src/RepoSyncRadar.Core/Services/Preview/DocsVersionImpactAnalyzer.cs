@@ -51,7 +51,7 @@ public static partial class DocsVersionImpactAnalyzer
         RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex WhitespaceSensitiveElementRegex();
 
-    [GeneratedRegex(@"\s+")]
+    [GeneratedRegex(@"[ \t\n\f\r]+")]
     private static partial Regex CollapsibleWhitespaceRegex();
 
     /// <summary>

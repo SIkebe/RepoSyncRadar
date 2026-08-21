@@ -136,6 +136,18 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Empty(affected);
     }
 
+    [Fact]
+    public void Preserves_NonBreaking_Space_Differences()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "a b",
+            DocsLiquidContext.Empty,
+            "a\u00A0b",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
     [Theory]
     [InlineData("`a  b`", "`a b`")]
     [InlineData("```\na  b\n```", "```\na b\n```")]

@@ -241,11 +241,12 @@ public class CommitDetailTests
     }
 
     [Fact]
-    public void CommitDetail_Publishes_Source_Summaries_As_Each_File_Completes()
+    public async Task CommitDetail_Publishes_Source_Summaries_As_Each_File_Completes()
     {
         var commit = MakeCommit(
             ("content/copilot/first.md", 1, 1),
-            ("content/copilot/second.md", 1, 1));
+            ("content/copilot/second.md", 1, 1),
+            ("content/copilot/third.md", 1, 1));
         var resolver = Substitute.For<IPathToUrlResolver>();
         resolver
             .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -254,6 +255,9 @@ public class CommitDetailTests
             TaskCreationOptions.RunContinuationsAsynchronously);
         var secondResult = new TaskCompletionSource<MarkdownFileChangeSummary?>(
             TaskCreationOptions.RunContinuationsAsynchronously);
+        var thirdResult = new TaskCompletionSource<MarkdownFileChangeSummary?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var thirdStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var coordinator = Substitute.For<IPreviewCoordinator>();
         coordinator.AnalyzeMarkdownFileChangeAsync(
                 commit.PrNumber,
@@ -267,6 +271,16 @@ public class CommitDetailTests
                 commit.Files[1].Path,
                 Arg.Any<CancellationToken>())
             .Returns(secondResult.Task);
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[2].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                thirdStarted.SetResult();
+                return thirdResult.Task;
+            });
 
         using var cut = RenderDetailWith(
             commit,
@@ -286,6 +300,11 @@ public class CommitDetailTests
                 commit.Sha,
                 commit.Files[1].Path,
                 Arg.Any<CancellationToken>());
+            coordinator.DidNotReceive().AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[2].Path,
+                Arg.Any<CancellationToken>());
         }, TimeSpan.FromSeconds(10));
 
         firstResult.SetResult(new MarkdownFileChangeSummary(
@@ -299,15 +318,25 @@ public class CommitDetailTests
                 "new",
                 1)));
 
+        await thirdStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            Xunit.TestContext.Current.CancellationToken);
         cut.WaitForAssertion(() =>
         {
             var sourceChanges = cut.FindAll("[data-testid=\"commit-detail-source-change\"]");
             Assert.Single(sourceChanges);
             Assert.Contains("old", sourceChanges[0].TextContent, StringComparison.Ordinal);
+            coordinator.Received(1).AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[2].Path,
+                Arg.Any<CancellationToken>());
             Assert.False(secondResult.Task.IsCompleted);
+            Assert.False(thirdResult.Task.IsCompleted);
         }, TimeSpan.FromSeconds(10));
 
         secondResult.SetResult(null);
+        thirdResult.SetResult(null);
     }
 
     [Fact]
