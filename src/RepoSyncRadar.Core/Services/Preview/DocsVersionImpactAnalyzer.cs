@@ -1166,34 +1166,74 @@ public static class DocsVersionImpactAnalyzer
         out HtmlWhiteSpaceMode mode)
     {
         var normalizedValue = NormalizeCssWhitespace(value);
-        value = normalizedValue.AsSpan();
-        if (value.Equals("normal", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("nowrap", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("collapse wrap", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("collapse nowrap", StringComparison.OrdinalIgnoreCase))
+        if (normalizedValue.Equals("normal", StringComparison.OrdinalIgnoreCase)
+            || normalizedValue.Equals("nowrap", StringComparison.OrdinalIgnoreCase)
+            || normalizedValue.Equals("collapse", StringComparison.OrdinalIgnoreCase)
+            || normalizedValue.Equals("wrap", StringComparison.OrdinalIgnoreCase))
         {
             mode = HtmlWhiteSpaceMode.Collapse;
             return true;
         }
-        if (value.Equals("pre-line", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("preserve-breaks", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("preserve-breaks wrap", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("preserve-breaks nowrap", StringComparison.OrdinalIgnoreCase))
+        if (normalizedValue.Equals("pre-line", StringComparison.OrdinalIgnoreCase)
+            || normalizedValue.Equals("preserve-breaks", StringComparison.OrdinalIgnoreCase))
         {
             mode = HtmlWhiteSpaceMode.PreLine;
             return true;
         }
-        if (value.Equals("pre", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("pre-wrap", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("break-spaces", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("preserve", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("preserve nowrap", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("preserve wrap", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("break-spaces nowrap", StringComparison.OrdinalIgnoreCase)
-            || value.Equals("break-spaces wrap", StringComparison.OrdinalIgnoreCase))
+        if (normalizedValue.Equals("pre", StringComparison.OrdinalIgnoreCase)
+            || normalizedValue.Equals("pre-wrap", StringComparison.OrdinalIgnoreCase)
+            || normalizedValue.Equals("break-spaces", StringComparison.OrdinalIgnoreCase)
+            || normalizedValue.Equals("preserve", StringComparison.OrdinalIgnoreCase))
         {
             mode = HtmlWhiteSpaceMode.Preserve;
             return true;
+        }
+
+        var tokens = normalizedValue.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 2)
+        {
+            string? collapseKeyword = null;
+            var hasWrapKeyword = false;
+            foreach (var token in tokens)
+            {
+                if (token.Equals("wrap", StringComparison.OrdinalIgnoreCase)
+                    || token.Equals("nowrap", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (hasWrapKeyword)
+                    {
+                        mode = default;
+                        return false;
+                    }
+                    hasWrapKeyword = true;
+                }
+                else if (token.Equals("collapse", StringComparison.OrdinalIgnoreCase)
+                         || token.Equals("preserve-breaks", StringComparison.OrdinalIgnoreCase)
+                         || token.Equals("preserve", StringComparison.OrdinalIgnoreCase)
+                         || token.Equals("break-spaces", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (collapseKeyword is not null)
+                    {
+                        mode = default;
+                        return false;
+                    }
+                    collapseKeyword = token;
+                }
+                else
+                {
+                    mode = default;
+                    return false;
+                }
+            }
+
+            if (hasWrapKeyword && collapseKeyword is not null)
+            {
+                mode = collapseKeyword.Equals("collapse", StringComparison.OrdinalIgnoreCase)
+                    ? HtmlWhiteSpaceMode.Collapse
+                    : collapseKeyword.Equals("preserve-breaks", StringComparison.OrdinalIgnoreCase)
+                        ? HtmlWhiteSpaceMode.PreLine
+                        : HtmlWhiteSpaceMode.Preserve;
+                return true;
+            }
         }
 
         mode = default;

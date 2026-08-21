@@ -96,7 +96,7 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""\bhref\s*=\s*(?<quote>["'])(?<href>.*?)\k<quote>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex AnchorHrefRegex();
 
-    [GeneratedRegex("""(?<attr>\bhref\s*=\s*)(?:(?<quote>["'])(?<url>.*?)\k<quote>|(?<url>[^\s"'=<>`]+))""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    [GeneratedRegex("""(?<prefix>^|[ \t\n\f\r])(?<attr>href\s*=\s*)(?:(?<quote>["'])(?<url>.*?)\k<quote>|(?<url>[^\s"'=<>`]+))""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex HtmlHrefRegex();
 
     [GeneratedRegex("""<span\b(?<attrs>[^>]*)>\s*AUTOTITLE\s*</span>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
@@ -111,10 +111,10 @@ internal static partial class MarkdownPreviewRenderer
     [GeneratedRegex("""<[^>]+>""", RegexOptions.Singleline)]
     private static partial Regex HtmlTagRegex();
 
-    [GeneratedRegex("""(?<attr>\b(?:src|poster)\s*=\s*)(?<quote>["'])(?<url>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
+    [GeneratedRegex("""(?<prefix>[ \t\n\f\r])(?<attr>(?:src|poster)\s*=\s*)(?<quote>["'])(?<url>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlAssetUrlRegex();
 
-    [GeneratedRegex("""(?<attr>\bsrcset\s*=\s*)(?<quote>["'])(?<value>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
+    [GeneratedRegex("""(?<prefix>[ \t\n\f\r])(?<attr>srcset\s*=\s*)(?<quote>["'])(?<value>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
     private static partial Regex HtmlSrcSetRegex();
 
     [GeneratedRegex("""<!--.*?-->""", RegexOptions.Singleline)]
@@ -1468,6 +1468,7 @@ internal static partial class MarkdownPreviewRenderer
                 var href = WebUtility.HtmlDecode(hrefMatch.Groups["url"].Value);
                 var next = RewriteAssetUrl(href, repoPath, "/markdown-links");
                 return string.Concat(
+                    hrefMatch.Groups["prefix"].Value,
                     hrefMatch.Groups["attr"].Value,
                     quote,
                     WebUtility.HtmlEncode(next),
@@ -1490,6 +1491,7 @@ internal static partial class MarkdownPreviewRenderer
             var url = WebUtility.HtmlDecode(m.Groups["url"].Value);
             var next = RewriteAssetUrl(url, repoPath, assetBasePath);
             return string.Concat(
+                m.Groups["prefix"].Value,
                 m.Groups["attr"].Value,
                 quote,
                 WebUtility.HtmlEncode(next),
@@ -1502,6 +1504,7 @@ internal static partial class MarkdownPreviewRenderer
             var value = WebUtility.HtmlDecode(m.Groups["value"].Value);
             var next = RewriteSrcSet(value, repoPath, assetBasePath);
             return string.Concat(
+                m.Groups["prefix"].Value,
                 m.Groups["attr"].Value,
                 quote,
                 WebUtility.HtmlEncode(next),

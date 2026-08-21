@@ -154,6 +154,23 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Empty(affected);
     }
 
+    [Theory]
+    [InlineData("""<a data-href="guide.md">Guide</a>""")]
+    [InlineData("""<img data-src="image.png">""")]
+    [InlineData("""<img data-srcset="small.png 1x, large.png 2x">""")]
+    public void Returns_Empty_When_Rename_Only_Rebases_Custom_Data_Attributes(string markdown)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
     [Fact]
     public void Returns_All_Versions_When_Plain_Text_Changes_Outside_Any_Ifversion()
     {
@@ -576,6 +593,8 @@ public sealed class DocsVersionImpactAnalyzerTests
     [Theory]
     [InlineData("normal")]
     [InlineData("nowrap")]
+    [InlineData("wrap collapse")]
+    [InlineData("nowrap collapse")]
     public void Collapses_Whitespace_For_Collapsing_Inline_Styles(string whiteSpace)
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
@@ -604,7 +623,11 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData("""<span style="white-space: preserve">a  b</span>""")]
     [InlineData("""<span style="white-space: preserve    nowrap">a  b</span>""")]
     [InlineData("<span style=\"white-space: preserve\tnowrap\">a  b</span>")]
+    [InlineData("""<span style="white-space: nowrap preserve">a  b</span>""")]
+    [InlineData("""<span style="white-space: wrap preserve">a  b</span>""")]
     [InlineData("""<span style="white-space: break-spaces nowrap">a  b</span>""")]
+    [InlineData("""<span style="white-space: nowrap break-spaces">a  b</span>""")]
+    [InlineData("""<span style="white-space: wrap break-spaces">a  b</span>""")]
     [InlineData("""<span style="--mode: pre; white-space: var(--mode)">a  b</span>""")]
     public void Preserves_Whitespace_For_Longhand_Or_Computed_Css(string before)
     {
@@ -688,6 +711,8 @@ public sealed class DocsVersionImpactAnalyzerTests
     [Theory]
     [InlineData("preserve-breaks")]
     [InlineData("preserve-breaks nowrap")]
+    [InlineData("nowrap preserve-breaks")]
+    [InlineData("wrap preserve-breaks")]
     public void Preserves_Line_Breaks_But_Collapses_Spaces_For_Modern_PreserveBreaks(
         string whiteSpace)
     {
