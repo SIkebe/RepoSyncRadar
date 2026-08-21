@@ -426,6 +426,15 @@ public sealed class DocsVersionImpactAnalyzerTests
         "<p>A<div>B</div>",
         "<p>A</p><div>B</div>")]
     [InlineData(
+        "<select><option>A<option>B</select>",
+        "<select><option>A</option><option>B</option></select>")]
+    [InlineData(
+        """<select><optgroup label="A"><option>A<optgroup label="B"><option>B</select>""",
+        """<select><optgroup label="A"><option>A</option></optgroup><optgroup label="B"><option>B</option></optgroup></select>""")]
+    [InlineData(
+        "<dl><dt>A<dd>B<dt>C</dl>",
+        "<dl><dt>A</dt><dd>B</dd><dt>C</dt></dl>")]
+    [InlineData(
         """<svg><foreignObject><X-Thing title='x'>Same text.</X-Thing></foreignObject></svg>""",
         """<svg><foreignObject><x-thing title="x">Same text.</x-thing></foreignObject></svg>""")]
     [InlineData(
@@ -994,6 +1003,34 @@ public sealed class DocsVersionImpactAnalyzerTests
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("<!-- <style> -->")]
+    [InlineData("<textarea><style></textarea>")]
+    [InlineData("""<xmp><link rel="stylesheet" href="theme.css"></xmp>""")]
+    public void Ignores_StylesheetLooking_Text_Outside_Html_Tag_Context(string hiddenMarkup)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"Same  text.\n{hiddenMarkup}",
+            DocsLiquidContext.Empty,
+            $"Same text.\n{hiddenMarkup}",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Ignores_MathMl_Style_Element_For_Global_Whitespace_Preservation()
+    {
+        const string math = "<math><style>same</style></math>";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"Same  text.\n{math}",
+            DocsLiquidContext.Empty,
+            $"Same text.\n{math}",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
     }
 
     [Fact]

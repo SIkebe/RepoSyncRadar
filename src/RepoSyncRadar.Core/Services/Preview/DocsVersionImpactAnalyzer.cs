@@ -522,8 +522,7 @@ public static class DocsVersionImpactAnalyzer
         cancellationToken.ThrowIfCancellationRequested();
         var normalized = new StringBuilder(html.Length);
         var elements = new List<HtmlElementContext>();
-        var hasStylesheetDrivenWhitespace = ContainsHtmlStartTag(html, "style")
-            || ContainsStylesheetLink(html);
+        var hasStylesheetDrivenWhitespace = ContainsStylesheetSource(html);
         var index = 0;
         var lastCancellationCheckIndex = 0;
         var pendingCollapsibleSpace = false;
@@ -941,7 +940,10 @@ public static class DocsVersionImpactAnalyzer
         int nextIndex,
         IReadOnlyList<HtmlElementContext> elements)
     {
-        if (isForeign || !isClosing || tagName is not ("li" or "p" or "td" or "th" or "tr"))
+        if (isForeign
+            || !isClosing
+            || tagName is not ("li" or "p" or "dt" or "dd" or "option" or "optgroup"
+                or "td" or "th" or "tr"))
         {
             return false;
         }
@@ -969,6 +971,18 @@ public static class DocsVersionImpactAnalyzer
             return false;
         }
         if (tagName == "tr" && parentTagName is not ("tbody" or "tfoot" or "thead"))
+        {
+            return false;
+        }
+        if (tagName is "dt" or "dd" && parentTagName != "dl")
+        {
+            return false;
+        }
+        if (tagName == "option" && parentTagName is not ("select" or "optgroup"))
+        {
+            return false;
+        }
+        if (tagName == "optgroup" && parentTagName != "select")
         {
             return false;
         }
@@ -1018,6 +1032,21 @@ public static class DocsVersionImpactAnalyzer
             return !nextIsClosing && ClosesOpenParagraph(nextTagName)
                 || nextIsClosing && nextTagName == parentTagName;
         }
+        if (tagName is "dt" or "dd")
+        {
+            return !nextIsClosing && nextTagName is "dt" or "dd"
+                || nextIsClosing && nextTagName == parentTagName;
+        }
+        if (tagName == "option")
+        {
+            return !nextIsClosing && nextTagName is "option" or "optgroup"
+                || nextIsClosing && nextTagName == parentTagName;
+        }
+        if (tagName == "optgroup")
+        {
+            return !nextIsClosing && nextTagName == "optgroup"
+                || nextIsClosing && nextTagName == parentTagName;
+        }
         if (tagName is "td" or "th")
         {
             return !nextIsClosing && nextTagName is "td" or "th"
@@ -1031,6 +1060,10 @@ public static class DocsVersionImpactAnalyzer
         List<HtmlElementContext> elements,
         string openingTagName)
     {
+        if (ClosesOpenParagraph(openingTagName))
+        {
+            CloseOpenParagraph(elements);
+        }
         if (openingTagName is "td" or "th")
         {
             RemoveOpenTableElement(elements, static name => name is "td" or "th", "tr");
@@ -1063,25 +1096,36 @@ public static class DocsVersionImpactAnalyzer
             }
             return;
         }
-        if (!ClosesOpenParagraph(openingTagName))
+        if (openingTagName is "dt" or "dd")
         {
+            RemoveOpenTableElement(
+                elements,
+                static name => name is "dt" or "dd",
+                "dl");
             return;
         }
-        for (var i = elements.Count - 1; i >= 0; i--)
+        if (openingTagName == "option")
         {
-            if (elements[i].TagName == "p")
-            {
-                elements.RemoveRange(i, elements.Count - i);
-                return;
-            }
+            RemoveOpenTableElement(elements, static name => name == "option", "optgroup", "select");
+            return;
         }
+        if (openingTagName == "optgroup")
+        {
+            RemoveOpenTableElement(elements, static name => name == "option", "optgroup", "select");
+            RemoveOpenTableElement(elements, static name => name == "optgroup", "select");
+        }
+    }
+
+    private static void CloseOpenParagraph(List<HtmlElementContext> elements)
+    {
+        RemoveOpenTableElement(elements, static name => name == "p");
     }
 
     private static bool ClosesOpenParagraph(string tagName)
         => tagName is "address" or "article" or "aside" or "blockquote" or "details"
-            or "div" or "dl" or "fieldset" or "figcaption" or "figure" or "footer"
+            or "dd" or "div" or "dl" or "dt" or "fieldset" or "figcaption" or "figure" or "footer"
             or "form" or "h1" or "h2" or "h3" or "h4" or "h5" or "h6" or "header"
-            or "hgroup" or "hr" or "main" or "menu" or "nav" or "ol" or "p" or "pre"
+            or "hgroup" or "hr" or "li" or "main" or "menu" or "nav" or "ol" or "p" or "pre"
             or "search" or "section" or "table" or "ul";
 
     private static bool HasHtmlAttributes(ReadOnlySpan<char> tag)
@@ -1108,59 +1152,111 @@ public static class DocsVersionImpactAnalyzer
         return index < tag.Length && tag[index] is not '>' and not '/';
     }
 
-    private static bool ContainsHtmlStartTag(string html, string tagName)
+    private static bool ContainsStylesheetSource(string html)
     {
-        var search = $"<{tagName}";
+        var elements = new List<HtmlElementContext>();
         var index = 0;
-        while ((index = html.IndexOf(search, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        while (index < html.Length)
         {
-            var afterName = index + search.Length;
-            if (afterName >= html.Length
-                || html[afterName] == '>'
-                || html[afterName] == '/'
-                || IsCollapsibleHtmlWhitespace(html[afterName]))
+            if (elements.Count > 0 && elements[^1].IsRawText)
             {
-                return true;
+                var context = elements[^1];
+                var closingTag = context.TagName == "plaintext"
+                    ? -1
+                    : FindRawTextClosingTag(html, index, context.TagName);
+                if (closingTag < 0)
+                {
+                    return false;
+                }
+                index = closingTag;
             }
-            index = afterName;
-        }
-        return false;
-    }
 
-    private static bool ContainsStylesheetLink(string html)
-    {
-        const string search = "<link";
-        var index = 0;
-        while ((index = html.IndexOf(search, index, StringComparison.OrdinalIgnoreCase)) >= 0)
-        {
-            var afterName = index + search.Length;
-            if (afterName < html.Length
-                && html[afterName] != '>'
-                && html[afterName] != '/'
-                && !IsCollapsibleHtmlWhitespace(html[afterName]))
+            var tagStart = html.IndexOf('<', index);
+            if (tagStart < 0)
             {
-                index = afterName;
+                return false;
+            }
+            if (html.AsSpan(tagStart).StartsWith("<!--", StringComparison.Ordinal))
+            {
+                var commentEnd = html.IndexOf("-->", tagStart + 4, StringComparison.Ordinal);
+                index = commentEnd < 0 ? html.Length : commentEnd + 3;
                 continue;
             }
 
-            var tagEnd = FindHtmlTagEnd(html, index);
-            var tag = html.AsSpan(index, tagEnd - index);
-            var rel = GetHtmlAttributeValue(tag, "rel");
-            if (rel is not null)
+            var tagEnd = FindHtmlTagEnd(html, tagStart);
+            var tag = html.AsSpan(tagStart, tagEnd - tagStart);
+            var tagName = GetHtmlTagName(
+                tag,
+                out var isClosing,
+                out var hasSelfClosingSyntax);
+            if (tagName.Length == 0)
             {
-                var decodedRel = DecodeHtmlCharacterReferences(rel);
-                foreach (var token in decodedRel.Split(
-                             [' ', '\t', '\n', '\f', '\r'],
-                             StringSplitOptions.RemoveEmptyEntries))
+                index = tagEnd;
+                continue;
+            }
+
+            var elementNamespace = ResolveHtmlElementNamespace(
+                elements,
+                tagName,
+                tag,
+                isClosing);
+            var isForeign = elementNamespace != HtmlElementNamespace.Html;
+            if (!isClosing
+                && (tagName == "style"
+                        && elementNamespace is HtmlElementNamespace.Html or HtmlElementNamespace.Svg
+                    || !isForeign && tagName == "link" && HasStylesheetRel(tag)))
+            {
+                return true;
+            }
+
+            if (isClosing)
+            {
+                PopHtmlElement(elements, tagName, elementNamespace);
+            }
+            else
+            {
+                var isSelfClosing = !isForeign && IsVoidElement(tagName)
+                    || isForeign && hasSelfClosingSyntax;
+                if (!isSelfClosing)
                 {
-                    if (token.Equals("stylesheet", StringComparison.OrdinalIgnoreCase))
-                    {
-                        return true;
-                    }
+                    elements.Add(new HtmlElementContext(
+                        tagName,
+                        HtmlWhiteSpaceMode.Collapse,
+                        !isForeign && IsRawTextElement(tagName),
+                        elementNamespace,
+                        ExposesWhitespaceBoundary: false,
+                        IntegrationKind: GetHtmlForeignIntegrationKind(
+                            elementNamespace,
+                            tagName,
+                            tag)));
                 }
             }
+
             index = tagEnd;
         }
+
+        return false;
+    }
+
+    private static bool HasStylesheetRel(ReadOnlySpan<char> tag)
+    {
+        var rel = GetHtmlAttributeValue(tag, "rel");
+        if (rel is null)
+        {
+            return false;
+        }
+
+        var decodedRel = DecodeHtmlCharacterReferences(rel);
+        foreach (var token in decodedRel.Split(
+                     [' ', '\t', '\n', '\f', '\r'],
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token.Equals("stylesheet", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 
