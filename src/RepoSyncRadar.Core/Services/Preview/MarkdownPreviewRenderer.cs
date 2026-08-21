@@ -756,8 +756,13 @@ internal static partial class MarkdownPreviewRenderer
         return current;
     }
 
-    internal static string RenderOfficialLiquidBlocksForComparison(string content)
-        => RenderOfficialLiquidBlocks(content);
+    internal static string PreprocessMarkdownForComparison(string content)
+    {
+        var tableFragmentsExpanded = ExpandMarkdownTableFragments(content);
+        var liquidBlocksRendered = RenderOfficialLiquidBlocks(tableFragmentsExpanded);
+        var githubAlertsRendered = RenderGitHubAlertBlocks(liquidBlocksRendered);
+        return NeutralizeLiquid(githubAlertsRendered);
+    }
 
     private static string ProtectRenderedHtml(
         string html,

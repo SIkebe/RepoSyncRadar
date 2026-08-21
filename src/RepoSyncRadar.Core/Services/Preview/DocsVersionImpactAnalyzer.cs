@@ -359,9 +359,9 @@ public static class DocsVersionImpactAnalyzer
 
     private static string NormalizeForComparison(string? rendered)
     {
-        var liquidBlocksRendered = MarkdownPreviewRenderer.RenderOfficialLiquidBlocksForComparison(
+        var preprocessed = MarkdownPreviewRenderer.PreprocessMarkdownForComparison(
             rendered ?? string.Empty);
-        var html = Markdown.ToHtml(liquidBlocksRendered, _comparisonPipeline);
+        var html = Markdown.ToHtml(preprocessed, _comparisonPipeline);
         var normalized = new StringBuilder(html.Length);
         var elements = new List<HtmlElementContext>();
         var hasStylesheetDrivenWhitespace = ContainsHtmlStartTag(html, "style")

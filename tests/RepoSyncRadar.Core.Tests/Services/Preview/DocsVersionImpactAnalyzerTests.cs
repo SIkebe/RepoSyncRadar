@@ -543,6 +543,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Equates_Concatenated_And_Separate_Table_Row_Fragments()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "`issue` | `object` | The issue itself. || `assignee` | `object` | The optional user.",
+            DocsLiquidContext.Empty,
+            "`issue` | `object` | The issue itself. |\n`assignee` | `object` | The optional user. |",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
     public void Ignores_Comments_Inside_Styled_Elements()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
