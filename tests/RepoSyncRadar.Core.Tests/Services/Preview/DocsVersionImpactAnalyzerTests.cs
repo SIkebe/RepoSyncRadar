@@ -179,6 +179,7 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData("""<input disabled="false">""", """<input disabled>""")]
     [InlineData("""<div hidden="false">Same text.</div>""", """<div hidden>Same text.</div>""")]
     [InlineData("<textarea>A&#32;B</textarea>", "<textarea>A B</textarea>")]
+    [InlineData("<title>A&#32;B</title>", "<title>A B</title>")]
     [InlineData("<textarea>&#128;</textarea>", "<textarea>€</textarea>")]
     [InlineData(
         "<textarea>&CounterClockwiseContourIntegral;</textarea>",
@@ -373,6 +374,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             """<span style="white-space: pre">a  b</span>""",
             DocsLiquidContext.Empty,
             """<span style="white-space: pre">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Decodes_Html_References_Before_Parsing_Inline_Styles()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space&#58;pre">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space&#58;pre">a b</span>""",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
@@ -764,6 +777,18 @@ public sealed class DocsVersionImpactAnalyzerTests
             before,
             DocsLiquidContext.Empty,
             after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Comment_Syntax_In_Title_Text()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<title><!-- old --></title>",
+            DocsLiquidContext.Empty,
+            "<title><!-- new --></title>",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);

@@ -485,7 +485,7 @@ public static class DocsVersionImpactAnalyzer
                     AppendHtmlText(
                         html.AsSpan(index, textEnd - index),
                         context.WhiteSpaceMode,
-                        decodeCharacterReferences: context.TagName == "textarea",
+                        decodeCharacterReferences: IsRcDataElement(context.TagName),
                         normalized,
                         ref pendingCollapsibleSpace,
                         ref hasInlineContent);
@@ -745,7 +745,7 @@ public static class DocsVersionImpactAnalyzer
             return mode;
         }
 
-        var styleWithoutComments = RemoveCssComments(style);
+        var styleWithoutComments = RemoveCssComments(DecodeHtmlCharacterReferences(style));
         var winningDeclarationIsImportant = false;
         foreach (var declaration in SplitCssDeclarations(styleWithoutComments))
         {
@@ -1169,7 +1169,10 @@ public static class DocsVersionImpactAnalyzer
     }
 
     private static bool IsRawTextElement(string tagName)
-        => tagName is "textarea" or "script" or "style";
+        => IsRcDataElement(tagName) || tagName is "script" or "style";
+
+    private static bool IsRcDataElement(string tagName)
+        => tagName is "textarea" or "title";
 
     private static bool IsInlineBoxElement(string tagName)
         => tagName is "audio" or "button" or "canvas" or "iframe" or "meter"
