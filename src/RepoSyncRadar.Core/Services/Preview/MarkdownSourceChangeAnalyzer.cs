@@ -79,41 +79,59 @@ public static partial class MarkdownSourceChangeAnalyzer
         var afterSource = after ?? string.Empty;
         var beforeMatches = VariableReferenceRegex().Matches(beforeSource);
         var afterMatches = VariableReferenceRegex().Matches(afterSource);
-        if (beforeMatches.Count == 0 || beforeMatches.Count != afterMatches.Count)
+        if (beforeMatches.Count == 0 && afterMatches.Count == 0)
         {
             return false;
         }
 
-        const string placeholder = "{rsr-variable}";
         if (!string.Equals(
-                VariableReferenceRegex().Replace(beforeSource, placeholder),
-                VariableReferenceRegex().Replace(afterSource, placeholder),
+                VariableReferenceRegex().Replace(beforeSource, string.Empty),
+                VariableReferenceRegex().Replace(afterSource, string.Empty),
                 StringComparison.Ordinal))
         {
             return false;
         }
 
-        var changed = new List<(string Before, string After)>();
-        for (var index = 0; index < beforeMatches.Count; index++)
+        var beforeKeys = beforeMatches
+            .Select(static match => match.Groups["key"].Value)
+            .ToArray();
+        var afterKeys = afterMatches
+            .Select(static match => match.Groups["key"].Value)
+            .ToArray();
+        var commonPrefix = 0;
+        while (commonPrefix < beforeKeys.Length
+               && commonPrefix < afterKeys.Length
+               && string.Equals(
+                   beforeKeys[commonPrefix],
+                   afterKeys[commonPrefix],
+                   StringComparison.Ordinal))
         {
-            var beforeKey = beforeMatches[index].Groups["key"].Value;
-            var afterKey = afterMatches[index].Groups["key"].Value;
-            if (!string.Equals(beforeKey, afterKey, StringComparison.Ordinal))
-            {
-                changed.Add((beforeKey, afterKey));
-            }
+            commonPrefix++;
         }
 
-        if (changed.Count == 0)
+        var beforeEnd = beforeKeys.Length;
+        var afterEnd = afterKeys.Length;
+        while (beforeEnd > commonPrefix
+               && afterEnd > commonPrefix
+               && string.Equals(
+                   beforeKeys[beforeEnd - 1],
+                   afterKeys[afterEnd - 1],
+                   StringComparison.Ordinal))
+        {
+            beforeEnd--;
+            afterEnd--;
+        }
+
+        var changeCount = Math.Max(beforeEnd - commonPrefix, afterEnd - commonPrefix);
+        if (changeCount == 0)
         {
             return false;
         }
-
         summary = new MarkdownSourceChangeSummary(
             MarkdownSourceChangeKind.LiquidVariableReference,
-            changed[0].Before,
-            changed[0].After,
-            changed.Count);
+            commonPrefix < beforeEnd ? beforeKeys[commonPrefix] : null,
+            commonPrefix < afterEnd ? afterKeys[commonPrefix] : null,
+            changeCount);
         return true;
     }
 

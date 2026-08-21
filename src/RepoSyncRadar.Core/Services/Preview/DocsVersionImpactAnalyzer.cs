@@ -53,7 +53,8 @@ public static class DocsVersionImpactAnalyzer
         string TagName,
         HtmlWhiteSpaceMode WhiteSpaceMode,
         bool IsRawText,
-        bool IsForeignContent);
+        bool IsForeignContent,
+        bool ExposesWhitespaceBoundary);
 
     /// <summary>
     /// 全版で評価し、before/after が一致しない版だけを <see cref="DocsVersionCatalog.All"/>
@@ -427,12 +428,17 @@ public static class DocsVersionImpactAnalyzer
             var isSelfClosing = IsVoidElement(tagName) || (isForeign && hasSelfClosingSyntax);
             var isBlock = IsBlockElement(tagName);
             var isWhitespaceBoundary = isBlock || tagName == "br";
+            var exposesWhitespaceBoundary = isClosing
+                ? FindHtmlElement(elements, tagName)?.ExposesWhitespaceBoundary == true
+                : HtmlTagExposesWhitespaceBoundary(tag);
             if (isWhitespaceBoundary)
             {
                 pendingCollapsibleSpace = false;
                 hasInlineContent = false;
             }
-            else if (isSelfClosing && pendingCollapsibleSpace && hasInlineContent)
+            else if ((isSelfClosing || exposesWhitespaceBoundary)
+                     && pendingCollapsibleSpace
+                     && hasInlineContent)
             {
                 normalized.Append(' ');
                 pendingCollapsibleSpace = false;
@@ -458,7 +464,8 @@ public static class DocsVersionImpactAnalyzer
                     tagName,
                     whiteSpaceMode,
                     IsRawTextElement(tagName),
-                    isForeign));
+                    isForeign,
+                    exposesWhitespaceBoundary));
             }
             else if (!isWhitespaceBoundary)
             {
@@ -470,6 +477,11 @@ public static class DocsVersionImpactAnalyzer
 
         return normalized.ToString().Trim();
     }
+
+    private static bool HtmlTagExposesWhitespaceBoundary(ReadOnlySpan<char> tag)
+        => GetHtmlAttributeValue(tag, "style") is not null
+            || GetHtmlAttributeValue(tag, "class") is not null
+            || GetHtmlAttributeValue(tag, "id") is not null;
 
     private static bool ContainsHtmlStartTag(string html, string tagName)
     {
@@ -820,6 +832,20 @@ public static class DocsVersionImpactAnalyzer
             elements.RemoveRange(index, elements.Count - index);
             return;
         }
+    }
+
+    private static HtmlElementContext? FindHtmlElement(
+        List<HtmlElementContext> elements,
+        string tagName)
+    {
+        for (var index = elements.Count - 1; index >= 0; index--)
+        {
+            if (string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal))
+            {
+                return elements[index];
+            }
+        }
+        return null;
     }
 
     private static int FindRawTextClosingTag(string html, int startIndex, string tagName)

@@ -44,6 +44,22 @@ public sealed class MarkdownSourceChangeAnalyzerTests
         Assert.Equal(1, summary.ChangeCount);
     }
 
+    [Theory]
+    [InlineData(null, "{% data variables.empty_value %}")]
+    [InlineData("{% data variables.empty_value %}", null)]
+    public void Detects_Added_Or_Removed_Liquid_Variable_Reference(
+        string? before,
+        string? after)
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(before, after);
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.LiquidVariableReference, summary!.Kind);
+        Assert.Equal(before is null ? null : "empty_value", summary.Before);
+        Assert.Equal(after is null ? null : "empty_value", summary.After);
+        Assert.Equal(1, summary.ChangeCount);
+    }
+
     [Fact]
     public void Detects_Frontmatter_Only_Change()
     {

@@ -473,6 +473,26 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Empty(affected);
     }
 
+    [Theory]
+    [InlineData(
+        """<span style="background:red">a </span><span>b</span>""",
+        """<span style="background:red">a</span><span> b</span>""")]
+    [InlineData(
+        """<span>a </span><span style="background:red">b</span>""",
+        """<span>a</span><span style="background:red"> b</span>""")]
+    public void Preserves_Whitespace_Ownership_Across_Styled_Inline_Boundaries(
+        string before,
+        string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
     [Fact]
     public void Ignores_Comments_Inside_Styled_Elements()
     {
