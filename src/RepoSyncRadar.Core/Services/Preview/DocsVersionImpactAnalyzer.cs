@@ -585,9 +585,31 @@ public static class DocsVersionImpactAnalyzer
         => tagName is "a" or "b" or "button" or "code" or "del" or "em" or "i" or "ins"
             or "kbd" or "mark" or "q" or "s" or "samp" or "small" or "strike"
             or "strong" or "sub" or "sup" or "u" or "var"
-            || GetHtmlAttributeValue(tag, "style") is not null
-            || GetHtmlAttributeValue(tag, "class") is not null
-            || GetHtmlAttributeValue(tag, "id") is not null;
+            || HasHtmlAttributes(tag);
+
+    private static bool HasHtmlAttributes(ReadOnlySpan<char> tag)
+    {
+        var index = 1;
+        while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
+        {
+            index++;
+        }
+        if (index < tag.Length && tag[index] == '/')
+        {
+            index++;
+        }
+        while (index < tag.Length
+               && !IsCollapsibleHtmlWhitespace(tag[index])
+               && tag[index] is not '>' and not '/')
+        {
+            index++;
+        }
+        while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
+        {
+            index++;
+        }
+        return index < tag.Length && tag[index] is not '>' and not '/';
+    }
 
     private static bool ContainsHtmlStartTag(string html, string tagName)
     {

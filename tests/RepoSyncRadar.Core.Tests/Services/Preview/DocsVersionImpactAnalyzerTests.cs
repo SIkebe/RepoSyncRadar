@@ -590,6 +590,22 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
+    [Theory]
+    [InlineData("title", "tip")]
+    [InlineData("dir", "rtl")]
+    public void Preserves_Whitespace_Ownership_Across_Attributed_Inline_Boundaries(
+        string attributeName,
+        string attributeValue)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"""<span {attributeName}="{attributeValue}">A </span>B""",
+            DocsLiquidContext.Empty,
+            $"""<span {attributeName}="{attributeValue}">A</span> B""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
     [Fact]
     public void Preserves_Whitespace_Ownership_Across_Inline_Code_Boundaries()
     {

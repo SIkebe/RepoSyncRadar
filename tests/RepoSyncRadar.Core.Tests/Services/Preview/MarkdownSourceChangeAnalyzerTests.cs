@@ -44,6 +44,31 @@ public sealed class MarkdownSourceChangeAnalyzerTests
         Assert.Equal(1, summary.ChangeCount);
     }
 
+    [Fact]
+    public void Detects_Filtered_Liquid_Interpolation_Reference_Replacement()
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(
+            """The value is {{ variables.old | default: "x" }}.""",
+            """The value is {{ variables.new | default: "x" }}.""");
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.LiquidVariableReference, summary!.Kind);
+        Assert.Equal("old", summary.Before);
+        Assert.Equal("new", summary.After);
+        Assert.Equal(1, summary.ChangeCount);
+    }
+
+    [Fact]
+    public void Does_Not_Classify_Filter_Changes_As_Liquid_Reference_Changes()
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(
+            """The value is {{ variables.old | default: "old" }}.""",
+            """The value is {{ variables.new | default: "new" }}.""");
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.SourceOnly, summary!.Kind);
+    }
+
     [Theory]
     [InlineData("{% data variables.old-%}", "{% data variables.new-%}")]
     [InlineData("{{ variables.old-}}", "{{ variables.new-}}")]

@@ -20,7 +20,7 @@ public static partial class MarkdownSourceChangeAnalyzer
     private const int _maxExcerptLength = 160;
 
     [GeneratedRegex(
-        @"(?:\{%-?\s*data\s+variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+?)\s*-?%\}|\{\{-?\s*(?:site\.data\.)?variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+?)\s*-?\}\})",
+        @"(?:\{%-?\s*data\s+variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+?)\s*-?%\}|\{\{-?\s*(?:site\.data\.)?variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+?)\s*(?<filters>(?:\|[^{}]*?)?)\s*-?\}\})",
         RegexOptions.IgnoreCase)]
     private static partial Regex VariableReferenceRegex();
 
@@ -129,6 +129,12 @@ public static partial class MarkdownSourceChangeAnalyzer
         var afterKeys = afterMatches
             .Select(static match => match.Groups["key"].Value)
             .ToArray();
+        var beforeFilters = beforeMatches
+            .Select(static match => match.Groups["filters"].Value)
+            .ToArray();
+        var afterFilters = afterMatches
+            .Select(static match => match.Groups["filters"].Value)
+            .ToArray();
         var commonPrefix = 0;
         while (commonPrefix < beforeKeys.Length
                && commonPrefix < afterKeys.Length
@@ -157,6 +163,17 @@ public static partial class MarkdownSourceChangeAnalyzer
         if (changeCount == 0)
         {
             return false;
+        }
+        var pairedChangeCount = Math.Min(beforeEnd - commonPrefix, afterEnd - commonPrefix);
+        for (var index = 0; index < pairedChangeCount; index++)
+        {
+            if (!string.Equals(
+                    beforeFilters[commonPrefix + index],
+                    afterFilters[commonPrefix + index],
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
         }
         summary = new MarkdownSourceChangeSummary(
             MarkdownSourceChangeKind.LiquidVariableReference,
