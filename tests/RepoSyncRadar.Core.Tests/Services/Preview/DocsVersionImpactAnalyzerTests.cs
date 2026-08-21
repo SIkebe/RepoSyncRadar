@@ -162,6 +162,33 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
+    [Theory]
+    [InlineData("""<input value="<!-- old -->">""", """<input value="<!-- new -->">""")]
+    [InlineData("<textarea><!-- old --></textarea>", "<textarea><!-- new --></textarea>")]
+    public void Preserves_Comment_Syntax_In_Html_Text_And_Attributes(string before, string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Reports_Rendering_Change_When_Indented_Code_Becomes_Paragraph()
+    {
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            "    code",
+            DocsLiquidContext.Empty,
+            "code",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, details.Count);
+        Assert.All(details, detail => Assert.NotEmpty(detail.Changes));
+    }
+
     [Fact]
     public void Flags_Only_Fpt_When_Change_Lives_Inside_Ifversion_Fpt_Block()
     {

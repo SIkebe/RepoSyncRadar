@@ -41,11 +41,13 @@ public static partial class DocsVersionImpactAnalyzer
         .UseAdvancedExtensions()
         .Build();
 
-    [GeneratedRegex(@"<!--.*?-->", RegexOptions.Singleline)]
-    private static partial Regex HtmlCommentRegex();
+    [GeneratedRegex(
+        @"<(?<tag>textarea|script|style)\b(?:[^>""']|""[^""]*""|'[^']*')*>.*?</\k<tag>\s*>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex RawTextElementRegex();
 
     [GeneratedRegex(
-        @"<(?<tag>pre|code|textarea|script|style)\b[^>]*>.*?</\k<tag>\s*>",
+        @"<(?<tag>pre|code)\b(?:[^>""']|""[^""]*""|'[^']*')*>.*?</\k<tag>\s*>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex WhitespaceSensitiveElementRegex();
 
@@ -111,10 +113,14 @@ public static partial class DocsVersionImpactAnalyzer
             if (!string.Equals(NormalizeForComparison(beforeRendered), NormalizeForComparison(afterRendered), StringComparison.Ordinal))
             {
                 var changes = BuildChangeSnippets(beforeRendered, afterRendered);
-                if (changes.Count > 0)
+                if (changes.Count == 0)
                 {
-                    affected.Add(new DocsVersionImpactDetail(version, changes));
+                    changes.Add(new DocsVersionChangeSnippet(
+                        DocsVersionChangeKind.Updated,
+                        TrimExcerpt(Markdown.ToHtml(beforeRendered ?? string.Empty, _comparisonPipeline)),
+                        TrimExcerpt(Markdown.ToHtml(afterRendered ?? string.Empty, _comparisonPipeline))));
                 }
+                affected.Add(new DocsVersionImpactDetail(version, changes));
             }
         }
         return affected;
@@ -311,16 +317,10 @@ public static partial class DocsVersionImpactAnalyzer
     private static string NormalizeForComparison(string? rendered)
     {
         var html = Markdown.ToHtml(rendered ?? string.Empty, _comparisonPipeline);
-        var withoutComments = HtmlCommentRegex().Replace(html, string.Empty);
         var sensitiveElements = new List<string>();
-        var protectedHtml = WhitespaceSensitiveElementRegex().Replace(
-            withoutComments,
-            match =>
-            {
-                var index = sensitiveElements.Count;
-                sensitiveElements.Add(match.Value);
-                return $"\uE000RSR{index}\uE001";
-            });
+        var protectedHtml = ProtectElements(html, RawTextElementRegex(), sensitiveElements);
+        var withoutComments = StripActualHtmlComments(protectedHtml);
+        protectedHtml = ProtectElements(withoutComments, WhitespaceSensitiveElementRegex(), sensitiveElements);
         var normalized = NormalizeCollapsibleTextWhitespace(protectedHtml);
         for (var index = 0; index < sensitiveElements.Count; index++)
         {
@@ -330,6 +330,43 @@ public static partial class DocsVersionImpactAnalyzer
                 StringComparison.Ordinal);
         }
         return normalized;
+    }
+
+    private static string ProtectElements(string html, Regex elementRegex, List<string> elements)
+        => elementRegex.Replace(
+            html,
+            match =>
+            {
+                var index = elements.Count;
+                elements.Add(match.Value);
+                return $"\uE000RSR{index}\uE001";
+            });
+
+    private static string StripActualHtmlComments(string html)
+    {
+        var stripped = new StringBuilder(html.Length);
+        var index = 0;
+        while (index < html.Length)
+        {
+            if (html.AsSpan(index).StartsWith("<!--", StringComparison.Ordinal))
+            {
+                var commentEnd = html.IndexOf("-->", index + 4, StringComparison.Ordinal);
+                index = commentEnd < 0 ? html.Length : commentEnd + 3;
+                continue;
+            }
+
+            if (html[index] == '<')
+            {
+                var tagEnd = FindHtmlTagEnd(html, index);
+                stripped.Append(html, index, tagEnd - index);
+                index = tagEnd;
+                continue;
+            }
+
+            stripped.Append(html[index]);
+            index++;
+        }
+        return stripped.ToString();
     }
 
     private static string NormalizeCollapsibleTextWhitespace(string html)
@@ -350,25 +387,35 @@ public static partial class DocsVersionImpactAnalyzer
                 continue;
             }
 
-            var quote = '\0';
-            do
-            {
-                var current = html[index];
-                normalized.Append(current);
-                index++;
-                if (quote == '\0' && current is '\'' or '"')
-                {
-                    quote = current;
-                }
-                else if (current == quote)
-                {
-                    quote = '\0';
-                }
-            }
-            while (index < html.Length && (html[index - 1] != '>' || quote != '\0'));
+            var tagEnd = FindHtmlTagEnd(html, index);
+            normalized.Append(html, index, tagEnd - index);
+            index = tagEnd;
         }
 
         return normalized.ToString().Trim();
+    }
+
+    private static int FindHtmlTagEnd(string html, int startIndex)
+    {
+        var quote = '\0';
+        for (var index = startIndex; index < html.Length; index++)
+        {
+            var current = html[index];
+            if (quote == '\0' && current is '\'' or '"')
+            {
+                quote = current;
+            }
+            else if (current == quote)
+            {
+                quote = '\0';
+            }
+            else if (current == '>' && quote == '\0')
+            {
+                return index + 1;
+            }
+        }
+
+        return html.Length;
     }
 
     private static void AddCurrentBlock(List<string> blocks, List<string> current)
