@@ -179,6 +179,9 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData("""<input disabled="false">""", """<input disabled>""")]
     [InlineData("<textarea>A&#32;B</textarea>", "<textarea>A B</textarea>")]
     [InlineData("<textarea>&#128;</textarea>", "<textarea>€</textarea>")]
+    [InlineData(
+        "<textarea>&CounterClockwiseContourIntegral;</textarea>",
+        "<textarea>∳</textarea>")]
     public void Returns_Empty_When_Only_Browser_Equivalent_Html_Syntax_Changes(
         string before,
         string after)
@@ -336,6 +339,22 @@ public sealed class DocsVersionImpactAnalyzerTests
             DocsLiquidContext.Empty);
 
         Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("""<span style="white-space-collapse: preserve">a  b</span>""")]
+    [InlineData("""<span style="--mode: pre; white-space: var(--mode)">a  b</span>""")]
+    public void Preserves_Whitespace_For_Longhand_Or_Computed_Css(string before)
+    {
+        var after = before.Replace("a  b", "a b", StringComparison.Ordinal);
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
     [Fact]

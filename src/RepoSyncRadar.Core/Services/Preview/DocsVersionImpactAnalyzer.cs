@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Markdig;
+using Markdig.Helpers;
 
 namespace RepoSyncRadar.Core.Services.Preview;
 
@@ -566,15 +567,13 @@ public static class DocsVersionImpactAnalyzer
         foreach (var declaration in style.Split(';'))
         {
             var separator = declaration.IndexOf(':');
-            if (separator < 0
-                || !declaration.AsSpan(0, separator).Trim().Equals(
-                    "white-space",
-                    StringComparison.OrdinalIgnoreCase))
+            if (separator < 0)
             {
                 continue;
             }
 
-            if (TryResolveDeclaredWhiteSpaceMode(
+            if (TryResolveWhiteSpaceDeclaration(
+                    declaration.AsSpan(0, separator).Trim(),
                     declaration.AsSpan(separator + 1),
                     out var declaredMode,
                     out var declarationIsImportant)
@@ -587,9 +586,63 @@ public static class DocsVersionImpactAnalyzer
         return mode;
     }
 
-    private static bool TryResolveDeclaredWhiteSpaceMode(
+    private static bool TryResolveWhiteSpaceDeclaration(
+        ReadOnlySpan<char> property,
         ReadOnlySpan<char> value,
         out HtmlWhiteSpaceMode mode,
+        out bool isImportant)
+    {
+        value = StripImportant(value, out isImportant);
+        if (property.Equals("white-space-collapse", StringComparison.OrdinalIgnoreCase))
+        {
+            if (value.Equals("collapse", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("discard", StringComparison.OrdinalIgnoreCase))
+            {
+                mode = HtmlWhiteSpaceMode.Collapse;
+                return true;
+            }
+            if (value.Equals("preserve-breaks", StringComparison.OrdinalIgnoreCase))
+            {
+                mode = HtmlWhiteSpaceMode.PreLine;
+                return true;
+            }
+            if (value.Equals("preserve", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("preserve-spaces", StringComparison.OrdinalIgnoreCase)
+                || value.Equals("break-spaces", StringComparison.OrdinalIgnoreCase))
+            {
+                mode = HtmlWhiteSpaceMode.Preserve;
+                return true;
+            }
+            if (ContainsComputedCssValue(value))
+            {
+                mode = HtmlWhiteSpaceMode.Preserve;
+                return true;
+            }
+        }
+        else if (!property.Equals("white-space", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = default;
+            isImportant = false;
+            return false;
+        }
+
+        if (TryResolveWhiteSpaceValue(value, out mode))
+        {
+            return true;
+        }
+        if (ContainsComputedCssValue(value))
+        {
+            mode = HtmlWhiteSpaceMode.Preserve;
+            return true;
+        }
+
+        mode = default;
+        isImportant = false;
+        return false;
+    }
+
+    private static ReadOnlySpan<char> StripImportant(
+        ReadOnlySpan<char> value,
         out bool isImportant)
     {
         value = value.Trim();
@@ -602,7 +655,13 @@ public static class DocsVersionImpactAnalyzer
         {
             value = value[..importantSeparator].TrimEnd();
         }
+        return value;
+    }
 
+    private static bool TryResolveWhiteSpaceValue(
+        ReadOnlySpan<char> value,
+        out HtmlWhiteSpaceMode mode)
+    {
         if (value.Equals("normal", StringComparison.OrdinalIgnoreCase)
             || value.Equals("nowrap", StringComparison.OrdinalIgnoreCase)
             || value.Equals("collapse wrap", StringComparison.OrdinalIgnoreCase)
@@ -629,9 +688,12 @@ public static class DocsVersionImpactAnalyzer
         }
 
         mode = default;
-        isImportant = false;
         return false;
     }
+
+    private static bool ContainsComputedCssValue(ReadOnlySpan<char> value)
+        => value.Contains("var(", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("env(", StringComparison.OrdinalIgnoreCase);
 
     private static string? GetHtmlAttributeValue(ReadOnlySpan<char> tag, string attributeName)
     {
@@ -929,11 +991,19 @@ public static class DocsVersionImpactAnalyzer
         var index = 0;
         while (index < value.Length)
         {
-            if (value[index] != '&'
-                || !TryDecodeNumericCharacterReference(
+            if (value[index] != '&')
+            {
+                index++;
+                continue;
+            }
+            if (!TryDecodeNumericCharacterReference(
                     value.AsSpan(index),
                     out var consumed,
-                    out var replacement))
+                    out var replacement)
+                && !TryDecodeNamedCharacterReference(
+                    value.AsSpan(index),
+                    out consumed,
+                    out replacement))
             {
                 index++;
                 continue;
@@ -953,6 +1023,41 @@ public static class DocsVersionImpactAnalyzer
             decoded.Append(WebUtility.HtmlDecode(value[segmentStart..]));
         }
         return decoded.ToString();
+    }
+
+    private static bool TryDecodeNamedCharacterReference(
+        ReadOnlySpan<char> value,
+        out int consumed,
+        out string replacement)
+    {
+        consumed = 0;
+        replacement = string.Empty;
+        if (value.Length < 3 || value[0] != '&')
+        {
+            return false;
+        }
+
+        var semicolon = value.IndexOf(';');
+        if (semicolon < 2)
+        {
+            return false;
+        }
+        for (var index = 1; index < semicolon; index++)
+        {
+            if (!char.IsAsciiLetterOrDigit(value[index]))
+            {
+                return false;
+            }
+        }
+
+        var decoded = EntityHelper.DecodeEntity(value[1..semicolon]);
+        if (decoded is null)
+        {
+            return false;
+        }
+        consumed = semicolon + 1;
+        replacement = decoded;
+        return true;
     }
 
     private static bool TryDecodeNumericCharacterReference(
