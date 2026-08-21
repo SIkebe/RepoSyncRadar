@@ -542,6 +542,42 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
+    [Theory]
+    [InlineData("strong")]
+    [InlineData("em")]
+    [InlineData("del")]
+    [InlineData("mark")]
+    [InlineData("sub")]
+    [InlineData("sup")]
+    public void Preserves_Whitespace_Ownership_Across_Semantic_Inline_Boundaries(
+        string tagName)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"<{tagName}>A </{tagName}>B",
+            DocsLiquidContext.Empty,
+            $"<{tagName}>A</{tagName}> B",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Stops_Analysis_When_Cancelled()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            DocsVersionImpactAnalyzer.AnalyzeCancellable(
+                "Before.",
+                DocsLiquidContext.Empty,
+                "After.",
+                DocsLiquidContext.Empty,
+                beforeRepoPath: null,
+                afterRepoPath: null,
+                cancellationToken: cancellation.Token));
+    }
+
     [Fact]
     public void Preserves_Prompt_Whitespace_That_Changes_The_Copilot_Link()
     {

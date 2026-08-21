@@ -67,6 +67,40 @@ public static class DocsVersionImpactAnalyzer
         DocsLiquidContext afterContext,
         string? beforeRepoPath = null,
         string? afterRepoPath = null)
+        => AnalyzeCore(
+            beforeMarkdown,
+            beforeContext,
+            afterMarkdown,
+            afterContext,
+            beforeRepoPath,
+            afterRepoPath,
+            CancellationToken.None);
+
+    internal static IReadOnlyList<DocsVersion> AnalyzeCancellable(
+        string? beforeMarkdown,
+        DocsLiquidContext beforeContext,
+        string? afterMarkdown,
+        DocsLiquidContext afterContext,
+        string? beforeRepoPath,
+        string? afterRepoPath,
+        CancellationToken cancellationToken)
+        => AnalyzeCore(
+            beforeMarkdown,
+            beforeContext,
+            afterMarkdown,
+            afterContext,
+            beforeRepoPath,
+            afterRepoPath,
+            cancellationToken);
+
+    private static IReadOnlyList<DocsVersion> AnalyzeCore(
+        string? beforeMarkdown,
+        DocsLiquidContext beforeContext,
+        string? afterMarkdown,
+        DocsLiquidContext afterContext,
+        string? beforeRepoPath = null,
+        string? afterRepoPath = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(beforeContext);
         ArgumentNullException.ThrowIfNull(afterContext);
@@ -83,6 +117,7 @@ public static class DocsVersionImpactAnalyzer
         var affected = new List<DocsVersion>(DocsVersionCatalog.All.Count);
         foreach (var version in DocsVersionCatalog.All)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var beforeRendered = DocsLiquidEvaluator.Evaluate(beforeRenderable, beforeContext, version);
             var afterRendered = DocsLiquidEvaluator.Evaluate(afterRenderable, afterContext, version);
             if (!string.IsNullOrWhiteSpace(beforeRepoPath)
@@ -100,8 +135,8 @@ public static class DocsVersionImpactAnalyzer
                     version);
             }
             if (!string.Equals(
-                    NormalizeForComparison(beforeRendered),
-                    NormalizeForComparison(afterRendered),
+                    NormalizeForComparison(beforeRendered, cancellationToken),
+                    NormalizeForComparison(afterRendered, cancellationToken),
                     StringComparison.Ordinal))
             {
                 affected.Add(version);
@@ -120,6 +155,40 @@ public static class DocsVersionImpactAnalyzer
         DocsLiquidContext afterContext,
         string? beforeRepoPath = null,
         string? afterRepoPath = null)
+        => AnalyzeDetailsCore(
+            beforeMarkdown,
+            beforeContext,
+            afterMarkdown,
+            afterContext,
+            beforeRepoPath,
+            afterRepoPath,
+            CancellationToken.None);
+
+    internal static IReadOnlyList<DocsVersionImpactDetail> AnalyzeDetailsCancellable(
+        string? beforeMarkdown,
+        DocsLiquidContext beforeContext,
+        string? afterMarkdown,
+        DocsLiquidContext afterContext,
+        string? beforeRepoPath,
+        string? afterRepoPath,
+        CancellationToken cancellationToken)
+        => AnalyzeDetailsCore(
+            beforeMarkdown,
+            beforeContext,
+            afterMarkdown,
+            afterContext,
+            beforeRepoPath,
+            afterRepoPath,
+            cancellationToken);
+
+    private static IReadOnlyList<DocsVersionImpactDetail> AnalyzeDetailsCore(
+        string? beforeMarkdown,
+        DocsLiquidContext beforeContext,
+        string? afterMarkdown,
+        DocsLiquidContext afterContext,
+        string? beforeRepoPath = null,
+        string? afterRepoPath = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(beforeContext);
         ArgumentNullException.ThrowIfNull(afterContext);
@@ -137,6 +206,7 @@ public static class DocsVersionImpactAnalyzer
         var affected = new List<DocsVersionImpactDetail>(DocsVersionCatalog.All.Count);
         foreach (var version in DocsVersionCatalog.All)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var beforeRendered = DocsLiquidEvaluator.Evaluate(beforeRenderable, beforeContext, version);
             var afterRendered = DocsLiquidEvaluator.Evaluate(afterRenderable, afterContext, version);
             if (!string.IsNullOrWhiteSpace(beforeRepoPath)
@@ -153,7 +223,10 @@ public static class DocsVersionImpactAnalyzer
                     afterContext,
                     version);
             }
-            if (!string.Equals(NormalizeForComparison(beforeRendered), NormalizeForComparison(afterRendered), StringComparison.Ordinal))
+            if (!string.Equals(
+                    NormalizeForComparison(beforeRendered, cancellationToken),
+                    NormalizeForComparison(afterRendered, cancellationToken),
+                    StringComparison.Ordinal))
             {
                 var changes = BuildChangeSnippets(beforeRendered, afterRendered);
                 if (changes.Count == 0)
@@ -357,20 +430,32 @@ public static class DocsVersionImpactAnalyzer
             && trimmedLine[hashCount] == ' ';
     }
 
-    private static string NormalizeForComparison(string? rendered)
+    private static string NormalizeForComparison(
+        string? rendered,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var preprocessed = MarkdownPreviewRenderer.PreprocessMarkdownForComparison(
-            rendered ?? string.Empty);
+            rendered ?? string.Empty,
+            cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var html = Markdown.ToHtml(preprocessed, _comparisonPipeline);
+        cancellationToken.ThrowIfCancellationRequested();
         var normalized = new StringBuilder(html.Length);
         var elements = new List<HtmlElementContext>();
         var hasStylesheetDrivenWhitespace = ContainsHtmlStartTag(html, "style")
             || ContainsHtmlStartTag(html, "link");
         var index = 0;
+        var lastCancellationCheckIndex = 0;
         var pendingCollapsibleSpace = false;
         var hasInlineContent = false;
         while (index < html.Length)
         {
+            if (index - lastCancellationCheckIndex >= 4096)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                lastCancellationCheckIndex = index;
+            }
             if (elements.Count > 0 && elements[^1].IsRawText)
             {
                 var context = elements[^1];
@@ -483,7 +568,9 @@ public static class DocsVersionImpactAnalyzer
     private static bool HtmlTagExposesWhitespaceBoundary(
         string tagName,
         ReadOnlySpan<char> tag)
-        => tagName is "a" or "code"
+        => tagName is "a" or "b" or "code" or "del" or "em" or "i" or "ins"
+            or "kbd" or "mark" or "q" or "s" or "samp" or "small" or "strike"
+            or "strong" or "sub" or "sup" or "u" or "var"
             || GetHtmlAttributeValue(tag, "style") is not null
             || GetHtmlAttributeValue(tag, "class") is not null
             || GetHtmlAttributeValue(tag, "id") is not null;

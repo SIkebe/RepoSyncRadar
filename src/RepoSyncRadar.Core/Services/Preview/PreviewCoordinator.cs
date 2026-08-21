@@ -450,13 +450,14 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                     cacheLiquidContexts: false,
                     cancellationToken)
                 .ConfigureAwait(false);
-            var affectedVersions = DocsVersionImpactAnalyzer.Analyze(
+            var affectedVersions = DocsVersionImpactAnalyzer.AnalyzeCancellable(
                 sources.BeforeMarkdown,
                 sources.BeforeLiquid,
                 sources.AfterMarkdown,
                 sources.AfterLiquid,
                 sources.BeforeFilePath,
-                filePath.Trim());
+                filePath.Trim(),
+                cancellationToken);
             var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer
                 .Analyze(sources.BeforeMarkdown, sources.AfterMarkdown);
             var previousPath = string.Equals(sources.BeforeFilePath, filePath, StringComparison.Ordinal)
@@ -627,13 +628,14 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         var afterLiquid = sources.AfterLiquid;
 
         progress?.Report("公式版 (fpt/ghec/ghes) で差分の出る版を解析中…");
-        var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetails(
+        var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetailsCancellable(
             beforeMarkdown,
             beforeLiquid,
             afterMarkdown,
             afterLiquid,
             sources.BeforeFilePath,
-            renderedFilePath);
+            renderedFilePath,
+            cancellationToken);
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
         var effectiveVersion = version ?? ResolveInitialMarkdownPreviewVersion(affectedVersions);
         progress?.Report("フロントマターの変更点を解析中…");

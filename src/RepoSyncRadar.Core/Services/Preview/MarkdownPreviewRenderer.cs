@@ -716,7 +716,8 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string RenderOfficialLiquidBlocks(
         string content,
-        RenderedHtmlPlaceholderStore? protectedHtmlFragments = null)
+        RenderedHtmlPlaceholderStore? protectedHtmlFragments = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(content))
         {
@@ -726,6 +727,7 @@ internal static partial class MarkdownPreviewRenderer
         var current = content;
         for (var safety = 0; safety < 16; safety++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var before = current;
             current = CodeTabsBlockRegex().Replace(
                 current,
@@ -756,11 +758,17 @@ internal static partial class MarkdownPreviewRenderer
         return current;
     }
 
-    internal static string PreprocessMarkdownForComparison(string content)
+    internal static string PreprocessMarkdownForComparison(
+        string content,
+        CancellationToken cancellationToken)
     {
-        var tableFragmentsExpanded = ExpandMarkdownTableFragments(content);
-        var liquidBlocksRendered = RenderOfficialLiquidBlocks(tableFragmentsExpanded);
+        var tableFragmentsExpanded = ExpandMarkdownTableFragments(content, cancellationToken);
+        var liquidBlocksRendered = RenderOfficialLiquidBlocks(
+            tableFragmentsExpanded,
+            cancellationToken: cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var githubAlertsRendered = RenderGitHubAlertBlocks(liquidBlocksRendered);
+        cancellationToken.ThrowIfCancellationRequested();
         return NeutralizeLiquid(githubAlertsRendered);
     }
 
@@ -2617,15 +2625,24 @@ internal static partial class MarkdownPreviewRenderer
         return depth;
     }
 
-    private static string ExpandMarkdownTableFragments(string markdown)
+    private static string ExpandMarkdownTableFragments(
+        string markdown,
+        CancellationToken cancellationToken = default)
     {
         var normalizedMarkdown = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
         var lines = normalizedMarkdown.Split('\n');
         var expanded = new StringBuilder(markdown.Length + 128);
         var pendingRows = new List<string>();
-        var protectedLines = FindProtectedMarkdownBlockLines(normalizedMarkdown, lines.Length);
+        var protectedLines = FindProtectedMarkdownBlockLines(
+            normalizedMarkdown,
+            lines.Length,
+            cancellationToken);
         for (var index = 0; index < lines.Length; index++)
         {
+            if ((index & 127) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
             var line = lines[index];
             if (protectedLines[index])
             {
@@ -2657,13 +2674,20 @@ internal static partial class MarkdownPreviewRenderer
         return expanded.ToString();
     }
 
-    private static bool[] FindProtectedMarkdownBlockLines(string markdown, int lineCount)
+    private static bool[] FindProtectedMarkdownBlockLines(
+        string markdown,
+        int lineCount,
+        CancellationToken cancellationToken)
     {
         var protectedLines = new bool[lineCount];
         var lineStarts = new int[lineCount];
         var lineIndex = 1;
         for (var offset = 0; offset < markdown.Length && lineIndex < lineCount; offset++)
         {
+            if ((offset & 4095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
             if (markdown[offset] == '\n')
             {
                 lineStarts[lineIndex++] = offset + 1;
@@ -2673,6 +2697,7 @@ internal static partial class MarkdownPreviewRenderer
         var document = Markdown.Parse(markdown, _pipeline);
         foreach (var block in document.Descendants().OfType<Block>())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (block is not (CodeBlock or HtmlBlock) || block.Span.Start < 0 || block.Span.End < block.Span.Start)
             {
                 continue;

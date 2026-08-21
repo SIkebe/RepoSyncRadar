@@ -45,6 +45,21 @@ public sealed class MarkdownSourceChangeAnalyzerTests
     }
 
     [Theory]
+    [InlineData("{% data variables.old-%}", "{% data variables.new-%}")]
+    [InlineData("{{ variables.old-}}", "{{ variables.new-}}")]
+    public void Excludes_Liquid_Whitespace_Control_Markers_From_Reference_Keys(
+        string before,
+        string after)
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(before, after);
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.LiquidVariableReference, summary!.Kind);
+        Assert.Equal("old", summary.Before);
+        Assert.Equal("new", summary.After);
+    }
+
+    [Theory]
     [InlineData(null, "{% data variables.empty_value %}")]
     [InlineData("{% data variables.empty_value %}", null)]
     public void Detects_Added_Or_Removed_Liquid_Variable_Reference(

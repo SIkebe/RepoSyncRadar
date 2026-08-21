@@ -20,7 +20,7 @@ public static partial class MarkdownSourceChangeAnalyzer
     private const int _maxExcerptLength = 160;
 
     [GeneratedRegex(
-        @"(?:\{%-?\s*data\s+variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+)\s*-?%\}|\{\{-?\s*(?:site\.data\.)?variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+)\s*-?\}\})",
+        @"(?:\{%-?\s*data\s+variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+?)\s*-?%\}|\{\{-?\s*(?:site\.data\.)?variables\.(?<key>[A-Za-z0-9_.\-/+_\[\]]+?)\s*-?\}\})",
         RegexOptions.IgnoreCase)]
     private static partial Regex VariableReferenceRegex();
 
