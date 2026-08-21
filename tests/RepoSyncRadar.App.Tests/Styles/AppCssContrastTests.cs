@@ -94,6 +94,16 @@ public sealed partial class AppCssContrastTests
     }
 
     [Fact]
+    public void DarkTheme_FileChangeDescription_Uses_MutedForegroundToken()
+    {
+        var descriptionBlock = GetExactRuleBlock(
+            ReadAppCss(),
+            ".radar-theme-dark .radar-commit-detail .file-change-description");
+
+        Assert.Contains("color: var(--radar-muted-fg)", descriptionBlock, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AppHeader_Uses_Theme_Surface_Tokens()
     {
         var headerBlock = GetRuleBlock(ReadAppCss(), ".app-header");

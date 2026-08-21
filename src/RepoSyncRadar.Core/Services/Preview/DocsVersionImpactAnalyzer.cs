@@ -488,22 +488,57 @@ public static class DocsVersionImpactAnalyzer
                 continue;
             }
 
-            var value = declaration.AsSpan(separator + 1).Trim();
-            if (value.StartsWith("normal", StringComparison.OrdinalIgnoreCase)
-                || value.StartsWith("nowrap", StringComparison.OrdinalIgnoreCase))
+            if (TryResolveDeclaredWhiteSpaceMode(
+                    declaration.AsSpan(separator + 1),
+                    out var declaredMode))
             {
-                mode = HtmlWhiteSpaceMode.Collapse;
-            }
-            else if (value.StartsWith("pre-line", StringComparison.OrdinalIgnoreCase))
-            {
-                mode = HtmlWhiteSpaceMode.PreLine;
-            }
-            else
-            {
-                mode = HtmlWhiteSpaceMode.Preserve;
+                mode = declaredMode;
             }
         }
         return mode;
+    }
+
+    private static bool TryResolveDeclaredWhiteSpaceMode(
+        ReadOnlySpan<char> value,
+        out HtmlWhiteSpaceMode mode)
+    {
+        value = value.Trim();
+        var importantSeparator = value.LastIndexOf('!');
+        if (importantSeparator >= 0
+            && value[(importantSeparator + 1)..].Trim().Equals(
+                "important",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            value = value[..importantSeparator].TrimEnd();
+        }
+
+        if (value.Equals("normal", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("nowrap", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("collapse wrap", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("collapse nowrap", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = HtmlWhiteSpaceMode.Collapse;
+            return true;
+        }
+        if (value.Equals("pre-line", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("preserve-breaks wrap", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = HtmlWhiteSpaceMode.PreLine;
+            return true;
+        }
+        if (value.Equals("pre", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("pre-wrap", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("break-spaces", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("preserve nowrap", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("preserve wrap", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("break-spaces wrap", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = HtmlWhiteSpaceMode.Preserve;
+            return true;
+        }
+
+        mode = default;
+        return false;
     }
 
     private static string? GetHtmlAttributeValue(ReadOnlySpan<char> tag, string attributeName)

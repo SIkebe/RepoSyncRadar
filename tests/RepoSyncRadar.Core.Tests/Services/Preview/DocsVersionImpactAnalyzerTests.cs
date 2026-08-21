@@ -213,6 +213,30 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Applies_Important_To_Recognized_WhiteSpace_Value()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: normal !important">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: normal !important">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Ignores_Invalid_WhiteSpace_Value()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<pre style="white-space: normal-invalid">a  b</pre>""",
+            DocsLiquidContext.Empty,
+            """<pre style="white-space: normal-invalid">a b</pre>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Preserves_Line_Breaks_But_Collapses_Spaces_For_PreLine()
     {
         var spaces = DocsVersionImpactAnalyzer.Analyze(

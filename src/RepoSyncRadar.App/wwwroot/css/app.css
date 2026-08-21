@@ -3159,7 +3159,7 @@ html, body {
 }
 
 .radar-theme-dark .radar-commit-detail .file-change-description {
-    color: var(--radar-muted);
+    color: var(--radar-muted-fg);
 }
 
 .radar-theme-dark .radar-commit-detail .file-change-description code {
