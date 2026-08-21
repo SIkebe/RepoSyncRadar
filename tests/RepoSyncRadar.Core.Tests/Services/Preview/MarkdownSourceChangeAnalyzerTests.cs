@@ -5,6 +5,24 @@ namespace RepoSyncRadar.Core.Tests.Services.Preview;
 
 public sealed class MarkdownSourceChangeAnalyzerTests
 {
+    [Theory]
+    [InlineData("Body.", "---\n---\nBody.", null, "")]
+    [InlineData("---\n---\nBody.", "Body.", "", null)]
+    public void Detects_Added_Or_Removed_Empty_Frontmatter(
+        string before,
+        string after,
+        string? expectedBefore,
+        string? expectedAfter)
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(before, after);
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.Frontmatter, summary!.Kind);
+        Assert.Equal(expectedBefore, summary.Before);
+        Assert.Equal(expectedAfter, summary.After);
+        Assert.Equal(1, summary.ChangeCount);
+    }
+
     [Fact]
     public void Detects_Liquid_Variable_Reference_Replacement()
     {

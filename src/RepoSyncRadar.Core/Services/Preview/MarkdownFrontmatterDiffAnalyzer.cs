@@ -154,23 +154,35 @@ public static class MarkdownFrontmatterDiffAnalyzer
     }
 
     internal static string ExtractFrontmatter(string markdown)
+        => TryExtractFrontmatter(markdown, out var frontmatter)
+            ? frontmatter
+            : string.Empty;
+
+    internal static bool HasFrontmatter(string? markdown)
+        => !string.IsNullOrEmpty(markdown)
+            && TryExtractFrontmatter(markdown, out _);
+
+    private static bool TryExtractFrontmatter(
+        string markdown,
+        out string frontmatter)
     {
+        frontmatter = string.Empty;
         if (!markdown.StartsWith("---", StringComparison.Ordinal))
         {
-            return string.Empty;
+            return false;
         }
 
         var span = markdown.AsSpan();
         var openLineEnd = span.IndexOf('\n');
         if (openLineEnd < 0)
         {
-            return string.Empty;
+            return false;
         }
 
         var openLine = span[..openLineEnd].TrimEnd('\r');
         if (!openLine.SequenceEqual("---"))
         {
-            return string.Empty;
+            return false;
         }
 
         var rest = span[(openLineEnd + 1)..];
@@ -183,7 +195,8 @@ public static class MarkdownFrontmatterDiffAnalyzer
             var line = remainder[..lineLength].TrimEnd('\r');
             if (line.SequenceEqual("---"))
             {
-                return rest[..cursor].ToString();
+                frontmatter = rest[..cursor].ToString();
+                return true;
             }
             cursor += lineLength + (lineEnd < 0 ? 0 : 1);
             if (lineEnd < 0)
@@ -192,7 +205,7 @@ public static class MarkdownFrontmatterDiffAnalyzer
             }
         }
 
-        return string.Empty;
+        return false;
     }
 
     private static void FlushPending(

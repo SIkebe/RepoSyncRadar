@@ -221,6 +221,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Distinguishes_Encoded_Tag_Text_From_Html_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "A&lt;span&gt;B&lt;/span&gt;C",
+            DocsLiquidContext.Empty,
+            "A<span>B</span>C",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Preserves_Hidden_UntilFound_Semantics()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(

@@ -649,7 +649,7 @@ public static class DocsVersionImpactAnalyzer
                 normalized.Append(' ');
             }
             pendingCollapsibleSpace = false;
-            normalized.Append(text);
+            AppendEscapedHtmlText(normalized, text);
             hasInlineContent |= text.Length > 0;
             return;
         }
@@ -679,10 +679,41 @@ public static class DocsVersionImpactAnalyzer
                     normalized.Append(' ');
                 }
                 pendingCollapsibleSpace = false;
-                normalized.Append(current);
+                AppendEscapedHtmlTextCharacter(normalized, current);
                 hasInlineContent = true;
                 previousWasCarriageReturn = false;
             }
+        }
+    }
+
+    private static void AppendEscapedHtmlText(
+        StringBuilder normalized,
+        ReadOnlySpan<char> text)
+    {
+        foreach (var current in text)
+        {
+            AppendEscapedHtmlTextCharacter(normalized, current);
+        }
+    }
+
+    private static void AppendEscapedHtmlTextCharacter(
+        StringBuilder normalized,
+        char value)
+    {
+        switch (value)
+        {
+            case '&':
+                normalized.Append("&amp;");
+                break;
+            case '<':
+                normalized.Append("&lt;");
+                break;
+            case '>':
+                normalized.Append("&gt;");
+                break;
+            default:
+                normalized.Append(value);
+                break;
         }
     }
 
