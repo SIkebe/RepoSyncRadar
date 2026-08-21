@@ -360,6 +360,8 @@ public static class DocsVersionImpactAnalyzer
         var html = Markdown.ToHtml(rendered ?? string.Empty, _comparisonPipeline);
         var normalized = new StringBuilder(html.Length);
         var elements = new List<HtmlElementContext>();
+        var hasStylesheetDrivenWhitespace = ContainsHtmlStartTag(html, "style")
+            || ContainsHtmlStartTag(html, "link");
         var index = 0;
         var pendingCollapsibleSpace = false;
         var hasInlineContent = false;
@@ -401,6 +403,10 @@ public static class DocsVersionImpactAnalyzer
                 var mode = elements.Count == 0
                     ? HtmlWhiteSpaceMode.Collapse
                     : elements[^1].WhiteSpaceMode;
+                if (hasStylesheetDrivenWhitespace)
+                {
+                    mode = HtmlWhiteSpaceMode.Preserve;
+                }
                 AppendHtmlText(
                     html.AsSpan(index, textEnd - index),
                     mode,
@@ -461,6 +467,25 @@ public static class DocsVersionImpactAnalyzer
         }
 
         return normalized.ToString().Trim();
+    }
+
+    private static bool ContainsHtmlStartTag(string html, string tagName)
+    {
+        var search = $"<{tagName}";
+        var index = 0;
+        while ((index = html.IndexOf(search, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            var afterName = index + search.Length;
+            if (afterName >= html.Length
+                || html[afterName] == '>'
+                || html[afterName] == '/'
+                || IsCollapsibleHtmlWhitespace(html[afterName]))
+            {
+                return true;
+            }
+            index = afterName;
+        }
+        return false;
     }
 
     private static void AppendHtmlText(

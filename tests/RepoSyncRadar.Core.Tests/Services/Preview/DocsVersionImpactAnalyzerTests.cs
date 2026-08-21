@@ -384,6 +384,19 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Preserves_Whitespace_When_A_Stylesheet_May_Apply_WhiteSpace_Rules()
+    {
+        const string style = "<style>.preserve { white-space: pre }</style>";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{style}<span class=\"preserve\">a  b</span>",
+            DocsLiquidContext.Empty,
+            $"{style}<span class=\"preserve\">a b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Honors_Nested_WhiteSpace_Overrides()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
