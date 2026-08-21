@@ -425,6 +425,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     [InlineData(
         "<p>A<div>B</div>",
         "<p>A</p><div>B</div>")]
+    [InlineData(
+        """<svg><foreignObject><X-Thing title='x'>Same text.</X-Thing></foreignObject></svg>""",
+        """<svg><foreignObject><x-thing title="x">Same text.</x-thing></foreignObject></svg>""")]
+    [InlineData(
+        """<svg><title><X-Thing title='x'>Same text.</X-Thing></title></svg>""",
+        """<svg><title><x-thing title="x">Same text.</x-thing></title></svg>""")]
+    [InlineData(
+        """<math><mtext><X-Thing title='x'>Same text.</X-Thing></mtext></math>""",
+        """<math><mtext><x-thing title="x">Same text.</x-thing></mtext></math>""")]
+    [InlineData(
+        """<math><annotation-xml encoding="text/html"><X-Thing title='x'>Same text.</X-Thing></annotation-xml></math>""",
+        """<math><annotation-xml encoding="text/html"><x-thing title="x">Same text.</x-thing></annotation-xml></math>""")]
     public void Returns_Empty_When_Only_Browser_Equivalent_Html_Syntax_Changes(
         string before,
         string after)
@@ -436,6 +448,79 @@ public sealed class DocsVersionImpactAnalyzerTests
             DocsLiquidContext.Empty);
 
         Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Does_Not_Treat_NonHtml_AnnotationXml_Encoding_As_Integration_Point()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<math><annotation-xml encoding="text/html bogus"><X-Thing>Same text.</X-Thing></annotation-xml></math>""",
+            DocsLiquidContext.Empty,
+            """<math><annotation-xml encoding="text/html bogus"><x-thing>Same text.</x-thing></annotation-xml></math>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Treats_Svg_Title_Comments_As_NonRendered_Markup()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<svg><title><!-- old --></title></svg>",
+            DocsLiquidContext.Empty,
+            "<svg><title><!-- new --></title></svg>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Foreign_EndTag_Does_Not_Pop_Through_Html_Scope_Barrier()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<svg><foreignObject><p></foreignObject><X-Thing title='x'>Same text.</X-Thing></p></foreignObject></svg>""",
+            DocsLiquidContext.Empty,
+            """<svg><foreignObject><p></foreignObject><x-thing title="x">Same text.</x-thing></p></foreignObject></svg>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Svg_Child_Of_NonHtml_AnnotationXml_Uses_Svg_Namespace()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<math><annotation-xml encoding="application/xml"><svg><foreignObject><X-Thing title='x'>Same text.</X-Thing></foreignObject></svg></annotation-xml></math>""",
+            DocsLiquidContext.Empty,
+            """<math><annotation-xml encoding="application/xml"><svg><foreignObject><x-thing title="x">Same text.</x-thing></foreignObject></svg></annotation-xml></math>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Foreign_Special_Element_Blocks_Outer_Foreign_EndTag()
+    {
+        const string prefix = "<svg><foreignObject><span></svg></span></foreignObject>";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{prefix}<textarea/><IMG SRC='same.png'></textarea></svg>",
+            DocsLiquidContext.Empty,
+            $"""{prefix}<textarea/><img src="same.png"></textarea></svg>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Foreign_EndTag_Pops_Through_Foreign_Special_Element()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<math><annotation-xml encoding="application/xml"></math><textarea><IMG SRC='same.png'></textarea>""",
+            DocsLiquidContext.Empty,
+            """<math><annotation-xml encoding="application/xml"></math><textarea><img src="same.png"></textarea>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
     [Fact]

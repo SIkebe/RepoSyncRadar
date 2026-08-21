@@ -1931,6 +1931,7 @@ internal static partial class MarkdownPreviewRenderer
                 }
 
                 if (elements[index].Namespace != ElementNamespace.Html &&
+                    elements[^1].Namespace == ElementNamespace.Html &&
                     HasHtmlScopeBarrier(elements, index))
                 {
                     return;
@@ -1961,8 +1962,7 @@ internal static partial class MarkdownPreviewRenderer
         for (var index = elements.Count - 1; index > matchingElementIndex; index--)
         {
             var candidate = elements[index];
-            if (candidate.Namespace == ElementNamespace.Html &&
-                _htmlSpecialElementNames.Contains(candidate.TagName))
+            if (IsSpecialElement(candidate))
             {
                 return true;
             }
@@ -1971,15 +1971,31 @@ internal static partial class MarkdownPreviewRenderer
         return false;
     }
 
+    private static bool IsSpecialElement(HtmlElementContext element)
+        => element.Namespace switch
+        {
+            ElementNamespace.Html => IsHtmlSpecialElement(element.TagName),
+            ElementNamespace.Svg => element.TagName is "foreignobject" or "desc" or "title",
+            ElementNamespace.MathMl => element.TagName is "mi" or "mo" or "mn" or "ms"
+                or "mtext" or "annotation-xml",
+            _ => false,
+        };
+
+    internal static bool IsHtmlSpecialElement(string tagName)
+        => _htmlSpecialElementNames.Contains(tagName);
+
     private static bool ForeignParentUsesHtmlParsing(
         HtmlElementContext parent,
         string tagName)
-        => parent.IntegrationKind switch
-        {
-            ForeignIntegrationKind.Html => true,
-            ForeignIntegrationKind.MathText => tagName is not ("mglyph" or "malignmark"),
-            _ => false,
-        };
+        => parent.Namespace == ElementNamespace.MathMl
+            && parent.TagName == "annotation-xml"
+            && tagName == "svg"
+            || parent.IntegrationKind switch
+            {
+                ForeignIntegrationKind.Html => true,
+                ForeignIntegrationKind.MathText => tagName is not ("mglyph" or "malignmark"),
+                _ => false,
+            };
 
     private static ForeignIntegrationKind GetForeignIntegrationKind(
         ElementNamespace elementNamespace,

@@ -2541,6 +2541,48 @@ var value = 1;
     }
 
     [Fact]
+    public void Svg_Child_Of_NonHtml_AnnotationXml_Uses_Svg_Namespace()
+    {
+        const string html =
+            """<math><annotation-xml encoding="application/xml"><svg><foreignObject><textarea/><img src=images/in-textarea.png></textarea></foreignObject></svg></annotation-xml></math>""";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/in-textarea.png", rewritten, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Foreign_Special_Element_Blocks_Outer_Foreign_EndTag()
+    {
+        const string html =
+            "<svg><foreignObject><span></svg></span></foreignObject><textarea/><img src=images/real-image.png></textarea></svg>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains(
+            "src=/markdown-assets/content/code-security/images/real-image.png",
+            rewritten,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Foreign_EndTag_Pops_Through_Foreign_Special_Element()
+    {
+        const string html =
+            """<math><annotation-xml encoding="application/xml"></math><textarea><img src=images/not-an-image.png></textarea>""";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/not-an-image.png", rewritten, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Rewrites_Relative_Candidate_In_Mixed_Data_SrcSet()
     {
         const string markdown =

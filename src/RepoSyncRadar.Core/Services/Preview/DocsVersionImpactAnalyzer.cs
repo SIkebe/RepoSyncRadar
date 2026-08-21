@@ -50,14 +50,32 @@ public static class DocsVersionImpactAnalyzer
         PreLine,
     }
 
+    private enum HtmlElementNamespace
+    {
+        Html,
+        Svg,
+        MathMl,
+    }
+
+    private enum HtmlForeignIntegrationKind
+    {
+        None,
+        Html,
+        MathText,
+    }
+
     private sealed record HtmlElementContext(
         string TagName,
         HtmlWhiteSpaceMode WhiteSpaceMode,
         bool IsRawText,
-        bool IsForeignContent,
+        HtmlElementNamespace Namespace,
         bool ExposesWhitespaceBoundary,
         bool MayRenderEmptyInlineBox = false,
-        bool IsImplied = false);
+        bool IsImplied = false,
+        HtmlForeignIntegrationKind IntegrationKind = HtmlForeignIntegrationKind.None)
+    {
+        public bool IsForeignContent => Namespace != HtmlElementNamespace.Html;
+    }
 
     /// <summary>
     /// 全版で評価し、before/after が一致しない版だけを <see cref="DocsVersionCatalog.All"/>
@@ -576,22 +594,29 @@ public static class DocsVersionImpactAnalyzer
             var tagEnd = FindHtmlTagEnd(html, index);
             var tag = html.AsSpan(index, tagEnd - index);
             var tagName = GetHtmlTagName(tag, out var isClosing, out var hasSelfClosingSyntax);
-            if (isClosing && IsVoidElement(tagName))
+            var elementNamespace = ResolveHtmlElementNamespace(
+                elements,
+                tagName,
+                tag,
+                isClosing);
+            var isForeign = elementNamespace != HtmlElementNamespace.Html;
+            if (isClosing && !isForeign && IsVoidElement(tagName))
             {
                 index = tagEnd;
                 continue;
             }
-            CloseImpliedTableDescendants(elements, tagName, isClosing);
-            CloseOpenTableSectionIfNeeded(
-                elements,
-                normalized,
-                tagName,
-                isClosing);
-            var parentIsForeign = elements.Count > 0 && elements[^1].IsForeignContent;
-            var isForeign = parentIsForeign || (!isClosing && tagName is "svg" or "math");
-            if (!isClosing && !isForeign)
+            if (!isForeign)
             {
-                ApplyImpliedHtmlEndTags(elements, tagName);
+                CloseImpliedTableDescendants(elements, tagName, isClosing);
+                CloseOpenTableSectionIfNeeded(
+                    elements,
+                    normalized,
+                    tagName,
+                    isClosing);
+                if (!isClosing)
+                {
+                    ApplyImpliedHtmlEndTags(elements, tagName);
+                }
             }
             OpenImpliedTableBodyIfNeeded(
                 elements,
@@ -599,10 +624,13 @@ public static class DocsVersionImpactAnalyzer
                 tagName,
                 isClosing,
                 isForeign);
-            var isSelfClosing = IsVoidElement(tagName) || (isForeign && hasSelfClosingSyntax);
+            var isSelfClosing = !isForeign && IsVoidElement(tagName)
+                || isForeign && hasSelfClosingSyntax;
             var isBlock = IsBlockElement(tagName);
             var isWhitespaceBoundary = isBlock || tagName == "br";
-            var matchingElement = isClosing ? FindHtmlElement(elements, tagName) : null;
+            var matchingElement = isClosing
+                ? FindHtmlElement(elements, tagName, elementNamespace)
+                : null;
             var exposesWhitespaceBoundary = isClosing
                 ? matchingElement?.ExposesWhitespaceBoundary == true
                 : HtmlTagExposesWhitespaceBoundary(tagName, tag);
@@ -636,11 +664,11 @@ public static class DocsVersionImpactAnalyzer
             }
             if (isClosing)
             {
-                PopHtmlElement(elements, tagName);
+                PopHtmlElement(elements, tagName, elementNamespace);
                 hasInlineContent |= IsInlineBoxElement(tagName)
                     || matchingElement?.MayRenderEmptyInlineBox == true;
             }
-            else if (!isSelfClosing && !IsVoidElement(tagName))
+            else if (!isSelfClosing)
             {
                 var inheritedMode = elements.Count == 0
                     ? HtmlWhiteSpaceMode.Collapse
@@ -649,10 +677,14 @@ public static class DocsVersionImpactAnalyzer
                 elements.Add(new HtmlElementContext(
                     tagName,
                     whiteSpaceMode,
-                    IsRawTextElement(tagName),
-                    isForeign,
+                    !isForeign && IsRawTextElement(tagName),
+                    elementNamespace,
                     exposesWhitespaceBoundary,
-                    MayRenderEmptyInlineBox(tagName, tag)));
+                    MayRenderEmptyInlineBox(tagName, tag),
+                    IntegrationKind: GetHtmlForeignIntegrationKind(
+                        elementNamespace,
+                        tagName,
+                        tag)));
             }
             else if (!isWhitespaceBoundary)
             {
@@ -831,7 +863,7 @@ public static class DocsVersionImpactAnalyzer
             "tbody",
             elements[^1].WhiteSpaceMode,
             IsRawText: false,
-            IsForeignContent: false,
+            Namespace: HtmlElementNamespace.Html,
             ExposesWhitespaceBoundary: false,
             IsImplied: true));
     }
@@ -1653,13 +1685,137 @@ public static class DocsVersionImpactAnalyzer
         return tag[nameStart..index].ToString().ToLowerInvariant();
     }
 
-    private static void PopHtmlElement(List<HtmlElementContext> elements, string tagName)
+    private static HtmlElementNamespace ResolveHtmlElementNamespace(
+        List<HtmlElementContext> elements,
+        string tagName,
+        ReadOnlySpan<char> tag,
+        bool isClosing)
+    {
+        if (isClosing)
+        {
+            for (var index = elements.Count - 1; index >= 0; index--)
+            {
+                if (string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal))
+                {
+                    return elements[index].Namespace;
+                }
+            }
+            return elements.Count == 0
+                ? HtmlElementNamespace.Html
+                : elements[^1].Namespace;
+        }
+
+        if (elements.Count == 0 || elements[^1].Namespace == HtmlElementNamespace.Html)
+        {
+            return tagName switch
+            {
+                "svg" => HtmlElementNamespace.Svg,
+                "math" => HtmlElementNamespace.MathMl,
+                _ => HtmlElementNamespace.Html,
+            };
+        }
+
+        if (HtmlForeignParentUsesHtmlParsing(elements[^1], tagName))
+        {
+            return tagName switch
+            {
+                "svg" => HtmlElementNamespace.Svg,
+                "math" => HtmlElementNamespace.MathMl,
+                _ => HtmlElementNamespace.Html,
+            };
+        }
+
+        if (IsHtmlForeignContentBreakoutTag(tagName, tag))
+        {
+            while (elements.Count > 0 &&
+                   elements[^1].Namespace != HtmlElementNamespace.Html &&
+                   elements[^1].IntegrationKind == HtmlForeignIntegrationKind.None)
+            {
+                elements.RemoveAt(elements.Count - 1);
+            }
+            return HtmlElementNamespace.Html;
+        }
+
+        return elements[^1].Namespace;
+    }
+
+    private static bool HtmlForeignParentUsesHtmlParsing(
+        HtmlElementContext parent,
+        string tagName)
+        => parent.Namespace == HtmlElementNamespace.MathMl
+            && parent.TagName == "annotation-xml"
+            && tagName == "svg"
+            || parent.IntegrationKind switch
+            {
+                HtmlForeignIntegrationKind.Html => true,
+                HtmlForeignIntegrationKind.MathText => tagName is not ("mglyph" or "malignmark"),
+                _ => false,
+            };
+
+    private static HtmlForeignIntegrationKind GetHtmlForeignIntegrationKind(
+        HtmlElementNamespace elementNamespace,
+        string tagName,
+        ReadOnlySpan<char> tag)
+        => elementNamespace switch
+        {
+            HtmlElementNamespace.Svg when tagName is "foreignobject" or "desc" or "title"
+                => HtmlForeignIntegrationKind.Html,
+            HtmlElementNamespace.MathMl when tagName is "mi" or "mo" or "mn" or "ms" or "mtext"
+                => HtmlForeignIntegrationKind.MathText,
+            HtmlElementNamespace.MathMl when tagName == "annotation-xml"
+                && HtmlAttributeEquals(tag, "encoding", "text/html",
+                    "application/xhtml+xml")
+                => HtmlForeignIntegrationKind.Html,
+            _ => HtmlForeignIntegrationKind.None,
+        };
+
+    private static bool HtmlAttributeEquals(
+        ReadOnlySpan<char> tag,
+        string attributeName,
+        params string[] expectedValues)
+    {
+        var value = GetHtmlAttributeValue(tag, attributeName);
+        if (value is null)
+        {
+            return false;
+        }
+
+        var decodedValue = DecodeHtmlCharacterReferences(value);
+        return expectedValues.Contains(decodedValue, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool IsHtmlForeignContentBreakoutTag(
+        string tagName,
+        ReadOnlySpan<char> tag)
+        => tagName is "b" or "big" or "blockquote" or "body" or "br" or "center" or "code"
+            or "dd" or "div" or "dl" or "dt" or "em" or "embed" or "h1" or "h2" or "h3"
+            or "h4" or "h5" or "h6" or "head" or "hr" or "i" or "img" or "li"
+            or "listing" or "menu" or "meta" or "nobr" or "ol" or "p" or "pre" or "ruby"
+            or "s" or "small" or "span" or "strong" or "strike" or "sub" or "sup"
+            or "table" or "tt" or "u" or "ul" or "var"
+            || tagName == "font"
+                && (GetHtmlAttributeValue(tag, "color") is not null
+                    || GetHtmlAttributeValue(tag, "face") is not null
+                    || GetHtmlAttributeValue(tag, "size") is not null);
+
+    private static void PopHtmlElement(
+        List<HtmlElementContext> elements,
+        string tagName,
+        HtmlElementNamespace elementNamespace)
     {
         for (var index = elements.Count - 1; index >= 0; index--)
         {
-            if (!string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal))
+            if (!string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal)
+                || elements[index].Namespace != elementNamespace)
             {
                 continue;
+            }
+
+            if (elementNamespace != HtmlElementNamespace.Html
+                && elements[^1].Namespace == HtmlElementNamespace.Html
+                && HasHtmlScopeBarrier(elements, index))
+            {
+                return;
             }
 
             elements.RemoveRange(index, elements.Count - index);
@@ -1667,13 +1823,44 @@ public static class DocsVersionImpactAnalyzer
         }
     }
 
+    private static bool HasHtmlScopeBarrier(
+        List<HtmlElementContext> elements,
+        int matchingElementIndex)
+    {
+        for (var index = elements.Count - 1; index > matchingElementIndex; index--)
+        {
+            var candidate = elements[index];
+            if (IsHtmlSpecialElement(candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsHtmlSpecialElement(HtmlElementContext element)
+        => element.Namespace switch
+        {
+            HtmlElementNamespace.Html
+                => MarkdownPreviewRenderer.IsHtmlSpecialElement(element.TagName),
+            HtmlElementNamespace.Svg
+                => element.TagName is "foreignobject" or "desc" or "title",
+            HtmlElementNamespace.MathMl
+                => element.TagName is "mi" or "mo" or "mn" or "ms"
+                    or "mtext" or "annotation-xml",
+            _ => false,
+        };
+
     private static HtmlElementContext? FindHtmlElement(
         List<HtmlElementContext> elements,
-        string tagName)
+        string tagName,
+        HtmlElementNamespace elementNamespace)
     {
         for (var index = elements.Count - 1; index >= 0; index--)
         {
-            if (string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal))
+            if (string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal)
+                && elements[index].Namespace == elementNamespace)
             {
                 return elements[index];
             }
