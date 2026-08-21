@@ -143,6 +143,38 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Detects_Relative_Stylesheet_Changes_Caused_By_Rename()
+    {
+        const string markdown = """<link rel="alternate stylesheet" href="theme.css">""";
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Rename_Only_Rebases_A_NonStylesheet_Link()
+    {
+        const string markdown = """<link rel="icon" href="icon.png">""";
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
     public void Returns_Empty_When_Renamed_File_Still_Resolves_The_Same_Link()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
@@ -912,6 +944,63 @@ public sealed class DocsVersionImpactAnalyzerTests
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_After_Empty_Styled_Inline_Box()
+    {
+        const string box = """<span style="display:inline-block;width:1em"></span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{box} X",
+            DocsLiquidContext.Empty,
+            $"{box}X",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_After_Empty_Inline_Box_With_Physical_Padding()
+    {
+        const string box = """<span style="padding-left:1em"></span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{box} X",
+            DocsLiquidContext.Empty,
+            $"{box}X",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("display:none")]
+    [InlineData("display:inline")]
+    [InlineData("padding-left:0")]
+    [InlineData("padding-left:1em;padding-left:0")]
+    [InlineData("padding-left:0!important;padding-left:1em")]
+    public void Collapses_Whitespace_After_Empty_Nonrendering_Styled_Inline_Element(string style)
+    {
+        var span = $"""<span style="{style}"></span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{span} X",
+            DocsLiquidContext.Empty,
+            $"{span}X",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Collapses_Leading_Whitespace_After_Empty_Nonvisual_Inline_Element()
+    {
+        const string span = """<span title="tip"></span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{span} X",
+            DocsLiquidContext.Empty,
+            $"{span}X",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
     }
 
     [Theory]

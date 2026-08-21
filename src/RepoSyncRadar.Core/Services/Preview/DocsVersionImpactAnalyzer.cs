@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 using Markdig;
@@ -55,6 +56,7 @@ public static class DocsVersionImpactAnalyzer
         bool IsRawText,
         bool IsForeignContent,
         bool ExposesWhitespaceBoundary,
+        bool MayRenderEmptyInlineBox = false,
         bool IsImplied = false);
 
     /// <summary>
@@ -595,8 +597,9 @@ public static class DocsVersionImpactAnalyzer
             var isSelfClosing = IsVoidElement(tagName) || (isForeign && hasSelfClosingSyntax);
             var isBlock = IsBlockElement(tagName);
             var isWhitespaceBoundary = isBlock || tagName == "br";
+            var matchingElement = isClosing ? FindHtmlElement(elements, tagName) : null;
             var exposesWhitespaceBoundary = isClosing
-                ? FindHtmlElement(elements, tagName)?.ExposesWhitespaceBoundary == true
+                ? matchingElement?.ExposesWhitespaceBoundary == true
                 : HtmlTagExposesWhitespaceBoundary(tagName, tag);
             if (isWhitespaceBoundary)
             {
@@ -629,7 +632,8 @@ public static class DocsVersionImpactAnalyzer
             if (isClosing)
             {
                 PopHtmlElement(elements, tagName);
-                hasInlineContent |= IsInlineBoxElement(tagName);
+                hasInlineContent |= IsInlineBoxElement(tagName)
+                    || matchingElement?.MayRenderEmptyInlineBox == true;
             }
             else if (!isSelfClosing && !IsVoidElement(tagName))
             {
@@ -642,7 +646,8 @@ public static class DocsVersionImpactAnalyzer
                     whiteSpaceMode,
                     IsRawTextElement(tagName),
                     isForeign,
-                    exposesWhitespaceBoundary));
+                    exposesWhitespaceBoundary,
+                    MayRenderEmptyInlineBox(tagName, tag)));
             }
             else if (!isWhitespaceBoundary)
             {
@@ -662,6 +667,142 @@ public static class DocsVersionImpactAnalyzer
             or "kbd" or "mark" or "q" or "s" or "samp" or "small" or "strike"
             or "strong" or "sub" or "sup" or "u" or "var"
             || HasHtmlAttributes(tag);
+
+    private static bool MayRenderEmptyInlineBox(string tagName, ReadOnlySpan<char> tag)
+    {
+        if (IsBlockElement(tagName))
+        {
+            return false;
+        }
+
+        var style = GetHtmlAttributeValue(tag, "style");
+        if (style is null)
+        {
+            return false;
+        }
+
+        var styleWithoutComments = RemoveCssComments(DecodeHtmlCharacterReferences(style));
+        var effectiveDeclarations = new Dictionary<string, (string Value, bool IsImportant)>(
+            StringComparer.OrdinalIgnoreCase);
+        foreach (var declaration in SplitCssDeclarations(styleWithoutComments))
+        {
+            var separator = declaration.IndexOf(':');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            var propertyName = declaration[..separator].Trim().ToLowerInvariant();
+            if (!IsEmptyBoxAffectingProperty(propertyName))
+            {
+                continue;
+            }
+
+            var value = StripImportant(declaration.AsSpan(separator + 1), out var isImportant)
+                .ToString();
+            if (!effectiveDeclarations.TryGetValue(propertyName, out var current)
+                || !current.IsImportant
+                || isImportant)
+            {
+                effectiveDeclarations[propertyName] = (value, isImportant);
+            }
+        }
+
+        foreach (var (propertyName, declaration) in effectiveDeclarations)
+        {
+            if (propertyName == "display")
+            {
+                if (DisplayCreatesEmptyBox(declaration.Value))
+                {
+                    return true;
+                }
+                continue;
+            }
+            if (CssBoxValueCreatesSpace(propertyName, declaration.Value))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsEmptyBoxAffectingProperty(string propertyName)
+        => propertyName == "display"
+            || propertyName is "margin" or "padding" or "border"
+            || propertyName.StartsWith("margin-", StringComparison.Ordinal)
+            || propertyName.StartsWith("padding-", StringComparison.Ordinal)
+            || propertyName.StartsWith("border-", StringComparison.Ordinal)
+                && !propertyName.Contains("color", StringComparison.Ordinal)
+                && !propertyName.Contains("image", StringComparison.Ordinal)
+                && !propertyName.Contains("radius", StringComparison.Ordinal);
+
+    private static bool DisplayCreatesEmptyBox(string value)
+    {
+        var normalized = NormalizeCssWhitespace(value.AsSpan()).ToLowerInvariant();
+        return normalized is not ("" or "none" or "contents" or "inline" or "inline flow"
+            or "initial" or "unset" or "revert" or "revert-layer");
+    }
+
+    private static bool CssBoxValueCreatesSpace(string propertyName, string value)
+    {
+        var normalized = NormalizeCssWhitespace(value.AsSpan()).ToLowerInvariant();
+        if (normalized.Length == 0)
+        {
+            return false;
+        }
+        var tokens = normalized.Split(
+            [' ', '/', ','],
+            StringSplitOptions.RemoveEmptyEntries);
+        if (propertyName.StartsWith("border", StringComparison.Ordinal)
+            && tokens.Any(static token => token is "none" or "hidden"))
+        {
+            return false;
+        }
+        if (tokens.Any(static token => token.StartsWith("calc(", StringComparison.Ordinal)
+                || token.StartsWith("var(", StringComparison.Ordinal)
+                || token.StartsWith("env(", StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        var foundNumericValue = false;
+        foreach (var token in tokens)
+        {
+            if (!TryGetCssNumericValue(token, out var numericValue))
+            {
+                continue;
+            }
+            foundNumericValue = true;
+            if (numericValue != 0)
+            {
+                return true;
+            }
+        }
+        if (foundNumericValue)
+        {
+            return false;
+        }
+        return propertyName.StartsWith("border", StringComparison.Ordinal)
+            && tokens.Any(static token => token is "solid" or "dashed" or "dotted" or "double"
+                or "groove" or "ridge" or "inset" or "outset");
+    }
+
+    private static bool TryGetCssNumericValue(string token, out double value)
+    {
+        value = default;
+        var numberEnd = 0;
+        while (numberEnd < token.Length
+               && (char.IsDigit(token[numberEnd]) || token[numberEnd] is '+' or '-' or '.'))
+        {
+            numberEnd++;
+        }
+        return numberEnd > 0
+            && double.TryParse(
+                token.AsSpan(0, numberEnd),
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out value);
+    }
 
     private static void OpenImpliedTableBodyIfNeeded(
         List<HtmlElementContext> elements,

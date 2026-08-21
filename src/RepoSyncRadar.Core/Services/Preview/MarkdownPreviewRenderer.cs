@@ -1515,7 +1515,7 @@ internal static partial class MarkdownPreviewRenderer
                     tag,
                     repoPath,
                     assetBasePath,
-                    tagName == "a" ? linkBasePath : null);
+                    ShouldRewriteHref(tagName, tag) ? linkBasePath : null);
             }
             rewritten.Append(tag);
             index = tagEnd;
@@ -1634,6 +1634,92 @@ internal static partial class MarkdownPreviewRenderer
         return rewritten is null
             ? tag
             : rewritten.Append(tag, copiedThrough, tag.Length - copiedThrough).ToString();
+    }
+
+    private static bool ShouldRewriteHref(string tagName, string tag)
+        => tagName == "a"
+            || tagName == "link" && TagAttributeContainsToken(tag, "rel", "stylesheet");
+
+    private static bool TagAttributeContainsToken(
+        string tag,
+        string attributeName,
+        string expectedToken)
+    {
+        var index = 1;
+        while (index < tag.Length && !char.IsWhiteSpace(tag[index]) && tag[index] != '>')
+        {
+            index++;
+        }
+
+        while (index < tag.Length)
+        {
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] is '>' or '/')
+            {
+                return false;
+            }
+
+            var nameStart = index;
+            while (index < tag.Length
+                   && !char.IsWhiteSpace(tag[index])
+                   && tag[index] is not '=' and not '>' and not '/')
+            {
+                index++;
+            }
+            var nameMatches = tag.AsSpan(nameStart, index - nameStart)
+                .Equals(attributeName, StringComparison.OrdinalIgnoreCase);
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] != '=')
+            {
+                continue;
+            }
+            index++;
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+
+            var quote = index < tag.Length && tag[index] is '\'' or '"' ? tag[index++] : '\0';
+            var valueStart = index;
+            if (quote == '\0')
+            {
+                while (index < tag.Length
+                       && !char.IsWhiteSpace(tag[index])
+                       && tag[index] != '>')
+                {
+                    index++;
+                }
+            }
+            else
+            {
+                while (index < tag.Length && tag[index] != quote)
+                {
+                    index++;
+                }
+            }
+            var valueEnd = index;
+            if (index < tag.Length && quote != '\0')
+            {
+                index++;
+            }
+            if (!nameMatches)
+            {
+                continue;
+            }
+
+            var decodedValue = WebUtility.HtmlDecode(tag[valueStart..valueEnd]);
+            return decodedValue.Split(
+                    [' ', '\t', '\n', '\f', '\r'],
+                    StringSplitOptions.RemoveEmptyEntries)
+                .Contains(expectedToken, StringComparer.OrdinalIgnoreCase);
+        }
+        return false;
     }
 
     private static bool IsRawTextElement(string tagName)
