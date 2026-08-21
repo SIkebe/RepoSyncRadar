@@ -252,18 +252,40 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
-    [Theory]
-    [InlineData("`a  b`", "`a b`")]
-    [InlineData("```\na  b\n```", "```\na b\n```")]
-    public void Preserves_Whitespace_Differences_Inside_Code(string before, string after)
+    [Fact]
+    public void Collapses_Whitespace_Inside_Inline_Code()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
-            before,
+            "`a  b`",
             DocsLiquidContext.Empty,
-            after,
+            "`a b`",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Differences_Inside_Fenced_Code()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "```\na  b\n```",
+            DocsLiquidContext.Empty,
+            "```\na b\n```",
             DocsLiquidContext.Empty);
 
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Treats_Br_As_A_Collapsible_Whitespace_Boundary()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<span>a<br> b</span>",
+            DocsLiquidContext.Empty,
+            "<span>a<br>b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
     }
 
     [Fact]

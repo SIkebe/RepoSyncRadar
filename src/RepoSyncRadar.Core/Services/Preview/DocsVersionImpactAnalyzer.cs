@@ -425,7 +425,8 @@ public static class DocsVersionImpactAnalyzer
             var isForeign = parentIsForeign || (!isClosing && tagName is "svg" or "math");
             var isSelfClosing = IsVoidElement(tagName) || (isForeign && hasSelfClosingSyntax);
             var isBlock = IsBlockElement(tagName);
-            if (isBlock)
+            var isWhitespaceBoundary = isBlock || tagName == "br";
+            if (isWhitespaceBoundary)
             {
                 pendingCollapsibleSpace = false;
                 hasInlineContent = false;
@@ -458,7 +459,7 @@ public static class DocsVersionImpactAnalyzer
                     IsRawTextElement(tagName),
                     isForeign));
             }
-            else if (!isBlock)
+            else if (!isWhitespaceBoundary)
             {
                 hasInlineContent = true;
             }
@@ -552,7 +553,7 @@ public static class DocsVersionImpactAnalyzer
         ReadOnlySpan<char> tag,
         HtmlWhiteSpaceMode inheritedMode)
     {
-        var mode = tagName is "pre" or "code" or "textarea" or "script" or "style"
+        var mode = tagName is "pre" or "textarea" or "script" or "style"
             ? HtmlWhiteSpaceMode.Preserve
             : inheritedMode;
         var style = GetHtmlAttributeValue(tag, "style");
