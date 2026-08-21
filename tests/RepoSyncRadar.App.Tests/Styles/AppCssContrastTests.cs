@@ -89,6 +89,18 @@ public sealed partial class AppCssContrastTests
     }
 
     [Fact]
+    public void ToolbarIconOnly_Is_Compact_And_Centered()
+    {
+        var iconButtonBlock = GetExactRuleBlock(ReadAppCss(), ".toolbar-button.icon-only");
+
+        Assert.Contains("align-items: center", iconButtonBlock, StringComparison.Ordinal);
+        Assert.Contains("display: inline-flex", iconButtonBlock, StringComparison.Ordinal);
+        Assert.Contains("justify-content: center", iconButtonBlock, StringComparison.Ordinal);
+        Assert.Contains("padding: 0", iconButtonBlock, StringComparison.Ordinal);
+        Assert.Contains("width: 1.9rem", iconButtonBlock, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SettingsPanel_Prevents_HeaderActions_And_LongPath_Overflow()
     {
         var css = ReadAppCss();

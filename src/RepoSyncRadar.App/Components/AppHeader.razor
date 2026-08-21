@@ -720,13 +720,15 @@
             return;
         }
 
+        var previousActivity = _appUpdateActivity;
         _appUpdateActivity = _updateService.CurrentActivity;
         if (_appUpdateActivity?.Status != AppUpdateActivityStatus.Downloaded)
         {
             _dismissedDownloadedUpdateVersion = null;
         }
 
-        if (_appUpdateActivity?.Status != AppUpdateActivityStatus.Failed)
+        if (_appUpdateActivity?.Status != AppUpdateActivityStatus.Failed
+            || !ReferenceEquals(previousActivity, _appUpdateActivity))
         {
             _dismissedFailedUpdateKey = null;
         }
