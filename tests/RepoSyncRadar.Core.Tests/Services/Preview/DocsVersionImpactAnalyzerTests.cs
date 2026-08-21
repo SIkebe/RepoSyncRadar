@@ -221,6 +221,18 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Ignores_Closing_Tags_For_Html_Void_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "Before <input></input> after",
+            DocsLiquidContext.Empty,
+            "Before <input> after",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
     public void Preserves_Entity_Syntax_Inside_Code()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(
@@ -251,6 +263,20 @@ public sealed class DocsVersionImpactAnalyzerTests
             "<textarea>&#38;amp;</textarea>",
             DocsLiquidContext.Empty,
             "<textarea>&amp;amp;</textarea>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Handles_Many_Invalid_Named_Entity_Prefixes_In_Linear_Time()
+    {
+        var invalidReferences = string.Concat(Enumerable.Repeat("&not-an-entity ", 10_000));
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{invalidReferences}<!-- old -->",
+            DocsLiquidContext.Empty,
+            $"{invalidReferences}<!-- new -->",
             DocsLiquidContext.Empty);
 
         Assert.Empty(affected);

@@ -134,6 +134,10 @@ public static class DocsVersionImpactAnalyzer
                     afterContext,
                     version);
             }
+            if (string.Equals(beforeRendered, afterRendered, StringComparison.Ordinal))
+            {
+                continue;
+            }
             if (!string.Equals(
                     NormalizeForComparison(beforeRendered, cancellationToken),
                     NormalizeForComparison(afterRendered, cancellationToken),
@@ -222,6 +226,10 @@ public static class DocsVersionImpactAnalyzer
                     afterRepoPath,
                     afterContext,
                     version);
+            }
+            if (string.Equals(beforeRendered, afterRendered, StringComparison.Ordinal))
+            {
+                continue;
             }
             if (!string.Equals(
                     NormalizeForComparison(beforeRendered, cancellationToken),
@@ -510,6 +518,11 @@ public static class DocsVersionImpactAnalyzer
             var tagEnd = FindHtmlTagEnd(html, index);
             var tag = html.AsSpan(index, tagEnd - index);
             var tagName = GetHtmlTagName(tag, out var isClosing, out var hasSelfClosingSyntax);
+            if (isClosing && IsVoidElement(tagName))
+            {
+                index = tagEnd;
+                continue;
+            }
             var parentIsForeign = elements.Count > 0 && elements[^1].IsForeignContent;
             var isForeign = parentIsForeign || (!isClosing && tagName is "svg" or "math");
             var isSelfClosing = IsVoidElement(tagName) || (isForeign && hasSelfClosingSyntax);
@@ -1168,17 +1181,14 @@ public static class DocsVersionImpactAnalyzer
             return false;
         }
 
-        var semicolon = value.IndexOf(';');
-        if (semicolon < 2)
+        var semicolon = 1;
+        while (semicolon < value.Length && char.IsAsciiLetterOrDigit(value[semicolon]))
+        {
+            semicolon++;
+        }
+        if (semicolon < 2 || semicolon >= value.Length || value[semicolon] != ';')
         {
             return false;
-        }
-        for (var index = 1; index < semicolon; index++)
-        {
-            if (!char.IsAsciiLetterOrDigit(value[index]))
-            {
-                return false;
-            }
         }
 
         var decoded = EntityHelper.DecodeEntity(value[1..semicolon]);
