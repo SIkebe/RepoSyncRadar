@@ -123,82 +123,124 @@ public static partial class MarkdownSourceChangeAnalyzer
     {
         var beforeLines = SplitLines(before);
         var afterLines = SplitLines(after);
-        var lcs = BuildLineLcsTable(beforeLines, afterLines);
-        var firstRemoved = new List<string>();
-        var firstAdded = new List<string>();
-        var currentRemoved = new List<string>();
-        var currentAdded = new List<string>();
-        var removedCount = 0;
-        var addedCount = 0;
-        var beforeIndex = 0;
-        var afterIndex = 0;
-
-        while (beforeIndex < beforeLines.Length || afterIndex < afterLines.Length)
+        var commonPrefix = 0;
+        while (commonPrefix < beforeLines.Length
+               && commonPrefix < afterLines.Length
+               && string.Equals(
+                   beforeLines[commonPrefix],
+                   afterLines[commonPrefix],
+                   StringComparison.Ordinal))
         {
-            if (beforeIndex < beforeLines.Length
-                && afterIndex < afterLines.Length
-                && string.Equals(beforeLines[beforeIndex], afterLines[afterIndex], StringComparison.Ordinal))
-            {
-                CaptureFirstHunk(firstRemoved, firstAdded, currentRemoved, currentAdded);
-                beforeIndex++;
-                afterIndex++;
-            }
-            else if (afterIndex < afterLines.Length
-                && (beforeIndex == beforeLines.Length
-                    || lcs[beforeIndex, afterIndex + 1] >= lcs[beforeIndex + 1, afterIndex]))
-            {
-                currentAdded.Add(afterLines[afterIndex]);
-                addedCount++;
-                afterIndex++;
-            }
-            else
-            {
-                currentRemoved.Add(beforeLines[beforeIndex]);
-                removedCount++;
-                beforeIndex++;
-            }
+            commonPrefix++;
         }
 
-        CaptureFirstHunk(firstRemoved, firstAdded, currentRemoved, currentAdded);
+        var beforeEnd = beforeLines.Length;
+        var afterEnd = afterLines.Length;
+        while (beforeEnd > commonPrefix
+               && afterEnd > commonPrefix
+               && string.Equals(
+                   beforeLines[beforeEnd - 1],
+                   afterLines[afterEnd - 1],
+                   StringComparison.Ordinal))
+        {
+            beforeEnd--;
+            afterEnd--;
+        }
+
+        var anchor = FindNextCommonLine(
+            beforeLines,
+            commonPrefix,
+            beforeEnd,
+            afterLines,
+            commonPrefix,
+            afterEnd);
         var excerpts = AbbreviatePair(
-            firstRemoved.Count > 0 ? firstRemoved[0] : null,
-            firstAdded.Count > 0 ? firstAdded[0] : null);
-        return (excerpts.Before, excerpts.After, Math.Max(Math.Max(removedCount, addedCount), 1));
+            anchor.BeforeIndex > commonPrefix ? beforeLines[commonPrefix] : null,
+            anchor.AfterIndex > commonPrefix ? afterLines[commonPrefix] : null);
+        var changeCount = CalculateLineChangeCount(beforeLines, afterLines);
+        return (excerpts.Before, excerpts.After, Math.Max(changeCount, 1));
     }
 
-    private static int[,] BuildLineLcsTable(string[] beforeLines, string[] afterLines)
+    private static int CalculateLineChangeCount(string[] beforeLines, string[] afterLines)
     {
-        var table = new int[beforeLines.Length + 1, afterLines.Length + 1];
-        for (var beforeIndex = beforeLines.Length - 1; beforeIndex >= 0; beforeIndex--)
+        var maximumEditDistance = beforeLines.Length + afterLines.Length;
+        var offset = maximumEditDistance + 1;
+        var frontier = new int[(maximumEditDistance * 2) + 3];
+        frontier[offset + 1] = 0;
+
+        for (var editDistance = 0; editDistance <= maximumEditDistance; editDistance++)
         {
-            for (var afterIndex = afterLines.Length - 1; afterIndex >= 0; afterIndex--)
+            for (var diagonal = -editDistance; diagonal <= editDistance; diagonal += 2)
             {
-                table[beforeIndex, afterIndex] = string.Equals(
-                    beforeLines[beforeIndex],
-                    afterLines[afterIndex],
-                    StringComparison.Ordinal)
-                    ? table[beforeIndex + 1, afterIndex + 1] + 1
-                    : Math.Max(table[beforeIndex + 1, afterIndex], table[beforeIndex, afterIndex + 1]);
+                var frontierIndex = offset + diagonal;
+                var beforeIndex = diagonal == -editDistance
+                                  || (diagonal != editDistance
+                                      && frontier[frontierIndex - 1] < frontier[frontierIndex + 1])
+                    ? frontier[frontierIndex + 1]
+                    : frontier[frontierIndex - 1] + 1;
+                var afterIndex = beforeIndex - diagonal;
+                while (beforeIndex < beforeLines.Length
+                       && afterIndex < afterLines.Length
+                       && string.Equals(
+                           beforeLines[beforeIndex],
+                           afterLines[afterIndex],
+                           StringComparison.Ordinal))
+                {
+                    beforeIndex++;
+                    afterIndex++;
+                }
+                frontier[frontierIndex] = beforeIndex;
+                if (beforeIndex >= beforeLines.Length && afterIndex >= afterLines.Length)
+                {
+                    return (editDistance
+                            + Math.Abs(afterLines.Length - beforeLines.Length))
+                           / 2;
+                }
             }
         }
-        return table;
+
+        return Math.Max(beforeLines.Length, afterLines.Length);
     }
 
-    private static void CaptureFirstHunk(
-        List<string> firstRemoved,
-        List<string> firstAdded,
-        List<string> currentRemoved,
-        List<string> currentAdded)
+    private static (int BeforeIndex, int AfterIndex) FindNextCommonLine(
+        string[] beforeLines,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterLines,
+        int afterStart,
+        int afterEnd)
     {
-        if (firstRemoved.Count == 0
-            && firstAdded.Count == 0
-            && (currentRemoved.Count > 0 || currentAdded.Count > 0))
+        var firstAfterIndexByLine = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (var afterIndex = afterStart; afterIndex < afterEnd; afterIndex++)
         {
-            firstRemoved.AddRange(currentRemoved);
-            firstAdded.AddRange(currentAdded);
+            firstAfterIndexByLine.TryAdd(afterLines[afterIndex], afterIndex);
         }
-        currentRemoved.Clear();
-        currentAdded.Clear();
+
+        var bestBeforeIndex = beforeEnd;
+        var bestAfterIndex = afterEnd;
+        var bestDistance = int.MaxValue;
+        for (var beforeIndex = beforeStart; beforeIndex < beforeEnd; beforeIndex++)
+        {
+            var beforeDistance = beforeIndex - beforeStart;
+            if (beforeDistance > bestDistance)
+            {
+                break;
+            }
+            if (!firstAfterIndexByLine.TryGetValue(beforeLines[beforeIndex], out var afterIndex))
+            {
+                continue;
+            }
+
+            var distance = beforeDistance + afterIndex - afterStart;
+            if (distance < bestDistance)
+            {
+                bestBeforeIndex = beforeIndex;
+                bestAfterIndex = afterIndex;
+                bestDistance = distance;
+            }
+        }
+
+        return (bestBeforeIndex, bestAfterIndex);
     }
 
     private static string[] SplitLines(string? source)

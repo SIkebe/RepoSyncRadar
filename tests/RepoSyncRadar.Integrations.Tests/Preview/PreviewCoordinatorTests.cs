@@ -434,6 +434,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.Equal(MarkdownSourceChangeKind.Frontmatter, summary.SourceChange!.Kind);
         Assert.Null(summary.SourceChange.Before);
         Assert.Equal("  - /copilot/old-location", summary.SourceChange.After);
+        Assert.Equal(0, GetLiquidContextCacheCount(sut));
         await contentServer.DidNotReceiveWithAnyArgs().StartAsync(
             default,
             default!,
@@ -447,6 +448,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
             cancellationToken: ct);
 
         Assert.NotNull(link);
+        Assert.Equal(2, GetLiquidContextCacheCount(sut));
         Assert.Equal(1, link!.SourceChangeCount);
         Assert.DoesNotContain("この時点にはファイルがありません", capturedPages["/markdown/before"], StringComparison.Ordinal);
         Assert.Contains("Unchanged body.", capturedPages["/markdown/before"], StringComparison.Ordinal);
@@ -1251,6 +1253,17 @@ public sealed class PreviewCoordinatorTests : IDisposable
 
         public void Report(string value) => Items.Add(value);
     }
+
+    private static int GetLiquidContextCacheCount(PreviewCoordinator coordinator)
+    {
+        var field = typeof(PreviewCoordinator).GetField(
+            "_liquidContextCache",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var cache = field?.GetValue(coordinator);
+        var count = cache?.GetType().GetProperty("Count")?.GetValue(cache);
+        return Assert.IsType<int>(count);
+    }
+
     private static PreviewCoordinator BuildSut(
         IProcessRunner runner,
         string bareCloneDir,

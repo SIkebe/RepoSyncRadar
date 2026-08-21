@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using Markdig;
 
@@ -50,7 +51,8 @@ public static class DocsVersionImpactAnalyzer
     private sealed record HtmlElementContext(
         string TagName,
         HtmlWhiteSpaceMode WhiteSpaceMode,
-        bool IsRawText);
+        bool IsRawText,
+        bool IsForeignContent);
 
     /// <summary>
     /// 全版で評価し、before/after が一致しない版だけを <see cref="DocsVersionCatalog.All"/>
@@ -332,6 +334,7 @@ public static class DocsVersionImpactAnalyzer
                     AppendHtmlText(
                         html.AsSpan(index, textEnd - index),
                         context.WhiteSpaceMode,
+                        decodeCharacterReferences: context.TagName == "textarea",
                         normalized,
                         ref pendingCollapsibleSpace,
                         ref hasInlineContent);
@@ -360,6 +363,7 @@ public static class DocsVersionImpactAnalyzer
                 AppendHtmlText(
                     html.AsSpan(index, textEnd - index),
                     mode,
+                    decodeCharacterReferences: true,
                     normalized,
                     ref pendingCollapsibleSpace,
                     ref hasInlineContent);
@@ -369,7 +373,10 @@ public static class DocsVersionImpactAnalyzer
 
             var tagEnd = FindHtmlTagEnd(html, index);
             var tag = html.AsSpan(index, tagEnd - index);
-            var tagName = GetHtmlTagName(tag, out var isClosing, out var isSelfClosing);
+            var tagName = GetHtmlTagName(tag, out var isClosing, out var hasSelfClosingSyntax);
+            var parentIsForeign = elements.Count > 0 && elements[^1].IsForeignContent;
+            var isForeign = parentIsForeign || (!isClosing && tagName is "svg" or "math");
+            var isSelfClosing = IsVoidElement(tagName) || (isForeign && hasSelfClosingSyntax);
             var isBlock = IsBlockElement(tagName);
             if (isBlock)
             {
@@ -382,7 +389,12 @@ public static class DocsVersionImpactAnalyzer
                 pendingCollapsibleSpace = false;
             }
 
-            normalized.Append(NormalizeHtmlTagSyntax(tag));
+            normalized.Append(NormalizeHtmlTagSyntax(
+                tag,
+                tagName,
+                isClosing,
+                isSelfClosing,
+                isForeign));
             if (isClosing)
             {
                 PopHtmlElement(elements, tagName);
@@ -396,7 +408,8 @@ public static class DocsVersionImpactAnalyzer
                 elements.Add(new HtmlElementContext(
                     tagName,
                     whiteSpaceMode,
-                    IsRawTextElement(tagName)));
+                    IsRawTextElement(tagName),
+                    isForeign));
             }
             else if (!isBlock)
             {
@@ -412,10 +425,15 @@ public static class DocsVersionImpactAnalyzer
     private static void AppendHtmlText(
         ReadOnlySpan<char> text,
         HtmlWhiteSpaceMode mode,
+        bool decodeCharacterReferences,
         StringBuilder normalized,
         ref bool pendingCollapsibleSpace,
         ref bool hasInlineContent)
     {
+        var decodedText = decodeCharacterReferences
+            ? DecodeHtmlCharacterReferences(text.ToString())
+            : text.ToString();
+        text = decodedText.AsSpan();
         if (mode == HtmlWhiteSpaceMode.Preserve)
         {
             if (pendingCollapsibleSpace && hasInlineContent)
@@ -705,7 +723,244 @@ public static class DocsVersionImpactAnalyzer
             or "pre" or "section" or "table" or "tbody" or "td" or "tfoot" or "th"
             or "thead" or "tr" or "ul";
 
-    private static string NormalizeHtmlTagSyntax(ReadOnlySpan<char> tag)
+    private static string NormalizeHtmlTagSyntax(
+        ReadOnlySpan<char> tag,
+        string tagName,
+        bool isClosing,
+        bool isSelfClosing,
+        bool isForeign)
+    {
+        if (tagName.Length == 0)
+        {
+            return CollapseHtmlTagWhitespace(tag);
+        }
+
+        var index = 1;
+        if (isClosing)
+        {
+            index++;
+        }
+        while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
+        {
+            index++;
+        }
+        var nameStart = index;
+        while (index < tag.Length
+               && (char.IsAsciiLetterOrDigit(tag[index]) || tag[index] is '-' or ':'))
+        {
+            index++;
+        }
+
+        var originalTagName = tag[nameStart..index].ToString();
+        var canonicalTagName = isForeign ? originalTagName : tagName;
+        if (isClosing)
+        {
+            return $"</{canonicalTagName}>";
+        }
+
+        var normalized = new StringBuilder(tag.Length);
+        normalized.Append('<').Append(canonicalTagName);
+        while (index < tag.Length)
+        {
+            while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] is '>' or '/')
+            {
+                break;
+            }
+
+            var attributeNameStart = index;
+            while (index < tag.Length
+                   && !IsCollapsibleHtmlWhitespace(tag[index])
+                   && tag[index] is not '=' and not '>' and not '/')
+            {
+                index++;
+            }
+            var attributeName = tag[attributeNameStart..index].ToString();
+            while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
+            {
+                index++;
+            }
+
+            string? attributeValue = null;
+            if (index < tag.Length && tag[index] == '=')
+            {
+                index++;
+                while (index < tag.Length && IsCollapsibleHtmlWhitespace(tag[index]))
+                {
+                    index++;
+                }
+                var quote = index < tag.Length && tag[index] is '\'' or '"' ? tag[index++] : '\0';
+                var valueStart = index;
+                if (quote == '\0')
+                {
+                    while (index < tag.Length
+                           && !IsCollapsibleHtmlWhitespace(tag[index])
+                           && tag[index] is not '>')
+                    {
+                        index++;
+                    }
+                }
+                else
+                {
+                    while (index < tag.Length && tag[index] != quote)
+                    {
+                        index++;
+                    }
+                }
+                attributeValue = tag[valueStart..index].ToString();
+                if (quote != '\0' && index < tag.Length)
+                {
+                    index++;
+                }
+            }
+
+            var canonicalAttributeName = isForeign
+                ? attributeName
+                : attributeName.ToLowerInvariant();
+            normalized.Append(' ').Append(canonicalAttributeName);
+            if (attributeValue is not null)
+            {
+                normalized
+                    .Append("=\"")
+                    .Append(WebUtility.HtmlEncode(DecodeHtmlCharacterReferences(attributeValue)))
+                    .Append('"');
+            }
+        }
+        normalized.Append(isSelfClosing && isForeign ? "/>" : ">");
+        return normalized.ToString();
+    }
+
+    private static string DecodeHtmlCharacterReferences(string value)
+    {
+        var decoded = new StringBuilder(value.Length);
+        var segmentStart = 0;
+        var index = 0;
+        while (index < value.Length)
+        {
+            if (value[index] != '&'
+                || !TryDecodeNumericCharacterReference(
+                    value.AsSpan(index),
+                    out var consumed,
+                    out var replacement))
+            {
+                index++;
+                continue;
+            }
+
+            if (index > segmentStart)
+            {
+                decoded.Append(WebUtility.HtmlDecode(value[segmentStart..index]));
+            }
+            decoded.Append(replacement);
+            index += consumed;
+            segmentStart = index;
+        }
+
+        if (segmentStart < value.Length)
+        {
+            decoded.Append(WebUtility.HtmlDecode(value[segmentStart..]));
+        }
+        return decoded.ToString();
+    }
+
+    private static bool TryDecodeNumericCharacterReference(
+        ReadOnlySpan<char> value,
+        out int consumed,
+        out string replacement)
+    {
+        consumed = 0;
+        replacement = string.Empty;
+        if (value.Length < 3 || value[0] != '&' || value[1] != '#')
+        {
+            return false;
+        }
+
+        var index = 2;
+        var isHexadecimal = index < value.Length && value[index] is 'x' or 'X';
+        if (isHexadecimal)
+        {
+            index++;
+        }
+        var digitsStart = index;
+        var codePoint = 0;
+        while (index < value.Length)
+        {
+            var digit = isHexadecimal
+                ? GetHexadecimalDigit(value[index])
+                : value[index] is >= '0' and <= '9'
+                    ? value[index] - '0'
+                    : -1;
+            if (digit < 0)
+            {
+                break;
+            }
+            codePoint = codePoint > 0x10FFFF
+                ? codePoint
+                : (codePoint * (isHexadecimal ? 16 : 10)) + digit;
+            index++;
+        }
+        if (index == digitsStart)
+        {
+            return false;
+        }
+        if (index < value.Length && value[index] == ';')
+        {
+            index++;
+        }
+
+        codePoint = NormalizeHtmlNumericCodePoint(codePoint);
+        consumed = index;
+        replacement = char.ConvertFromUtf32(codePoint);
+        return true;
+    }
+
+    private static int GetHexadecimalDigit(char value)
+        => value switch
+        {
+            >= '0' and <= '9' => value - '0',
+            >= 'a' and <= 'f' => value - 'a' + 10,
+            >= 'A' and <= 'F' => value - 'A' + 10,
+            _ => -1,
+        };
+
+    private static int NormalizeHtmlNumericCodePoint(int codePoint)
+        => codePoint switch
+        {
+            0 or > 0x10FFFF or >= 0xD800 and <= 0xDFFF => 0xFFFD,
+            0x80 => 0x20AC,
+            0x82 => 0x201A,
+            0x83 => 0x0192,
+            0x84 => 0x201E,
+            0x85 => 0x2026,
+            0x86 => 0x2020,
+            0x87 => 0x2021,
+            0x88 => 0x02C6,
+            0x89 => 0x2030,
+            0x8A => 0x0160,
+            0x8B => 0x2039,
+            0x8C => 0x0152,
+            0x8E => 0x017D,
+            0x91 => 0x2018,
+            0x92 => 0x2019,
+            0x93 => 0x201C,
+            0x94 => 0x201D,
+            0x95 => 0x2022,
+            0x96 => 0x2013,
+            0x97 => 0x2014,
+            0x98 => 0x02DC,
+            0x99 => 0x2122,
+            0x9A => 0x0161,
+            0x9B => 0x203A,
+            0x9C => 0x0153,
+            0x9E => 0x017E,
+            0x9F => 0x0178,
+            _ => codePoint,
+        };
+
+    private static string CollapseHtmlTagWhitespace(ReadOnlySpan<char> tag)
     {
         var normalized = new StringBuilder(tag.Length);
         var quote = '\0';

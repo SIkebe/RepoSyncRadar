@@ -161,6 +161,27 @@ public sealed class MarkdownSourceChangeAnalyzerTests
         Assert.Equal("<!-- old -->", summary!.Before);
         Assert.Null(summary.After);
         Assert.DoesNotContain("Keep", summary.Before, StringComparison.Ordinal);
+        Assert.Equal(1, summary.ChangeCount);
+    }
+
+    [Fact]
+    public void Finds_First_Hunk_In_Large_Files_Without_A_Quadratic_Matrix()
+    {
+        var beforeLines = Enumerable.Range(0, 10_000)
+            .Select(static index => $"Line {index}")
+            .ToArray();
+        var afterLines = (string[])beforeLines.Clone();
+        beforeLines[5_000] = "<!-- old -->";
+        afterLines[5_000] = "<!-- new -->";
+
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(
+            string.Join('\n', beforeLines),
+            string.Join('\n', afterLines));
+
+        Assert.NotNull(summary);
+        Assert.Equal("<!-- old -->", summary!.Before);
+        Assert.Equal("<!-- new -->", summary.After);
+        Assert.Equal(1, summary.ChangeCount);
     }
 
     [Fact]

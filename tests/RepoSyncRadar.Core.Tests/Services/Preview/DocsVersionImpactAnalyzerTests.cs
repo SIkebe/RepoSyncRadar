@@ -148,6 +148,62 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Empty(affected);
     }
 
+    [Theory]
+    [InlineData("A&#32;B", "A B")]
+    [InlineData("""<SPAN title='x'>Same text.</SPAN>""", """<span title="x">Same text.</span>""")]
+    [InlineData("""<span TITLE=x>Same text.</span>""", """<span title="x">Same text.</span>""")]
+    [InlineData("""<span title="A&#32;B">Same text.</span>""", """<span title="A B">Same text.</span>""")]
+    [InlineData("<textarea>A&#32;B</textarea>", "<textarea>A B</textarea>")]
+    [InlineData("<textarea>&#128;</textarea>", "<textarea>€</textarea>")]
+    public void Returns_Empty_When_Only_Browser_Equivalent_Html_Syntax_Changes(
+        string before,
+        string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Entity_Syntax_Inside_Code()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "`A&#32;B`",
+            DocsLiquidContext.Empty,
+            "`A B`",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Does_Not_Equate_Html5_Numeric_Reference_With_Dotnet_Control_Character()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<textarea>&#128;</textarea>",
+            DocsLiquidContext.Empty,
+            "<textarea>\u0080</textarea>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Decodes_Character_References_Only_Once()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<textarea>&#38;amp;</textarea>",
+            DocsLiquidContext.Empty,
+            "<textarea>&amp;amp;</textarea>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
     [Fact]
     public void Preserves_NonBreaking_Space_Differences()
     {
