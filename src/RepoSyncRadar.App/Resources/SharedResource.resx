@@ -118,6 +118,7 @@
   <data name="CommitDetail.FileChange.AnalysisPartiallyCompleted" xml:space="preserve"><value>Markdown ファイル {1} 件中 {0} 件の変更理由を解析しました。残りは利用できませんでした</value></data>
   <data name="CommitDetail.FileChange.AnalysisUnavailable" xml:space="preserve"><value>Markdown ファイル {0} 件の変更理由を解析できませんでした</value></data>
   <data name="CommitDetail.FileChange.RetryAnalysis" xml:space="preserve"><value>再試行</value></data>
+  <data name="CommitDetail.FileChange.AnalysisRetrying" xml:space="preserve"><value>Markdown の変更理由を再解析しています</value></data>
   <data name="CommitDetail.FileChange.EmptyValue" xml:space="preserve"><value>（空白）</value></data>
   <data name="CommitDetail.FileChange.Frontmatter" xml:space="preserve"><value>フロントマター変更</value></data>
   <data name="CommitDetail.FileChange.LiquidVariableReference" xml:space="preserve"><value>Liquid 変数参照</value></data>

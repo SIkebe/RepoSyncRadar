@@ -188,7 +188,8 @@
         </div>
         @if (_markdownChangeAnalysisHasFailures)
         {
-            <div class="file-change-analysis-feedback">
+            <div class="file-change-analysis-feedback"
+                 aria-busy="@(_markdownChangeAnalysisIsRetrying ? "true" : "false")">
                 <span data-testid="commit-detail-file-change-analysis-status"
                       role="status"
                       aria-live="polite"
@@ -196,6 +197,7 @@
                 <button type="button"
                         class="file-change-analysis-retry"
                         data-testid="commit-detail-file-change-analysis-retry"
+                        aria-disabled="@(_markdownChangeAnalysisIsRetrying ? "true" : "false")"
                         @onclick="RetryMarkdownChangeSummaryAnalysis">@L["CommitDetail.FileChange.RetryAnalysis"]</button>
             </div>
         }
@@ -400,6 +402,7 @@
     private CancellationTokenSource? _markdownChangeSummaryCts;
     private string? _markdownChangeAnalysisStatus;
     private bool _markdownChangeAnalysisHasFailures;
+    private bool _markdownChangeAnalysisIsRetrying;
     private string? _predictiveFilePrewarmPath;
     private string? _historyForSha;
     private IReadOnlyList<CommitHistoryTimelineEntry> _historyEntries = [];
@@ -521,6 +524,7 @@
             _markdownChangeSummariesByFile.Clear();
             _markdownChangeAnalysisStatus = null;
             _markdownChangeAnalysisHasFailures = false;
+            _markdownChangeAnalysisIsRetrying = false;
             _resolvedForSha = null;
             _activePreviewSha = null;
             CancelCurrentPreviewOperation();
@@ -545,6 +549,7 @@
             _markdownChangeSummariesByFile.Clear();
             _markdownChangeAnalysisStatus = null;
             _markdownChangeAnalysisHasFailures = false;
+            _markdownChangeAnalysisIsRetrying = false;
             CancelPredictiveFilePrewarm();
             StartPredictivePrewarm(Commit);
             StartMarkdownChangeSummaryAnalysis(Commit);
@@ -570,14 +575,21 @@
         _resolvedForSha = Commit.Sha;
     }
 
-    private void StartMarkdownChangeSummaryAnalysis(Commit commit)
+    private void StartMarkdownChangeSummaryAnalysis(
+        Commit commit,
+        bool preserveFailureFeedback = false)
     {
         CancelMarkdownChangeSummaryAnalysis();
-        _markdownChangeAnalysisStatus = null;
-        _markdownChangeAnalysisHasFailures = false;
+        if (!preserveFailureFeedback)
+        {
+            _markdownChangeAnalysisStatus = null;
+            _markdownChangeAnalysisHasFailures = false;
+            _markdownChangeAnalysisIsRetrying = false;
+        }
         if (Services.GetService<IPreviewCoordinator>() is not { } coordinator
             || Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.IsEnabled != true)
         {
+            _markdownChangeAnalysisIsRetrying = false;
             return;
         }
 
@@ -586,6 +598,7 @@
             .ToArray();
         if (markdownFiles.Length == 0)
         {
+            _markdownChangeAnalysisIsRetrying = false;
             return;
         }
 
@@ -668,6 +681,7 @@
                             files.Count],
                     };
                     _markdownChangeAnalysisHasFailures = successfulAnalysisCount < files.Count;
+                    _markdownChangeAnalysisIsRetrying = false;
                     StateHasChanged();
                 }
             });
@@ -679,13 +693,15 @@
 
     private void RetryMarkdownChangeSummaryAnalysis()
     {
-        if (Commit is null)
+        if (Commit is null || _markdownChangeAnalysisIsRetrying)
         {
             return;
         }
 
         _markdownChangeSummariesByFile.Clear();
-        StartMarkdownChangeSummaryAnalysis(Commit);
+        _markdownChangeAnalysisIsRetrying = true;
+        _markdownChangeAnalysisStatus = L["CommitDetail.FileChange.AnalysisRetrying"];
+        StartMarkdownChangeSummaryAnalysis(Commit, preserveFailureFeedback: true);
     }
 
     private void CancelMarkdownChangeSummaryAnalysis()

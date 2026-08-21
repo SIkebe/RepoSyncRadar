@@ -300,6 +300,30 @@ public sealed class DocsVersionImpactAnalyzerTests
     }
 
     [Fact]
+    public void Returns_Empty_When_Only_Iframe_Fallback_Content_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<iframe>old fallback</iframe>",
+            DocsLiquidContext.Empty,
+            "<iframe>new fallback</iframe>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Ownership_Around_AttributeFree_Iframe()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "A <iframe>same fallback</iframe>B",
+            DocsLiquidContext.Empty,
+            "A<iframe>same fallback</iframe> B",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
     public void Returns_Empty_When_Only_Collapsible_Text_Whitespace_Changes()
     {
         var affected = DocsVersionImpactAnalyzer.Analyze(

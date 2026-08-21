@@ -405,20 +405,17 @@ public class CommitDetailTests
             .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
         var analysisAttempt = 0;
+        var retryResult = new TaskCompletionSource<MarkdownFileChangeSummary?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
         var coordinator = Substitute.For<IPreviewCoordinator>();
         coordinator.AnalyzeMarkdownFileChangeAsync(
                 commit.PrNumber,
                 commit.Sha,
                 commit.Files[0].Path,
                 Arg.Any<CancellationToken>())
-            .Returns(_ => Task.FromResult<MarkdownFileChangeSummary?>(
-                Interlocked.Increment(ref analysisAttempt) == 1
-                    ? null
-                    : new MarkdownFileChangeSummary(
-                        IsRenamed: false,
-                        PreviousPath: null,
-                        HasRenderedBodyChanges: true,
-                        FrontmatterChangeCount: 0)));
+            .Returns(_ => Interlocked.Increment(ref analysisAttempt) == 1
+                ? Task.FromResult<MarkdownFileChangeSummary?>(null)
+                : retryResult.Task);
 
         using var cut = RenderDetailWith(
             commit,
@@ -442,16 +439,41 @@ public class CommitDetailTests
 
         cut.WaitForAssertion(() =>
         {
+            var retryingStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
             Assert.Contains(
-                "解析が完了しました",
-                cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]").TextContent,
+                "再解析しています",
+                retryingStatus.TextContent,
                 StringComparison.Ordinal);
-            Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-file-change-analysis-retry\"]"));
-            coordinator.Received(2).AnalyzeMarkdownFileChangeAsync(
+            Assert.Equal("true", retryingStatus.ParentElement?.GetAttribute("aria-busy"));
+            Assert.Equal(
+                "true",
+                cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]")
+                    .GetAttribute("aria-disabled"));
+            _ = coordinator.Received(2).AnalyzeMarkdownFileChangeAsync(
                 commit.PrNumber,
                 commit.Sha,
                 commit.Files[0].Path,
                 Arg.Any<CancellationToken>());
+        });
+
+        await cut.InvokeAsync(
+            () => cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]").Click());
+        _ = coordinator.Received(2).AnalyzeMarkdownFileChangeAsync(
+            commit.PrNumber,
+            commit.Sha,
+            commit.Files[0].Path,
+            Arg.Any<CancellationToken>());
+
+        retryResult.SetResult(null);
+        cut.WaitForAssertion(() =>
+        {
+            var failedStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
+            Assert.Contains("解析できませんでした", failedStatus.TextContent, StringComparison.Ordinal);
+            Assert.Equal("false", failedStatus.ParentElement?.GetAttribute("aria-busy"));
+            Assert.Equal(
+                "false",
+                cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]")
+                    .GetAttribute("aria-disabled"));
         });
     }
 

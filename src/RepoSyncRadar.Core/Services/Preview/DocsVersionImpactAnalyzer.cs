@@ -524,13 +524,16 @@ public static class DocsVersionImpactAnalyzer
                 if (closingTag != index)
                 {
                     var textEnd = closingTag < 0 ? html.Length : closingTag;
-                    AppendHtmlText(
-                        html.AsSpan(index, textEnd - index),
-                        context.WhiteSpaceMode,
-                        decodeCharacterReferences: IsRcDataElement(context.TagName),
-                        normalized,
-                        ref pendingCollapsibleSpace,
-                        ref hasInlineContent);
+                    if (context.TagName != "iframe")
+                    {
+                        AppendHtmlText(
+                            html.AsSpan(index, textEnd - index),
+                            context.WhiteSpaceMode,
+                            decodeCharacterReferences: IsRcDataElement(context.TagName),
+                            normalized,
+                            ref pendingCollapsibleSpace,
+                            ref hasInlineContent);
+                    }
                     index = textEnd;
                     continue;
                 }
@@ -663,7 +666,8 @@ public static class DocsVersionImpactAnalyzer
     private static bool HtmlTagExposesWhitespaceBoundary(
         string tagName,
         ReadOnlySpan<char> tag)
-        => tagName is "a" or "b" or "button" or "code" or "del" or "em" or "i" or "ins"
+        => IsInlineBoxElement(tagName)
+            || tagName is "a" or "b" or "button" or "code" or "del" or "em" or "i" or "ins"
             or "kbd" or "mark" or "q" or "s" or "samp" or "small" or "strike"
             or "strong" or "sub" or "sup" or "u" or "var"
             || HasHtmlAttributes(tag);
@@ -1694,7 +1698,7 @@ public static class DocsVersionImpactAnalyzer
     }
 
     private static bool IsRawTextElement(string tagName)
-        => IsRcDataElement(tagName) || tagName is "script" or "style" or "xmp";
+        => IsRcDataElement(tagName) || tagName is "script" or "style" or "xmp" or "iframe";
 
     private static bool IsRcDataElement(string tagName)
         => tagName is "textarea" or "title";

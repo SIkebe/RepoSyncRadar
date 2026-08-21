@@ -1186,6 +1186,11 @@ html, body {
     background: color-mix(in srgb, currentColor 10%, transparent);
 }
 
+.radar-commit-detail .file-change-analysis-retry[aria-disabled="true"] {
+    cursor: wait;
+    opacity: 0.7;
+}
+
 .radar-commit-detail .file-change-analysis-retry:focus-visible {
     outline: 2px solid currentColor;
     outline-offset: 2px;
