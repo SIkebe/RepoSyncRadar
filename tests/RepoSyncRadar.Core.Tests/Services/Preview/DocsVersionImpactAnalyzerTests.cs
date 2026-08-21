@@ -378,6 +378,20 @@ public sealed class DocsVersionImpactAnalyzerTests
         Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
     }
 
+    [Theory]
+    [InlineData("""--note: '; white-space: normal;'""")]
+    [InlineData("""--note: token(; white-space: normal;)""")]
+    public void Ignores_Css_Declaration_Separators_Inside_Values(string customProperty)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"""<span style="white-space: pre; {customProperty}">a  b</span>""",
+            DocsLiquidContext.Empty,
+            $"""<span style="white-space: pre; {customProperty}">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
     [Fact]
     public void Reads_Slashes_Inside_Unquoted_Html_Attribute_Values()
     {

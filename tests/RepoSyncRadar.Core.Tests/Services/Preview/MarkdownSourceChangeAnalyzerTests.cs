@@ -69,6 +69,17 @@ public sealed class MarkdownSourceChangeAnalyzerTests
         Assert.Equal(MarkdownSourceChangeKind.SourceOnly, summary!.Kind);
     }
 
+    [Fact]
+    public void Does_Not_Skip_Filter_Changes_On_Otherwise_Unchanged_References()
+    {
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(
+            """{{ variables.a | default: "old" }} {{ variables.old }}""",
+            """{{ variables.a | default: "new" }} {{ variables.new }}""");
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.SourceOnly, summary!.Kind);
+    }
+
     [Theory]
     [InlineData("{% data variables.old-%}", "{% data variables.new-%}")]
     [InlineData("{{ variables.old-}}", "{{ variables.new-}}")]

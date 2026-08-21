@@ -705,7 +705,7 @@ public static class DocsVersionImpactAnalyzer
 
         var styleWithoutComments = RemoveCssComments(style);
         var winningDeclarationIsImportant = false;
-        foreach (var declaration in styleWithoutComments.Split(';'))
+        foreach (var declaration in SplitCssDeclarations(styleWithoutComments))
         {
             var separator = declaration.IndexOf(':');
             if (separator < 0)
@@ -725,6 +725,57 @@ public static class DocsVersionImpactAnalyzer
             }
         }
         return mode;
+    }
+
+    private static IEnumerable<string> SplitCssDeclarations(string style)
+    {
+        var declarationStart = 0;
+        var quote = '\0';
+        var escaping = false;
+        var nestingDepth = 0;
+        for (var index = 0; index < style.Length; index++)
+        {
+            var current = style[index];
+            if (escaping)
+            {
+                escaping = false;
+                continue;
+            }
+            if (current == '\\')
+            {
+                escaping = true;
+                continue;
+            }
+            if (quote != '\0')
+            {
+                if (current == quote)
+                {
+                    quote = '\0';
+                }
+                continue;
+            }
+            if (current is '\'' or '"')
+            {
+                quote = current;
+                continue;
+            }
+            if (current is '(' or '[' or '{')
+            {
+                nestingDepth++;
+                continue;
+            }
+            if (current is ')' or ']' or '}')
+            {
+                nestingDepth = Math.Max(0, nestingDepth - 1);
+                continue;
+            }
+            if (current == ';' && nestingDepth == 0)
+            {
+                yield return style[declarationStart..index];
+                declarationStart = index + 1;
+            }
+        }
+        yield return style[declarationStart..];
     }
 
     private static string RemoveCssComments(string value)

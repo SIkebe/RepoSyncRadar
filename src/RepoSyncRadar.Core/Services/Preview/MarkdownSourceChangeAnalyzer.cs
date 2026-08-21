@@ -138,10 +138,11 @@ public static partial class MarkdownSourceChangeAnalyzer
         var commonPrefix = 0;
         while (commonPrefix < beforeKeys.Length
                && commonPrefix < afterKeys.Length
-               && string.Equals(
+               && ReferencesMatch(
                    beforeKeys[commonPrefix],
+                   beforeFilters[commonPrefix],
                    afterKeys[commonPrefix],
-                   StringComparison.Ordinal))
+                   afterFilters[commonPrefix]))
         {
             commonPrefix++;
         }
@@ -150,10 +151,11 @@ public static partial class MarkdownSourceChangeAnalyzer
         var afterEnd = afterKeys.Length;
         while (beforeEnd > commonPrefix
                && afterEnd > commonPrefix
-               && string.Equals(
+               && ReferencesMatch(
                    beforeKeys[beforeEnd - 1],
+                   beforeFilters[beforeEnd - 1],
                    afterKeys[afterEnd - 1],
-                   StringComparison.Ordinal))
+                   afterFilters[afterEnd - 1]))
         {
             beforeEnd--;
             afterEnd--;
@@ -182,6 +184,14 @@ public static partial class MarkdownSourceChangeAnalyzer
             changeCount);
         return true;
     }
+
+    private static bool ReferencesMatch(
+        string beforeKey,
+        string beforeFilters,
+        string afterKey,
+        string afterFilters)
+        => string.Equals(beforeKey, afterKey, StringComparison.Ordinal)
+            && string.Equals(beforeFilters, afterFilters, StringComparison.Ordinal);
 
     private static (string? Before, string? After, int ChangeCount) FindFirstChangedLine(
         string? before,
