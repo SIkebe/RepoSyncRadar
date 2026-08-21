@@ -574,7 +574,8 @@ public static class DocsVersionImpactAnalyzer
                 index = tagEnd;
                 continue;
             }
-            CloseImpliedTableBodyIfNeeded(
+            CloseImpliedTableDescendants(elements, tagName, isClosing);
+            CloseOpenTableSectionIfNeeded(
                 elements,
                 normalized,
                 tagName,
@@ -688,7 +689,7 @@ public static class DocsVersionImpactAnalyzer
             IsImplied: true));
     }
 
-    private static void CloseImpliedTableBodyIfNeeded(
+    private static void CloseOpenTableSectionIfNeeded(
         List<HtmlElementContext> elements,
         StringBuilder normalized,
         string tagName,
@@ -698,13 +699,59 @@ public static class DocsVersionImpactAnalyzer
             || !isClosing && tagName is "caption" or "colgroup" or "tbody" or "tfoot" or "thead";
         if (!endsCurrentRowGroup
             || elements.Count == 0
-            || elements[^1] is not { TagName: "tbody", IsImplied: true })
+            || elements[^1].TagName is not ("tbody" or "tfoot" or "thead"))
         {
             return;
         }
 
-        normalized.Append("</tbody>");
+        normalized.Append("</").Append(elements[^1].TagName).Append('>');
         elements.RemoveAt(elements.Count - 1);
+    }
+
+    private static void CloseImpliedTableDescendants(
+        List<HtmlElementContext> elements,
+        string tagName,
+        bool isClosing)
+    {
+        var opensNewTableSection = !isClosing
+            && tagName is "caption" or "colgroup" or "tbody" or "tfoot" or "thead";
+        if (!opensNewTableSection
+            && (!isClosing || tagName is not ("tr" or "tbody" or "tfoot" or "thead" or "table")))
+        {
+            return;
+        }
+
+        RemoveOpenTableElement(elements, static name => name is "td" or "th", "tr");
+        if (!isClosing || tagName != "tr")
+        {
+            RemoveOpenTableElement(
+                elements,
+                static name => name == "tr",
+                "tbody",
+                "tfoot",
+                "thead",
+                "table");
+        }
+    }
+
+    private static void RemoveOpenTableElement(
+        List<HtmlElementContext> elements,
+        Func<string, bool> matches,
+        params string[] boundaries)
+    {
+        for (var index = elements.Count - 1; index >= 0; index--)
+        {
+            var tagName = elements[index].TagName;
+            if (matches(tagName))
+            {
+                elements.RemoveRange(index, elements.Count - index);
+                return;
+            }
+            if (boundaries.Contains(tagName, StringComparer.Ordinal))
+            {
+                return;
+            }
+        }
     }
 
     private static bool IsOptionalHtmlEndTagSyntax(
@@ -715,7 +762,7 @@ public static class DocsVersionImpactAnalyzer
         int nextIndex,
         IReadOnlyList<HtmlElementContext> elements)
     {
-        if (isForeign || !isClosing || tagName is not ("li" or "p"))
+        if (isForeign || !isClosing || tagName is not ("li" or "p" or "td" or "th" or "tr"))
         {
             return false;
         }
@@ -735,6 +782,14 @@ public static class DocsVersionImpactAnalyzer
             break;
         }
         if (tagName == "li" && parentTagName is not ("ol" or "ul"))
+        {
+            return false;
+        }
+        if (tagName is "td" or "th" && parentTagName != "tr")
+        {
+            return false;
+        }
+        if (tagName == "tr" && parentTagName is not ("tbody" or "tfoot" or "thead"))
         {
             return false;
         }
@@ -779,14 +834,40 @@ public static class DocsVersionImpactAnalyzer
             return !nextIsClosing && nextTagName == "li"
                 || nextIsClosing && nextTagName == parentTagName;
         }
-        return !nextIsClosing && ClosesOpenParagraph(nextTagName)
-            || nextIsClosing && nextTagName == parentTagName;
+        if (tagName == "p")
+        {
+            return !nextIsClosing && ClosesOpenParagraph(nextTagName)
+                || nextIsClosing && nextTagName == parentTagName;
+        }
+        if (tagName is "td" or "th")
+        {
+            return !nextIsClosing && nextTagName is "td" or "th"
+                || nextIsClosing && nextTagName is "tr" or "tbody" or "tfoot" or "thead" or "table";
+        }
+        return !nextIsClosing && nextTagName == "tr"
+            || nextIsClosing && nextTagName is "tbody" or "tfoot" or "thead" or "table";
     }
 
     private static void ApplyImpliedHtmlEndTags(
         List<HtmlElementContext> elements,
         string openingTagName)
     {
+        if (openingTagName is "td" or "th")
+        {
+            RemoveOpenTableElement(elements, static name => name is "td" or "th", "tr");
+            return;
+        }
+        if (openingTagName == "tr")
+        {
+            RemoveOpenTableElement(
+                elements,
+                static name => name == "tr",
+                "tbody",
+                "tfoot",
+                "thead",
+                "table");
+            return;
+        }
         if (openingTagName == "li")
         {
             for (var i = elements.Count - 1; i >= 0; i--)

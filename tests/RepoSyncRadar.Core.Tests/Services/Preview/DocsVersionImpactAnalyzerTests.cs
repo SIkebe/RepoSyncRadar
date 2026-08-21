@@ -306,6 +306,15 @@ public sealed class DocsVersionImpactAnalyzerTests
         "<table><tr><td>Same text.</td></tr></table>",
         "<table><tbody><tr><td>Same text.</td></tr></tbody></table>")]
     [InlineData(
+        "<table><tr><td>A<td>B</table>",
+        "<table><tbody><tr><td>A</td><td>B</td></tr></tbody></table>")]
+    [InlineData(
+        "<table><tr><th>A<tr><td>B</table>",
+        "<table><tbody><tr><th>A</th></tr><tr><td>B</td></tr></tbody></table>")]
+    [InlineData(
+        "<table><tr><td>A<tfoot><tr><td>B</table>",
+        "<table><tbody><tr><td>A</td></tr></tbody><tfoot><tr><td>B</td></tr></tfoot></table>")]
+    [InlineData(
         "<ul><li>One<li>Two</ul>",
         "<ul><li>One</li><li>Two</li></ul>")]
     [InlineData(

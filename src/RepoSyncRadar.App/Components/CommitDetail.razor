@@ -575,7 +575,8 @@
         CancelMarkdownChangeSummaryAnalysis();
         _markdownChangeAnalysisStatus = null;
         _markdownChangeAnalysisHasFailures = false;
-        if (Services.GetService<IPreviewCoordinator>() is not { } coordinator)
+        if (Services.GetService<IPreviewCoordinator>() is not { } coordinator
+            || Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.IsEnabled != true)
         {
             return;
         }

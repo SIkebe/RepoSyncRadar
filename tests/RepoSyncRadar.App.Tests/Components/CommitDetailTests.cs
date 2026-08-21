@@ -456,6 +456,37 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void CommitDetail_Does_Not_Report_Analysis_Failure_When_Preview_Is_Disabled()
+    {
+        var commit = MakeCommit(("content/copilot/disabled.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator,
+            previewEnabled: false);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(
+                cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]").TextContent);
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-file-change-analysis-retry\"]"));
+            coordinator.DidNotReceiveWithAnyArgs().AnalyzeMarkdownFileChangeAsync(
+                default,
+                default!,
+                default!,
+                default);
+        });
+    }
+
+    [Fact]
     public void CommitDetail_Shows_Viewed_Count_From_File_State()
     {
         var commit = MakeCommit(
@@ -1778,7 +1809,8 @@ public class CommitDetailTests
         IPreviewCoordinator? coordinator,
         int previewReadyTimeoutSeconds = 600,
         CommitHistorySnapshot? historySnapshot = null,
-        IRadarRepository? repository = null)
+        IRadarRepository? repository = null,
+        bool previewEnabled = true)
     {
         var services = new ServiceCollection()
             .AddSingleton(resolver)
@@ -1813,6 +1845,7 @@ public class CommitDetailTests
         services.AddSingleton<IOptions<DocsRepositoryOptions>>(
             Options.Create(new DocsRepositoryOptions
             {
+                BareCloneDir = previewEnabled ? new DocsRepositoryOptions().BareCloneDir : string.Empty,
                 PreviewReadyTimeoutSeconds = previewReadyTimeoutSeconds,
             }));
         services.AddSingleton<IOptions<GitHubOptions>>(
