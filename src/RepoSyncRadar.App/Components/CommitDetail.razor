@@ -584,6 +584,7 @@
         try
         {
             var nextFileIndex = -1;
+            var successfulAnalysisCount = 0;
             async Task AnalyzeNextFilesAsync()
             {
                 while (true)
@@ -601,7 +602,12 @@
                         commit.Sha,
                         file.Path,
                         cancellationToken);
-                    if (summary is null || !ShouldPublishMarkdownChangeSummary(summary))
+                    if (summary is null)
+                    {
+                        continue;
+                    }
+                    Interlocked.Increment(ref successfulAnalysisCount);
+                    if (!ShouldPublishMarkdownChangeSummary(summary))
                     {
                         continue;
                     }
@@ -626,9 +632,19 @@
                 if (!cancellationToken.IsCancellationRequested
                     && string.Equals(Commit?.Sha, commit.Sha, StringComparison.Ordinal))
                 {
-                    _markdownChangeAnalysisStatus = L[
-                        "CommitDetail.FileChange.AnalysisCompleted",
-                        files.Count];
+                    _markdownChangeAnalysisStatus = successfulAnalysisCount switch
+                    {
+                        0 => L[
+                            "CommitDetail.FileChange.AnalysisUnavailable",
+                            files.Count],
+                        _ when successfulAnalysisCount < files.Count => L[
+                            "CommitDetail.FileChange.AnalysisPartiallyCompleted",
+                            successfulAnalysisCount,
+                            files.Count],
+                        _ => L[
+                            "CommitDetail.FileChange.AnalysisCompleted",
+                            files.Count],
+                    };
                     StateHasChanged();
                 }
             });

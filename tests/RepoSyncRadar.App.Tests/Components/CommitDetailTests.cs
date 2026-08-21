@@ -389,7 +389,37 @@ public class CommitDetailTests
         thirdResult.SetResult(null);
         cut.WaitForAssertion(() =>
             Assert.Contains(
-                "Markdown ファイル 3 件",
+                "3 件中 1 件",
+                cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]").TextContent,
+                StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CommitDetail_Announces_When_Source_Summary_Analysis_Is_Unavailable()
+    {
+        var commit = MakeCommit(("content/copilot/unavailable.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<MarkdownFileChangeSummary?>(null));
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+
+        cut.WaitForAssertion(() =>
+            Assert.Contains(
+                "解析できませんでした",
                 cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]").TextContent,
                 StringComparison.Ordinal));
     }
