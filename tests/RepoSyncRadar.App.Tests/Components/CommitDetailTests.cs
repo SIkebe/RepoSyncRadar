@@ -38,6 +38,24 @@ public class CommitDetailTests
         Assert.Equal(expected, ProgressElapsedDisplay.SmoothElapsedSeconds(displayed, actual));
     }
 
+    [Theory]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, true)]
+    public void ShouldPublishMarkdownChangeSummary_Only_When_Visible(
+        bool isRenamed,
+        bool hasRenderedBodyChanges,
+        bool expected)
+    {
+        var summary = new MarkdownFileChangeSummary(
+            isRenamed,
+            PreviousPath: null,
+            hasRenderedBodyChanges,
+            FrontmatterChangeCount: 0);
+
+        Assert.Equal(expected, CommitDetail.ShouldPublishMarkdownChangeSummary(summary));
+    }
+
     [Fact]
     public void CommitDetail_Shows_Resolved_Urls()
     {

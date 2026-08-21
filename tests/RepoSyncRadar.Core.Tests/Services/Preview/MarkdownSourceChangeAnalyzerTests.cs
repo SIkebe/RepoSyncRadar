@@ -108,6 +108,20 @@ public sealed class MarkdownSourceChangeAnalyzerTests
     }
 
     [Fact]
+    public void Detects_Frontmatter_When_Body_Only_Changes_Line_Endings()
+    {
+        const string before = "---\ntitle: Old title\n---\nFirst line.\r\nSecond line.";
+        const string after = "---\ntitle: New title\n---\nFirst line.\nSecond line.";
+
+        var summary = MarkdownSourceChangeAnalyzer.Analyze(before, after);
+
+        Assert.NotNull(summary);
+        Assert.Equal(MarkdownSourceChangeKind.Frontmatter, summary!.Kind);
+        Assert.Equal("title: Old title", summary.Before);
+        Assert.Equal("title: New title", summary.After);
+    }
+
+    [Fact]
     public void Describes_First_Generic_Source_Only_Change()
     {
         var summary = MarkdownSourceChangeAnalyzer.Analyze(

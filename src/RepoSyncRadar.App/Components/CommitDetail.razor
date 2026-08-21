@@ -591,7 +591,7 @@
                         commit.Sha,
                         file.Path,
                         cancellationToken);
-                    if (summary is null)
+                    if (summary is null || !ShouldPublishMarkdownChangeSummary(summary))
                     {
                         continue;
                     }
@@ -637,6 +637,9 @@
 
     private static bool IsRenamedFile(CommitFile file)
         => string.Equals(file.Status, "renamed", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool ShouldPublishMarkdownChangeSummary(MarkdownFileChangeSummary summary)
+        => summary.IsRenamed || !summary.HasRenderedBodyChanges;
 
     private LocalizedString BuildFileChangeTitle(CommitFile file, MarkdownFileChangeSummary? summary)
     {

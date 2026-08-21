@@ -44,15 +44,14 @@ public static partial class MarkdownSourceChangeAnalyzer
             }
 
             var bodyChange = FindFirstChangedLine(beforeBody, afterBody);
-            if (bodyChange.Before is null && bodyChange.After is null)
+            if (bodyChange.Before is not null || bodyChange.After is not null)
             {
-                return null;
+                return new MarkdownSourceChangeSummary(
+                    MarkdownSourceChangeKind.SourceOnly,
+                    bodyChange.Before,
+                    bodyChange.After,
+                    bodyChange.ChangeCount);
             }
-            return new MarkdownSourceChangeSummary(
-                MarkdownSourceChangeKind.SourceOnly,
-                bodyChange.Before,
-                bodyChange.After,
-                bodyChange.ChangeCount);
         }
 
         var changes = frontmatterChanges ?? MarkdownFrontmatterDiffAnalyzer.Analyze(beforeMarkdown, afterMarkdown);
