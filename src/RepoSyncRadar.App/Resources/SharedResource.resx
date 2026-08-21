@@ -114,6 +114,7 @@
   <data name="CommitDetail.Empty" xml:space="preserve"><value>コミットを選択してください。</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>ファイル</value></data>
   <data name="CommitDetail.FileChange.ChangedTo" xml:space="preserve"><value>変更後:</value></data>
+  <data name="CommitDetail.FileChange.AnalysisCompleted" xml:space="preserve"><value>Markdown ファイル {0} 件の変更理由の解析が完了しました</value></data>
   <data name="CommitDetail.FileChange.EmptyValue" xml:space="preserve"><value>（空白）</value></data>
   <data name="CommitDetail.FileChange.Frontmatter" xml:space="preserve"><value>フロントマター変更</value></data>
   <data name="CommitDetail.FileChange.LiquidVariableReference" xml:space="preserve"><value>Liquid 変数参照</value></data>

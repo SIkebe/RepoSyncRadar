@@ -348,14 +348,14 @@ public class CommitDetailTests
                 commit.Files[2].Path,
                 Arg.Any<CancellationToken>());
         }, TimeSpan.FromSeconds(10));
-        var analysisStatuses = cut.FindAll("[data-testid=\"commit-detail-file-change-summary\"]");
-        Assert.Equal(3, analysisStatuses.Count);
-        Assert.All(analysisStatuses, status =>
-        {
-            Assert.Equal("status", status.GetAttribute("role"));
-            Assert.Equal("polite", status.GetAttribute("aria-live"));
-            Assert.Equal("true", status.GetAttribute("aria-atomic"));
-        });
+        var analysisStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
+        Assert.Equal("status", analysisStatus.GetAttribute("role"));
+        Assert.Equal("polite", analysisStatus.GetAttribute("aria-live"));
+        Assert.Equal("true", analysisStatus.GetAttribute("aria-atomic"));
+        Assert.Empty(analysisStatus.TextContent);
+        Assert.All(
+            cut.FindAll("[data-testid=\"commit-detail-file-change-summary\"]"),
+            summary => Assert.Null(summary.GetAttribute("aria-live")));
 
         firstResult.SetResult(new MarkdownFileChangeSummary(
             IsRenamed: false,
@@ -387,6 +387,11 @@ public class CommitDetailTests
 
         secondResult.SetResult(null);
         thirdResult.SetResult(null);
+        cut.WaitForAssertion(() =>
+            Assert.Contains(
+                "Markdown ファイル 3 件",
+                cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]").TextContent,
+                StringComparison.Ordinal));
     }
 
     [Fact]

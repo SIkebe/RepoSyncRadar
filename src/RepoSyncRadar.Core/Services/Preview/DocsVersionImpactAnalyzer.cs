@@ -932,6 +932,7 @@ public static class DocsVersionImpactAnalyzer
             || value.Equals("preserve", StringComparison.OrdinalIgnoreCase)
             || value.Equals("preserve nowrap", StringComparison.OrdinalIgnoreCase)
             || value.Equals("preserve wrap", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("break-spaces nowrap", StringComparison.OrdinalIgnoreCase)
             || value.Equals("break-spaces wrap", StringComparison.OrdinalIgnoreCase))
         {
             mode = HtmlWhiteSpaceMode.Preserve;

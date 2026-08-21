@@ -433,6 +433,7 @@ public sealed class DocsVersionImpactAnalyzerTests
     [Theory]
     [InlineData("""<span style="white-space-collapse: preserve">a  b</span>""")]
     [InlineData("""<span style="white-space: preserve">a  b</span>""")]
+    [InlineData("""<span style="white-space: break-spaces nowrap">a  b</span>""")]
     [InlineData("""<span style="--mode: pre; white-space: var(--mode)">a  b</span>""")]
     public void Preserves_Whitespace_For_Longhand_Or_Computed_Css(string before)
     {

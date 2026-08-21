@@ -186,6 +186,11 @@
                 }
             </div>
         </div>
+        <span class="file-change-visually-hidden"
+              data-testid="commit-detail-file-change-analysis-status"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true">@_markdownChangeAnalysisStatus</span>
         <ul class="files">
             @foreach (var file in Commit.Files)
             {
@@ -215,9 +220,6 @@
                         }
                         <span class="file-change-summary"
                               data-testid="commit-detail-file-change-summary"
-                              role="status"
-                              aria-live="polite"
-                              aria-atomic="true"
                               title="@(showChangeSummary ? BuildFileChangeTitle(file, changeSummary).Value : null)">
                             @if (showChangeSummary)
                             {
@@ -380,6 +382,7 @@
     private CancellationTokenSource? _predictivePrewarmCts;
     private CancellationTokenSource? _predictiveFilePrewarmCts;
     private CancellationTokenSource? _markdownChangeSummaryCts;
+    private string? _markdownChangeAnalysisStatus;
     private string? _predictiveFilePrewarmPath;
     private string? _historyForSha;
     private IReadOnlyList<CommitHistoryTimelineEntry> _historyEntries = [];
@@ -499,6 +502,7 @@
             _reusableReferencePathsByFile.Clear();
             _selectedReusableReferenceByFile.Clear();
             _markdownChangeSummariesByFile.Clear();
+            _markdownChangeAnalysisStatus = null;
             _resolvedForSha = null;
             _activePreviewSha = null;
             CancelCurrentPreviewOperation();
@@ -521,6 +525,7 @@
             _reusableReferencePathsByFile.Clear();
             _selectedReusableReferenceByFile.Clear();
             _markdownChangeSummariesByFile.Clear();
+            _markdownChangeAnalysisStatus = null;
             CancelPredictiveFilePrewarm();
             StartPredictivePrewarm(Commit);
             StartMarkdownChangeSummaryAnalysis(Commit);
@@ -616,6 +621,17 @@
             var workerCount = Math.Min(MaxConcurrentMarkdownChangeAnalyses, files.Count);
             await Task.WhenAll(Enumerable.Range(0, workerCount).Select(_ => AnalyzeNextFilesAsync()));
             cancellationToken.ThrowIfCancellationRequested();
+            await InvokeAsync(() =>
+            {
+                if (!cancellationToken.IsCancellationRequested
+                    && string.Equals(Commit?.Sha, commit.Sha, StringComparison.Ordinal))
+                {
+                    _markdownChangeAnalysisStatus = L[
+                        "CommitDetail.FileChange.AnalysisCompleted",
+                        files.Count];
+                    StateHasChanged();
+                }
+            });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
