@@ -38,6 +38,24 @@ public class CommitDetailTests
         Assert.Equal(expected, ProgressElapsedDisplay.SmoothElapsedSeconds(displayed, actual));
     }
 
+    [Theory]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    [InlineData(false, false, true)]
+    public void ShouldPublishMarkdownChangeSummary_Only_When_Visible(
+        bool isRenamed,
+        bool hasRenderedBodyChanges,
+        bool expected)
+    {
+        var summary = new MarkdownFileChangeSummary(
+            isRenamed,
+            PreviousPath: null,
+            hasRenderedBodyChanges,
+            FrontmatterChangeCount: 0);
+
+        Assert.Equal(expected, CommitDetail.ShouldPublishMarkdownChangeSummary(summary));
+    }
+
     [Fact]
     public void CommitDetail_Shows_Resolved_Urls()
     {
@@ -115,6 +133,378 @@ public class CommitDetailTests
             Assert.Contains("リネーム", changeSummary.TextContent, StringComparison.Ordinal);
             Assert.Contains("本文変更なし", changeSummary.TextContent, StringComparison.Ordinal);
             Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-preview-status\"]"));
+        });
+    }
+
+    [Fact]
+    public void CommitDetail_Shows_Rename_Before_Source_Analysis()
+    {
+        var commit = MakeCommit(("content/copilot/new-location.md", 0, 0));
+        commit.Files[0].Status = "renamed";
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+
+        using var cut = RenderDetailWith(commit, resolver);
+
+        var changeSummary = cut.Find("[data-testid=\"commit-detail-file-change-summary\"]");
+        Assert.Contains("リネーム", changeSummary.TextContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("本文変更なし", changeSummary.TextContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CommitDetail_Shows_Liquid_Variable_Change_Before_Preview()
+    {
+        var commit = MakeCommit(("content/code-security/set-pr-thresholds.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<MarkdownFileChangeSummary?>(
+                new MarkdownFileChangeSummary(
+                    IsRenamed: false,
+                    PreviousPath: null,
+                    HasRenderedBodyChanges: false,
+                    FrontmatterChangeCount: 0,
+                    SourceChange: new MarkdownSourceChangeSummary(
+                        MarkdownSourceChangeKind.LiquidVariableReference,
+                        "code-quality.workflow_name_actions",
+                        "product.prodname_code_quality_short",
+                        1))));
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+
+        cut.WaitForAssertion(() =>
+        {
+            var changeSummary = cut.Find("[data-testid=\"commit-detail-file-change-summary\"]");
+            Assert.Contains("本文変更なし", changeSummary.TextContent, StringComparison.Ordinal);
+            Assert.Contains("Liquid 変数参照", changeSummary.TextContent, StringComparison.Ordinal);
+            var sourceChange = cut.Find("[data-testid=\"commit-detail-source-change\"]");
+            Assert.Contains("code-quality.workflow_name_actions", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.Contains("変更後:", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.NotNull(sourceChange.QuerySelector(".file-change-visually-hidden"));
+            Assert.Contains("product.prodname_code_quality_short", sourceChange.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void CommitDetail_Distinguishes_Missing_And_Blank_Source_Values()
+    {
+        var commit = MakeCommit(("content/copilot/blank-line.md", 1, 0));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<MarkdownFileChangeSummary?>(
+                new MarkdownFileChangeSummary(
+                    IsRenamed: false,
+                    PreviousPath: null,
+                    HasRenderedBodyChanges: false,
+                    FrontmatterChangeCount: 0,
+                    SourceChange: new MarkdownSourceChangeSummary(
+                        MarkdownSourceChangeKind.SourceOnly,
+                        Before: null,
+                        After: string.Empty,
+                        ChangeCount: 1))));
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+
+        cut.WaitForAssertion(() =>
+        {
+            var sourceChange = cut.Find("[data-testid=\"commit-detail-source-change\"]");
+            Assert.Contains("（行なし）", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.Contains("（空白）", sourceChange.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void CommitDetail_Describes_Whitespace_Only_Source_Values()
+    {
+        var commit = MakeCommit(("content/copilot/whitespace.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<MarkdownFileChangeSummary?>(
+                new MarkdownFileChangeSummary(
+                    IsRenamed: false,
+                    PreviousPath: null,
+                    HasRenderedBodyChanges: false,
+                    FrontmatterChangeCount: 0,
+                    SourceChange: new MarkdownSourceChangeSummary(
+                        MarkdownSourceChangeKind.SourceOnly,
+                        Before: " ",
+                        After: "  ",
+                        ChangeCount: 1))));
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+
+        cut.WaitForAssertion(() =>
+        {
+            var sourceChange = cut.Find("[data-testid=\"commit-detail-source-change\"]");
+            Assert.Contains("スペース 1", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.Contains("スペース 2", sourceChange.TextContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("（空白）", sourceChange.TextContent, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task CommitDetail_Publishes_Source_Summaries_As_Each_File_Completes()
+    {
+        var commit = MakeCommit(
+            ("content/copilot/first.md", 1, 1),
+            ("content/copilot/second.md", 1, 1),
+            ("content/copilot/third.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var firstResult = new TaskCompletionSource<MarkdownFileChangeSummary?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondResult = new TaskCompletionSource<MarkdownFileChangeSummary?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var thirdResult = new TaskCompletionSource<MarkdownFileChangeSummary?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var thirdStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(firstResult.Task);
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[1].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(secondResult.Task);
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[2].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                thirdStarted.SetResult();
+                return thirdResult.Task;
+            });
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+        cut.WaitForAssertion(() =>
+        {
+            coordinator.Received(1).AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>());
+            coordinator.Received(1).AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[1].Path,
+                Arg.Any<CancellationToken>());
+            coordinator.DidNotReceive().AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[2].Path,
+                Arg.Any<CancellationToken>());
+        }, TimeSpan.FromSeconds(10));
+        var analysisStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
+        Assert.Equal("status", analysisStatus.GetAttribute("role"));
+        Assert.Equal("polite", analysisStatus.GetAttribute("aria-live"));
+        Assert.Equal("true", analysisStatus.GetAttribute("aria-atomic"));
+        Assert.Empty(analysisStatus.TextContent);
+        Assert.All(
+            cut.FindAll("[data-testid=\"commit-detail-file-change-summary\"]"),
+            summary => Assert.Null(summary.GetAttribute("aria-live")));
+
+        firstResult.SetResult(new MarkdownFileChangeSummary(
+            IsRenamed: false,
+            PreviousPath: null,
+            HasRenderedBodyChanges: false,
+            FrontmatterChangeCount: 0,
+            SourceChange: new MarkdownSourceChangeSummary(
+                MarkdownSourceChangeKind.SourceOnly,
+                "old",
+                "new",
+                1)));
+
+        await thirdStarted.Task.WaitAsync(
+            TimeSpan.FromSeconds(10),
+            Xunit.TestContext.Current.CancellationToken);
+        cut.WaitForAssertion(() =>
+        {
+            var sourceChanges = cut.FindAll("[data-testid=\"commit-detail-source-change\"]");
+            Assert.Single(sourceChanges);
+            Assert.Contains("old", sourceChanges[0].TextContent, StringComparison.Ordinal);
+            coordinator.Received(1).AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[2].Path,
+                Arg.Any<CancellationToken>());
+            Assert.False(secondResult.Task.IsCompleted);
+            Assert.False(thirdResult.Task.IsCompleted);
+        }, TimeSpan.FromSeconds(10));
+
+        secondResult.SetResult(null);
+        thirdResult.SetResult(null);
+        cut.WaitForAssertion(() =>
+        {
+            var partialStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
+            Assert.Contains("3 件中 1 件", partialStatus.TextContent, StringComparison.Ordinal);
+            Assert.True(partialStatus.ParentElement?.ClassList.Contains("file-change-analysis-feedback"));
+            Assert.NotNull(cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]"));
+        });
+    }
+
+    [Fact]
+    public async Task CommitDetail_Shows_Unavailable_Analysis_And_Retries()
+    {
+        var commit = MakeCommit(("content/copilot/unavailable.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var analysisAttempt = 0;
+        var retryResult = new TaskCompletionSource<MarkdownFileChangeSummary?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>())
+            .Returns(_ => Interlocked.Increment(ref analysisAttempt) == 1
+                ? Task.FromResult<MarkdownFileChangeSummary?>(null)
+                : retryResult.Task);
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+
+        cut.WaitForAssertion(() =>
+        {
+            var unavailableStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
+            Assert.Contains(
+                "解析できませんでした",
+                unavailableStatus.TextContent,
+                StringComparison.Ordinal);
+            Assert.True(unavailableStatus.ParentElement?.ClassList.Contains("file-change-analysis-feedback"));
+        });
+
+        await cut.InvokeAsync(
+            () => cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]").Click());
+
+        cut.WaitForAssertion(() =>
+        {
+            var retryingStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
+            Assert.Contains(
+                "再解析しています",
+                retryingStatus.TextContent,
+                StringComparison.Ordinal);
+            Assert.Equal("true", retryingStatus.ParentElement?.GetAttribute("aria-busy"));
+            Assert.Equal(
+                "true",
+                cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]")
+                    .GetAttribute("aria-disabled"));
+            _ = coordinator.Received(2).AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                commit.Files[0].Path,
+                Arg.Any<CancellationToken>());
+        });
+
+        await cut.InvokeAsync(
+            () => cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]").Click());
+        _ = coordinator.Received(2).AnalyzeMarkdownFileChangeAsync(
+            commit.PrNumber,
+            commit.Sha,
+            commit.Files[0].Path,
+            Arg.Any<CancellationToken>());
+
+        retryResult.SetResult(null);
+        cut.WaitForAssertion(() =>
+        {
+            var failedStatus = cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]");
+            Assert.Contains("解析できませんでした", failedStatus.TextContent, StringComparison.Ordinal);
+            Assert.Equal("false", failedStatus.ParentElement?.GetAttribute("aria-busy"));
+            Assert.Equal(
+                "false",
+                cut.Find("[data-testid=\"commit-detail-file-change-analysis-retry\"]")
+                    .GetAttribute("aria-disabled"));
+        });
+    }
+
+    [Fact]
+    public void CommitDetail_Does_Not_Report_Analysis_Failure_When_Preview_Is_Disabled()
+    {
+        var commit = MakeCommit(("content/copilot/disabled.md", 1, 1));
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator,
+            previewEnabled: false);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(
+                cut.Find("[data-testid=\"commit-detail-file-change-analysis-status\"]").TextContent);
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-file-change-analysis-retry\"]"));
+            coordinator.DidNotReceiveWithAnyArgs().AnalyzeMarkdownFileChangeAsync(
+                default,
+                default!,
+                default!,
+                default);
         });
     }
 
@@ -778,7 +1168,8 @@ public class CommitDetailTests
                 button => Assert.False(button.HasAttribute("disabled")));
         });
 
-        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next);
+        await cut.InvokeAsync(
+            () => navigator.RequestFileNavigation(PreviewFileNavigationDirection.Next));
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(adjacentPath, captured?.FilePath);
@@ -786,7 +1177,8 @@ public class CommitDetailTests
                 cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]"),
                 button => Assert.False(button.HasAttribute("disabled")));
         });
-        navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous);
+        await cut.InvokeAsync(
+            () => navigator.RequestFileNavigation(PreviewFileNavigationDirection.Previous));
         cut.WaitForAssertion(() =>
         {
             Assert.Equal(referencePaths[1], captured?.FilePath);
@@ -799,7 +1191,7 @@ public class CommitDetailTests
                 Arg.Any<DocsVersion?>(),
                 Arg.Any<IReadOnlyList<string>>(),
                 Arg.Any<CancellationToken>());
-        });
+        }, TimeSpan.FromSeconds(10));
     }
 
     [Fact]
@@ -1439,7 +1831,8 @@ public class CommitDetailTests
         IPreviewCoordinator? coordinator,
         int previewReadyTimeoutSeconds = 600,
         CommitHistorySnapshot? historySnapshot = null,
-        IRadarRepository? repository = null)
+        IRadarRepository? repository = null,
+        bool previewEnabled = true)
     {
         var services = new ServiceCollection()
             .AddSingleton(resolver)
@@ -1474,6 +1867,7 @@ public class CommitDetailTests
         services.AddSingleton<IOptions<DocsRepositoryOptions>>(
             Options.Create(new DocsRepositoryOptions
             {
+                BareCloneDir = previewEnabled ? new DocsRepositoryOptions().BareCloneDir : string.Empty,
                 PreviewReadyTimeoutSeconds = previewReadyTimeoutSeconds,
             }));
         services.AddSingleton<IOptions<GitHubOptions>>(

@@ -25,6 +25,10 @@ public sealed class DocsRepositoryOptions
     /// <summary>URL passed to <c>git clone --bare</c>. Required when <see cref="BareCloneDir"/> is set.</summary>
     public string CloneUrl { get; set; } = "https://github.com/github/docs.git";
 
+    /// <summary>Whether the local docs preview pipeline has the required repository settings.</summary>
+    public bool IsEnabled => !string.IsNullOrWhiteSpace(BareCloneDir)
+        && !string.IsNullOrWhiteSpace(CloneUrl);
+
     /// <summary>Directory used for Markdown preview assets and cleanup of legacy preview worktrees.</summary>
     public string WorktreeRoot { get; set; } = Path.Combine(_defaultPreviewRoot, "worktrees");
 

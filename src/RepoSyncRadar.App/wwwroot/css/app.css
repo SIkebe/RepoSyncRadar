@@ -1116,6 +1116,86 @@ html, body {
     color: #116329;
 }
 
+.radar-commit-detail .file-change-badge-source {
+    background: #fff8c5;
+    border-color: #d4a72c;
+    color: #633c01;
+}
+
+.radar-commit-detail .file-change-description {
+    align-items: center;
+    color: #57606a;
+    display: inline-flex;
+    flex-wrap: wrap;
+    font-size: 0.72rem;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.radar-commit-detail .file-change-description code {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 3px;
+    color: #24292f;
+    font-size: inherit;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    padding: 0.05rem 0.25rem;
+    white-space: break-spaces;
+}
+
+.radar-commit-detail .file-change-visually-hidden {
+    border: 0;
+    clip: rect(0 0 0 0);
+    block-size: 1px;
+    inline-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    white-space: nowrap;
+}
+
+.radar-commit-detail .file-change-analysis-feedback {
+    align-items: center;
+    background: var(--radar-warning-bg, #fff8c5);
+    border: 1px solid #d4a72c;
+    border-radius: 6px;
+    color: var(--radar-warning-fg, #7d4e00);
+    display: flex;
+    font-size: 0.78rem;
+    gap: 0.65rem;
+    justify-content: space-between;
+    margin: 0.5rem 0;
+    padding: 0.45rem 0.6rem;
+}
+
+.radar-commit-detail .file-change-analysis-retry {
+    background: transparent;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    color: inherit;
+    cursor: pointer;
+    flex: 0 0 auto;
+    font: inherit;
+    font-weight: 700;
+    padding: 0.2rem 0.5rem;
+}
+
+.radar-commit-detail .file-change-analysis-retry:hover {
+    background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.radar-commit-detail .file-change-analysis-retry[aria-disabled="true"] {
+    cursor: wait;
+    opacity: 0.7;
+}
+
+.radar-commit-detail .file-change-analysis-retry:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
 .radar-commit-detail .file-viewed-toggle {
     align-items: center;
     color: #57606a;
@@ -3111,6 +3191,22 @@ html, body {
     background: #173b25;
     border-color: #2f7d46;
     color: #aff5b4;
+}
+
+.radar-theme-dark .radar-commit-detail .file-change-badge-source {
+    background: #3b2e10;
+    border-color: #9e6a03;
+    color: #f2cc60;
+}
+
+.radar-theme-dark .radar-commit-detail .file-change-description {
+    color: var(--radar-muted-fg);
+}
+
+.radar-theme-dark .radar-commit-detail .file-change-description code {
+    background: #161b22;
+    border-color: var(--radar-border);
+    color: var(--radar-fg);
 }
 
 .radar-theme-dark .review-suggestion-state {

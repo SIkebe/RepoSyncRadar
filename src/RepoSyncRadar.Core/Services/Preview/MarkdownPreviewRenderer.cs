@@ -21,6 +21,25 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 internal static partial class MarkdownPreviewRenderer
 {
+    private enum ElementNamespace
+    {
+        Html,
+        Svg,
+        MathMl,
+    }
+
+    private enum ForeignIntegrationKind
+    {
+        None,
+        Html,
+        MathText,
+    }
+
+    private readonly record struct HtmlElementContext(
+        string TagName,
+        ElementNamespace Namespace,
+        ForeignIntegrationKind IntegrationKind);
+
     public enum RenderedMarkdownDiffSide
     {
         None,
@@ -65,6 +84,20 @@ internal static partial class MarkdownPreviewRenderer
         "your",
     };
 
+    private static readonly HashSet<string> _htmlSpecialElementNames = new(StringComparer.Ordinal)
+    {
+        "address", "applet", "area", "article", "aside", "base", "basefont", "bgsound",
+        "blockquote", "body", "br", "button", "caption", "center", "col", "colgroup",
+        "dd", "details", "dir", "div", "dl", "dt", "embed", "fieldset", "figcaption",
+        "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4",
+        "h5", "h6", "head", "header", "hgroup", "hr", "html", "iframe", "img",
+        "input", "keygen", "li", "link", "listing", "main", "marquee", "menu", "meta",
+        "nav", "noembed", "noframes", "noscript", "object", "ol", "p", "param",
+        "plaintext", "pre", "script", "search", "section", "select", "source", "style",
+        "summary", "table", "tbody", "td", "template", "textarea", "tfoot", "th",
+        "thead", "title", "tr", "track", "ul", "wbr", "xmp",
+    };
+
     // Liquid block / variable syntax used pervasively in github/docs content.
     // We never attempt to evaluate these — only to neutralise them so Markdig
     // does not render literal `{% ifversion fpt %}` into a <p> tag and the
@@ -107,12 +140,6 @@ internal static partial class MarkdownPreviewRenderer
 
     [GeneratedRegex("""<[^>]+>""", RegexOptions.Singleline)]
     private static partial Regex HtmlTagRegex();
-
-    [GeneratedRegex("""(?<attr>\b(?:src|poster)\s*=\s*)(?<quote>["'])(?<url>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
-    private static partial Regex HtmlAssetUrlRegex();
-
-    [GeneratedRegex("""(?<attr>\bsrcset\s*=\s*)(?<quote>["'])(?<value>[^"']+)\k<quote>""", RegexOptions.IgnoreCase)]
-    private static partial Regex HtmlSrcSetRegex();
 
     [GeneratedRegex("""<!--.*?-->""", RegexOptions.Singleline)]
     private static partial Regex HtmlCommentRegex();
@@ -716,7 +743,8 @@ internal static partial class MarkdownPreviewRenderer
 
     private static string RenderOfficialLiquidBlocks(
         string content,
-        RenderedHtmlPlaceholderStore? protectedHtmlFragments = null)
+        RenderedHtmlPlaceholderStore? protectedHtmlFragments = null,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(content))
         {
@@ -726,6 +754,7 @@ internal static partial class MarkdownPreviewRenderer
         var current = content;
         for (var safety = 0; safety < 16; safety++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var before = current;
             current = CodeTabsBlockRegex().Replace(
                 current,
@@ -754,6 +783,20 @@ internal static partial class MarkdownPreviewRenderer
             }
         }
         return current;
+    }
+
+    internal static string PreprocessMarkdownForComparison(
+        string content,
+        CancellationToken cancellationToken)
+    {
+        var tableFragmentsExpanded = ExpandMarkdownTableFragments(content, cancellationToken);
+        var liquidBlocksRendered = RenderOfficialLiquidBlocks(
+            tableFragmentsExpanded,
+            cancellationToken: cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var githubAlertsRendered = RenderGitHubAlertBlocks(liquidBlocksRendered);
+        cancellationToken.ThrowIfCancellationRequested();
+        return NeutralizeLiquid(githubAlertsRendered);
     }
 
     private static string ProtectRenderedHtml(
@@ -1438,77 +1481,643 @@ internal static partial class MarkdownPreviewRenderer
         yield return "content/" + trimmed;
     }
 
+    internal static string RewriteLocalReferencesForComparison(string html, string repoPath)
+        => RewriteHtmlReferences(
+            html,
+            repoPath,
+            "/markdown-assets",
+            "/markdown-links");
+
     private static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
+        => string.IsNullOrWhiteSpace(assetBasePath)
+            ? html
+            : RewriteHtmlReferences(html, repoPath, assetBasePath, linkBasePath: null);
+
+    private static string RewriteHtmlReferences(
+        string html,
+        string repoPath,
+        string assetBasePath,
+        string? linkBasePath)
     {
-        if (string.IsNullOrWhiteSpace(assetBasePath) || string.IsNullOrEmpty(html))
+        if (string.IsNullOrEmpty(html))
         {
             return html;
         }
 
-        var rewritten = HtmlAssetUrlRegex().Replace(html, m =>
+        var rewritten = new StringBuilder(html.Length + 128);
+        var elements = new List<HtmlElementContext>();
+        string? rawTextTagName = null;
+        var index = 0;
+        while (index < html.Length)
         {
-            var quote = m.Groups["quote"].Value;
-            var url = WebUtility.HtmlDecode(m.Groups["url"].Value);
-            var next = RewriteAssetUrl(url, repoPath, assetBasePath);
-            return string.Concat(
-                m.Groups["attr"].Value,
-                quote,
-                WebUtility.HtmlEncode(next),
-                quote);
-        });
-
-        return HtmlSrcSetRegex().Replace(rewritten, m =>
-        {
-            var quote = m.Groups["quote"].Value;
-            var value = WebUtility.HtmlDecode(m.Groups["value"].Value);
-            var next = RewriteSrcSet(value, repoPath, assetBasePath);
-            return string.Concat(
-                m.Groups["attr"].Value,
-                quote,
-                WebUtility.HtmlEncode(next),
-                quote);
-        });
-    }
-
-    private static string RewriteSrcSet(string srcset, string repoPath, string assetBasePath)
-    {
-        if (srcset.Contains("data:", StringComparison.OrdinalIgnoreCase))
-        {
-            return srcset;
-        }
-
-        var candidates = srcset.Split(',', StringSplitOptions.None);
-        var rewritten = new StringBuilder(srcset.Length + 64);
-        for (var i = 0; i < candidates.Length; i++)
-        {
-            if (i > 0)
+            if (rawTextTagName is not null)
             {
-                rewritten.Append(',');
+                var rawTextEnd = FindRawTextClosingTag(html, index, rawTextTagName);
+                if (rawTextEnd < 0)
+                {
+                    rewritten.Append(html, index, html.Length - index);
+                    break;
+                }
+                rewritten.Append(html, index, rawTextEnd - index);
+                index = rawTextEnd;
+                rawTextTagName = null;
             }
 
-            var candidate = candidates[i];
-            var leadingLength = candidate.Length - candidate.TrimStart().Length;
-            var trailingLength = candidate.Length - candidate.TrimEnd().Length;
-            var leading = candidate[..leadingLength];
-            var core = candidate[leadingLength..(candidate.Length - trailingLength)];
-            var trailing = candidate[(candidate.Length - trailingLength)..];
-            if (core.Length == 0)
+            var tagStart = html.IndexOf('<', index);
+            if (tagStart < 0)
             {
-                rewritten.Append(candidate);
+                rewritten.Append(html, index, html.Length - index);
+                break;
+            }
+            rewritten.Append(html, index, tagStart - index);
+
+            if (html.AsSpan(tagStart).StartsWith("<!--", StringComparison.Ordinal))
+            {
+                var commentEnd = html.IndexOf("-->", tagStart + 4, StringComparison.Ordinal);
+                var nextIndex = commentEnd < 0 ? html.Length : commentEnd + 3;
+                rewritten.Append(html, tagStart, nextIndex - tagStart);
+                index = nextIndex;
                 continue;
             }
 
-            var descriptorStart = FindFirstWhitespace(core);
-            var url = descriptorStart < 0 ? core : core[..descriptorStart];
-            var descriptor = descriptorStart < 0 ? string.Empty : core[descriptorStart..];
-            rewritten
-                .Append(leading)
-                .Append(RewriteAssetUrl(url, repoPath, assetBasePath))
-                .Append(descriptor)
-                .Append(trailing);
+            var tagEnd = FindHtmlTagEnd(html, tagStart);
+            var tag = html[tagStart..tagEnd];
+            var tagName = GetHtmlTagName(tag, out var isClosing);
+            var elementNamespace = ResolveElementNamespace(
+                elements,
+                tagName,
+                tag,
+                isClosing);
+            if (!isClosing && tagName.Length > 0)
+            {
+                tag = RewriteTagAttributes(
+                    tag,
+                    tagName,
+                    elementNamespace == ElementNamespace.Html,
+                    repoPath,
+                    assetBasePath,
+                    ShouldRewriteHref(tagName, tag, elementNamespace) ? linkBasePath : null);
+            }
+            rewritten.Append(tag);
+            index = tagEnd;
+
+            if (!isClosing
+                && elementNamespace == ElementNamespace.Html
+                && IsRawTextElement(tagName))
+            {
+                rawTextTagName = tagName;
+            }
+            UpdateHtmlElementStack(
+                elements,
+                tagName,
+                tag,
+                isClosing,
+                tag.AsSpan().TrimEnd().EndsWith("/>", StringComparison.Ordinal),
+                elementNamespace);
         }
         return rewritten.ToString();
     }
+
+    private static string RewriteTagAttributes(
+        string tag,
+        string tagName,
+        bool usesHtmlUrlAttributes,
+        string repoPath,
+        string assetBasePath,
+        string? linkBasePath)
+    {
+        StringBuilder? rewritten = null;
+        var copiedThrough = 0;
+        var index = 1;
+        while (index < tag.Length && tag[index] is '/' or '!')
+        {
+            index++;
+        }
+        while (index < tag.Length && !char.IsWhiteSpace(tag[index]) && tag[index] != '>')
+        {
+            index++;
+        }
+
+        while (index < tag.Length)
+        {
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] is '>' or '/')
+            {
+                break;
+            }
+
+            var nameStart = index;
+            while (index < tag.Length
+                   && !char.IsWhiteSpace(tag[index])
+                   && tag[index] is not '=' and not '>' and not '/')
+            {
+                index++;
+            }
+            if (index == nameStart)
+            {
+                index++;
+                continue;
+            }
+
+            var attributeName = tag[nameStart..index];
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] != '=')
+            {
+                continue;
+            }
+            index++;
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+
+            var quote = index < tag.Length && tag[index] is '\'' or '"' ? tag[index++] : '\0';
+            var valueStart = index;
+            if (quote == '\0')
+            {
+                while (index < tag.Length
+                       && !char.IsWhiteSpace(tag[index])
+                       && tag[index] != '>')
+                {
+                    index++;
+                }
+            }
+            else
+            {
+                while (index < tag.Length && tag[index] != quote)
+                {
+                    index++;
+                }
+            }
+            var valueEnd = index;
+            if (index < tag.Length && quote != '\0')
+            {
+                index++;
+            }
+
+            var decodedValue = WebUtility.HtmlDecode(tag[valueStart..valueEnd]);
+            var next = attributeName.ToLowerInvariant() switch
+            {
+                "src" when usesHtmlUrlAttributes && ShouldRewriteSrc(tagName, tag)
+                    => RewriteAssetUrl(decodedValue, repoPath, assetBasePath),
+                "poster" when usesHtmlUrlAttributes && tagName == "video"
+                    => RewriteAssetUrl(decodedValue, repoPath, assetBasePath),
+                "srcset" when usesHtmlUrlAttributes && tagName is "img" or "source"
+                    => RewriteSrcSet(decodedValue, repoPath, assetBasePath),
+                "href" when linkBasePath is not null => RewriteAssetUrl(decodedValue, repoPath, linkBasePath),
+                _ => decodedValue,
+            };
+            if (string.Equals(next, decodedValue, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            rewritten ??= new StringBuilder(tag.Length + 64);
+            rewritten
+                .Append(tag, copiedThrough, valueStart - copiedThrough)
+                .Append(WebUtility.HtmlEncode(next));
+            copiedThrough = valueEnd;
+        }
+
+        return rewritten is null
+            ? tag
+            : rewritten.Append(tag, copiedThrough, tag.Length - copiedThrough).ToString();
+    }
+
+    private static bool ShouldRewriteSrc(string tagName, string tag)
+        => tagName is "audio" or "embed" or "iframe" or "img" or "script" or "source"
+            or "track" or "video"
+            || tagName == "input" && TagAttributeEquals(tag, "type", "image");
+
+    private static bool ShouldRewriteHref(
+        string tagName,
+        string tag,
+        ElementNamespace elementNamespace)
+        => tagName == "a"
+            || elementNamespace == ElementNamespace.Html
+                && (tagName == "area"
+                    || tagName == "link"
+                        && TagAttributeContainsToken(tag, "rel", "stylesheet"));
+
+    private static bool TagAttributeContainsToken(
+        string tag,
+        string attributeName,
+        string expectedToken)
+    {
+        var value = GetTagAttributeValue(tag, attributeName);
+        return value is not null
+            && value.Split(
+                    [' ', '\t', '\n', '\f', '\r'],
+                    StringSplitOptions.RemoveEmptyEntries)
+                .Contains(expectedToken, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool TagAttributeEquals(
+        string tag,
+        string attributeName,
+        string expectedValue)
+        => string.Equals(
+            GetTagAttributeValue(tag, attributeName),
+            expectedValue,
+            StringComparison.OrdinalIgnoreCase);
+
+    private static string? GetTagAttributeValue(string tag, string attributeName)
+    {
+        var index = 1;
+        while (index < tag.Length && !char.IsWhiteSpace(tag[index]) && tag[index] != '>')
+        {
+            index++;
+        }
+
+        while (index < tag.Length)
+        {
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] is '>' or '/')
+            {
+                return null;
+            }
+
+            var nameStart = index;
+            while (index < tag.Length
+                   && !char.IsWhiteSpace(tag[index])
+                   && tag[index] is not '=' and not '>' and not '/')
+            {
+                index++;
+            }
+            var nameMatches = tag.AsSpan(nameStart, index - nameStart)
+                .Equals(attributeName, StringComparison.OrdinalIgnoreCase);
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+            if (index >= tag.Length || tag[index] != '=')
+            {
+                continue;
+            }
+            index++;
+            while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+            {
+                index++;
+            }
+
+            var quote = index < tag.Length && tag[index] is '\'' or '"' ? tag[index++] : '\0';
+            var valueStart = index;
+            if (quote == '\0')
+            {
+                while (index < tag.Length
+                       && !char.IsWhiteSpace(tag[index])
+                       && tag[index] != '>')
+                {
+                    index++;
+                }
+            }
+            else
+            {
+                while (index < tag.Length && tag[index] != quote)
+                {
+                    index++;
+                }
+            }
+            var valueEnd = index;
+            if (index < tag.Length && quote != '\0')
+            {
+                index++;
+            }
+            if (!nameMatches)
+            {
+                continue;
+            }
+
+            return WebUtility.HtmlDecode(tag[valueStart..valueEnd]);
+        }
+        return null;
+    }
+
+    private static bool IsRawTextElement(string tagName)
+        => tagName is "script"
+            or "style"
+            or "textarea"
+            or "title"
+            or "iframe"
+            or "noembed"
+            or "noframes"
+            or "xmp"
+            or "plaintext";
+
+    private static int FindHtmlTagEnd(string html, int startIndex)
+    {
+        var quote = '\0';
+        for (var index = startIndex; index < html.Length; index++)
+        {
+            var current = html[index];
+            if (quote == '\0' && current is '\'' or '"')
+            {
+                quote = current;
+            }
+            else if (current == quote)
+            {
+                quote = '\0';
+            }
+            else if (current == '>' && quote == '\0')
+            {
+                return index + 1;
+            }
+        }
+        return html.Length;
+    }
+
+    private static string GetHtmlTagName(string tag, out bool isClosing)
+    {
+        var index = 1;
+        isClosing = index < tag.Length && tag[index] == '/';
+        if (isClosing)
+        {
+            index++;
+        }
+        while (index < tag.Length && char.IsWhiteSpace(tag[index]))
+        {
+            index++;
+        }
+        var nameStart = index;
+        while (index < tag.Length
+               && !char.IsWhiteSpace(tag[index])
+               && tag[index] is not '>' and not '/')
+        {
+            index++;
+        }
+        return tag[nameStart..index].ToLowerInvariant();
+    }
+
+    private static int FindRawTextClosingTag(string html, int startIndex, string tagName)
+    {
+        if (tagName == "plaintext")
+        {
+            return -1;
+        }
+
+        var search = $"</{tagName}";
+        var index = startIndex;
+        while ((index = html.IndexOf(search, index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            var afterName = index + search.Length;
+            if (afterName >= html.Length
+                || html[afterName] == '>'
+                || html[afterName] == '/'
+                || char.IsWhiteSpace(html[afterName]))
+            {
+                return index;
+            }
+            index = afterName;
+        }
+        return -1;
+    }
+
+    private static ElementNamespace ResolveElementNamespace(
+        List<HtmlElementContext> elements,
+        string tagName,
+        string tag,
+        bool isClosing)
+    {
+        if (isClosing)
+        {
+            for (var index = elements.Count - 1; index >= 0; index--)
+            {
+                if (string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal))
+                {
+                    return elements[index].Namespace;
+                }
+            }
+            return elements.Count == 0 ? ElementNamespace.Html : elements[^1].Namespace;
+        }
+
+        if (elements.Count == 0 || elements[^1].Namespace == ElementNamespace.Html)
+        {
+            return tagName switch
+            {
+                "svg" => ElementNamespace.Svg,
+                "math" => ElementNamespace.MathMl,
+                _ => ElementNamespace.Html,
+            };
+        }
+
+        if (ForeignParentUsesHtmlParsing(elements[^1], tagName))
+        {
+            return tagName switch
+            {
+                "svg" => ElementNamespace.Svg,
+                "math" => ElementNamespace.MathMl,
+                _ => ElementNamespace.Html,
+            };
+        }
+
+        if (IsForeignContentBreakoutTag(tagName, tag))
+        {
+            while (elements.Count > 0 &&
+                   elements[^1].Namespace != ElementNamespace.Html &&
+                   elements[^1].IntegrationKind == ForeignIntegrationKind.None)
+            {
+                elements.RemoveAt(elements.Count - 1);
+            }
+            return ElementNamespace.Html;
+        }
+        return elements[^1].Namespace;
+    }
+
+    private static void UpdateHtmlElementStack(
+        List<HtmlElementContext> elements,
+        string tagName,
+        string tag,
+        bool isClosing,
+        bool hasSelfClosingSyntax,
+        ElementNamespace elementNamespace)
+    {
+        if (isClosing)
+        {
+            for (var index = elements.Count - 1; index >= 0; index--)
+            {
+                if (!string.Equals(elements[index].TagName, tagName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (elements[index].Namespace != ElementNamespace.Html &&
+                    elements[^1].Namespace == ElementNamespace.Html &&
+                    HasHtmlScopeBarrier(elements, index))
+                {
+                    return;
+                }
+
+                elements.RemoveRange(index, elements.Count - index);
+                return;
+            }
+            return;
+        }
+
+        var isSelfClosing = elementNamespace == ElementNamespace.Html
+            ? IsHtmlVoidElement(tagName)
+            : hasSelfClosingSyntax;
+        if (!isSelfClosing)
+        {
+            elements.Add(new HtmlElementContext(
+                tagName,
+                elementNamespace,
+                GetForeignIntegrationKind(elementNamespace, tagName, tag)));
+        }
+    }
+
+    private static bool HasHtmlScopeBarrier(
+        List<HtmlElementContext> elements,
+        int matchingElementIndex)
+    {
+        for (var index = elements.Count - 1; index > matchingElementIndex; index--)
+        {
+            var candidate = elements[index];
+            if (IsSpecialElement(candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsSpecialElement(HtmlElementContext element)
+        => element.Namespace switch
+        {
+            ElementNamespace.Html => IsHtmlSpecialElement(element.TagName),
+            ElementNamespace.Svg => element.TagName is "foreignobject" or "desc" or "title",
+            ElementNamespace.MathMl => element.TagName is "mi" or "mo" or "mn" or "ms"
+                or "mtext" or "annotation-xml",
+            _ => false,
+        };
+
+    internal static bool IsHtmlSpecialElement(string tagName)
+        => _htmlSpecialElementNames.Contains(tagName);
+
+    private static bool ForeignParentUsesHtmlParsing(
+        HtmlElementContext parent,
+        string tagName)
+        => parent.Namespace == ElementNamespace.MathMl
+            && parent.TagName == "annotation-xml"
+            && tagName == "svg"
+            || parent.IntegrationKind switch
+            {
+                ForeignIntegrationKind.Html => true,
+                ForeignIntegrationKind.MathText => tagName is not ("mglyph" or "malignmark"),
+                _ => false,
+            };
+
+    private static ForeignIntegrationKind GetForeignIntegrationKind(
+        ElementNamespace elementNamespace,
+        string tagName,
+        string tag)
+        => elementNamespace switch
+        {
+            ElementNamespace.Svg when tagName is "foreignobject" or "desc" or "title"
+                => ForeignIntegrationKind.Html,
+            ElementNamespace.MathMl when tagName is "mi" or "mo" or "mn" or "ms" or "mtext"
+                => ForeignIntegrationKind.MathText,
+            ElementNamespace.MathMl when tagName == "annotation-xml"
+                && (TagAttributeEquals(tag, "encoding", "text/html")
+                    || TagAttributeEquals(tag, "encoding", "application/xhtml+xml"))
+                => ForeignIntegrationKind.Html,
+            _ => ForeignIntegrationKind.None,
+        };
+
+    private static bool IsForeignContentBreakoutTag(string tagName, string tag)
+        => tagName is "b" or "big" or "blockquote" or "body" or "br" or "center" or "code"
+            or "dd" or "div" or "dl" or "dt" or "em" or "embed" or "h1" or "h2" or "h3"
+            or "h4" or "h5" or "h6" or "head" or "hr" or "i" or "img" or "li"
+            or "listing" or "menu" or "meta" or "nobr" or "ol" or "p" or "pre" or "ruby"
+            or "s" or "small" or "span" or "strong" or "strike" or "sub" or "sup"
+            or "table" or "tt" or "u" or "ul" or "var"
+            || tagName == "font"
+                && (GetTagAttributeValue(tag, "color") is not null
+                    || GetTagAttributeValue(tag, "face") is not null
+                    || GetTagAttributeValue(tag, "size") is not null);
+
+    private static bool IsHtmlVoidElement(string tagName)
+        => tagName is "area" or "base" or "br" or "col" or "embed" or "hr" or "img"
+            or "input" or "link" or "meta" or "param" or "source" or "track" or "wbr";
+
+    private static string RewriteSrcSet(string srcset, string repoPath, string assetBasePath)
+    {
+        StringBuilder? rewritten = null;
+        var copiedThrough = 0;
+        var index = 0;
+        while (index < srcset.Length)
+        {
+            while (index < srcset.Length
+                   && (IsAsciiWhitespace(srcset[index]) || srcset[index] == ','))
+            {
+                index++;
+            }
+            if (index >= srcset.Length)
+            {
+                break;
+            }
+
+            var urlStart = index;
+            while (index < srcset.Length && !IsAsciiWhitespace(srcset[index]))
+            {
+                index++;
+            }
+            var tokenEnd = index;
+            var urlEnd = tokenEnd;
+            while (urlEnd > urlStart && srcset[urlEnd - 1] == ',')
+            {
+                urlEnd--;
+            }
+
+            var url = srcset[urlStart..urlEnd];
+            var next = RewriteAssetUrl(url, repoPath, assetBasePath);
+            if (!string.Equals(url, next, StringComparison.Ordinal))
+            {
+                rewritten ??= new StringBuilder(srcset.Length + 64);
+                rewritten
+                    .Append(srcset, copiedThrough, urlStart - copiedThrough)
+                    .Append(next);
+                copiedThrough = urlEnd;
+            }
+
+            if (urlEnd < tokenEnd)
+            {
+                continue;
+            }
+            var isInsideParentheses = false;
+            while (index < srcset.Length)
+            {
+                var current = srcset[index++];
+                if (!isInsideParentheses && current == '(')
+                {
+                    isInsideParentheses = true;
+                }
+                else if (isInsideParentheses && current == ')')
+                {
+                    isInsideParentheses = false;
+                }
+                else if (!isInsideParentheses && current == ',')
+                {
+                    break;
+                }
+            }
+        }
+        return rewritten is null
+            ? srcset
+            : rewritten.Append(srcset, copiedThrough, srcset.Length - copiedThrough).ToString();
+    }
+
+    private static bool IsAsciiWhitespace(char value)
+        => value is '\t' or '\n' or '\f' or '\r' or ' ';
 
     private static string RewriteAssetUrl(string url, string repoPath, string assetBasePath)
     {
@@ -1571,18 +2180,6 @@ internal static partial class MarkdownPreviewRenderer
         var normalized = repoPath.Replace('\\', '/');
         var lastSlash = normalized.LastIndexOf('/');
         return lastSlash < 0 ? string.Empty : normalized[..lastSlash];
-    }
-
-    private static int FindFirstWhitespace(string value)
-    {
-        for (var i = 0; i < value.Length; i++)
-        {
-            if (char.IsWhiteSpace(value[i]))
-            {
-                return i;
-            }
-        }
-        return -1;
     }
 
     private static string CombineAssetPath(string basePath, string relativePath)
@@ -2609,15 +3206,24 @@ internal static partial class MarkdownPreviewRenderer
         return depth;
     }
 
-    private static string ExpandMarkdownTableFragments(string markdown)
+    private static string ExpandMarkdownTableFragments(
+        string markdown,
+        CancellationToken cancellationToken = default)
     {
         var normalizedMarkdown = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
         var lines = normalizedMarkdown.Split('\n');
         var expanded = new StringBuilder(markdown.Length + 128);
         var pendingRows = new List<string>();
-        var protectedLines = FindProtectedMarkdownBlockLines(normalizedMarkdown, lines.Length);
+        var protectedLines = FindProtectedMarkdownBlockLines(
+            normalizedMarkdown,
+            lines.Length,
+            cancellationToken);
         for (var index = 0; index < lines.Length; index++)
         {
+            if ((index & 127) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
             var line = lines[index];
             if (protectedLines[index])
             {
@@ -2649,13 +3255,20 @@ internal static partial class MarkdownPreviewRenderer
         return expanded.ToString();
     }
 
-    private static bool[] FindProtectedMarkdownBlockLines(string markdown, int lineCount)
+    private static bool[] FindProtectedMarkdownBlockLines(
+        string markdown,
+        int lineCount,
+        CancellationToken cancellationToken)
     {
         var protectedLines = new bool[lineCount];
         var lineStarts = new int[lineCount];
         var lineIndex = 1;
         for (var offset = 0; offset < markdown.Length && lineIndex < lineCount; offset++)
         {
+            if ((offset & 4095) == 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+            }
             if (markdown[offset] == '\n')
             {
                 lineStarts[lineIndex++] = offset + 1;
@@ -2665,6 +3278,7 @@ internal static partial class MarkdownPreviewRenderer
         var document = Markdown.Parse(markdown, _pipeline);
         foreach (var block in document.Descendants().OfType<Block>())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (block is not (CodeBlock or HtmlBlock) || block.Span.Start < 0 || block.Span.End < block.Span.Start)
             {
                 continue;

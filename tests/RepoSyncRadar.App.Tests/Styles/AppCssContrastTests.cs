@@ -69,6 +69,21 @@ public sealed partial class AppCssContrastTests
     }
 
     [Fact]
+    public void SourceChange_Badges_Meet_NormalTextContrast()
+    {
+        var css = ReadAppCss();
+        var lightBadge = GetExactRuleBlock(css, ".radar-commit-detail .file-change-badge-source");
+        var darkBadge = GetExactRuleBlock(css, ".radar-theme-dark .radar-commit-detail .file-change-badge-source");
+
+        Assert.Contains("background: #fff8c5", lightBadge, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("color: #633c01", lightBadge, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("background: #3b2e10", darkBadge, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("color: #f2cc60", darkBadge, StringComparison.OrdinalIgnoreCase);
+        AssertContrast("source change badge", "#633c01", "#fff8c5");
+        AssertContrast("dark source change badge", "#f2cc60", "#3b2e10");
+    }
+
+    [Fact]
     public void DarkTheme_ReusableUsagePicker_Uses_ThemeAware_LabelColor()
     {
         var pickerBlock = GetExactRuleBlock(
@@ -76,6 +91,27 @@ public sealed partial class AppCssContrastTests
             ".radar-theme-dark .radar-commit-detail .reusable-usage-picker");
 
         Assert.Contains("color: var(--radar-muted-fg)", pickerBlock, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DarkTheme_FileChangeDescription_Uses_MutedForegroundToken()
+    {
+        var descriptionBlock = GetExactRuleBlock(
+            ReadAppCss(),
+            ".radar-theme-dark .radar-commit-detail .file-change-description");
+
+        Assert.Contains("color: var(--radar-muted-fg)", descriptionBlock, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FileChangeExcerpts_Preserve_Whitespace_While_Wrapping()
+    {
+        var excerptBlock = GetExactRuleBlock(
+            ReadAppCss(),
+            ".radar-commit-detail .file-change-description code");
+
+        Assert.Contains("overflow-wrap: anywhere", excerptBlock, StringComparison.Ordinal);
+        Assert.Contains("white-space: break-spaces", excerptBlock, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -55,6 +55,191 @@ public sealed class DocsVersionImpactAnalyzerTests
         });
     }
 
+    [Theory]
+    [InlineData("![Diagram](images/diagram.png)")]
+    [InlineData("<img src=images/diagram.png>")]
+    [InlineData("<video poster=images/diagram.png></video>")]
+    [InlineData("<img srcset=images/diagram.png>")]
+    [InlineData("""<img srcset="data:image/png;base64,AAAA 1x, images/diagram.png 2x">""")]
+    public void Detects_Relative_Asset_Changes_Caused_By_Rename(string markdown)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+        Assert.Equal(DocsVersionCatalog.All.Count, details.Count);
+        Assert.All(details, detail =>
+        {
+            var change = Assert.Single(detail.Changes);
+            Assert.Contains(
+                "/markdown-assets/content/old/images/diagram.png",
+                change.BeforeExcerpt,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "/markdown-assets/content/new/images/diagram.png",
+                change.AfterExcerpt,
+                StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Renamed_File_Still_Resolves_The_Same_Asset()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "![Diagram](images/diagram.png)",
+            DocsLiquidContext.Empty,
+            "![Diagram](../old/images/diagram.png)",
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("[Guide](../guide.md)")]
+    [InlineData("<a href=../guide.md>Guide</a>")]
+    [InlineData("<map><area href=../guide.md></map>")]
+    public void Detects_Relative_Link_Changes_Caused_By_Rename(string markdown)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/deeper/page.md");
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/deeper/page.md");
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+        Assert.All(details, detail =>
+        {
+            var change = Assert.Single(detail.Changes);
+            Assert.Contains(
+                "/markdown-links/content/guide.md",
+                change.BeforeExcerpt,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "/markdown-links/content/new/guide.md",
+                change.AfterExcerpt,
+                StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public void Detects_Relative_Stylesheet_Changes_Caused_By_Rename()
+    {
+        const string markdown = """<link rel="alternate stylesheet" href="theme.css">""";
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Rename_Only_Rebases_A_NonStylesheet_Link()
+    {
+        const string markdown = """<link rel="icon" href="icon.png">""";
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Renamed_File_Still_Resolves_The_Same_Link()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "[Guide](guide.md)",
+            DocsLiquidContext.Empty,
+            "[Guide](../old/guide.md)",
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("""<a data-href="guide.md">Guide</a>""")]
+    [InlineData("""<img data-src="image.png">""")]
+    [InlineData("""<img data-srcset="small.png 1x, large.png 2x">""")]
+    public void Returns_Empty_When_Rename_Only_Rebases_Custom_Data_Attributes(string markdown)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("""<div src="images/diagram.png"></div>""")]
+    [InlineData("""<div poster="images/diagram.png"></div>""")]
+    [InlineData("""<div srcset="images/diagram.png 1x"></div>""")]
+    public void Returns_Empty_When_Rename_Only_Rebases_Unsupported_Url_Attributes(
+        string markdown)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Rename_Only_Rebases_Svg_Area_Href()
+    {
+        const string markdown = "<svg><area href=guides/next.md></area></svg>";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            markdown,
+            DocsLiquidContext.Empty,
+            markdown,
+            DocsLiquidContext.Empty,
+            "content/old/page.md",
+            "content/new/page.md");
+
+        Assert.Empty(affected);
+    }
+
     [Fact]
     public void Returns_All_Versions_When_Plain_Text_Changes_Outside_Any_Ifversion()
     {
@@ -96,6 +281,1170 @@ public sealed class DocsVersionImpactAnalyzerTests
             DocsLiquidContext.Empty);
 
         Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Only_Html_Comment_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "Same text.\n<!-- old note -->",
+            DocsLiquidContext.Empty,
+            "Same text.\n<!-- new note -->",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("`<!-- old note -->`", "`<!-- new note -->`")]
+    [InlineData("```html\n<!-- old note -->\n```", "```html\n<!-- new note -->\n```")]
+    public void Detects_Html_Comment_Syntax_Changes_Inside_Code(string before, string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Detects_Visible_Comment_Syntax_Changes_Inside_Xmp()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<xmp><!-- old --></xmp>",
+            DocsLiquidContext.Empty,
+            "<xmp><!-- new --></xmp>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Only_Whitespace_Around_Xmp_Block_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "Before\n<xmp>Same</xmp>\nAfter",
+            DocsLiquidContext.Empty,
+            "Before<xmp>Same</xmp>After",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Only_Iframe_Fallback_Content_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<iframe>old fallback</iframe>",
+            DocsLiquidContext.Empty,
+            "<iframe>new fallback</iframe>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Ownership_Around_AttributeFree_Iframe()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "A <iframe>same fallback</iframe>B",
+            DocsLiquidContext.Empty,
+            "A<iframe>same fallback</iframe> B",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Detects_Visible_Comment_Syntax_After_Plaintext_Start()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<plaintext>\n<!-- old -->",
+            DocsLiquidContext.Empty,
+            "<plaintext>\n<!-- new -->",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Detects_Visible_Content_Changes_After_SolidusTerminated_Iframe_End_Tag()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<iframe></iframe/><p>old</p>",
+            DocsLiquidContext.Empty,
+            "<iframe></iframe/><p>new</p>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Only_Collapsible_Text_Whitespace_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "Same text.",
+            DocsLiquidContext.Empty,
+            "Same  text.",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Returns_Empty_When_Only_Raw_Html_Tag_Spacing_Changes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span  title = "x">Same text.</span>""",
+            DocsLiquidContext.Empty,
+            """<span title="x">Same text.</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Analyze_Handles_A_Large_Rendered_Rewrite_Without_Building_Snippets()
+    {
+        var before = string.Join(
+            "\n\n",
+            Enumerable.Range(0, 10_000).Select(static index => $"Before paragraph {index}."));
+        var after = string.Join(
+            "\n\n",
+            Enumerable.Range(0, 10_000).Select(static index => $"After paragraph {index}."));
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("A&#32;B", "A B")]
+    [InlineData("""<SPAN title='x'>Same text.</SPAN>""", """<span title="x">Same text.</span>""")]
+    [InlineData("""<span TITLE=x>Same text.</span>""", """<span title="x">Same text.</span>""")]
+    [InlineData("""<span title="A&#32;B">Same text.</span>""", """<span title="A B">Same text.</span>""")]
+    [InlineData(
+        """<span title="x" class="y">Same text.</span>""",
+        """<span class="y" title="x">Same text.</span>""")]
+    [InlineData("""<input disabled>""", """<input disabled="">""")]
+    [InlineData("""<input disabled="false">""", """<input disabled>""")]
+    [InlineData("""<div hidden="false">Same text.</div>""", """<div hidden>Same text.</div>""")]
+    [InlineData("<textarea>A&#32;B</textarea>", "<textarea>A B</textarea>")]
+    [InlineData("<title>A&#32;B</title>", "<title>A B</title>")]
+    [InlineData("<textarea>&#128;</textarea>", "<textarea>€</textarea>")]
+    [InlineData(
+        "<textarea>&CounterClockwiseContourIntegral;</textarea>",
+        "<textarea>∳</textarea>")]
+    [InlineData(
+        "<table><tr><td>Same text.</td></tr></table>",
+        "<table><tbody><tr><td>Same text.</td></tr></tbody></table>")]
+    [InlineData(
+        "<table><tr><td>A<td>B</table>",
+        "<table><tbody><tr><td>A</td><td>B</td></tr></tbody></table>")]
+    [InlineData(
+        "<table><tr><th>A<tr><td>B</table>",
+        "<table><tbody><tr><th>A</th></tr><tr><td>B</td></tr></tbody></table>")]
+    [InlineData(
+        "<table><tr><td>A<tfoot><tr><td>B</table>",
+        "<table><tbody><tr><td>A</td></tr></tbody><tfoot><tr><td>B</td></tr></tfoot></table>")]
+    [InlineData(
+        "<ul><li>One<li>Two</ul>",
+        "<ul><li>One</li><li>Two</li></ul>")]
+    [InlineData(
+        "<p>A<div>B</div>",
+        "<p>A</p><div>B</div>")]
+    [InlineData(
+        "<select><option>A<option>B</select>",
+        "<select><option>A</option><option>B</option></select>")]
+    [InlineData(
+        """<select><optgroup label="A"><option>A<optgroup label="B"><option>B</select>""",
+        """<select><optgroup label="A"><option>A</option></optgroup><optgroup label="B"><option>B</option></optgroup></select>""")]
+    [InlineData(
+        "<dl><dt>A<dd>B<dt>C</dl>",
+        "<dl><dt>A</dt><dd>B</dd><dt>C</dt></dl>")]
+    [InlineData(
+        """<svg><foreignObject><X-Thing title='x'>Same text.</X-Thing></foreignObject></svg>""",
+        """<svg><foreignObject><x-thing title="x">Same text.</x-thing></foreignObject></svg>""")]
+    [InlineData(
+        """<svg><title><X-Thing title='x'>Same text.</X-Thing></title></svg>""",
+        """<svg><title><x-thing title="x">Same text.</x-thing></title></svg>""")]
+    [InlineData(
+        """<math><mtext><X-Thing title='x'>Same text.</X-Thing></mtext></math>""",
+        """<math><mtext><x-thing title="x">Same text.</x-thing></mtext></math>""")]
+    [InlineData(
+        """<math><annotation-xml encoding="text/html"><X-Thing title='x'>Same text.</X-Thing></annotation-xml></math>""",
+        """<math><annotation-xml encoding="text/html"><x-thing title="x">Same text.</x-thing></annotation-xml></math>""")]
+    public void Returns_Empty_When_Only_Browser_Equivalent_Html_Syntax_Changes(
+        string before,
+        string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Does_Not_Treat_NonHtml_AnnotationXml_Encoding_As_Integration_Point()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<math><annotation-xml encoding="text/html bogus"><X-Thing>Same text.</X-Thing></annotation-xml></math>""",
+            DocsLiquidContext.Empty,
+            """<math><annotation-xml encoding="text/html bogus"><x-thing>Same text.</x-thing></annotation-xml></math>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Treats_Svg_Title_Comments_As_NonRendered_Markup()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<svg><title><!-- old --></title></svg>",
+            DocsLiquidContext.Empty,
+            "<svg><title><!-- new --></title></svg>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Foreign_EndTag_Does_Not_Pop_Through_Html_Scope_Barrier()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<svg><foreignObject><p></foreignObject><X-Thing title='x'>Same text.</X-Thing></p></foreignObject></svg>""",
+            DocsLiquidContext.Empty,
+            """<svg><foreignObject><p></foreignObject><x-thing title="x">Same text.</x-thing></p></foreignObject></svg>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Svg_Child_Of_NonHtml_AnnotationXml_Uses_Svg_Namespace()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<math><annotation-xml encoding="application/xml"><svg><foreignObject><X-Thing title='x'>Same text.</X-Thing></foreignObject></svg></annotation-xml></math>""",
+            DocsLiquidContext.Empty,
+            """<math><annotation-xml encoding="application/xml"><svg><foreignObject><x-thing title="x">Same text.</x-thing></foreignObject></svg></annotation-xml></math>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Foreign_Special_Element_Blocks_Outer_Foreign_EndTag()
+    {
+        const string prefix = "<svg><foreignObject><span></svg></span></foreignObject>";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{prefix}<textarea/><IMG SRC='same.png'></textarea></svg>",
+            DocsLiquidContext.Empty,
+            $"""{prefix}<textarea/><img src="same.png"></textarea></svg>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Foreign_EndTag_Pops_Through_Foreign_Special_Element()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<math><annotation-xml encoding="application/xml"></math><textarea><IMG SRC='same.png'></textarea>""",
+            DocsLiquidContext.Empty,
+            """<math><annotation-xml encoding="application/xml"></math><textarea><img src="same.png"></textarea>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_First_Duplicate_Html_Attribute_Value()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span title="first" title="second">Same text.</span>""",
+            DocsLiquidContext.Empty,
+            """<span title="second" title="first">Same text.</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_List_Item_Boundary_Before_Text()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<ul><li>A</li>B</ul>",
+            DocsLiquidContext.Empty,
+            "<ul><li>AB</li></ul>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Paragraph_Boundary_Before_Text()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<p>A</p>B",
+            DocsLiquidContext.Empty,
+            "<p>AB</p>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Attributed_Tbody_Semantics()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<table><tr><td>Same text.</td></tr></table>",
+            DocsLiquidContext.Empty,
+            """<table><tbody class="highlight"><tr><td>Same text.</td></tr></tbody></table>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Explicit_Tbody_Group_Boundaries()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<table><tbody><tr><td>A</td></tr></tbody><tbody><tr><td>B</td></tr></tbody></table>",
+            DocsLiquidContext.Empty,
+            "<table><tbody><tr><td>A</td></tr><tr><td>B</td></tr></tbody></table>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Equates_Valueless_And_Empty_NonBoolean_Html_Attributes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<input value>",
+            DocsLiquidContext.Empty,
+            """<input value="">""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Distinguishes_Encoded_Tag_Text_From_Html_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "A&lt;span&gt;B&lt;/span&gt;C",
+            DocsLiquidContext.Empty,
+            "A<span>B</span>C",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Hidden_UntilFound_Semantics()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<div hidden="until-found">Same text.</div>""",
+            DocsLiquidContext.Empty,
+            """<div hidden>Same text.</div>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("<div hidden>old</div>", "<div hidden>new</div>")]
+    [InlineData(
+        """<div style="display:none">old</div>""",
+        """<div style="display:none">new</div>""")]
+    [InlineData("<template>old</template>", "<template>new</template>")]
+    [InlineData(
+        "<div hidden><span><textarea>old</textarea></span></div>",
+        "<div hidden><span><textarea>new</textarea></span></div>")]
+    public void Ignores_Text_Changes_Inside_NonRendering_Subtrees(
+        string before,
+        string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Suppressed_Void_Element_Does_Not_Create_Inline_Whitespace()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<img hidden> X",
+            DocsLiquidContext.Empty,
+            "<img hidden>X",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("<div hidden>Same text.</div>", "<div>Same text.</div>")]
+    [InlineData(
+        """<div style="display:none">Same text.</div>""",
+        """<div style="display:block">Same text.</div>""")]
+    public void Preserves_Visibility_Changes(string before, string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Ignores_Closing_Tags_For_Html_Void_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "Before <input></input> after",
+            DocsLiquidContext.Empty,
+            "Before <input> after",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Entity_Syntax_Inside_Code()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "`A&#32;B`",
+            DocsLiquidContext.Empty,
+            "`A B`",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Does_Not_Equate_Html5_Numeric_Reference_With_Dotnet_Control_Character()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<textarea>&#128;</textarea>",
+            DocsLiquidContext.Empty,
+            "<textarea>\u0080</textarea>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Decodes_Character_References_Only_Once()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<textarea>&#38;amp;</textarea>",
+            DocsLiquidContext.Empty,
+            "<textarea>&amp;amp;</textarea>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Handles_Many_Invalid_Named_Entity_Prefixes_In_Linear_Time()
+    {
+        var invalidReferences = string.Concat(Enumerable.Repeat("&not-an-entity ", 10_000));
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{invalidReferences}<!-- old -->",
+            DocsLiquidContext.Empty,
+            $"{invalidReferences}<!-- new -->",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_NonBreaking_Space_Differences()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "a b",
+            DocsLiquidContext.Empty,
+            "a\u00A0b",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Collapses_Whitespace_Inside_Inline_Code()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "`a  b`",
+            DocsLiquidContext.Empty,
+            "`a b`",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Differences_Inside_Fenced_Code()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "```\na  b\n```",
+            DocsLiquidContext.Empty,
+            "```\na b\n```",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Treats_Br_As_A_Collapsible_Whitespace_Boundary()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<span>a<br> b</span>",
+            DocsLiquidContext.Empty,
+            "<span>a<br>b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Differences_Inside_Raw_Html_Attributes()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<input value="a  b">""",
+            DocsLiquidContext.Empty,
+            """<input value="a b">""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_When_Inline_Style_Disables_Collapsing()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Decodes_Html_References_Before_Parsing_Inline_Styles()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space&#58;pre">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space&#58;pre">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_When_Inline_Style_Contains_Css_Comments()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre /* keep */">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre /* keep */">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("""--note: '; white-space: normal;'""")]
+    [InlineData("""--note: token(; white-space: normal;)""")]
+    public void Ignores_Css_Declaration_Separators_Inside_Values(string customProperty)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"""<span style="white-space: pre; {customProperty}">a  b</span>""",
+            DocsLiquidContext.Empty,
+            $"""<span style="white-space: pre; {customProperty}">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Reads_Slashes_Inside_Unquoted_Html_Attribute_Values()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style=background:url(/x);white-space:pre>a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style=background:url(/x);white-space:pre>a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("normal")]
+    [InlineData("nowrap")]
+    [InlineData("wrap collapse")]
+    [InlineData("nowrap collapse")]
+    public void Collapses_Whitespace_For_Collapsing_Inline_Styles(string whiteSpace)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"""<span style="white-space: {whiteSpace}">a  b</span>""",
+            DocsLiquidContext.Empty,
+            $"""<span style="white-space: {whiteSpace}">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Applies_Important_To_Recognized_WhiteSpace_Value()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: normal !important">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: normal !important">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("""<span style="white-space-collapse: preserve">a  b</span>""")]
+    [InlineData("""<span style="white-space: preserve">a  b</span>""")]
+    [InlineData("""<span style="white-space: preserve    nowrap">a  b</span>""")]
+    [InlineData("<span style=\"white-space: preserve\tnowrap\">a  b</span>")]
+    [InlineData("""<span style="white-space: nowrap preserve">a  b</span>""")]
+    [InlineData("""<span style="white-space: wrap preserve">a  b</span>""")]
+    [InlineData("""<span style="white-space: break-spaces nowrap">a  b</span>""")]
+    [InlineData("""<span style="white-space: nowrap break-spaces">a  b</span>""")]
+    [InlineData("""<span style="white-space: wrap break-spaces">a  b</span>""")]
+    [InlineData("""<span style="--mode: pre; white-space: var(--mode)">a  b</span>""")]
+    public void Preserves_Whitespace_For_Longhand_Or_Computed_Css(string before)
+    {
+        var after = before.Replace("a  b", "a b", StringComparison.Ordinal);
+
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Ignores_Invalid_WhiteSpaceCollapse_Value()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<pre style="white-space-collapse: nowrap">a  b</pre>""",
+            DocsLiquidContext.Empty,
+            """<pre style="white-space-collapse: nowrap">a b</pre>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Important_WhiteSpace_Declaration_Beats_Later_NonImportant_Declaration()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre !important; white-space: normal">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre !important; white-space: normal">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Later_Important_WhiteSpace_Declaration_Wins()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre !important; white-space: normal !important">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre !important; white-space: normal !important">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Ignores_Invalid_WhiteSpace_Value()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<pre style="white-space: normal-invalid">a  b</pre>""",
+            DocsLiquidContext.Empty,
+            """<pre style="white-space: normal-invalid">a b</pre>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Line_Breaks_But_Collapses_Spaces_For_PreLine()
+    {
+        var spaces = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre-line">a  b</span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre-line">a b</span>""",
+            DocsLiquidContext.Empty);
+        var lineBreak = DocsVersionImpactAnalyzer.Analyze(
+            "<span style=\"white-space: pre-line\">a\r\nb</span>",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre-line">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(spaces);
+        Assert.Equal(DocsVersionCatalog.All.Count, lineBreak.Count);
+    }
+
+    [Theory]
+    [InlineData("preserve-breaks")]
+    [InlineData("preserve-breaks nowrap")]
+    [InlineData("nowrap preserve-breaks")]
+    [InlineData("wrap preserve-breaks")]
+    public void Preserves_Line_Breaks_But_Collapses_Spaces_For_Modern_PreserveBreaks(
+        string whiteSpace)
+    {
+        var spaces = DocsVersionImpactAnalyzer.Analyze(
+            $"""<span style="white-space: {whiteSpace}">a  b</span>""",
+            DocsLiquidContext.Empty,
+            $"""<span style="white-space: {whiteSpace}">a b</span>""",
+            DocsLiquidContext.Empty);
+        var lineBreak = DocsVersionImpactAnalyzer.Analyze(
+            $"<span style=\"white-space: {whiteSpace}\">a\r\nb</span>",
+            DocsLiquidContext.Empty,
+            $"""<span style="white-space: {whiteSpace}">a b</span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(spaces);
+        Assert.Equal(DocsVersionCatalog.All.Count, lineBreak.Count);
+    }
+
+    [Fact]
+    public void Still_Collapses_Unrelated_Text_When_Page_Contains_Preformatted_Style()
+    {
+        const string fixedSpan = """<span style="white-space: pre">fixed</span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{fixedSpan}\n\nSame text.",
+            DocsLiquidContext.Empty,
+            $"{fixedSpan}\n\nSame  text.",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_When_A_Stylesheet_May_Apply_WhiteSpace_Rules()
+    {
+        const string style = "<style>.preserve { white-space: pre }</style>";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{style}<span class=\"preserve\">a  b</span>",
+            DocsLiquidContext.Empty,
+            $"{style}<span class=\"preserve\">a b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Collapses_Whitespace_When_A_NonStylesheet_Link_Is_Present()
+    {
+        const string link = """<link rel="icon" href="icon.png">""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{link}<span>a  b</span>",
+            DocsLiquidContext.Empty,
+            $"{link}<span>a b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_When_A_Linked_Stylesheet_May_Apply_Rules()
+    {
+        const string link = """<link rel="alternate stylesheet" href="theme.css">""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{link}<span>a  b</span>",
+            DocsLiquidContext.Empty,
+            $"{link}<span>a b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("<!-- <style> -->")]
+    [InlineData("<textarea><style></textarea>")]
+    [InlineData("""<xmp><link rel="stylesheet" href="theme.css"></xmp>""")]
+    public void Ignores_StylesheetLooking_Text_Outside_Html_Tag_Context(string hiddenMarkup)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"Same  text.\n{hiddenMarkup}",
+            DocsLiquidContext.Empty,
+            $"Same text.\n{hiddenMarkup}",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Ignores_MathMl_Style_Element_For_Global_Whitespace_Preservation()
+    {
+        const string math = "<math><style>same</style></math>";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"Same  text.\n{math}",
+            DocsLiquidContext.Empty,
+            $"Same text.\n{math}",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Ignores_Stylesheets_Inside_Template_Content()
+    {
+        const string template = "<template><style>.preserve { white-space: pre }</style></template>";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{template}<span>a  b</span>",
+            DocsLiquidContext.Empty,
+            $"{template}<span>a b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Honors_Nested_WhiteSpace_Overrides()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<div style="white-space: normal"><span style="white-space: pre">a  b</span></div>""",
+            DocsLiquidContext.Empty,
+            """<div style="white-space: normal"><span style="white-space: pre">a b</span></div>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Collapses_Whitespace_Across_Adjacent_Inline_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<span>a </span><span>b</span>",
+            DocsLiquidContext.Empty,
+            "<span>a</span><span> b</span>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData(
+        """<span style="background:red">a </span><span>b</span>""",
+        """<span style="background:red">a</span><span> b</span>""")]
+    [InlineData(
+        """<span>a </span><span style="background:red">b</span>""",
+        """<span>a</span><span style="background:red"> b</span>""")]
+    public void Preserves_Whitespace_Ownership_Across_Styled_Inline_Boundaries(
+        string before,
+        string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("title", "tip")]
+    [InlineData("dir", "rtl")]
+    public void Preserves_Whitespace_Ownership_Across_Attributed_Inline_Boundaries(
+        string attributeName,
+        string attributeValue)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"""<span {attributeName}="{attributeValue}">A </span>B""",
+            DocsLiquidContext.Empty,
+            $"""<span {attributeName}="{attributeValue}">A</span> B""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Ownership_Across_Inline_Code_Boundaries()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<code>A </code>B",
+            DocsLiquidContext.Empty,
+            "<code>A</code> B",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Ownership_Across_Link_Boundaries()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<a href="x">A </a>B""",
+            DocsLiquidContext.Empty,
+            """<a href="x">A</a> B""",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_Ownership_Across_Button_Boundaries()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<button>A </button>B",
+            DocsLiquidContext.Empty,
+            "<button>A</button> B",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_After_Empty_Inline_Controls()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<button></button>X",
+            DocsLiquidContext.Empty,
+            "<button></button> X",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_After_Empty_Styled_Inline_Box()
+    {
+        const string box = """<span style="display:inline-block;width:1em"></span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{box} X",
+            DocsLiquidContext.Empty,
+            $"{box}X",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Whitespace_After_Empty_Inline_Box_With_Physical_Padding()
+    {
+        const string box = """<span style="padding-left:1em"></span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{box} X",
+            DocsLiquidContext.Empty,
+            $"{box}X",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Theory]
+    [InlineData("display:none")]
+    [InlineData("display:inline")]
+    [InlineData("padding-left:0")]
+    [InlineData("padding-left:1em;padding-left:0")]
+    [InlineData("padding-left:0!important;padding-left:1em")]
+    public void Collapses_Whitespace_After_Empty_Nonrendering_Styled_Inline_Element(string style)
+    {
+        var span = $"""<span style="{style}"></span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{span} X",
+            DocsLiquidContext.Empty,
+            $"{span}X",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Collapses_Leading_Whitespace_After_Empty_Nonvisual_Inline_Element()
+    {
+        const string span = """<span title="tip"></span>""";
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"{span} X",
+            DocsLiquidContext.Empty,
+            $"{span}X",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("strong")]
+    [InlineData("em")]
+    [InlineData("del")]
+    [InlineData("mark")]
+    [InlineData("sub")]
+    [InlineData("sup")]
+    public void Preserves_Whitespace_Ownership_Across_Semantic_Inline_Boundaries(
+        string tagName)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            $"<{tagName}>A </{tagName}>B",
+            DocsLiquidContext.Empty,
+            $"<{tagName}>A</{tagName}> B",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Stops_Analysis_When_Cancelled()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            DocsVersionImpactAnalyzer.AnalyzeCancellable(
+                "Before.",
+                DocsLiquidContext.Empty,
+                "After.",
+                DocsLiquidContext.Empty,
+                beforeRepoPath: null,
+                afterRepoPath: null,
+                cancellationToken: cancellation.Token));
+    }
+
+    [Fact]
+    public void Stops_Detailed_Analysis_When_Cancelled()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            DocsVersionImpactAnalyzer.AnalyzeDetailsCancellable(
+                "Before.",
+                DocsLiquidContext.Empty,
+                "After.",
+                DocsLiquidContext.Empty,
+                beforeRepoPath: null,
+                afterRepoPath: null,
+                cancellation.Token));
+    }
+
+    [Fact]
+    public void Ignores_Collapsible_Whitespace_After_Summary_Block()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<details><summary>Title</summary>\nBody</details>",
+            DocsLiquidContext.Empty,
+            "<details><summary>Title</summary>Body</details>",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Preserves_Prompt_Whitespace_That_Changes_The_Copilot_Link()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "{% prompt %}Explain  this{% endprompt %}",
+            DocsLiquidContext.Empty,
+            "{% prompt %}Explain this{% endprompt %}",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Equates_Concatenated_And_Separate_Table_Row_Fragments()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "`issue` | `object` | The issue itself. || `assignee` | `object` | The optional user.",
+            DocsLiquidContext.Empty,
+            "`issue` | `object` | The issue itself. |\n`assignee` | `object` | The optional user. |",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Fact]
+    public void Ignores_Comments_Inside_Styled_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            """<span style="white-space: pre"><!-- old --></span>""",
+            DocsLiquidContext.Empty,
+            """<span style="white-space: pre"><!-- new --></span>""",
+            DocsLiquidContext.Empty);
+
+        Assert.Empty(affected);
+    }
+
+    [Theory]
+    [InlineData("""<input value="<!-- old -->">""", """<input value="<!-- new -->">""")]
+    [InlineData("<textarea><!-- old --></textarea>", "<textarea><!-- new --></textarea>")]
+    public void Preserves_Comment_Syntax_In_Html_Text_And_Attributes(string before, string after)
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            before,
+            DocsLiquidContext.Empty,
+            after,
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Preserves_Comment_Syntax_In_Title_Text()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<title><!-- old --></title>",
+            DocsLiquidContext.Empty,
+            "<title><!-- new --></title>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Restores_Nested_Whitespace_Sensitive_Elements()
+    {
+        var affected = DocsVersionImpactAnalyzer.Analyze(
+            "<pre><textarea><!-- old --></textarea></pre>",
+            DocsLiquidContext.Empty,
+            "<pre><textarea><!-- new --></textarea></pre>",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, affected.Count);
+    }
+
+    [Fact]
+    public void Reports_Rendering_Change_When_Indented_Code_Becomes_Paragraph()
+    {
+        var details = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            "    code",
+            DocsLiquidContext.Empty,
+            "code",
+            DocsLiquidContext.Empty);
+
+        Assert.Equal(DocsVersionCatalog.All.Count, details.Count);
+        Assert.All(details, detail => Assert.NotEmpty(detail.Changes));
     }
 
     [Fact]

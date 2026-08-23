@@ -49,8 +49,7 @@ public sealed partial class DocsWorktreeManager
         _processCleaner = processCleaner;
     }
 
-    public bool IsEnabled => !string.IsNullOrWhiteSpace(_options.BareCloneDir)
-        && !string.IsNullOrWhiteSpace(_options.CloneUrl);
+    public bool IsEnabled => _options.IsEnabled;
 
     /// <summary>
     /// Creates the bare clone if it does not yet exist. Idempotent.

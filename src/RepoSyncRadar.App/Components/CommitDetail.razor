@@ -186,6 +186,29 @@
                 }
             </div>
         </div>
+        @if (_markdownChangeAnalysisHasFailures)
+        {
+            <div class="file-change-analysis-feedback"
+                 aria-busy="@(_markdownChangeAnalysisIsRetrying ? "true" : "false")">
+                <span data-testid="commit-detail-file-change-analysis-status"
+                      role="status"
+                      aria-live="polite"
+                      aria-atomic="true">@_markdownChangeAnalysisStatus</span>
+                <button type="button"
+                        class="file-change-analysis-retry"
+                        data-testid="commit-detail-file-change-analysis-retry"
+                        aria-disabled="@(_markdownChangeAnalysisIsRetrying ? "true" : "false")"
+                        @onclick="RetryMarkdownChangeSummaryAnalysis">@L["CommitDetail.FileChange.RetryAnalysis"]</button>
+            </div>
+        }
+        else
+        {
+            <span class="file-change-visually-hidden"
+                  data-testid="commit-detail-file-change-analysis-status"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true">@_markdownChangeAnalysisStatus</span>
+        }
         <ul class="files">
             @foreach (var file in Commit.Files)
             {
@@ -208,19 +231,37 @@
                     <div class="file-change-meta">
                         <span class="stats"
                               data-testid="commit-detail-stats-@file.Path">@FormatStats(file)</span>
-                        @if (IsRenamedFile(file))
-                        {
+                        @{
                             _markdownChangeSummariesByFile.TryGetValue(file.Path, out var changeSummary);
-                            <span class="file-change-summary"
-                                  data-testid="commit-detail-file-change-summary"
-                                  title="@BuildRenameTitle(changeSummary)">
-                                <span class="file-change-badge file-change-badge-rename">@L["CommitDetail.FileChange.Renamed"]</span>
+                            var showChangeSummary = IsRenamedFile(file)
+                                || changeSummary is { HasRenderedBodyChanges: false };
+                        }
+                        <span class="file-change-summary"
+                              data-testid="commit-detail-file-change-summary"
+                              title="@(showChangeSummary ? BuildFileChangeTitle(file, changeSummary).Value : null)">
+                            @if (showChangeSummary)
+                            {
+                                @if (IsRenamedFile(file))
+                                {
+                                    <span class="file-change-badge file-change-badge-rename">@L["CommitDetail.FileChange.Renamed"]</span>
+                                }
                                 @if (changeSummary is { HasRenderedBodyChanges: false })
                                 {
                                     <span class="file-change-badge file-change-badge-no-body">@L["CommitDetail.FileChange.NoBodyChanges"]</span>
+                                    @if (changeSummary.SourceChange is { } sourceChange)
+                                    {
+                                        <span class="file-change-badge file-change-badge-source">@BuildSourceChangeLabel(sourceChange.Kind)</span>
+                                        <span class="file-change-description"
+                                              data-testid="commit-detail-source-change">
+                                            <code>@DisplaySourceValue(sourceChange.Before)</code>
+                                            <span class="file-change-visually-hidden">@L["CommitDetail.FileChange.ChangedTo"]</span>
+                                            <span aria-hidden="true">→</span>
+                                            <code>@DisplaySourceValue(sourceChange.After)</code>
+                                        </span>
+                                    }
                                 }
-                            </span>
-                        }
+                            }
+                        </span>
                     </div>
                     <div class="preview-file-action">
                         @if (canOpenPreview)
@@ -359,6 +400,9 @@
     private CancellationTokenSource? _predictivePrewarmCts;
     private CancellationTokenSource? _predictiveFilePrewarmCts;
     private CancellationTokenSource? _markdownChangeSummaryCts;
+    private string? _markdownChangeAnalysisStatus;
+    private bool _markdownChangeAnalysisHasFailures;
+    private bool _markdownChangeAnalysisIsRetrying;
     private string? _predictiveFilePrewarmPath;
     private string? _historyForSha;
     private IReadOnlyList<CommitHistoryTimelineEntry> _historyEntries = [];
@@ -478,6 +522,9 @@
             _reusableReferencePathsByFile.Clear();
             _selectedReusableReferenceByFile.Clear();
             _markdownChangeSummariesByFile.Clear();
+            _markdownChangeAnalysisStatus = null;
+            _markdownChangeAnalysisHasFailures = false;
+            _markdownChangeAnalysisIsRetrying = false;
             _resolvedForSha = null;
             _activePreviewSha = null;
             CancelCurrentPreviewOperation();
@@ -500,6 +547,9 @@
             _reusableReferencePathsByFile.Clear();
             _selectedReusableReferenceByFile.Clear();
             _markdownChangeSummariesByFile.Clear();
+            _markdownChangeAnalysisStatus = null;
+            _markdownChangeAnalysisHasFailures = false;
+            _markdownChangeAnalysisIsRetrying = false;
             CancelPredictiveFilePrewarm();
             StartPredictivePrewarm(Commit);
             StartMarkdownChangeSummaryAnalysis(Commit);
@@ -525,19 +575,30 @@
         _resolvedForSha = Commit.Sha;
     }
 
-    private void StartMarkdownChangeSummaryAnalysis(Commit commit)
+    private void StartMarkdownChangeSummaryAnalysis(
+        Commit commit,
+        bool preserveFailureFeedback = false)
     {
         CancelMarkdownChangeSummaryAnalysis();
-        if (Services.GetService<IPreviewCoordinator>() is not { } coordinator)
+        if (!preserveFailureFeedback)
         {
+            _markdownChangeAnalysisStatus = null;
+            _markdownChangeAnalysisHasFailures = false;
+            _markdownChangeAnalysisIsRetrying = false;
+        }
+        if (Services.GetService<IPreviewCoordinator>() is not { } coordinator
+            || Services.GetService<IOptions<DocsRepositoryOptions>>()?.Value.IsEnabled != true)
+        {
+            _markdownChangeAnalysisIsRetrying = false;
             return;
         }
 
-        var renamedMarkdownFiles = commit.Files
-            .Where(static file => IsRenamedFile(file) && PreviewPathMapper.IsMarkdown(file.Path))
+        var markdownFiles = commit.Files
+            .Where(static file => PreviewPathMapper.IsMarkdown(file.Path))
             .ToArray();
-        if (renamedMarkdownFiles.Length == 0)
+        if (markdownFiles.Length == 0)
         {
+            _markdownChangeAnalysisIsRetrying = false;
             return;
         }
 
@@ -545,7 +606,7 @@
         _ = AnalyzeMarkdownChangesAsync(
             coordinator,
             commit,
-            renamedMarkdownFiles,
+            markdownFiles,
             _markdownChangeSummaryCts.Token);
     }
 
@@ -557,44 +618,90 @@
     {
         try
         {
-            var results = new MarkdownFileChangeSummary?[files.Count];
-            await Parallel.ForEachAsync(
-                Enumerable.Range(0, files.Count),
-                new ParallelOptions
+            var nextFileIndex = -1;
+            var successfulAnalysisCount = 0;
+            async Task AnalyzeNextFilesAsync()
+            {
+                while (true)
                 {
-                    CancellationToken = cancellationToken,
-                    MaxDegreeOfParallelism = MaxConcurrentMarkdownChangeAnalyses,
-                },
-                async (index, token) =>
-                {
-                    var file = files[index];
-                    results[index] = await coordinator.AnalyzeMarkdownFileChangeAsync(
-                    commit.PrNumber,
-                    commit.Sha,
-                    file.Path,
-                    token);
-                });
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var fileIndex = Interlocked.Increment(ref nextFileIndex);
+                    if (fileIndex >= files.Count)
+                    {
+                        return;
+                    }
+
+                    var file = files[fileIndex];
+                    var summary = await coordinator.AnalyzeMarkdownFileChangeAsync(
+                        commit.PrNumber,
+                        commit.Sha,
+                        file.Path,
+                        cancellationToken);
+                    if (summary is null)
+                    {
+                        continue;
+                    }
+                    Interlocked.Increment(ref successfulAnalysisCount);
+                    if (!ShouldPublishMarkdownChangeSummary(summary))
+                    {
+                        continue;
+                    }
+
+                    await InvokeAsync(() =>
+                    {
+                        if (!cancellationToken.IsCancellationRequested
+                            && string.Equals(Commit?.Sha, commit.Sha, StringComparison.Ordinal))
+                        {
+                            _markdownChangeSummariesByFile[file.Path] = summary;
+                            StateHasChanged();
+                        }
+                    });
+                }
+            }
+
+            var workerCount = Math.Min(MaxConcurrentMarkdownChangeAnalyses, files.Count);
+            await Task.WhenAll(Enumerable.Range(0, workerCount).Select(_ => AnalyzeNextFilesAsync()));
             cancellationToken.ThrowIfCancellationRequested();
             await InvokeAsync(() =>
             {
-                if (!string.Equals(Commit?.Sha, commit.Sha, StringComparison.Ordinal))
+                if (!cancellationToken.IsCancellationRequested
+                    && string.Equals(Commit?.Sha, commit.Sha, StringComparison.Ordinal))
                 {
-                    return;
-                }
-
-                for (var index = 0; index < results.Length; index++)
-                {
-                    if (results[index] is { } summary)
+                    _markdownChangeAnalysisStatus = successfulAnalysisCount switch
                     {
-                        _markdownChangeSummariesByFile[files[index].Path] = summary;
-                    }
+                        0 => L[
+                            "CommitDetail.FileChange.AnalysisUnavailable",
+                            files.Count],
+                        _ when successfulAnalysisCount < files.Count => L[
+                            "CommitDetail.FileChange.AnalysisPartiallyCompleted",
+                            successfulAnalysisCount,
+                            files.Count],
+                        _ => L[
+                            "CommitDetail.FileChange.AnalysisCompleted",
+                            files.Count],
+                    };
+                    _markdownChangeAnalysisHasFailures = successfulAnalysisCount < files.Count;
+                    _markdownChangeAnalysisIsRetrying = false;
+                    StateHasChanged();
                 }
-                StateHasChanged();
             });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
+    }
+
+    private void RetryMarkdownChangeSummaryAnalysis()
+    {
+        if (Commit is null || _markdownChangeAnalysisIsRetrying)
+        {
+            return;
+        }
+
+        _markdownChangeSummariesByFile.Clear();
+        _markdownChangeAnalysisIsRetrying = true;
+        _markdownChangeAnalysisStatus = L["CommitDetail.FileChange.AnalysisRetrying"];
+        StartMarkdownChangeSummaryAnalysis(Commit, preserveFailureFeedback: true);
     }
 
     private void CancelMarkdownChangeSummaryAnalysis()
@@ -618,10 +725,77 @@
     private static bool IsRenamedFile(CommitFile file)
         => string.Equals(file.Status, "renamed", StringComparison.OrdinalIgnoreCase);
 
-    private LocalizedString BuildRenameTitle(MarkdownFileChangeSummary? summary)
-        => summary?.PreviousPath is { Length: > 0 } previousPath
-            ? L["CommitDetail.FileChange.RenamedFrom", previousPath]
-            : L["CommitDetail.FileChange.Renamed"];
+    internal static bool ShouldPublishMarkdownChangeSummary(MarkdownFileChangeSummary summary)
+        => summary.IsRenamed || !summary.HasRenderedBodyChanges;
+
+    private LocalizedString BuildFileChangeTitle(CommitFile file, MarkdownFileChangeSummary? summary)
+    {
+        if (IsRenamedFile(file))
+        {
+            return summary?.PreviousPath is { Length: > 0 } previousPath
+                ? L["CommitDetail.FileChange.RenamedFrom", previousPath]
+                : L["CommitDetail.FileChange.Renamed"];
+        }
+
+        return summary?.SourceChange is { } sourceChange
+            ? L[
+                "CommitDetail.FileChange.SourceDetail",
+                BuildSourceChangeLabel(sourceChange.Kind),
+                DisplaySourceValue(sourceChange.Before),
+                DisplaySourceValue(sourceChange.After)]
+            : L["CommitDetail.FileChange.NoBodyChanges"];
+    }
+
+    private LocalizedString BuildSourceChangeLabel(MarkdownSourceChangeKind kind)
+        => kind switch
+        {
+            MarkdownSourceChangeKind.LiquidVariableReference => L["CommitDetail.FileChange.LiquidVariableReference"],
+            MarkdownSourceChangeKind.Frontmatter => L["CommitDetail.FileChange.Frontmatter"],
+            _ => L["CommitDetail.FileChange.SourceOnly"],
+        };
+
+    private LocalizedString DisplaySourceValue(string? value)
+        => value is null
+            ? L["CommitDetail.FileChange.MissingValue"]
+            : value.Length == 0
+            ? L["CommitDetail.FileChange.EmptyValue"]
+            : string.IsNullOrWhiteSpace(value)
+            ? DisplayWhitespaceValue(value)
+            : new LocalizedString(value, value);
+
+    private LocalizedString DisplayWhitespaceValue(string value)
+    {
+        var spaces = 0;
+        var tabs = 0;
+        var lineBreaks = 0;
+        var other = 0;
+        for (var index = 0; index < value.Length; index++)
+        {
+            switch (value[index])
+            {
+                case ' ':
+                    spaces++;
+                    break;
+                case '\t':
+                    tabs++;
+                    break;
+                case '\r':
+                    lineBreaks++;
+                    if (index + 1 < value.Length && value[index + 1] == '\n')
+                    {
+                        index++;
+                    }
+                    break;
+                case '\n':
+                    lineBreaks++;
+                    break;
+                default:
+                    other++;
+                    break;
+            }
+        }
+        return L["CommitDetail.FileChange.WhitespaceValue", spaces, tabs, lineBreaks, other];
+    }
 
     private async Task LoadHistoryAsync(Commit commit)
     {

@@ -477,6 +477,46 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Frontmatter_Diff_Analyzer_Handles_Large_Rewrites_In_Linear_Memory()
+    {
+        var before = $"---\n{string.Join('\n', Enumerable.Range(0, 10_000).Select(static index => $"before-{index}: value"))}\n---";
+        var after = $"---\n{string.Join('\n', Enumerable.Range(0, 10_000).Select(static index => $"after-{index}: value"))}\n---";
+
+        var changes = MarkdownFrontmatterDiffAnalyzer.Analyze(before, after);
+
+        Assert.Equal(10_000, changes.Count);
+        Assert.Equal("before-0: value", changes[0].BeforeLine);
+        Assert.Equal("after-0: value", changes[0].AfterLine);
+        Assert.Equal("before-9999: value", changes[^1].BeforeLine);
+        Assert.Equal("after-9999: value", changes[^1].AfterLine);
+    }
+
+    [Fact]
+    public void Frontmatter_Diff_Analyzer_Reports_Complete_Large_Moves()
+    {
+        var lines = Enumerable.Range(0, 1_000).Select(static index => $"line-{index}: value").ToArray();
+        var before = $"---\n{string.Join('\n', lines)}\n---";
+        var after = $"---\n{string.Join('\n', lines.Skip(1).Append(lines[0]))}\n---";
+
+        var changes = MarkdownFrontmatterDiffAnalyzer.Analyze(before, after);
+
+        Assert.Collection(
+            changes,
+            change =>
+            {
+                Assert.Equal(DocsVersionChangeKind.Removed, change.Kind);
+                Assert.Equal("line-0: value", change.BeforeLine);
+                Assert.Null(change.AfterLine);
+            },
+            change =>
+            {
+                Assert.Equal(DocsVersionChangeKind.Added, change.Kind);
+                Assert.Null(change.BeforeLine);
+                Assert.Equal("line-0: value", change.AfterLine);
+            });
+    }
+
+    [Fact]
     public void Strips_Frontmatter_Block_From_Body()
     {
         var markdown = """
@@ -2288,6 +2328,338 @@ var value = 1;
         Assert.Contains("img,video{max-width:100%;height:auto;}", html, StringComparison.Ordinal);
         Assert.DoesNotContain("src=\"/assets/images", html, StringComparison.Ordinal);
         Assert.DoesNotContain("srcset=\"/assets/images", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Rewrite_Asset_Syntax_Inside_Code()
+    {
+        const string markdown = """
+            Inline `<img src=images/inline.png>`.
+
+            ```html
+            <img src=images/fenced.png>
+            ```
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains("&lt;img src=images/inline.png&gt;", html, StringComparison.Ordinal);
+        Assert.Contains("images/fenced.png", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("/markdown-assets/after/content/code-security/images/", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rewrites_Only_Real_Attributes_Outside_Raw_Text()
+    {
+        const string renderedHtml = """
+            <img alt="example src=images/in-alt.png" data-note="poster=images/in-data.png" src=images/actual.png>
+            <a title="href=other.md" href=guide.md>Guide</a>
+            <iframe><img src=images/in-iframe.png></iframe>
+            """;
+
+        var html = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            renderedHtml,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/in-alt.png", html, StringComparison.Ordinal);
+        Assert.Contains("poster=images/in-data.png", html, StringComparison.Ordinal);
+        Assert.Contains("href=other.md", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "src=/markdown-assets/content/code-security/images/actual.png",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "href=/markdown-links/content/code-security/guide.md",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains("<img src=images/in-iframe.png>", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("<textarea/><img src=images/in-textarea.png>")]
+    [InlineData("<xmp/><img src=images/in-xmp.png>")]
+    [InlineData("<plaintext><img src=images/in-plaintext.png>")]
+    [InlineData("<plaintext></plaintext><img src=images/still-in-plaintext.png>")]
+    public void Does_Not_Rewrite_References_After_Nonvoid_Raw_Text_Start(string html)
+    {
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Equal(html, rewritten);
+    }
+
+    [Fact]
+    public void Rewrites_Reference_After_SelfClosing_Foreign_Title()
+    {
+        const string html = "<svg><title/></svg><img src=images/after-svg.png>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains(
+            "src=/markdown-assets/content/code-security/images/after-svg.png",
+            rewritten,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""<div src="images/file.png"></div>""")]
+    [InlineData("""<div poster="images/file.png"></div>""")]
+    [InlineData("""<div srcset="images/file.png 1x"></div>""")]
+    public void Does_Not_Rewrite_Url_Attributes_Unsupported_By_The_Element(string html)
+    {
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Equal(html, rewritten);
+    }
+
+    [Fact]
+    public void Rewrites_Area_Href_For_Comparison()
+    {
+        const string html = "<map><area href=guides/next.md></map>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains(
+            "href=/markdown-links/content/code-security/guides/next.md",
+            rewritten,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_Not_Rewrite_Area_Href_In_Svg_Namespace()
+    {
+        const string html = "<svg><area href=guides/next.md></area></svg>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Equal(html, rewritten);
+    }
+
+    [Fact]
+    public void Rewrites_Reference_After_SolidusTerminated_Raw_Text_End_Tag()
+    {
+        const string html =
+            "<textarea/>literal <img src=images/in-textarea.png></textarea/><img src=images/after-textarea.png>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/in-textarea.png", rewritten, StringComparison.Ordinal);
+        Assert.Contains(
+            "src=/markdown-assets/content/code-security/images/after-textarea.png",
+            rewritten,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("svg", "foreignObject")]
+    [InlineData("svg", "desc")]
+    [InlineData("math", "mtext")]
+    public void Honors_Html_Parsing_Inside_Foreign_Integration_Points(
+        string foreignRoot,
+        string integrationPoint)
+    {
+        var html = $"<{foreignRoot}><{integrationPoint}><textarea/>"
+            + "<img src=images/in-textarea.png></textarea>"
+            + "<img src=images/after-textarea.png>"
+            + $"</{integrationPoint}></{foreignRoot}>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/in-textarea.png", rewritten, StringComparison.Ordinal);
+        Assert.Contains(
+            "src=/markdown-assets/content/code-security/images/after-textarea.png",
+            rewritten,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Honors_Html_Breakout_Tag_Inside_Foreign_Content()
+    {
+        const string html =
+            "<svg><g><p><textarea/><img src=images/in-textarea.png></textarea></p></g></svg>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/in-textarea.png", rewritten, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Foreign_Breakout_Retains_IntegrationPoint_Ancestor()
+    {
+        const string html =
+            "<svg><foreignObject><svg><p></p></foreignObject><style><img src=images/real-image.png></style></svg>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains(
+            "src=/markdown-assets/content/code-security/images/real-image.png",
+            rewritten,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Foreign_EndTag_Does_Not_Pop_Through_Html_Scope_Barrier()
+    {
+        const string html =
+            "<svg><foreignObject><p></foreignObject><style><img src=images/not-an-image.png></style></svg>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/not-an-image.png", rewritten, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Nested_Foreign_Root_Name_Inherits_Parent_Namespace()
+    {
+        const string html =
+            "<math><mrow><svg><title><textarea/><img src=images/real-image.png></title></svg></mrow></math>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains(
+            "src=/markdown-assets/content/code-security/images/real-image.png",
+            rewritten,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Html_Child_Does_Not_Pop_SameNamed_Foreign_Integration_Point()
+    {
+        const string html =
+            "<math><mtext><mtext></mtext><textarea/><img src=images/in-textarea.png></textarea></mtext></math>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/in-textarea.png", rewritten, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("text/html", false)]
+    [InlineData("application/xhtml+xml", false)]
+    [InlineData("text/html bogus", true)]
+    public void Requires_Exact_AnnotationXml_Html_Encoding(
+        string encoding,
+        bool expectsRewrite)
+    {
+        var html = $"""<math><annotation-xml encoding="{encoding}"><textarea/><img src=images/candidate.png></annotation-xml></math>""";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Equal(
+            expectsRewrite,
+            rewritten.Contains("/markdown-assets/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Svg_Child_Of_NonHtml_AnnotationXml_Uses_Svg_Namespace()
+    {
+        const string html =
+            """<math><annotation-xml encoding="application/xml"><svg><foreignObject><textarea/><img src=images/in-textarea.png></textarea></foreignObject></svg></annotation-xml></math>""";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/in-textarea.png", rewritten, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Foreign_Special_Element_Blocks_Outer_Foreign_EndTag()
+    {
+        const string html =
+            "<svg><foreignObject><span></svg></span></foreignObject><textarea/><img src=images/real-image.png></textarea></svg>";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains(
+            "src=/markdown-assets/content/code-security/images/real-image.png",
+            rewritten,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Foreign_EndTag_Pops_Through_Foreign_Special_Element()
+    {
+        const string html =
+            """<math><annotation-xml encoding="application/xml"></math><textarea><img src=images/not-an-image.png></textarea>""";
+
+        var rewritten = MarkdownPreviewRenderer.RewriteLocalReferencesForComparison(
+            html,
+            "content/code-security/page.md");
+
+        Assert.Contains("src=images/not-an-image.png", rewritten, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rewrites_Relative_Candidate_In_Mixed_Data_SrcSet()
+    {
+        const string markdown =
+            """<img srcset="data:image/png;base64,AAAA 1x, images/diagram.png 2x">""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(
+            "srcset=\"data:image/png;base64,AAAA 1x, /markdown-assets/after/content/code-security/images/diagram.png 2x\"",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(
+        "data:image/png;base64,AAAA future(foo(bar), images/diagram.png 2x",
+        "/markdown-assets/after/content/code-security/images/diagram.png 2x")]
+    [InlineData(
+        "images/\u00a0file.png 1x",
+        "/markdown-assets/after/content/code-security/images/%C2%A0file.png 1x")]
+    public void Rewrites_SrcSet_Using_Browser_Tokenization(string srcset, string expected)
+    {
+        var markdown = $"""<img srcset="{srcset}">""";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/code-security/page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(expected, html, StringComparison.Ordinal);
     }
 
     [Fact]

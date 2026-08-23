@@ -113,9 +113,22 @@
   <data name="CommitDetail.DetailedAnalysis" xml:space="preserve"><value>根拠・影響・確認観点</value></data>
   <data name="CommitDetail.Empty" xml:space="preserve"><value>コミットを選択してください。</value></data>
   <data name="CommitDetail.Files" xml:space="preserve"><value>ファイル</value></data>
+  <data name="CommitDetail.FileChange.ChangedTo" xml:space="preserve"><value>変更後:</value></data>
+  <data name="CommitDetail.FileChange.AnalysisCompleted" xml:space="preserve"><value>Markdown ファイル {0} 件の変更理由の解析が完了しました</value></data>
+  <data name="CommitDetail.FileChange.AnalysisPartiallyCompleted" xml:space="preserve"><value>Markdown ファイル {1} 件中 {0} 件の変更理由を解析しました。残りは利用できませんでした</value></data>
+  <data name="CommitDetail.FileChange.AnalysisUnavailable" xml:space="preserve"><value>Markdown ファイル {0} 件の変更理由を解析できませんでした</value></data>
+  <data name="CommitDetail.FileChange.RetryAnalysis" xml:space="preserve"><value>再試行</value></data>
+  <data name="CommitDetail.FileChange.AnalysisRetrying" xml:space="preserve"><value>Markdown の変更理由を再解析しています</value></data>
+  <data name="CommitDetail.FileChange.EmptyValue" xml:space="preserve"><value>（空白）</value></data>
+  <data name="CommitDetail.FileChange.Frontmatter" xml:space="preserve"><value>フロントマター変更</value></data>
+  <data name="CommitDetail.FileChange.LiquidVariableReference" xml:space="preserve"><value>Liquid 変数参照</value></data>
+  <data name="CommitDetail.FileChange.MissingValue" xml:space="preserve"><value>（行なし）</value></data>
   <data name="CommitDetail.FileChange.NoBodyChanges" xml:space="preserve"><value>本文変更なし</value></data>
   <data name="CommitDetail.FileChange.Renamed" xml:space="preserve"><value>リネーム</value></data>
   <data name="CommitDetail.FileChange.RenamedFrom" xml:space="preserve"><value>{0} からリネームされました</value></data>
+  <data name="CommitDetail.FileChange.SourceDetail" xml:space="preserve"><value>{0}: {1} → {2}</value></data>
+  <data name="CommitDetail.FileChange.SourceOnly" xml:space="preserve"><value>ソースのみ変更</value></data>
+  <data name="CommitDetail.FileChange.WhitespaceValue" xml:space="preserve"><value>（空白文字: スペース {0}、タブ {1}、改行 {2}、その他 {3}）</value></data>
   <data name="CommitDetail.FileViewed" xml:space="preserve"><value>確認済み</value></data>
   <data name="CommitDetail.FileViewed.MarkTitle" xml:space="preserve"><value>{0} を確認済みにします</value></data>
   <data name="CommitDetail.FileViewed.UnmarkTitle" xml:space="preserve"><value>{0} の確認済みを解除します</value></data>

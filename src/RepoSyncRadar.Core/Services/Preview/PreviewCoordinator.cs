@@ -66,7 +66,8 @@ public interface IPreviewCoordinator
 
     /// <summary>
     /// Analyzes a Markdown file without starting the preview server so the file list can
-    /// identify renames and rendered-body changes before the user opens the comparison.
+    /// identify renames, rendered-body changes, and source-only changes before the user
+    /// opens the comparison.
     /// </summary>
     Task<MarkdownFileChangeSummary?> AnalyzeMarkdownFileChangeAsync(
         int prNumber,
@@ -174,7 +175,8 @@ public sealed record MarkdownFileChangeSummary(
     bool IsRenamed,
     string? PreviousPath,
     bool HasRenderedBodyChanges,
-    int FrontmatterChangeCount);
+    int FrontmatterChangeCount,
+    MarkdownSourceChangeSummary? SourceChange = null);
 
 internal sealed record ReusablePreviewTarget(
     string FilePath,
@@ -445,25 +447,33 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                     sha,
                     filePath.Trim(),
                     progress: null,
+                    cacheLiquidContexts: false,
                     cancellationToken)
                 .ConfigureAwait(false);
-            var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetails(
+            var affectedVersions = DocsVersionImpactAnalyzer.AnalyzeCancellable(
                 sources.BeforeMarkdown,
                 sources.BeforeLiquid,
                 sources.AfterMarkdown,
                 sources.AfterLiquid,
                 sources.BeforeFilePath,
-                filePath.Trim());
+                filePath.Trim(),
+                cancellationToken);
+            var frontmatterChanges = MarkdownFrontmatterDiffAnalyzer
+                .Analyze(sources.BeforeMarkdown, sources.AfterMarkdown);
             var previousPath = string.Equals(sources.BeforeFilePath, filePath, StringComparison.Ordinal)
                 ? null
                 : sources.BeforeFilePath;
             return new MarkdownFileChangeSummary(
                 IsRenamed: previousPath is not null,
                 PreviousPath: previousPath,
-                HasRenderedBodyChanges: versionImpacts.Count > 0,
-                FrontmatterChangeCount: MarkdownFrontmatterDiffAnalyzer
-                    .Analyze(sources.BeforeMarkdown, sources.AfterMarkdown)
-                    .Count);
+                HasRenderedBodyChanges: affectedVersions.Count > 0,
+                FrontmatterChangeCount: frontmatterChanges.Count,
+                SourceChange: affectedVersions.Count == 0
+                    ? MarkdownSourceChangeAnalyzer.Analyze(
+                        sources.BeforeMarkdown,
+                        sources.AfterMarkdown,
+                        frontmatterChanges)
+                    : null);
         }
         catch (OperationCanceledException)
         {
@@ -609,6 +619,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 sha,
                 renderedFilePath,
                 progress,
+                cacheLiquidContexts: true,
                 cancellationToken)
             .ConfigureAwait(false);
         var beforeMarkdown = sources.BeforeMarkdown;
@@ -617,13 +628,14 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         var afterLiquid = sources.AfterLiquid;
 
         progress?.Report("公式版 (fpt/ghec/ghes) で差分の出る版を解析中…");
-        var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetails(
+        var versionImpacts = DocsVersionImpactAnalyzer.AnalyzeDetailsCancellable(
             beforeMarkdown,
             beforeLiquid,
             afterMarkdown,
             afterLiquid,
             sources.BeforeFilePath,
-            renderedFilePath);
+            renderedFilePath,
+            cancellationToken);
         var affectedVersions = versionImpacts.Select(static impact => impact.Version).ToArray();
         var effectiveVersion = version ?? ResolveInitialMarkdownPreviewVersion(affectedVersions);
         progress?.Report("フロントマターの変更点を解析中…");
@@ -690,6 +702,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         string afterSha,
         string afterFilePath,
         IProgress<string>? progress,
+        bool cacheLiquidContexts,
         CancellationToken cancellationToken)
     {
         progress?.Report($"{afterFilePath} の変更前 Markdown を bare clone から読み込み中…");
@@ -714,17 +727,19 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
 
         progress?.Report("変更前 Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
-        var beforeLiquid = await LoadLiquidContextCachedAsync(
+        var beforeLiquid = await LoadLiquidContextAsync(
                 session.BeforeSha,
                 beforeFilePath,
                 beforeMarkdown,
+                cacheLiquidContexts,
                 cancellationToken)
             .ConfigureAwait(false);
         progress?.Report("PR HEAD Markdown の Liquid 変数・再利用ブロック・ページタイトルを読み込み中…");
-        var afterLiquid = await LoadLiquidContextCachedAsync(
+        var afterLiquid = await LoadLiquidContextAsync(
                 afterSha,
                 afterFilePath,
                 afterMarkdown,
+                cacheLiquidContexts,
                 cancellationToken)
             .ConfigureAwait(false);
         return new MarkdownComparisonSources(
@@ -1012,10 +1027,11 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
     private PreparedMarkdownSession? TryGetValidPreparedSession(PreparedSessionKey key)
         => _preparedSessions.TryGetValue(key, out var cached) ? cached : null;
 
-    private async Task<DocsLiquidContext> LoadLiquidContextCachedAsync(
+    private async Task<DocsLiquidContext> LoadLiquidContextAsync(
         string commitSha,
         string filePath,
         string? markdown,
+        bool cacheResult,
         CancellationToken cancellationToken)
     {
         var key = new LiquidContextCacheKey(commitSha, filePath);
@@ -1029,9 +1045,12 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 markdown,
                 cancellationToken)
             .ConfigureAwait(false);
-        // DocsLiquidContext.Empty を含めキャッシュに入れる: data/ 配下が無いのも
-        // 一定の事実なので 2 回目以降のディスク I/O を避ける。
-        _liquidContextCache[key] = loaded;
+        if (cacheResult)
+        {
+            // DocsLiquidContext.Empty を含めキャッシュに入れる: data/ 配下が無いのも
+            // 一定の事実なので 2 回目以降のディスク I/O を避ける。
+            _liquidContextCache[key] = loaded;
+        }
         return loaded;
     }
 

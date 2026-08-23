@@ -144,7 +144,8 @@ dotnet run --project src/RepoSyncRadar.App
 
 - **Sidebar**: ステータス別の件数。クリックでフィルタ切り替え。
 - **Commit List**: 取り込まれたコミットの一覧。クリックで詳細へ。
-- **Commit Detail**: ファイル一覧 + 公開 URL マッピング。
+- **Commit Detail**: ファイル一覧 + 公開 URL マッピング。本文レンダリングに差が出ない変更は、
+  プレビューを開く前に Liquid 変数参照、フロントマター、その他のソース変更として変更前後を表示します。
 
 ---
 
