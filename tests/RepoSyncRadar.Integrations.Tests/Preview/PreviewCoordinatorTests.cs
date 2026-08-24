@@ -735,7 +735,10 @@ public sealed class PreviewCoordinatorTests : IDisposable
         AssertMarkdownPreviewUrl(link.AfterUrl, "/markdown/after", "v=ghec", "file=content%2Fadmin%2Faudit.md");
         Assert.Contains("enterprise limit.", capturedPages["/markdown/after"], StringComparison.Ordinal);
         Assert.Contains("Using the audit log API", capturedPages["/markdown/after"], StringComparison.Ordinal);
-        Assert.Contains("href=\"/admin/audit-api\"", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        Assert.Contains(
+            "href=\"https://docs.github.com/en/enterprise-cloud@latest/admin/audit-api\"",
+            capturedPages["/markdown/after"],
+            StringComparison.Ordinal);
         Assert.DoesNotContain(">AUTOTITLE</a>", capturedPages["/markdown/after"], StringComparison.Ordinal);
     }
 

@@ -261,7 +261,7 @@ internal static partial class MarkdownPreviewRenderer
                     : "<p class=\"rsr-empty\">このファイルは存在しますが、本文はありません。フロントマターのみ、または自動生成コメントのみの Markdown です。</p>";
             }
             body = RewriteAutotitleLinks(body, trimmedRepoPath, effectiveLiquidContext, effectiveVersion);
-            body = RewriteAssetReferences(body, trimmedRepoPath, assetBasePath);
+            body = RewritePreviewReferences(body, trimmedRepoPath, assetBasePath, effectiveVersion);
         }
 
         var html = new StringBuilder(capacity: body.Length + 2200);
@@ -1486,18 +1486,27 @@ internal static partial class MarkdownPreviewRenderer
             html,
             repoPath,
             "/markdown-assets",
-            "/markdown-links");
+            "/markdown-links",
+            docsLinkVersion: null);
 
-    private static string RewriteAssetReferences(string html, string repoPath, string? assetBasePath)
-        => string.IsNullOrWhiteSpace(assetBasePath)
-            ? html
-            : RewriteHtmlReferences(html, repoPath, assetBasePath, linkBasePath: null);
+    private static string RewritePreviewReferences(
+        string html,
+        string repoPath,
+        string? assetBasePath,
+        DocsVersion version)
+        => RewriteHtmlReferences(
+            html,
+            repoPath,
+            string.IsNullOrWhiteSpace(assetBasePath) ? null : assetBasePath,
+            linkBasePath: null,
+            version);
 
     private static string RewriteHtmlReferences(
         string html,
         string repoPath,
-        string assetBasePath,
-        string? linkBasePath)
+        string? assetBasePath,
+        string? linkBasePath,
+        DocsVersion? docsLinkVersion)
     {
         if (string.IsNullOrEmpty(html))
         {
@@ -1550,13 +1559,16 @@ internal static partial class MarkdownPreviewRenderer
                 isClosing);
             if (!isClosing && tagName.Length > 0)
             {
+                var shouldRewriteHref = ShouldRewriteHref(tagName, tag, elementNamespace);
+                var shouldRewriteDocsHref = ShouldRewriteDocsHref(tagName, elementNamespace);
                 tag = RewriteTagAttributes(
                     tag,
                     tagName,
                     elementNamespace == ElementNamespace.Html,
                     repoPath,
                     assetBasePath,
-                    ShouldRewriteHref(tagName, tag, elementNamespace) ? linkBasePath : null);
+                    shouldRewriteHref ? linkBasePath : null,
+                    shouldRewriteDocsHref ? docsLinkVersion : null);
             }
             rewritten.Append(tag);
             index = tagEnd;
@@ -1583,8 +1595,9 @@ internal static partial class MarkdownPreviewRenderer
         string tagName,
         bool usesHtmlUrlAttributes,
         string repoPath,
-        string assetBasePath,
-        string? linkBasePath)
+        string? assetBasePath,
+        string? linkBasePath,
+        DocsVersion? docsLinkVersion)
     {
         StringBuilder? rewritten = null;
         var copiedThrough = 0;
@@ -1664,12 +1677,20 @@ internal static partial class MarkdownPreviewRenderer
             var decodedValue = WebUtility.HtmlDecode(tag[valueStart..valueEnd]);
             var next = attributeName.ToLowerInvariant() switch
             {
-                "src" when usesHtmlUrlAttributes && ShouldRewriteSrc(tagName, tag)
+                "src" when assetBasePath is not null
+                    && usesHtmlUrlAttributes
+                    && ShouldRewriteSrc(tagName, tag)
                     => RewriteAssetUrl(decodedValue, repoPath, assetBasePath),
-                "poster" when usesHtmlUrlAttributes && tagName == "video"
+                "poster" when assetBasePath is not null
+                    && usesHtmlUrlAttributes
+                    && tagName == "video"
                     => RewriteAssetUrl(decodedValue, repoPath, assetBasePath),
-                "srcset" when usesHtmlUrlAttributes && tagName is "img" or "source"
+                "srcset" when assetBasePath is not null
+                    && usesHtmlUrlAttributes
+                    && tagName is "img" or "source"
                     => RewriteSrcSet(decodedValue, repoPath, assetBasePath),
+                "href" when docsLinkVersion is not null
+                    => RewriteDocsLinkUrl(decodedValue, repoPath, docsLinkVersion),
                 "href" when linkBasePath is not null => RewriteAssetUrl(decodedValue, repoPath, linkBasePath),
                 _ => decodedValue,
             };
@@ -1704,6 +1725,10 @@ internal static partial class MarkdownPreviewRenderer
                 && (tagName == "area"
                     || tagName == "link"
                         && TagAttributeContainsToken(tag, "rel", "stylesheet"));
+
+    private static bool ShouldRewriteDocsHref(string tagName, ElementNamespace elementNamespace)
+        => tagName == "a"
+            || elementNamespace == ElementNamespace.Html && tagName == "area";
 
     private static bool TagAttributeContainsToken(
         string tag,
@@ -2151,6 +2176,102 @@ internal static partial class MarkdownPreviewRenderer
         return string.Create(
             CultureInfo.InvariantCulture,
             $"{assetBasePath.TrimEnd('/')}/{EscapeAssetPath(repoRelative)}{suffix}");
+    }
+
+    private static string RewriteDocsLinkUrl(string url, string repoPath, DocsVersion version)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return url;
+        }
+
+        var trimmed = url.Trim();
+        if (trimmed.StartsWith('#')
+            || trimmed.StartsWith("//", StringComparison.Ordinal)
+            || Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+        {
+            return url;
+        }
+
+        var suffixStart = FindUrlSuffixStart(trimmed);
+        var path = suffixStart < 0 ? trimmed : trimmed[..suffixStart];
+        var suffix = suffixStart < 0 ? string.Empty : trimmed[suffixStart..];
+        string docsPath;
+        if (path.Length == 0)
+        {
+            var currentPagePath = MapRepoPathToVersionedDocsPath(repoPath, version);
+            if (currentPagePath is null)
+            {
+                return url;
+            }
+
+            docsPath = currentPagePath;
+        }
+        else if (path.StartsWith('/'))
+        {
+            docsPath = IsUnversionedDocsPath(path) || HasDocsLanguagePrefix(path)
+                ? path
+                : HasDocsVersionPrefix(path)
+                    ? "/en" + path
+                    : BuildDocsVersionPrefix(version) + path;
+        }
+        else
+        {
+            var repoRelative = ResolveRepoRelativeAssetPath(repoPath, path);
+            var mappedPath = repoRelative is null
+                ? null
+                : PreviewPathMapper.Map(repoRelative, "en");
+            if (mappedPath is null)
+            {
+                return url;
+            }
+
+            docsPath = ApplyDocsVersion(mappedPath, version);
+        }
+
+        return Uri.TryCreate(
+            "https://docs.github.com" + docsPath + suffix,
+            UriKind.Absolute,
+            out var officialUri)
+            ? officialUri.AbsoluteUri
+            : url;
+    }
+
+    private static string? MapRepoPathToVersionedDocsPath(string repoPath, DocsVersion version)
+    {
+        var mappedPath = PreviewPathMapper.Map(repoPath, "en");
+        return mappedPath is null ? null : ApplyDocsVersion(mappedPath, version);
+    }
+
+    private static string ApplyDocsVersion(string mappedPath, DocsVersion version)
+        => BuildDocsVersionPrefix(version) + mappedPath["/en".Length..];
+
+    private static string BuildDocsVersionPrefix(DocsVersion version)
+        => version.Plan switch
+        {
+            DocsPlan.Ghec => "/en/enterprise-cloud@latest",
+            DocsPlan.Ghes => "/en/enterprise-server@" + (version.GhesRelease ?? "latest"),
+            _ => "/en",
+        };
+
+    private static bool IsUnversionedDocsPath(string path)
+        => path.StartsWith("/assets/", StringComparison.Ordinal)
+            || path.StartsWith("/public/", StringComparison.Ordinal);
+
+    private static bool HasDocsLanguagePrefix(string path)
+    {
+        var separatorIndex = path.IndexOf('/', 1);
+        var language = separatorIndex < 0 ? path[1..] : path[1..separatorIndex];
+        return language is "de" or "en" or "es" or "fr" or "ja" or "ko" or "pt" or "ru" or "zh";
+    }
+
+    private static bool HasDocsVersionPrefix(string path)
+    {
+        var separatorIndex = path.IndexOf('/', 1);
+        var segment = separatorIndex < 0 ? path[1..] : path[1..separatorIndex];
+        return segment.StartsWith("free-pro-team@", StringComparison.Ordinal)
+            || segment.StartsWith("enterprise-cloud@", StringComparison.Ordinal)
+            || segment.StartsWith("enterprise-server@", StringComparison.Ordinal);
     }
 
     private static int FindUrlSuffixStart(string url)

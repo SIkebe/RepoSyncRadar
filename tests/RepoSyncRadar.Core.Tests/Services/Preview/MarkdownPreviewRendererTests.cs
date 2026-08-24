@@ -652,7 +652,7 @@ public sealed partial class MarkdownPreviewRendererTests
             context);
 
         Assert.Contains(">Applying security configurations in your organization</a>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"/code-security/how-tos/secure-at-scale/configure-organization-security#creating-a-custom-security-configuration\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://docs.github.com/en/code-security/how-tos/secure-at-scale/configure-organization-security#creating-a-custom-security-configuration\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain(">AUTOTITLE</a>", html, StringComparison.Ordinal);
     }
 
@@ -680,7 +680,7 @@ public sealed partial class MarkdownPreviewRendererTests
             context);
 
         Assert.Contains(">About GitHub Copilot</a>", html, StringComparison.Ordinal);
-        Assert.Contains("href=\"../concepts/about-copilot.md?tool=vscode\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://docs.github.com/en/copilot/concepts/about-copilot?tool=vscode\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain(">AUTOTITLE</a>", html, StringComparison.Ordinal);
     }
 
@@ -704,7 +704,7 @@ public sealed partial class MarkdownPreviewRendererTests
             "PR HEAD",
             context);
 
-        Assert.Contains("<a href=\"/copilot/concepts/billing/budgets-for-usage-based-billing\" title=\"Budget controls\">Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
+        Assert.Contains("<a href=\"https://docs.github.com/en/copilot/concepts/billing/budgets-for-usage-based-billing\" title=\"Budget controls\">Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
     }
 
@@ -762,7 +762,7 @@ public sealed partial class MarkdownPreviewRendererTests
             diffAgainstMarkdown: beforeMarkdown,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
-        Assert.Contains("href=\"/copilot/concepts/billing/budgets-for-usage-based-billing\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://docs.github.com/en/copilot/concepts/billing/budgets-for-usage-based-billing\"", html, StringComparison.Ordinal);
         Assert.Contains("Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("AUTOTITLE", html, StringComparison.Ordinal);
     }
@@ -803,7 +803,7 @@ public sealed partial class MarkdownPreviewRendererTests
             diffAgainstMarkdown: beforeMarkdown,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
-        Assert.Contains("<a href=\"/copilot/concepts/billing/budgets-for-usage-based-billing\">Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
+        Assert.Contains("<a href=\"https://docs.github.com/en/copilot/concepts/billing/budgets-for-usage-based-billing\">Budgets for usage-based billing</a>", html, StringComparison.Ordinal);
         Assert.Contains("<code>[AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing)</code>", html, StringComparison.Ordinal);
         Assert.Contains("See [AUTOTITLE](/copilot/concepts/billing/budgets-for-usage-based-billing).", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<code>&lt;a href=", html, StringComparison.Ordinal);
@@ -835,7 +835,7 @@ public sealed partial class MarkdownPreviewRendererTests
             diffAgainstMarkdown: beforeMarkdown,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
-        Assert.Contains("Use [preview]. <span class=\"rsr-rendered-diff-added\">See <a href=\"/new-target\">New target</a>.</span>", html, StringComparison.Ordinal);
+        Assert.Contains("Use [preview]. <span class=\"rsr-rendered-diff-added\">See <a href=\"https://docs.github.com/en/new-target\">New target</a>.</span>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">Use [preview]", html, StringComparison.Ordinal);
     }
 
@@ -970,11 +970,11 @@ public sealed partial class MarkdownPreviewRendererTests
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
         Assert.Contains(
-            "<span class=\"rsr-rendered-diff-removed\"><a href=\"/old-target\">Old target</a></span>",
+            "<span class=\"rsr-rendered-diff-removed\"><a href=\"https://docs.github.com/en/old-target\">Old target</a></span>",
             beforeHtml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "<span class=\"rsr-rendered-diff-added\"><a href=\"/new-target\">New target</a></span>",
+            "<span class=\"rsr-rendered-diff-added\"><a href=\"https://docs.github.com/en/new-target\">New target</a></span>",
             afterHtml,
             StringComparison.Ordinal);
         Assert.DoesNotContain("href=\"/old<span", beforeHtml, StringComparison.OrdinalIgnoreCase);
@@ -1013,7 +1013,7 @@ public sealed partial class MarkdownPreviewRendererTests
             diffAgainstMarkdown: beforeMarkdown,
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
-        Assert.Contains("href=\"/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/streaming-the-audit-log-for-your-enterprise\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://docs.github.com/en/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/streaming-the-audit-log-for-your-enterprise\"", html, StringComparison.Ordinal);
         Assert.Contains("<span class=\"rsr-rendered-diff-added\">If you intend", html, StringComparison.Ordinal);
         Assert.Contains("Streaming the audit log for your enterprise</a>.</span>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("%3C/span%3E", html, StringComparison.OrdinalIgnoreCase);
@@ -2328,6 +2328,134 @@ var value = 1;
         Assert.Contains("img,video{max-width:100%;height:auto;}", html, StringComparison.Ordinal);
         Assert.DoesNotContain("src=\"/assets/images", html, StringComparison.Ordinal);
         Assert.DoesNotContain("srcset=\"/assets/images", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("fpt", "https://docs.github.com/en/copilot/concepts/about-copilot#scope")]
+    [InlineData("ghec", "https://docs.github.com/en/enterprise-cloud@latest/copilot/concepts/about-copilot#scope")]
+    [InlineData("ghes-3.21", "https://docs.github.com/en/enterprise-server@3.21/copilot/concepts/about-copilot#scope")]
+    public void Rewrites_RootRelative_Docs_Links_To_Selected_Official_Version(
+        string versionSlug,
+        string expectedUrl)
+    {
+        const string markdown = "[About Copilot](/copilot/concepts/about-copilot#scope)";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/current-page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            version: DocsVersionCatalog.FromSlug(versionSlug),
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains($"href=\"{expectedUrl}\"", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("de")]
+    [InlineData("en")]
+    [InlineData("es")]
+    [InlineData("fr")]
+    [InlineData("ja")]
+    [InlineData("ko")]
+    [InlineData("pt")]
+    [InlineData("ru")]
+    [InlineData("zh")]
+    public void Preserves_Supported_Localized_Root_Links(string language)
+    {
+        var markdown = $"[Localized](/{language}/copilot/concepts/about-copilot)";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/current-page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            version: DocsVersion.Ghes("3.21"),
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(
+            $"href=\"https://docs.github.com/{language}/copilot/concepts/about-copilot\"",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("free-pro-team@latest")]
+    [InlineData("enterprise-cloud@latest")]
+    [InlineData("enterprise-server@latest")]
+    [InlineData("enterprise-server@3.20")]
+    public void Preserves_Explicit_Docs_Version_Prefixes(string versionPrefix)
+    {
+        var markdown = $"[Versioned](/{versionPrefix}/copilot/concepts/about-copilot)";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/current-page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            version: DocsVersion.Ghes("3.21"),
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(
+            $"href=\"https://docs.github.com/en/{versionPrefix}/copilot/concepts/about-copilot\"",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Resolves_QueryOnly_Links_Against_The_Current_Official_Page()
+    {
+        const string markdown = "[CLI](?tool=cli#usage)";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/current-page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            version: DocsVersion.Ghes("3.21"),
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(
+            "href=\"https://docs.github.com/en/enterprise-server@3.21/copilot/concepts/current-page?tool=cli#usage\"",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rewrites_Relative_Markdown_Links_Without_Changing_External_Or_Fragment_Links()
+    {
+        const string markdown = """
+            [Setup](../guides/setup.md?tool=vscode#start)
+
+            [Section](#local-section)
+
+            [External](https://example.com/path)
+
+            [Download](/assets/download.zip)
+
+            [Localized](/ja/copilot/concepts/about-copilot)
+
+            <link rel="stylesheet" href="styles/local.css">
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/current/page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(
+            "href=\"https://docs.github.com/en/copilot/concepts/guides/setup?tool=vscode#start\"",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains("href=\"#local-section\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://example.com/path\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://docs.github.com/assets/download.zip\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"https://docs.github.com/ja/copilot/concepts/about-copilot\"", html, StringComparison.Ordinal);
+        Assert.Contains("href=\"styles/local.css\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("href=\"../guides/setup.md", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("href=\"https://docs.github.com/en/copilot/concepts/current/styles/local.css\"", html, StringComparison.Ordinal);
     }
 
     [Fact]
