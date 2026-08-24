@@ -6,8 +6,8 @@ targets:
 - copilot
 dependencies:
   apm:
-  - GoogleChrome/modern-web-guidance/skills/modern-web-guidance#9e70fa4c808b52364eb85c645e261523231176f6
-  - github/awesome-copilot/skills/lsp-setup#a80885b76044550770f60f360f8a0e5ae3524a31
+  - GoogleChrome/modern-web-guidance/skills/modern-web-guidance#460e5536b8e61034d83ff4af24bb0bf1112d2cb0
+  - github/awesome-copilot/skills/lsp-setup#4742f265959bf025882314564b364d9d7af6e2d5
   mcp: []
 includes: auto
 scripts: {}
