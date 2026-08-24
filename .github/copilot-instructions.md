@@ -123,6 +123,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Markdown preview Liquid context must stay lazy but complete for the clicked file: load referenced reusables, AUTOTITLE targets, and referenced `data/**/*.yml` sequence files used by `for` loops such as `tables.copilot.models-and-pricing`; do not fall back to all-repo reusable/content scans for interactivity.
 - Markdown preview should also load referenced `data/tables/**/*.yml` mapping objects and the GHES `enterpriseServerReleases` object when pages use Liquid mapping loops, `assign`, `case/when`, dynamic bracket lookups, or release-date tables.
 - Markdown preview `ifversion` evaluation should load referenced `data/features/*.yml` files so known feature flags use their real `versions` mapping; unknown feature flags should remain conservatively visible.
+- Rewrite relative and root-relative links in rendered Markdown to version-aware official `docs.github.com` URLs; never leave page links targeting unregistered localhost preview routes.
 - Rendered Markdown comparison should show a visible marker in both panes when possible; for pure additions/removals, use a small gap marker at the stable adjacent text on the side where the changed prose is absent.
 
 ### Cache And Theme

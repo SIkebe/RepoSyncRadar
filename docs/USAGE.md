@@ -227,6 +227,7 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
 - [`PreviewCoordinator`](../src/RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs) が clone → fetch → parent 解決 → Markdown/Liquid render → `LocalPreviewContentServer` 起動 → `PreviewSession.Activate(port)` を 1 ステップで束ねます
 - [`PreviewPathMapper`](../src/RepoSyncRadar.Core/Services/Preview/PreviewPathMapper.cs) が `content/foo/bar.md` を `/en/foo/bar` に、`content/index.md` を `/en` に変換します
 - Markdown 内の相対画像や `/assets/...` 参照は、必要なファイルだけを bare clone から asset cache に展開して配信します
+- Markdown 内の相対リンクとルート相対リンクは、表示中の Docs バージョンに対応する公式 `docs.github.com` URL へ変換します
 
 ### 5.2 監査ログ
 
