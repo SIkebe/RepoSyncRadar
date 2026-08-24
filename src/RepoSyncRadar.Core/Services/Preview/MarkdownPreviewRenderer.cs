@@ -2206,7 +2206,9 @@ internal static partial class MarkdownPreviewRenderer
         {
             docsPath = IsUnversionedDocsPath(path) || HasDocsLanguagePrefix(path)
                 ? path
-                : BuildDocsVersionPrefix(version) + path;
+                : HasDocsVersionPrefix(path)
+                    ? "/en" + path
+                    : BuildDocsVersionPrefix(version) + path;
         }
         else
         {
@@ -2247,6 +2249,15 @@ internal static partial class MarkdownPreviewRenderer
         var separatorIndex = path.IndexOf('/', 1);
         var language = separatorIndex < 0 ? path[1..] : path[1..separatorIndex];
         return language is "de" or "en" or "es" or "fr" or "ja" or "ko" or "pt" or "ru" or "zh";
+    }
+
+    private static bool HasDocsVersionPrefix(string path)
+    {
+        var separatorIndex = path.IndexOf('/', 1);
+        var segment = separatorIndex < 0 ? path[1..] : path[1..separatorIndex];
+        return segment.StartsWith("free-pro-team@", StringComparison.Ordinal)
+            || segment.StartsWith("enterprise-cloud@", StringComparison.Ordinal)
+            || segment.StartsWith("enterprise-server@", StringComparison.Ordinal);
     }
 
     private static int FindUrlSuffixStart(string url)

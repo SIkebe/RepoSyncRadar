@@ -2379,6 +2379,29 @@ var value = 1;
             StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("free-pro-team@latest")]
+    [InlineData("enterprise-cloud@latest")]
+    [InlineData("enterprise-server@latest")]
+    [InlineData("enterprise-server@3.20")]
+    public void Preserves_Explicit_Docs_Version_Prefixes(string versionPrefix)
+    {
+        var markdown = $"[Versioned](/{versionPrefix}/copilot/concepts/about-copilot)";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/current-page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            version: DocsVersion.Ghes("3.21"),
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(
+            $"href=\"https://docs.github.com/en/{versionPrefix}/copilot/concepts/about-copilot\"",
+            html,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Rewrites_Relative_Markdown_Links_Without_Changing_External_Or_Fragment_Links()
     {
