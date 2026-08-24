@@ -2403,6 +2403,25 @@ var value = 1;
     }
 
     [Fact]
+    public void Resolves_QueryOnly_Links_Against_The_Current_Official_Page()
+    {
+        const string markdown = "[CLI](?tool=cli#usage)";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/current-page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            version: DocsVersion.Ghes("3.21"),
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(
+            "href=\"https://docs.github.com/en/enterprise-server@3.21/copilot/concepts/current-page?tool=cli#usage\"",
+            html,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Rewrites_Relative_Markdown_Links_Without_Changing_External_Or_Fragment_Links()
     {
         const string markdown = """

@@ -2196,13 +2196,18 @@ internal static partial class MarkdownPreviewRenderer
         var suffixStart = FindUrlSuffixStart(trimmed);
         var path = suffixStart < 0 ? trimmed : trimmed[..suffixStart];
         var suffix = suffixStart < 0 ? string.Empty : trimmed[suffixStart..];
+        string docsPath;
         if (path.Length == 0)
         {
-            return url;
-        }
+            var currentPagePath = MapRepoPathToVersionedDocsPath(repoPath, version);
+            if (currentPagePath is null)
+            {
+                return url;
+            }
 
-        string docsPath;
-        if (path.StartsWith('/'))
+            docsPath = currentPagePath;
+        }
+        else if (path.StartsWith('/'))
         {
             docsPath = IsUnversionedDocsPath(path) || HasDocsLanguagePrefix(path)
                 ? path
@@ -2221,7 +2226,7 @@ internal static partial class MarkdownPreviewRenderer
                 return url;
             }
 
-            docsPath = BuildDocsVersionPrefix(version) + mappedPath["/en".Length..];
+            docsPath = ApplyDocsVersion(mappedPath, version);
         }
 
         return Uri.TryCreate(
@@ -2231,6 +2236,15 @@ internal static partial class MarkdownPreviewRenderer
             ? officialUri.AbsoluteUri
             : url;
     }
+
+    private static string? MapRepoPathToVersionedDocsPath(string repoPath, DocsVersion version)
+    {
+        var mappedPath = PreviewPathMapper.Map(repoPath, "en");
+        return mappedPath is null ? null : ApplyDocsVersion(mappedPath, version);
+    }
+
+    private static string ApplyDocsVersion(string mappedPath, DocsVersion version)
+        => BuildDocsVersionPrefix(version) + mappedPath["/en".Length..];
 
     private static string BuildDocsVersionPrefix(DocsVersion version)
         => version.Plan switch
