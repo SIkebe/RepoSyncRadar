@@ -2243,10 +2243,11 @@ internal static partial class MarkdownPreviewRenderer
             || path.StartsWith("/public/", StringComparison.Ordinal);
 
     private static bool HasDocsLanguagePrefix(string path)
-        => path.Equals("/en", StringComparison.Ordinal)
-            || path.StartsWith("/en/", StringComparison.Ordinal)
-            || path.Equals("/ja", StringComparison.Ordinal)
-            || path.StartsWith("/ja/", StringComparison.Ordinal);
+    {
+        var separatorIndex = path.IndexOf('/', 1);
+        var language = separatorIndex < 0 ? path[1..] : path[1..separatorIndex];
+        return language is "de" or "en" or "es" or "fr" or "ja" or "ko" or "pt" or "ru" or "zh";
+    }
 
     private static int FindUrlSuffixStart(string url)
     {

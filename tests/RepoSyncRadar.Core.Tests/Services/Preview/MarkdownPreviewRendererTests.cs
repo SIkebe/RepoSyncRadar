@@ -2351,6 +2351,34 @@ var value = 1;
         Assert.Contains($"href=\"{expectedUrl}\"", html, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("de")]
+    [InlineData("en")]
+    [InlineData("es")]
+    [InlineData("fr")]
+    [InlineData("ja")]
+    [InlineData("ko")]
+    [InlineData("pt")]
+    [InlineData("ru")]
+    [InlineData("zh")]
+    public void Preserves_Supported_Localized_Root_Links(string language)
+    {
+        var markdown = $"[Localized](/{language}/copilot/concepts/about-copilot)";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/current-page.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            version: DocsVersion.Ghes("3.21"),
+            assetBasePath: "/markdown-assets/after");
+
+        Assert.Contains(
+            $"href=\"https://docs.github.com/{language}/copilot/concepts/about-copilot\"",
+            html,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Rewrites_Relative_Markdown_Links_Without_Changing_External_Or_Fragment_Links()
     {
