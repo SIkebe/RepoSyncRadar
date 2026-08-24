@@ -61,6 +61,7 @@ git status --short
 
 - `copilot.cmd help config` から現在利用可能なmodel IDを確認する。
 - GitHub DocsのSupported models、AI model comparison、Models and pricingも確認し、GA/preview、公式用途、料金を補助情報として記録する。
+- OpenAI APIやAmazon Bedrockなど提供元の価格は、GitHub Copilot SDKのAI Credits単価として扱わない。Copilotの費用比較にはGitHub DocsのModels and pricingとSDK/CLIのusage実測値を使い、提供元のpromotionは明確に区別する。
 - dirty worktreeは変更しない。比較対象コードに未コミット変更がある場合は、その状態を結果へ明記する。
 
 ## 標準課題
