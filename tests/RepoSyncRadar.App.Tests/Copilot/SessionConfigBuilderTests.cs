@@ -41,6 +41,8 @@ public class SessionConfigBuilderTests
         Assert.False(config.EnableFileChangeTracking);
         Assert.False(config.EnableSessionStore);
         Assert.False(config.EnableExperimentalMode);
+        Assert.NotNull(config.IncludedBuiltinSkills);
+        Assert.Empty(config.IncludedBuiltinSkills);
         Assert.NotNull(config.Memory);
         Assert.False(config.Memory!.Enabled);
         Assert.NotNull(config.ToolSearch);
@@ -58,7 +60,7 @@ public class SessionConfigBuilderTests
         Assert.NotNull(config.ManagedSettings);
         Assert.NotNull(config.ManagedSettings!.Permissions);
         Assert.Equal(
-            DisableBypassPermissionsMode.Disable,
+            DisableBypassPermissionsModes.Disable,
             config.ManagedSettings.Permissions!.DisableBypassPermissionsMode);
         Assert.Equal(["shell"], config.ManagedSettings.Permissions.Deny);
         Assert.Equal(McpOAuthTokenStorageMode.InMemory, config.McpOAuthTokenStorage);

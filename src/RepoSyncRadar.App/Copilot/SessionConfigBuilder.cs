@@ -49,6 +49,7 @@ internal static class SessionConfigBuilder
             EnableFileChangeTracking = false,
             EnableSessionStore = false,
             EnableExperimentalMode = false,
+            IncludedBuiltinSkills = [],
             Memory = new MemoryConfiguration { Enabled = false },
             ToolSearch = new ToolSearchConfig { Enabled = false },
             SkipCustomInstructions = true,
@@ -59,7 +60,7 @@ internal static class SessionConfigBuilder
             {
                 Permissions = new ManagedSettingsPermissions
                 {
-                    DisableBypassPermissionsMode = DisableBypassPermissionsMode.Disable,
+                    DisableBypassPermissionsMode = DisableBypassPermissionsModes.Disable,
                     Deny = ["shell"],
                 },
             },
