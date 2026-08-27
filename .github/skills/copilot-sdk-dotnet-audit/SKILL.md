@@ -75,6 +75,7 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 ### 4. SDK source/tests の差分を読む
 
 前後 version の repository commit がある場合は commit 間 diff を確認する。
+隣接 preview の release body が前版の項目を再掲する場合があるため、release note の列挙をそのまま差分とみなさず、前版 release body と tag 間 diff で実際の変更を確定する。
 
 重点ファイル:
 
