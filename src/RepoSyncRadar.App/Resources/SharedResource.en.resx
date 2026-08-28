@@ -147,6 +147,7 @@
   <data name="CommitDetail.OpenPrInPaneTitle" xml:space="preserve"><value>Open the PR #{0} commit diff in the right pane</value></data>
   <data name="CommitDetail.PreviewableCount" xml:space="preserve"><value>{0} comparable</value></data>
   <data name="CommitDetail.ViewedCount" xml:space="preserve"><value>{0}/{1} viewed</value></data>
+  <data name="CommitDetail.ViewedCountWithReusableCoverage" xml:space="preserve"><value>{0}/{1} viewed ({2} via usage pages)</value></data>
   <data name="CommitDetail.PreviewPosition" xml:space="preserve"><value>Preview target {0} / {1}</value></data>
   <data name="CommitDetail.PreviewTitle.LocalComparison" xml:space="preserve"><value>Open this file in WebView2 with local previews for the parent commit and PR HEAD side by side</value></data>
   <data name="CommitDetail.PreviewTitle.MarkdownComparison" xml:space="preserve"><value>Render Markdown and open the parent commit vs PR HEAD diff in WebView2</value></data>
@@ -155,6 +156,8 @@
   <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>Preview startup</value></data>
   <data name="CommitDetail.ReusableUsage.Label" xml:space="preserve"><value>Usage page</value></data>
   <data name="CommitDetail.ReusableUsage.AriaLabel" xml:space="preserve"><value>Usage page for {0}</value></data>
+  <data name="CommitDetail.ReusableCovered.Label" xml:space="preserve"><value>Covered by viewed usage</value></data>
+  <data name="CommitDetail.ReusableCovered.Title" xml:space="preserve"><value>The change in {0} is covered by the viewed usage page {1} in this commit. Its individual preview can be skipped.</value></data>
   <data name="CommitDetail.Score" xml:space="preserve"><value>Score</value></data>
   <data name="CommitDetail.ScoreBand.Immediate" xml:space="preserve"><value>Review now</value></data>
   <data name="CommitDetail.ScoreBand.Immediate.Description" xml:space="preserve"><value>0.85-1.00: new APIs, breaking changes, security, or other changes needing immediate review/share.</value></data>

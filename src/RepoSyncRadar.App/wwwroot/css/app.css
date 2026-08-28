@@ -1218,7 +1218,8 @@ html, body {
 }
 
 .radar-commit-detail .preview-file-index,
-.radar-commit-detail .preview-active-badge {
+.radar-commit-detail .preview-active-badge,
+.radar-commit-detail .reusable-covered-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1240,6 +1241,14 @@ html, body {
     padding: 0.12rem 0.35rem;
     background: #d6e7ff;
     color: #1f4f99;
+}
+
+.radar-commit-detail .reusable-covered-badge {
+    background: #dafbe1;
+    border: 1px solid #82d89a;
+    color: #116329;
+    gap: 0.2rem;
+    padding: 0.12rem 0.35rem;
 }
 
 .radar-commit-detail .file-row .stats {
@@ -3179,6 +3188,12 @@ html, body {
     background: var(--radar-chip-bg) !important;
     border: 1px solid var(--radar-accent-border) !important;
     color: var(--radar-chip-fg) !important;
+}
+
+.radar-theme-dark .radar-commit-detail .reusable-covered-badge {
+    background: #12261a;
+    border-color: #3fb950;
+    color: #7ee787;
 }
 
 .radar-theme-dark .radar-commit-detail .file-change-badge {

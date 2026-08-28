@@ -147,6 +147,7 @@
   <data name="CommitDetail.OpenPrInPaneTitle" xml:space="preserve"><value>右ペインで PR #{0} のコミット差分を開きます</value></data>
   <data name="CommitDetail.PreviewableCount" xml:space="preserve"><value>{0} 件を比較可能</value></data>
   <data name="CommitDetail.ViewedCount" xml:space="preserve"><value>{0}/{1} 件を確認済み</value></data>
+  <data name="CommitDetail.ViewedCountWithReusableCoverage" xml:space="preserve"><value>{0}/{1} 件を確認済み（{2} 件は使用箇所経由）</value></data>
   <data name="CommitDetail.PreviewPosition" xml:space="preserve"><value>プレビュー対象 {0} / {1}</value></data>
   <data name="CommitDetail.PreviewTitle.LocalComparison" xml:space="preserve"><value>変更前コミットと PR HEAD のローカルプレビューを並べて、このファイルを WebView2 で開きます</value></data>
   <data name="CommitDetail.PreviewTitle.MarkdownComparison" xml:space="preserve"><value>Markdown をレンダリングして変更前コミットと PR HEAD の差分を WebView2 で開きます</value></data>
@@ -155,6 +156,8 @@
   <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>プレビュー起動</value></data>
   <data name="CommitDetail.ReusableUsage.Label" xml:space="preserve"><value>使用箇所</value></data>
   <data name="CommitDetail.ReusableUsage.AriaLabel" xml:space="preserve"><value>{0} の使用箇所</value></data>
+  <data name="CommitDetail.ReusableCovered.Label" xml:space="preserve"><value>使用箇所で確認済み</value></data>
+  <data name="CommitDetail.ReusableCovered.Title" xml:space="preserve"><value>{0} の変更は、同じコミット内の確認済み使用箇所 {1} で確認できます。個別プレビューは省略できます。</value></data>
   <data name="CommitDetail.Score" xml:space="preserve"><value>スコア</value></data>
   <data name="CommitDetail.ScoreBand.Immediate" xml:space="preserve"><value>すぐ確認</value></data>
   <data name="CommitDetail.ScoreBand.Immediate.Description" xml:space="preserve"><value>0.85-1.00: 新 API・破壊的変更・セキュリティなど、すぐ共有や確認が必要な変更。</value></data>

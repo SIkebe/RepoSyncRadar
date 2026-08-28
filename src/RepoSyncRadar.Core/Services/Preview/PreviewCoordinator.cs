@@ -176,7 +176,10 @@ public sealed record MarkdownFileChangeSummary(
     string? PreviousPath,
     bool HasRenderedBodyChanges,
     int FrontmatterChangeCount,
-    MarkdownSourceChangeSummary? SourceChange = null);
+    MarkdownSourceChangeSummary? SourceChange = null)
+{
+    public IReadOnlyList<string> ReusableReferencePaths { get; init; } = [];
+}
 
 internal sealed record ReusablePreviewTarget(
     string FilePath,
@@ -442,6 +445,21 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                 return null;
             }
 
+            IReadOnlyList<string> reusableReferencePaths = [];
+            if (TryBuildReusableKey(filePath, out _))
+            {
+                var reusableTarget = await TryResolveReusablePreviewTargetAsync(
+                        session.BeforeSha,
+                        sha,
+                        filePath,
+                        preferredReferencePath: null,
+                        changedFilePaths: null,
+                        progress: null,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                reusableReferencePaths = reusableTarget?.ReferencePaths ?? [];
+            }
+
             var sources = await LoadMarkdownComparisonSourcesAsync(
                     session,
                     sha,
@@ -473,7 +491,10 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
                         sources.BeforeMarkdown,
                         sources.AfterMarkdown,
                         frontmatterChanges)
-                    : null);
+                    : null)
+            {
+                ReusableReferencePaths = reusableReferencePaths,
+            };
         }
         catch (OperationCanceledException)
         {

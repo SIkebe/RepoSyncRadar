@@ -142,6 +142,18 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 WriteRepoFile(path, "content/webhooks/prefix-only.md", "---\ntitle: Prefix only\n---\n\n{% data reusables.webhooks.issue_properties_metrics %}");
             });
 
+        var summary = await sut.AnalyzeMarkdownFileChangeAsync(
+            123,
+            "headsha",
+            "data/reusables/webhooks/issue_properties.md",
+            ct);
+
+        Assert.NotNull(summary);
+        Assert.Equal(
+            ["content/webhooks/less-relevant.md", "content/webhooks/nested.md", "content/webhooks/preferred.md"],
+            summary!.ReusableReferencePaths);
+        Assert.DoesNotContain("content/webhooks/prefix-only.md", summary.ReusableReferencePaths);
+
         var link = await sut.PrepareMarkdownComparisonPreviewAsync(
             123,
             "headsha",
