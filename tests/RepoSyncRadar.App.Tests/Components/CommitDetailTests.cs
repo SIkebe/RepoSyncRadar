@@ -57,6 +57,21 @@ public class CommitDetailTests
     }
 
     [Fact]
+    public void ShouldPublishMarkdownChangeSummary_When_Reusable_Has_Usage_Pages()
+    {
+        var summary = new MarkdownFileChangeSummary(
+            IsRenamed: false,
+            PreviousPath: null,
+            HasRenderedBodyChanges: true,
+            FrontmatterChangeCount: 0)
+        {
+            ReusableReferencePaths = ["content/copilot/about-copilot.md"],
+        };
+
+        Assert.True(CommitDetail.ShouldPublishMarkdownChangeSummary(summary));
+    }
+
+    [Fact]
     public void CommitDetail_Shows_Resolved_Urls()
     {
         var commit = MakeCommit(("content/copilot/about-copilot.md", 1, 0));
@@ -530,6 +545,87 @@ public class CommitDetailTests
         Assert.Equal(string.Empty, checkboxes[1].GetAttribute("checked"));
         Assert.Empty(cut.FindAll(".file-main .file-viewed-toggle"));
         Assert.NotNull(cut.Find(".preview-file-action [data-testid=\"commit-detail-file-viewed\"]"));
+    }
+
+    [Fact]
+    public void CommitDetail_Marks_Reusable_As_Covered_By_Viewed_Usage_Page()
+    {
+        const string usagePath = "content/repositories/rulesets/available-rules.md";
+        const string reusablePath = "data/reusables/repositories/rulesets-push-rules.md";
+        var commit = MakeCommit(
+            (usagePath, 22, 0),
+            (reusablePath, 1, 0));
+        commit.Files[0].ViewedAt = new DateTime(2026, 8, 28, 0, 0, 0, DateTimeKind.Utc);
+
+        var resolver = Substitute.For<IPathToUrlResolver>();
+        resolver
+            .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                usagePath,
+                Arg.Any<CancellationToken>())
+            .Returns(new MarkdownFileChangeSummary(false, null, true, 0));
+        coordinator.AnalyzeMarkdownFileChangeAsync(
+                commit.PrNumber,
+                commit.Sha,
+                reusablePath,
+                Arg.Any<CancellationToken>())
+            .Returns(new MarkdownFileChangeSummary(
+                IsRenamed: false,
+                PreviousPath: null,
+                HasRenderedBodyChanges: true,
+                FrontmatterChangeCount: 0)
+            {
+                ReusableReferencePaths = [usagePath],
+            });
+
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator: null,
+            session: null,
+            coordinator: coordinator);
+
+        cut.WaitForAssertion(() =>
+        {
+            var badge = cut.Find(
+                $"[data-testid=\"commit-detail-reusable-covered\"][data-path=\"{reusablePath}\"]");
+            Assert.Contains("使用箇所で確認済み", badge.TextContent, StringComparison.Ordinal);
+            Assert.Contains(usagePath, badge.GetAttribute("title"), StringComparison.Ordinal);
+            Assert.Equal(
+                "2/2 件を確認済み（1 件は使用箇所経由）",
+                cut.Find("[data-testid=\"commit-detail-viewed-count\"]").TextContent);
+            Assert.Null(cut.Find(
+                $"[data-testid=\"commit-detail-file-viewed\"][data-path=\"{reusablePath}\"]")
+                .GetAttribute("checked"));
+        });
+
+        cut.Find(
+            $"[data-testid=\"commit-detail-file-viewed\"][data-path=\"{reusablePath}\"]")
+            .Change(true);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Single(cut.FindAll("[data-testid=\"commit-detail-reusable-covered\"]"));
+            Assert.Equal(
+                "2/2 件を確認済み",
+                cut.Find("[data-testid=\"commit-detail-viewed-count\"]").TextContent);
+        });
+
+        cut.Find(
+            $"[data-testid=\"commit-detail-file-viewed\"][data-path=\"{usagePath}\"]")
+            .Change(false);
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-reusable-covered\"]"));
+            Assert.Equal(
+                "1/2 件を確認済み",
+                cut.Find("[data-testid=\"commit-detail-viewed-count\"]").TextContent);
+        });
     }
 
     [Fact]

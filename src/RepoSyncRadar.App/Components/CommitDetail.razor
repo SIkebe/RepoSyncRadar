@@ -216,6 +216,7 @@
                 var canOpenPreview = previewTarget is not null || IsLocalComparisonPreviewable(file);
                 var previewPosition = GetPreviewPosition(file);
                 var isActivePreview = IsActivePreviewFile(file);
+                var viewedReusableUsage = FindViewedReusableUsageFile(file);
                 <li class="@BuildFileRowClass(file)" data-testid="commit-detail-file" data-path="@file.Path">
                     <span class="file-main">
                         @if (previewPosition.Ordinal > 0)
@@ -223,6 +224,16 @@
                             <span class="preview-file-index" title="@L["CommitDetail.PreviewPosition", previewPosition.Ordinal, previewPosition.Total]">@previewPosition.Ordinal</span>
                         }
                         <span class="path">@file.Path</span>
+                        @if (viewedReusableUsage is not null)
+                        {
+                            <span class="reusable-covered-badge"
+                                  data-testid="commit-detail-reusable-covered"
+                                  data-path="@file.Path"
+                                  title="@L["CommitDetail.ReusableCovered.Title", file.Path, viewedReusableUsage.Path]">
+                                <span aria-hidden="true">&#x2713;</span>
+                                @L["CommitDetail.ReusableCovered.Label"]
+                            </span>
+                        }
                         @if (isActivePreview)
                         {
                             <span class="preview-active-badge">@L["CommitDetail.Showing"]</span>
@@ -726,7 +737,9 @@
         => string.Equals(file.Status, "renamed", StringComparison.OrdinalIgnoreCase);
 
     internal static bool ShouldPublishMarkdownChangeSummary(MarkdownFileChangeSummary summary)
-        => summary.IsRenamed || !summary.HasRenderedBodyChanges;
+        => summary.IsRenamed
+            || !summary.HasRenderedBodyChanges
+            || summary.ReusableReferencePaths is { Count: > 0 };
 
     private LocalizedString BuildFileChangeTitle(CommitFile file, MarkdownFileChangeSummary? summary)
     {
@@ -1092,8 +1105,35 @@
             return L["CommitDetail.ViewedCount", 0, 0];
         }
 
-        var viewed = Commit.Files.Count(static file => file.ViewedAt is not null);
-        return L["CommitDetail.ViewedCount", viewed, Commit.Files.Count];
+        var directlyViewed = Commit.Files.Count(static file => file.ViewedAt is not null);
+        var coveredByUsage = Commit.Files.Count(
+            file => file.ViewedAt is null && FindViewedReusableUsageFile(file) is not null);
+        var viewed = directlyViewed + coveredByUsage;
+        return coveredByUsage > 0
+            ? L["CommitDetail.ViewedCountWithReusableCoverage", viewed, Commit.Files.Count, coveredByUsage]
+            : L["CommitDetail.ViewedCount", viewed, Commit.Files.Count];
+    }
+
+    private CommitFile? FindViewedReusableUsageFile(CommitFile file)
+    {
+        if (Commit is null
+            || !_markdownChangeSummariesByFile.TryGetValue(file.Path, out var summary)
+            || summary.ReusableReferencePaths is not { Count: > 0 } referencePaths)
+        {
+            return null;
+        }
+
+        foreach (var referencePath in referencePaths)
+        {
+            var usageFile = Commit.Files.FirstOrDefault(
+                candidate => candidate.ViewedAt is not null
+                    && string.Equals(candidate.Path, referencePath, StringComparison.Ordinal));
+            if (usageFile is not null)
+            {
+                return usageFile;
+            }
+        }
+        return null;
     }
 
     private string BuildViewedTitle(CommitFile file)
