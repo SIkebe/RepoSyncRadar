@@ -28,7 +28,7 @@ public sealed class ThirdPartyNoticesPanelTests
         Assert.Contains("MudBlazor", packages);
         var sdkIndex = Array.IndexOf(packages, "GitHub.Copilot.SDK");
         Assert.NotEqual(-1, sdkIndex);
-        Assert.Equal("1.0.13-preview.1", versions[sdkIndex]);
+        Assert.Equal("1.0.13-preview.2", versions[sdkIndex]);
         Assert.Contains("Microsoft.Web.WebView2", packages);
         Assert.Contains("BSD-2-Clause", cut.Markup, StringComparison.Ordinal);
         Assert.Contains("MIT", cut.Markup, StringComparison.Ordinal);

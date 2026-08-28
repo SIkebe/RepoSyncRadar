@@ -13,7 +13,7 @@ public static class ThirdPartyNotices
 {
     public static IReadOnlyList<ThirdPartyNotice> All { get; } =
     [
-        Mit("GitHub.Copilot.SDK", "1.0.13-preview.1", "Copyright (c) Microsoft Corporation. All rights reserved.", "https://github.com/github/copilot-sdk"),
+        Mit("GitHub.Copilot.SDK", "1.0.13-preview.2", "Copyright (c) Microsoft Corporation. All rights reserved.", "https://github.com/github/copilot-sdk"),
         new(
             "Markdig",
             "1.2.0",
