@@ -94,6 +94,7 @@ RepoSyncRadar を「コードの集合」ではなく「実際に使うアプリ
    - code block は先頭行だけでなく全行、空行、末尾、次言語見出しまで測る。
    - table は gap の表示/非表示で、直前行高、次行 top、`colSpan` / `rowSpan`、computed `width` が変わらないか確認する。
    - paragraph → heading では margin collapse、table では synthetic cell の列幅再配分、code では片側だけの wrapping を優先的に疑う。
+   - 複数 target を囲う overlay は、target ごとに固有の横スクロール祖先で rect を clip してから外接矩形を作る。全 target のスクロール祖先を先に交差すると、内側 container の端へ枠全体がずれる。
 5. resize の settle を待って反復する。
    - debounce 直後の1回だけでなく、遅延再計測後にも同じ値か確認する。
    - 通常幅、最大化、左ペイン閉、再オープンを最低2往復し、必要なら6往復する。

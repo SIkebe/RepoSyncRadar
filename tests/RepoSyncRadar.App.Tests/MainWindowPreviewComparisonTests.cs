@@ -1286,21 +1286,27 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
         Assert.Contains("const inlinePadding = 6", script, StringComparison.Ordinal);
         Assert.Contains(
-            "window.getComputedStyle(ancestor).overflowX !== 'visible'",
+            "getHorizontallyVisibleRect(target, inlinePadding)",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "let visibleRight = document.documentElement.clientWidth",
+            "let left = Math.max(0, rect.left - inlinePadding)",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "visibleLeft = Math.max(visibleLeft, scrollRect.left + borderLeft)",
+            "let right = Math.min(document.documentElement.clientWidth, rect.right + inlinePadding)",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "visibleRight = Math.min(visibleRight, scrollRect.right - borderRight)",
+            "left = Math.max(left, scrollRect.left + borderLeft)",
             script,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "right = Math.min(right, scrollRect.right - borderRight)",
+            script,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("let visibleLeft = 0", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("let visibleRight = document.documentElement.clientWidth", script, StringComparison.Ordinal);
         Assert.Contains(
             "scrollTarget.addEventListener('scroll', positionOverlay, { passive: true })",
             script,

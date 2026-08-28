@@ -1455,39 +1455,39 @@ td.rsr-preview-diff-alignment-gap {
     });
     return Array.from(candidates);
   };
+  const getHorizontallyVisibleRect = (target, inlinePadding) => {
+    const rect = target.getBoundingClientRect();
+    let left = Math.max(0, rect.left - inlinePadding);
+    let right = Math.min(document.documentElement.clientWidth, rect.right + inlinePadding);
+    let ancestor = target.parentElement;
+    while (ancestor && ancestor !== document.body) {
+      if (window.getComputedStyle(ancestor).overflowX !== 'visible') {
+        const scrollRect = ancestor.getBoundingClientRect();
+        const scrollStyle = window.getComputedStyle(ancestor);
+        const borderLeft = Number.parseFloat(scrollStyle.borderLeftWidth) || 0;
+        const borderRight = Number.parseFloat(scrollStyle.borderRightWidth) || 0;
+        left = Math.max(left, scrollRect.left + borderLeft);
+        right = Math.min(right, scrollRect.right - borderRight);
+      }
+      ancestor = ancestor.parentElement;
+    }
+    return right > left
+      ? { left, right, top: rect.top, bottom: rect.bottom }
+      : null;
+  };
   const positionOverlay = () => {
+    const inlinePadding = 6;
     const rects = overlayTargets
-      .map((target) => target.getBoundingClientRect())
-      .filter((rect) => rect.width > 0 && rect.height > 0);
+      .map((target) => getHorizontallyVisibleRect(target, inlinePadding))
+      .filter((rect) => rect && rect.right > rect.left && rect.bottom > rect.top);
     if (rects.length === 0) {
       overlay.hidden = true;
       return;
     }
     overlay.hidden = false;
-    const inlinePadding = 6;
-    let visibleLeft = 0;
-    let visibleRight = document.documentElement.clientWidth;
-    scrollTargets.forEach((scrollTarget) => {
-      const scrollRect = scrollTarget.getBoundingClientRect();
-      const scrollStyle = window.getComputedStyle(scrollTarget);
-      const borderLeft = Number.parseFloat(scrollStyle.borderLeftWidth) || 0;
-      const borderRight = Number.parseFloat(scrollStyle.borderRightWidth) || 0;
-      visibleLeft = Math.max(visibleLeft, scrollRect.left + borderLeft);
-      visibleRight = Math.min(visibleRight, scrollRect.right - borderRight);
-    });
-    const clippedLeft = Math.max(
-      visibleLeft,
-      Math.min(...rects.map((rect) => rect.left)) - inlinePadding);
-    const clippedRight = Math.min(
-      visibleRight,
-      Math.max(...rects.map((rect) => rect.right)) + inlinePadding);
-    if (clippedRight <= clippedLeft) {
-      overlay.hidden = true;
-      return;
-    }
-    const left = clippedLeft + window.scrollX;
+    const left = Math.min(...rects.map((rect) => rect.left)) + window.scrollX;
     const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
-    const right = clippedRight + window.scrollX;
+    const right = Math.max(...rects.map((rect) => rect.right)) + window.scrollX;
     const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
     overlay.style.left = `${left.toFixed(1)}px`;
     overlay.style.top = `${top.toFixed(1)}px`;
