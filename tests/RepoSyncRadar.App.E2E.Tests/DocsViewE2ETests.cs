@@ -183,6 +183,79 @@ public sealed class DocsViewE2ETests
         }
     }
 
+    [Fact]
+    public async Task Preview_Diff_Overlay_Unions_Targets_Clipped_By_Their_Own_Scroll_Containers()
+    {
+        var appAssemblyPath = Path.ChangeExtension(AppHost.ResolveAppExePath(), ".dll");
+        var appAssembly = Assembly.LoadFrom(appAssemblyPath);
+        var highlighterType = appAssembly.GetType(
+            "RepoSyncRadar.App.PreviewDiffHighlighter",
+            throwOnError: true)!;
+        var script = Assert.IsType<string>(
+            highlighterType
+                .GetMethod(
+                    "BuildNavigateToDiffScript",
+                    BindingFlags.NonPublic | BindingFlags.Static)!
+                .Invoke(null, [0]));
+        var context = Assert.Single(_fixture.DocsBrowser.Contexts);
+        var page = await context.NewPageAsync();
+        try
+        {
+            await page.SetViewportSizeAsync(800, 600);
+            await page.SetContentAsync(
+                """
+                <main>
+                  <article>
+                    <p id="outside"
+                       data-rsr-diff-navigation-index="0"
+                       style="margin: 20px; width: 200px">Outside target</p>
+                    <div id="scroller"
+                         style="border-left: 4px solid; border-right: 6px solid; margin-left: 100px; overflow-x: auto; width: 320px">
+                      <div style="width: 700px">
+                        <p data-rsr-diff-navigation-index="0"
+                           style="margin-left: 40px; width: 500px">Nested target</p>
+                      </div>
+                    </div>
+                  </article>
+                </main>
+                """);
+
+            var navigationResult = await page.EvaluateAsync<JsonElement>(script);
+            var geometry = await page.EvaluateAsync<JsonElement>(
+                """
+                () => {
+                    const overlay = document.getElementById('rsr-preview-diff-active-overlay')
+                        .getBoundingClientRect();
+                    const outside = document.getElementById('outside').getBoundingClientRect();
+                    const scroller = document.getElementById('scroller');
+                    const scrollerRect = scroller.getBoundingClientRect();
+                    const scrollerStyle = getComputedStyle(scroller);
+                    const borderRight = Number.parseFloat(scrollerStyle.borderRightWidth) || 0;
+                    return {
+                        actualLeft: overlay.left,
+                        actualRight: overlay.right,
+                        expectedLeft: outside.left - 6,
+                        expectedRight: scrollerRect.right - borderRight,
+                    };
+                }
+                """);
+
+            Assert.True(navigationResult.GetProperty("found").GetBoolean());
+            Assert.Equal(
+                geometry.GetProperty("expectedLeft").GetDouble(),
+                geometry.GetProperty("actualLeft").GetDouble(),
+                precision: 1);
+            Assert.Equal(
+                geometry.GetProperty("expectedRight").GetDouble(),
+                geometry.GetProperty("actualRight").GetDouble(),
+                precision: 1);
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
+    }
+
     private static async Task<string> WaitForPinnedColorModeAsync(IPage page)
     {
         await page.WaitForFunctionAsync(
