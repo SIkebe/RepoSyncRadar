@@ -1,12 +1,12 @@
 lockfile_version: '1'
-generated_at: '2026-08-24T05:02:32.315859+00:00'
-apm_version: 0.28.0
+generated_at: '2026-08-31T10:52:47.215974+00:00'
+apm_version: 0.29.0
 dependencies:
 - repo_url: github/awesome-copilot
   name: lsp-setup
   host: github.com
-  resolved_commit: 4742f265959bf025882314564b364d9d7af6e2d5
-  resolved_ref: 4742f265959bf025882314564b364d9d7af6e2d5
+  resolved_commit: c956566a35c3c2e635f019e7a1bfa59d9497e8b1
+  resolved_ref: c956566a35c3c2e635f019e7a1bfa59d9497e8b1
   version: unknown
   virtual_path: skills/lsp-setup
   is_virtual: true
@@ -23,8 +23,8 @@ dependencies:
   materialization_repo_url: GoogleChrome/modern-web-guidance
   name: modern-web-guidance
   host: github.com
-  resolved_commit: 460e5536b8e61034d83ff4af24bb0bf1112d2cb0
-  resolved_ref: 460e5536b8e61034d83ff4af24bb0bf1112d2cb0
+  resolved_commit: 457c381def89ce6213a171238f92eea63e9eaeb2
+  resolved_ref: 457c381def89ce6213a171238f92eea63e9eaeb2
   version: unknown
   virtual_path: skills/modern-web-guidance
   is_virtual: true
@@ -180,7 +180,7 @@ dependencies:
     .agents/skills/modern-web-guidance/guides/built-in-ai/language-model.md: sha256:5b8848267f34e6361ec251dd9fcce27f12f116487ba6493d3c077857aed31eca
     .agents/skills/modern-web-guidance/guides/built-in-ai/prompt-api.md: sha256:5b8848267f34e6361ec251dd9fcce27f12f116487ba6493d3c077857aed31eca
     .agents/skills/modern-web-guidance/guides/built-in-ai/summarizer.md: sha256:7922ab19ccac7e68262007dd8d96812d6d455aa643cb1edb3fc9f25a4cece2a7
-    .agents/skills/modern-web-guidance/guides/built-in-ai/translator.md: sha256:8e379baae33e0c34799cc93f1dc6c8929ed6f9f4891d9b1c0b6f0c62d5124b14
+    .agents/skills/modern-web-guidance/guides/built-in-ai/translator.md: sha256:1a9e48f318b5f5c3254f9d1ecdda8d961129ece58087edd05f20dd9fccce01b1
     .agents/skills/modern-web-guidance/guides/css/animate-to-intrinsic-sizes.md: sha256:785a8b2e26a3e1e2d06cc773334fffe6497533b24d89dc3a90efceac09c029cd
     .agents/skills/modern-web-guidance/guides/css/calculate-with-intrinsic-sizes.md: sha256:45733897f683ddd0959c5285c7039150527d9eea4a0673ac3c56f93d73332f76
     .agents/skills/modern-web-guidance/guides/css/child-state-based-styling.md: sha256:bdc9101a217a7fd29fbd70f0e97f3887d7b797179ee58027ce57f8d9fce0f1ce
@@ -188,7 +188,7 @@ dependencies:
     .agents/skills/modern-web-guidance/guides/css/css-layout.md: sha256:ff1d632ba2af9dfafb14f49e8e65539769bd3d837b5dc307071367b602ab95b2
     .agents/skills/modern-web-guidance/guides/css/css.md: sha256:8a23dbec80bb90c3c025fba8bfde1bcbfa04b5ecd6f0d43f71db3e6a0ec598c1
     .agents/skills/modern-web-guidance/guides/css/design-token-reactivity.md: sha256:3bac11e6aa58f2b6902bd827a4bdf200b941d2b89d2e1f8813c67c694694e8b8
-    .agents/skills/modern-web-guidance/guides/css/dynamic-sibling-styling.md: sha256:cb70beee2f130bc9dbd98685a54d0cfd05c62f109b596ccfe86f8828907eed08
+    .agents/skills/modern-web-guidance/guides/css/dynamic-sibling-styling.md: sha256:d40bfca05b8d043fe769fe855f4c1b43dc8b693f4944d225d5ee4d3b6db419b0
     .agents/skills/modern-web-guidance/guides/css/fluid-scaling.md: sha256:59b7c060a0363924397cf52213c61a60bce97a1c252517c8623e5dc2ebd5ddcd
     .agents/skills/modern-web-guidance/guides/css/individual-transform-properties.md: sha256:adc19c640a5e3070192a3d01761cb07e6cf464b4c6c18149116f8f7314b5c86a
     .agents/skills/modern-web-guidance/guides/css/overflow-clipping-control.md: sha256:11a29817d15a7f66020e58c1d7e86cfc7ccb6f5af9b573cb18f925a4fcf272d4
@@ -271,7 +271,7 @@ dependencies:
     .agents/skills/modern-web-guidance/guides/ui-behaviors/custom-button-actions.md: sha256:f06d1d08117b2e2a9faff1f610d88b0df8db02b8130fcd407873584bacec20af
     .agents/skills/modern-web-guidance/guides/ui-behaviors/declarative-dialog-popover-control.md: sha256:27c0d7135bfcb9674ca20573166b7726ab5e050e38da91436a39507e3024faf2
     .agents/skills/modern-web-guidance/guides/ui-behaviors/directional-navigation-transitions.md: sha256:f308e3d9bdd060c2b5f17a08c5270e12c75e7f487bad159d5df56f57b14a0b7a
-    .agents/skills/modern-web-guidance/guides/ui-behaviors/dynamic-sibling-animations.md: sha256:98493ff7e5ebbb01c580a7c306d20933a5aa19b28d8b1a1c289cc3476bb09532
+    .agents/skills/modern-web-guidance/guides/ui-behaviors/dynamic-sibling-animations.md: sha256:dbd14a1dfbcc48607cac65e37586a8fbaf46040c3d7de83fdb50810eaa6c67df
     .agents/skills/modern-web-guidance/guides/ui-behaviors/group-element-transitions.md: sha256:5b140ac01a0d4382206c0ff2645be60eb7c26a3172a66e0fa097d5409b71a486
     .agents/skills/modern-web-guidance/guides/ui-behaviors/highlight-text-ranges.md: sha256:fac1a8aba8c9581a4b7d37ec6fbd61d925fb28bb0d77314c6c3612713f449d4e
     .agents/skills/modern-web-guidance/guides/ui-behaviors/interactive-content-reveal.md: sha256:967397ff4d38cd79d1ec457ab86a4c6999ad6124829a53281cd08752025aaee7
@@ -314,7 +314,7 @@ dependencies:
     .agents/skills/modern-web-guidance/guides/webmcp/agentic-forms.md: sha256:c9210a53221ae230c3820b94b75f4b7b21196d9b0b6b0979b789866c2f2a8396
     .agents/skills/modern-web-guidance/guides/webmcp/agentic-javascript-tools.md: sha256:7b26edd8a70d0c33a1eef465edc4abc6391ce0d8f94c41acbed5a2487a558745
     .agents/skills/modern-web-guidance/guides/webmcp/webmcp.md: sha256:78b80afc94fcdc0177345d7cbd0abb83660f309a400266ff408325142db41b2c
-  content_hash: sha256:8951bdfc695fb4d9c5966ecf6b4a9bcc921a6a0a20b2b237b1619735fec0265d
+  content_hash: sha256:07775fbfaed98fcf50795256434f646da296311bc10dd54f2de29075eca9095b
 deployments:
 - kind: project-relative
   target: copilot
@@ -423,7 +423,7 @@ deployments:
   owners:
   - googlechrome/modern-web-guidance/skills/modern-web-guidance
   active_owner: googlechrome/modern-web-guidance/skills/modern-web-guidance
-  content_hash: sha256:8e379baae33e0c34799cc93f1dc6c8929ed6f9f4891d9b1c0b6f0c62d5124b14
+  content_hash: sha256:1a9e48f318b5f5c3254f9d1ecdda8d961129ece58087edd05f20dd9fccce01b1
 - kind: project-relative
   target: copilot
   value: .agents/skills/modern-web-guidance/guides/css/animate-to-intrinsic-sizes.md
@@ -495,7 +495,7 @@ deployments:
   owners:
   - googlechrome/modern-web-guidance/skills/modern-web-guidance
   active_owner: googlechrome/modern-web-guidance/skills/modern-web-guidance
-  content_hash: sha256:cb70beee2f130bc9dbd98685a54d0cfd05c62f109b596ccfe86f8828907eed08
+  content_hash: sha256:d40bfca05b8d043fe769fe855f4c1b43dc8b693f4944d225d5ee4d3b6db419b0
 - kind: project-relative
   target: copilot
   value: .agents/skills/modern-web-guidance/guides/css/fluid-scaling.md
@@ -1242,7 +1242,7 @@ deployments:
   owners:
   - googlechrome/modern-web-guidance/skills/modern-web-guidance
   active_owner: googlechrome/modern-web-guidance/skills/modern-web-guidance
-  content_hash: sha256:98493ff7e5ebbb01c580a7c306d20933a5aa19b28d8b1a1c289cc3476bb09532
+  content_hash: sha256:dbd14a1dfbcc48607cac65e37586a8fbaf46040c3d7de83fdb50810eaa6c67df
 - kind: project-relative
   target: copilot
   value: .agents/skills/modern-web-guidance/guides/ui-behaviors/group-element-transitions.md
