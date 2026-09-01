@@ -62,6 +62,7 @@ Desktop.ini
 *.db-shm
 *.db-wal
 .cache/
+.impeccable/
 docs-worktrees/
 local-secrets.json
 appsettings.Local.json

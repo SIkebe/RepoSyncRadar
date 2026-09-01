@@ -252,7 +252,7 @@
         {
             CreateState(ExplanationChannel, L["Drafts.Channel.Explanation"], rows: 8),
             CreateState(TwitterChannel, "Twitter", rows: 3),
-            CreateState(CustomerChannel, L["Drafts.Channel.Customer"], rows: 10),
+            CreateState(CustomerChannel, L["Drafts.Channel.Customer"], rows: 18),
         };
 
         _channels.Clear();
@@ -467,9 +467,12 @@
     }
 
     private static string GetChannelClass(DraftChannelState state)
-        => state.Channel == ExplanationChannel
-            ? "drafts-channel drafts-channel-large"
-            : "drafts-channel";
+        => state.Channel switch
+        {
+            ExplanationChannel => "drafts-channel drafts-channel-large",
+            CustomerChannel => "drafts-channel drafts-channel-customer",
+            _ => "drafts-channel",
+        };
 
     private static string BuildDraftBodyDescription(string metaId, string warningsId, IReadOnlyCollection<string> warnings)
         => warnings.Count > 0 ? $"{metaId} {warningsId}" : metaId;

@@ -164,6 +164,27 @@ public sealed partial class AppCssContrastTests
     }
 
     [Fact]
+    public void CustomerDraft_Uses_ViewportResponsiveHeight_Without_MaximumCap()
+    {
+        var customerDraftBlock = GetExactRuleBlock(
+            ReadAppCss(),
+            ".drafts-channel-customer .drafts-body");
+
+        Assert.Contains("min-block-size: clamp(18rem, 42dvh, 36rem)", customerDraftBlock, StringComparison.Ordinal);
+        Assert.Contains("max-block-size: none", customerDraftBlock, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CommitDetail_Contains_AbsolutelyPositioned_LiveRegions()
+    {
+        var commitDetailBlock = GetExactRuleBlock(
+            ReadAppCss(),
+            ".radar-commit-detail");
+
+        Assert.Contains("position: relative", commitDetailBlock, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void LocalSettingsGrid_Does_Not_Force_Horizontal_Overflow_On_Narrow_Workbench()
     {
         var css = ReadAppCss();
