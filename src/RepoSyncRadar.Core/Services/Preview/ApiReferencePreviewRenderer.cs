@@ -43,48 +43,102 @@ internal static partial class ApiReferencePreviewRenderer
         string? diffAgainstJson,
         MarkdownPreviewRenderer.RenderedMarkdownDiffSide diffSide)
     {
-        var descriptor = PreviewPathMapper.MapApiReferenceData(repoPath)
-            ?? throw new InvalidOperationException($"'{repoPath}' は API reference data ではありません。");
-        var changedEntries = FindChangedEntries(descriptor, json, diffAgainstJson);
-        var entriesWithChangedMetadata = FindEntriesWithChangedMetadata(
-            descriptor,
-            json,
-            diffAgainstJson,
-            changedEntries);
-        var markdown = BuildMarkdown(
-            descriptor,
-            json,
-            changedEntries,
-            entriesWithChangedMetadata,
-            markerClass: null);
-        var comparisonMarkdown = BuildMarkdown(
-            descriptor,
-            diffAgainstJson,
-            changedEntries,
-            entriesWithChangedMetadata,
-            markerClass: null);
-        if (CountLines(markdown) > 4_000 || CountLines(comparisonMarkdown) > 4_000)
-        {
-            var markerClass = diffSide == MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before
-                ? "rsr-rendered-diff-removed"
-                : "rsr-rendered-diff-added";
-            markdown = BuildMarkdown(
-                descriptor,
+        var comparison = diffSide == MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before
+            ? RenderComparison(
+                repoPath,
                 json,
-                changedEntries,
-                entriesWithChangedMetadata,
-                markerClass);
-            comparisonMarkdown = null;
-            diffSide = MarkdownPreviewRenderer.RenderedMarkdownDiffSide.None;
+                sha,
+                label,
+                repoPath,
+                diffAgainstJson,
+                sha,
+                label)
+            : RenderComparison(
+                repoPath,
+                diffAgainstJson,
+                sha,
+                label,
+                repoPath,
+                json,
+                sha,
+                label);
+        return diffSide == MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before
+            ? comparison.BeforeHtml
+            : comparison.AfterHtml;
+    }
+
+    internal static ApiReferenceComparisonDocuments RenderComparison(
+        string beforeRepoPath,
+        string? beforeJson,
+        string beforeSha,
+        string beforeLabel,
+        string afterRepoPath,
+        string? afterJson,
+        string afterSha,
+        string afterLabel)
+    {
+        var beforeDescriptor = PreviewPathMapper.MapApiReferenceData(beforeRepoPath)
+            ?? throw new InvalidOperationException($"'{beforeRepoPath}' は API reference data ではありません。");
+        var afterDescriptor = PreviewPathMapper.MapApiReferenceData(afterRepoPath)
+            ?? throw new InvalidOperationException($"'{afterRepoPath}' は API reference data ではありません。");
+        if (beforeDescriptor.Kind != afterDescriptor.Kind)
+        {
+            throw new InvalidOperationException("比較元と PR HEAD の API reference kind が一致しません。");
         }
-        return MarkdownPreviewRenderer.RenderDocument(
-            repoPath,
-            markdown,
-            sha,
-            label,
-            diffAgainstMarkdown: comparisonMarkdown,
-            diffAgainstRepoPath: repoPath,
-            diffSide: diffSide);
+
+        var changedEntries = FindChangedEntries(afterDescriptor, afterJson, beforeJson);
+        var entriesWithChangedMetadata = FindEntriesWithChangedMetadata(
+            afterDescriptor,
+            afterJson,
+            beforeJson,
+            changedEntries);
+        var beforeMarkdown = BuildMarkdown(
+            beforeDescriptor,
+            beforeJson,
+            changedEntries,
+            entriesWithChangedMetadata,
+            markerClass: null);
+        var afterMarkdown = BuildMarkdown(
+            afterDescriptor,
+            afterJson,
+            changedEntries,
+            entriesWithChangedMetadata,
+            markerClass: null);
+        var isLargeDiff = CountLines(beforeMarkdown) > 4_000 || CountLines(afterMarkdown) > 4_000;
+        if (isLargeDiff)
+        {
+            beforeMarkdown = AddSemanticChangeMarkers(
+                beforeMarkdown,
+                "rsr-rendered-diff-removed");
+            afterMarkdown = AddSemanticChangeMarkers(
+                afterMarkdown,
+                "rsr-rendered-diff-added");
+        }
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            beforeRepoPath,
+            beforeMarkdown,
+            beforeSha,
+            beforeLabel,
+            diffAgainstMarkdown: isLargeDiff ? null : afterMarkdown,
+            diffAgainstRepoPath: afterRepoPath,
+            diffSide: isLargeDiff
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.None
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            afterRepoPath,
+            afterMarkdown,
+            afterSha,
+            afterLabel,
+            diffAgainstMarkdown: isLargeDiff ? null : beforeMarkdown,
+            diffAgainstRepoPath: beforeRepoPath,
+            diffSide: isLargeDiff
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.None
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        return new ApiReferenceComparisonDocuments(
+            beforeHtml,
+            afterHtml,
+            ResolveOfficialUrl(afterDescriptor, beforeJson, afterJson, changedEntries));
     }
 
     internal static string BuildMarkdown(ApiReferencePreviewDescriptor descriptor, string? json)
@@ -102,6 +156,16 @@ internal static partial class ApiReferencePreviewRenderer
     {
         var descriptor = PreviewPathMapper.MapApiReferenceData(repoPath)
             ?? throw new InvalidOperationException($"'{repoPath}' は API reference data ではありません。");
+        var changedEntries = FindChangedEntries(descriptor, beforeJson, afterJson);
+        return ResolveOfficialUrl(descriptor, beforeJson, afterJson, changedEntries);
+    }
+
+    private static Uri ResolveOfficialUrl(
+        ApiReferencePreviewDescriptor descriptor,
+        string? beforeJson,
+        string? afterJson,
+        HashSet<string> changedEntries)
+    {
         var versionPath = descriptor.Version switch
         {
             "fpt" => "/en",
@@ -115,7 +179,6 @@ internal static partial class ApiReferencePreviewRenderer
             return new Uri($"https://docs.github.com{versionPath}/graphql/reference/{descriptor.Category}");
         }
 
-        var changedEntries = FindChangedEntries(descriptor, beforeJson, afterJson);
         var subcategory = FindFirstChangedRestSubcategory(afterJson, changedEntries)
             ?? FindFirstChangedRestSubcategory(beforeJson, changedEntries)
             ?? descriptor.Category;
@@ -375,9 +438,16 @@ internal static partial class ApiReferencePreviewRenderer
     {
         markdown.AppendLine().Append("### ").AppendLine(ToPlainText(entityName));
         AppendSemanticChangeMarker(markdown, markerClass);
+        var returnType = GetGraphQlType(entity);
+        if (returnType.Length > 0)
+        {
+            markdown.AppendLine()
+                .Append("**Returns:** ").AppendLine(RenderCode(returnType));
+        }
         AppendDescription(markdown, GetString(entity, "description"));
         AppendGraphQlMembers(markdown, entity, "args", "Arguments");
         AppendGraphQlMembers(markdown, entity, "fields", "Fields");
+        AppendGraphQlFieldArguments(markdown, entity);
         AppendGraphQlMembers(markdown, entity, "inputFields", "Input fields");
         AppendGraphQlMembers(markdown, entity, "returnFields", "Return fields");
         AppendGraphQlMembers(markdown, entity, "values", "Values");
@@ -404,9 +474,43 @@ internal static partial class ApiReferencePreviewRenderer
         foreach (var member in members.EnumerateArray())
         {
             markdown.Append("| ").Append(RenderCode(GetString(member, "name") ?? string.Empty))
-                .Append(" | ").Append(RenderCode(GetString(member, "type") ?? string.Empty))
+                .Append(" | ").Append(RenderCode(GetGraphQlType(member)))
                 .Append(" | ").Append(EscapeTable(ToPlainText(GetString(member, "description"))))
                 .AppendLine(" |");
+        }
+    }
+
+    private static void AppendGraphQlFieldArguments(StringBuilder markdown, JsonElement entity)
+    {
+        if (!entity.TryGetProperty("fields", out var fields)
+            || fields.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var field in fields.EnumerateArray())
+        {
+            if (field.ValueKind != JsonValueKind.Object
+                || !field.TryGetProperty("arguments", out var arguments)
+                || arguments.ValueKind != JsonValueKind.Array
+                || arguments.GetArrayLength() == 0)
+            {
+                continue;
+            }
+
+            markdown.AppendLine().Append("##### Arguments for ")
+                .AppendLine(RenderCode(GetString(field, "name") ?? string.Empty))
+                .AppendLine()
+                .AppendLine("| Name | Type | Description |")
+                .AppendLine("| --- | --- | --- |");
+            foreach (var argument in arguments.EnumerateArray())
+            {
+                markdown.Append("| ")
+                    .Append(RenderCode(GetString(argument, "name") ?? string.Empty))
+                    .Append(" | ").Append(RenderCode(GetGraphQlType(argument)))
+                    .Append(" | ").Append(EscapeTable(ToPlainText(GetString(argument, "description"))))
+                    .AppendLine(" |");
+            }
         }
     }
 
@@ -430,6 +534,20 @@ internal static partial class ApiReferencePreviewRenderer
         return type.ValueKind == JsonValueKind.Array
             ? string.Join(" | ", type.EnumerateArray().Select(static item => item.GetString()))
             : type.GetString() ?? string.Empty;
+    }
+
+    private static string GetGraphQlType(JsonElement element)
+    {
+        if (!element.TryGetProperty("type", out var type))
+        {
+            return string.Empty;
+        }
+        return type.ValueKind switch
+        {
+            JsonValueKind.String => type.GetString() ?? string.Empty,
+            JsonValueKind.Object => GetString(type, "name") ?? string.Empty,
+            _ => string.Empty,
+        };
     }
 
     private static string? GetString(JsonElement element, string propertyName)
@@ -564,6 +682,7 @@ internal static partial class ApiReferencePreviewRenderer
     {
         var metadata = ParseObject(entity);
         RemoveProperties(metadata, "name", "description");
+        StripGraphQlTypeMetadata(metadata);
         foreach (var propertyName in new[]
                  {
                      "args",
@@ -577,9 +696,39 @@ internal static partial class ApiReferencePreviewRenderer
             StripObjectArray(
                 metadata,
                 propertyName,
-                static member => RemoveProperties(member, "name", "type", "description"));
+                propertyName == "fields"
+                    ? StripGraphQlFieldMetadata
+                    : StripGraphQlMemberMetadata);
         }
         return SerializeMetadata(metadata);
+    }
+
+    private static void StripGraphQlFieldMetadata(JsonObject field)
+    {
+        StripGraphQlMemberMetadata(field);
+        StripObjectArray(field, "arguments", StripGraphQlMemberMetadata);
+    }
+
+    private static void StripGraphQlMemberMetadata(JsonObject member)
+    {
+        RemoveProperties(member, "name", "description");
+        StripGraphQlTypeMetadata(member);
+    }
+
+    private static void StripGraphQlTypeMetadata(JsonObject owner)
+    {
+        if (owner["type"] is JsonObject type)
+        {
+            type.Remove("name");
+            if (type.Count == 0)
+            {
+                owner.Remove("type");
+            }
+        }
+        else
+        {
+            owner.Remove("type");
+        }
     }
 
     private static JsonObject ParseObject(JsonElement element)
@@ -752,6 +901,15 @@ internal static partial class ApiReferencePreviewRenderer
         }
     }
 
+    private static string AddSemanticChangeMarkers(string markdown, string markerClass)
+        => markdown.Replace(
+            "\n### ",
+            string.Concat(
+                "\n<span class=\"",
+                markerClass,
+                "\">Changed API reference entry</span>\n\n### "),
+            StringComparison.Ordinal);
+
     private static int CountLines(string text)
         => text.Count(static character => character == '\n') + 1;
 
@@ -765,6 +923,7 @@ internal static partial class ApiReferencePreviewRenderer
             {
                 builder.Append(' ');
             }
+
             builder.Append(character is '-' or '_' ? ' ' : character);
         }
         if (builder.Length > 0)
@@ -791,3 +950,8 @@ internal static partial class ApiReferencePreviewRenderer
     private static string EscapeTable(string value)
         => EscapeInline(value).Replace("|", "\\|", StringComparison.Ordinal);
 }
+
+internal sealed record ApiReferenceComparisonDocuments(
+    string BeforeHtml,
+    string AfterHtml,
+    Uri OfficialUrl);

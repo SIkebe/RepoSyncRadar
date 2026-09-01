@@ -57,7 +57,12 @@ public sealed class ApiReferencePreviewRendererTests
                 "fields": [{
                   "name": "name",
                   "type": "String!",
-                  "description": "<p>The workflow name.</p>"
+                  "description": "<p>The workflow name.</p>",
+                  "arguments": [{
+                    "name": "format",
+                    "type": { "name": "String", "id": "string" },
+                    "description": "<p>The output format.</p>"
+                  }]
                 }]
               }]
             }
@@ -71,6 +76,11 @@ public sealed class ApiReferencePreviewRendererTests
         Assert.Contains("### Workflow", markdown, StringComparison.Ordinal);
         Assert.Contains(
             "| <code>name</code> | <code>String!</code> | The workflow name. |",
+            markdown,
+            StringComparison.Ordinal);
+        Assert.Contains("##### Arguments for <code>name</code>", markdown, StringComparison.Ordinal);
+        Assert.Contains(
+            "| <code>format</code> | <code>String</code> | The output format. |",
             markdown,
             StringComparison.Ordinal);
     }
@@ -100,6 +110,7 @@ public sealed class ApiReferencePreviewRendererTests
         var markdown = ApiReferencePreviewRenderer.BuildMarkdown(descriptor, json);
 
         Assert.Contains("## Queries", markdown, StringComparison.Ordinal);
+        Assert.Contains("**Returns:** <code>License</code>", markdown, StringComparison.Ordinal);
         Assert.Contains(
             "| <code>key</code> | <code>String!</code> | The SPDX ID. |",
             markdown,
@@ -326,6 +337,35 @@ public sealed class ApiReferencePreviewRendererTests
 
         Assert.Contains("New", html, StringComparison.Ordinal);
         Assert.Contains("rsr-rendered-diff-added", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderComparison_Produces_Both_Documents_From_One_Comparison()
+    {
+        const string beforeJson = """
+            {"teams":[{"title":"List teams","verb":"get","requestPath":"/teams","descriptionHTML":"<p>Old description.</p>"}]}
+            """;
+        const string afterJson = """
+            {"teams":[{"title":"List teams","verb":"get","requestPath":"/teams","descriptionHTML":"<p>New description.</p>"}]}
+            """;
+
+        var comparison = ApiReferencePreviewRenderer.RenderComparison(
+            "src/rest/data/fpt-2022-11-28/teams.json",
+            beforeJson,
+            "basesha",
+            "Before API reference",
+            "src/rest/data/fpt-2022-11-28/teams.json",
+            afterJson,
+            "headsha",
+            "PR HEAD API reference");
+
+        Assert.Contains("Old", comparison.BeforeHtml, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-removed", comparison.BeforeHtml, StringComparison.Ordinal);
+        Assert.Contains("New", comparison.AfterHtml, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", comparison.AfterHtml, StringComparison.Ordinal);
+        Assert.Equal(
+            "https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28",
+            comparison.OfficialUrl.AbsoluteUri);
     }
 
     [Fact]

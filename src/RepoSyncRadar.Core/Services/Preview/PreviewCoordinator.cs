@@ -476,24 +476,19 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         }
 
         progress?.Report("公式 API reference のページ構造へレンダリング中…");
-        var beforeHtml = ApiReferencePreviewRenderer.RenderDocument(
+        var renderedComparison = ApiReferencePreviewRenderer.RenderComparison(
             beforePath,
             beforeJson,
             preparedSession.BeforeSha,
             $"Before {ShortSha(preparedSession.BeforeSha)} API reference",
-            afterJson,
-            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
-        var afterHtml = ApiReferencePreviewRenderer.RenderDocument(
             normalizedPath,
             afterJson,
             sha,
-            $"PR HEAD {ShortSha(sha)} API reference",
-            beforeJson,
-            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+            $"PR HEAD {ShortSha(sha)} API reference");
         var pages = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["/api-reference/before"] = beforeHtml,
-            ["/api-reference/after"] = afterHtml,
+            ["/api-reference/before"] = renderedComparison.BeforeHtml,
+            ["/api-reference/after"] = renderedComparison.AfterHtml,
         };
 
         var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
@@ -520,10 +515,7 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
         {
             RequestedFilePath = normalizedPath,
             RenderedFilePath = normalizedPath,
-            OfficialUrl = ApiReferencePreviewRenderer.ResolveOfficialUrl(
-                normalizedPath,
-                beforeJson,
-                afterJson),
+            OfficialUrl = renderedComparison.OfficialUrl,
         };
     }
 
