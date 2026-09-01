@@ -788,6 +788,10 @@ html, body {
     color: var(--radar-danger-fg, #a40e26);
 }
 
+.radar-commit-detail {
+    position: relative;
+}
+
 .radar-commit-detail .commit-header {
     display: flex;
     flex-direction: column;
@@ -2595,6 +2599,11 @@ html, body {
 
 .drafts-channel-large .drafts-body {
     max-height: 22rem;
+}
+
+.drafts-channel-customer .drafts-body {
+    min-block-size: clamp(18rem, 42dvh, 36rem);
+    max-block-size: none;
 }
 
 /* Preview 起動進捗 UI (スピナー / 経過秒 / ログ tail / 中止ボタン)。

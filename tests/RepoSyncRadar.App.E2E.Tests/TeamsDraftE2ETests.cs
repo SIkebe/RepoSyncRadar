@@ -44,7 +44,7 @@ public sealed class LegacyTeamsDraftE2ETests
             SeededAppHostFixture.SeededCustomerBody,
             (await page.Locator("[data-testid='drafts-body-customer']").InputValueAsync()).Trim());
         Assert.Equal("3", await page.Locator("[data-testid='drafts-body-twitter']").GetAttributeAsync("rows"));
-        Assert.Equal("10", await page.Locator("[data-testid='drafts-body-customer']").GetAttributeAsync("rows"));
+        Assert.Equal("18", await page.Locator("[data-testid='drafts-body-customer']").GetAttributeAsync("rows"));
     }
 
     [Fact]
