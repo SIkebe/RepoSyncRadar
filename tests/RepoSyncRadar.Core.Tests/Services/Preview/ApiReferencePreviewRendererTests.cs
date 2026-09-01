@@ -181,6 +181,20 @@ public sealed class ApiReferencePreviewRendererTests
     }
 
     [Fact]
+    public void Encodes_Path_Derived_Descriptor_Values()
+    {
+        var descriptor = Assert.IsType<ApiReferencePreviewDescriptor>(
+            PreviewPathMapper.MapApiReferenceData(
+                "src/graphql/data/fpt/schema-`<img src=x onerror=alert(1)>.json"));
+
+        var markdown = ApiReferencePreviewRenderer.BuildMarkdown(descriptor, """{"objects":[]}""");
+
+        Assert.DoesNotContain("<img", markdown, StringComparison.Ordinal);
+        Assert.Contains("&lt;img", markdown, StringComparison.Ordinal);
+        Assert.Contains("<code>/en/graphql/reference/", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Omits_Unchanged_Rest_Subcategory_Headings()
     {
         const string beforeJson = """

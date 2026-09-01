@@ -437,9 +437,7 @@ internal static partial class MarkdownPreviewRenderer
     const selector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
     const structuralBlockSelector = 'pre,li,td,th,blockquote,.ghd-markdown-alert';
     const textBlockSelector = 'p,h1,h2,h3,h4,h5,h6';
-    const removedSelector =
-        '.rsr-rendered-diff-removed:not(.rsr-rendered-diff-gap),' +
-        '.rsr-rendered-diff-added.rsr-rendered-diff-gap';
+    const removedSelector = '.rsr-rendered-diff-removed';
     const isRemoved = (element) =>
         element.matches(removedSelector) ||
         element.querySelector(removedSelector) !== null;

@@ -3185,13 +3185,10 @@ var value = 1;
         Assert.Contains("width:10px", html, StringComparison.Ordinal);
         Assert.Contains(".rsr-rendered-diff-added,.rsr-rendered-diff-removed", html, StringComparison.Ordinal);
         Assert.Contains(
-            ".rsr-rendered-diff-removed:not(.rsr-rendered-diff-gap)",
+            "const removedSelector = '.rsr-rendered-diff-removed'",
             html,
             StringComparison.Ordinal);
-        Assert.Contains(
-            ".rsr-rendered-diff-added.rsr-rendered-diff-gap",
-            html,
-            StringComparison.Ordinal);
+        Assert.DoesNotContain(".rsr-rendered-diff-added.rsr-rendered-diff-gap", html, StringComparison.Ordinal);
         Assert.Contains("document.querySelectorAll('[data-rsr-diff-navigation-index]')", html, StringComparison.Ordinal);
         Assert.Contains("groups.set(navigationIndex, { elements: [], removed: false })", html, StringComparison.Ordinal);
         Assert.Contains("element.closest(structuralBlockSelector)", html, StringComparison.Ordinal);

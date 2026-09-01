@@ -178,16 +178,17 @@ internal static partial class ApiReferencePreviewRenderer
     {
         var kind = descriptor.Kind == ApiReferenceKind.Rest ? "REST API" : "GraphQL API";
         var markdown = new StringBuilder()
-            .Append("# ").Append(kind).Append(" reference: ").AppendLine(descriptor.Category)
+            .Append("# ").Append(kind).Append(" reference: ")
+            .AppendLine(EncodeMarkdownText(descriptor.Category))
             .AppendLine()
             .Append("> Local rendering of the generated github/docs reference data.")
             .AppendLine()
-            .Append("- Documentation version: `").Append(descriptor.Version).AppendLine("`");
+            .Append("- Documentation version: ").AppendLine(RenderCode(descriptor.Version));
         if (descriptor.ApiVersion is not null)
         {
-            markdown.Append("- REST API version: `").Append(descriptor.ApiVersion).AppendLine("`");
+            markdown.Append("- REST API version: ").AppendLine(RenderCode(descriptor.ApiVersion));
         }
-        markdown.Append("- Official path: `").Append(descriptor.OfficialPath).AppendLine("`");
+        markdown.Append("- Official path: ").AppendLine(RenderCode(descriptor.OfficialPath));
         return markdown;
     }
 
@@ -783,6 +784,9 @@ internal static partial class ApiReferencePreviewRenderer
             "<code>",
             WebUtility.HtmlEncode(EscapeInline(value)).Replace("|", "&#124;", StringComparison.Ordinal),
             "</code>");
+
+    private static string EncodeMarkdownText(string value)
+        => WebUtility.HtmlEncode(EscapeInline(value));
 
     private static string EscapeTable(string value)
         => EscapeInline(value).Replace("|", "\\|", StringComparison.Ordinal);
