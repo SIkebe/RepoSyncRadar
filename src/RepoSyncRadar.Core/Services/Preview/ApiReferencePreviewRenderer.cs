@@ -266,7 +266,8 @@ internal static partial class ApiReferencePreviewRenderer
         {
             if (subcategory.Value.ValueKind != JsonValueKind.Array)
             {
-                continue;
+                throw new InvalidOperationException(
+                    $"REST API reference subcategory '{subcategory.Name}' must be a JSON array.");
             }
 
             var headingWritten = false;
@@ -394,9 +395,16 @@ internal static partial class ApiReferencePreviewRenderer
     {
         foreach (var sectionName in _graphQlSections)
         {
-            if (!root.TryGetProperty(sectionName, out var section)
-                || section.ValueKind != JsonValueKind.Array
-                || section.GetArrayLength() == 0)
+            if (!root.TryGetProperty(sectionName, out var section))
+            {
+                continue;
+            }
+            if (section.ValueKind != JsonValueKind.Array)
+            {
+                throw new InvalidOperationException(
+                    $"GraphQL API reference section '{sectionName}' must be a JSON array.");
+            }
+            if (section.GetArrayLength() == 0)
             {
                 continue;
             }

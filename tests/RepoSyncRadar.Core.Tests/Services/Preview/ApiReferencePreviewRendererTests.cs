@@ -206,6 +206,30 @@ public sealed class ApiReferencePreviewRendererTests
     }
 
     [Fact]
+    public void Rejects_Rest_Subcategory_With_Unsupported_Shape()
+    {
+        var descriptor = Assert.IsType<ApiReferencePreviewDescriptor>(
+            PreviewPathMapper.MapApiReferenceData("src/rest/data/fpt-2022-11-28/teams.json"));
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => ApiReferencePreviewRenderer.BuildMarkdown(descriptor, """{"teams":{"title":"List teams"}}"""));
+
+        Assert.Contains("'teams' must be a JSON array", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rejects_GraphQl_Section_With_Unsupported_Shape()
+    {
+        var descriptor = Assert.IsType<ApiReferencePreviewDescriptor>(
+            PreviewPathMapper.MapApiReferenceData("src/graphql/data/fpt/schema-actions.json"));
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => ApiReferencePreviewRenderer.BuildMarkdown(descriptor, """{"objects":{"name":"Workflow"}}"""));
+
+        Assert.Contains("'objects' must be a JSON array", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Omits_Unchanged_Rest_Subcategory_Headings()
     {
         const string beforeJson = """
