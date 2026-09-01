@@ -104,7 +104,7 @@ public sealed class ApiReferencePreviewRendererTests
     public void Sanitizes_Heading_Html_From_Reference_Data()
     {
         const string json = """
-            {"teams":[{"title":"<img src=x onerror=alert(1)>List teams","verb":"get","requestPath":"/teams","parameters":[],"bodyParameters":[],"statusCodes":[]}]}
+            {"teams":[{"title":"&lt;img src=x onerror=alert(1)&gt;List teams","verb":"get","requestPath":"/teams","parameters":[],"bodyParameters":[],"statusCodes":[]}]}
             """;
         var descriptor = Assert.IsType<ApiReferencePreviewDescriptor>(
             PreviewPathMapper.MapApiReferenceData("src/rest/data/fpt-2022-11-28/teams.json"));
@@ -114,6 +114,85 @@ public sealed class ApiReferencePreviewRendererTests
         Assert.Contains("### List teams", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("<img", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("onerror", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Omits_Unchanged_Rest_Subcategory_Headings()
+    {
+        const string beforeJson = """
+            {
+              "unchanged-group":[{"title":"Same","verb":"get","requestPath":"/same","descriptionHTML":"<p>Same.</p>"}],
+              "changed-group":[{"title":"Changed","verb":"get","requestPath":"/changed","descriptionHTML":"<p>Old.</p>"}]
+            }
+            """;
+        const string afterJson = """
+            {
+              "unchanged-group":[{"title":"Same","verb":"get","requestPath":"/same","descriptionHTML":"<p>Same.</p>"}],
+              "changed-group":[{"title":"Changed","verb":"get","requestPath":"/changed","descriptionHTML":"<p>New.</p>"}]
+            }
+            """;
+
+        var html = ApiReferencePreviewRenderer.RenderDocument(
+            "src/rest/data/fpt-2022-11-28/teams.json",
+            afterJson,
+            "headsha",
+            "PR HEAD API reference",
+            beforeJson,
+            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("Changed group</h2>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unchanged group</h2>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Omits_Unchanged_GraphQl_Section_Headings()
+    {
+        const string beforeJson = """
+            {
+              "queries":[{"name":"same","description":"<p>Same.</p>"}],
+              "objects":[{"name":"Changed","description":"<p>Old.</p>"}]
+            }
+            """;
+        const string afterJson = """
+            {
+              "queries":[{"name":"same","description":"<p>Same.</p>"}],
+              "objects":[{"name":"Changed","description":"<p>New.</p>"}]
+            }
+            """;
+
+        var html = ApiReferencePreviewRenderer.RenderDocument(
+            "src/graphql/data/fpt/schema-actions.json",
+            afterJson,
+            "headsha",
+            "PR HEAD API reference",
+            beforeJson,
+            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("Objects</h2>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Queries</h2>", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Shows_Raw_Fallback_For_Metadata_Only_Changes()
+    {
+        const string beforeJson = """
+            {"objects":[{"name":"Workflow","description":"<p>An Actions workflow.</p>","isDeprecated":false}]}
+            """;
+        const string afterJson = """
+            {"objects":[{"name":"Workflow","description":"<p>An Actions workflow.</p>","isDeprecated":true}]}
+            """;
+
+        var html = ApiReferencePreviewRenderer.RenderDocument(
+            "src/graphql/data/fpt/schema-actions.json",
+            afterJson,
+            "headsha",
+            "PR HEAD API reference",
+            beforeJson,
+            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("Generated metadata", html, StringComparison.Ordinal);
+        Assert.Contains("isDeprecated", html, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", html, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -11,6 +11,11 @@ namespace RepoSyncRadar.Core.Services.Preview;
 /// </summary>
 internal static partial class ApiReferencePreviewRenderer
 {
+    private static readonly JsonSerializerOptions _indentedJsonOptions = new()
+    {
+        WriteIndented = true,
+    };
+
     private static readonly string[] _graphQlSections =
     [
         "queries",
@@ -40,14 +45,29 @@ internal static partial class ApiReferencePreviewRenderer
         var descriptor = PreviewPathMapper.MapApiReferenceData(repoPath)
             ?? throw new InvalidOperationException($"'{repoPath}' は API reference data ではありません。");
         var changedEntries = FindChangedEntries(descriptor, json, diffAgainstJson);
-        var markdown = BuildMarkdown(descriptor, json, changedEntries, markerClass: null);
-        var comparisonMarkdown = BuildMarkdown(descriptor, diffAgainstJson, changedEntries, markerClass: null);
+        var metadataOnlyEntries = FindMetadataOnlyEntries(
+            descriptor,
+            json,
+            diffAgainstJson,
+            changedEntries);
+        var markdown = BuildMarkdown(
+            descriptor,
+            json,
+            changedEntries,
+            metadataOnlyEntries,
+            markerClass: null);
+        var comparisonMarkdown = BuildMarkdown(
+            descriptor,
+            diffAgainstJson,
+            changedEntries,
+            metadataOnlyEntries,
+            markerClass: null);
         if (CountLines(markdown) > 4_000 || CountLines(comparisonMarkdown) > 4_000)
         {
             var markerClass = diffSide == MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before
                 ? "rsr-rendered-diff-removed"
                 : "rsr-rendered-diff-added";
-            markdown = BuildMarkdown(descriptor, json, changedEntries, markerClass);
+            markdown = BuildMarkdown(descriptor, json, changedEntries, metadataOnlyEntries, markerClass);
             comparisonMarkdown = null;
             diffSide = MarkdownPreviewRenderer.RenderedMarkdownDiffSide.None;
         }
@@ -62,7 +82,12 @@ internal static partial class ApiReferencePreviewRenderer
     }
 
     internal static string BuildMarkdown(ApiReferencePreviewDescriptor descriptor, string? json)
-        => BuildMarkdown(descriptor, json, changedEntries: null, markerClass: null);
+        => BuildMarkdown(
+            descriptor,
+            json,
+            changedEntries: null,
+            metadataOnlyEntries: null,
+            markerClass: null);
 
     internal static Uri ResolveOfficialUrl(
         string repoPath,
@@ -98,6 +123,7 @@ internal static partial class ApiReferencePreviewRenderer
         ApiReferencePreviewDescriptor descriptor,
         string? json,
         HashSet<string>? changedEntries,
+        HashSet<string>? metadataOnlyEntries,
         string? markerClass)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
@@ -123,11 +149,21 @@ internal static partial class ApiReferencePreviewRenderer
         }
         if (descriptor.Kind == ApiReferenceKind.Rest)
         {
-            AppendRestReference(markdown, document.RootElement, changedEntries, markerClass);
+            AppendRestReference(
+                markdown,
+                document.RootElement,
+                changedEntries,
+                metadataOnlyEntries,
+                markerClass);
         }
         else
         {
-            AppendGraphQlReference(markdown, document.RootElement, changedEntries, markerClass);
+            AppendGraphQlReference(
+                markdown,
+                document.RootElement,
+                changedEntries,
+                metadataOnlyEntries,
+                markerClass);
         }
         return markdown.ToString();
     }
@@ -153,6 +189,7 @@ internal static partial class ApiReferencePreviewRenderer
         StringBuilder markdown,
         JsonElement root,
         HashSet<string>? changedEntries,
+        HashSet<string>? metadataOnlyEntries,
         string? markerClass)
     {
         foreach (var subcategory in root.EnumerateObject().OrderBy(static property => property.Name, StringComparer.Ordinal))
@@ -162,7 +199,7 @@ internal static partial class ApiReferencePreviewRenderer
                 continue;
             }
 
-            markdown.AppendLine().Append("## ").AppendLine(Humanize(subcategory.Name));
+            var headingWritten = false;
             foreach (var operation in subcategory.Value.EnumerateArray())
             {
                 if (operation.ValueKind != JsonValueKind.Object)
@@ -179,16 +216,36 @@ internal static partial class ApiReferencePreviewRenderer
                     continue;
                 }
 
-                markdown.AppendLine().Append("### ").AppendLine(ToPlainText(title))
-                    .AppendLine()
-                    .Append('`').Append(verb).Append(' ').Append(requestPath).AppendLine("`");
-                AppendSemanticChangeMarker(markdown, markerClass);
-                AppendDescription(markdown, GetString(operation, "descriptionHTML"));
-                AppendRestParameters(markdown, operation, "parameters", "Parameters");
-                AppendRestParameters(markdown, operation, "bodyParameters", "Body parameters");
-                AppendStatusCodes(markdown, operation);
+                if (!headingWritten)
+                {
+                    markdown.AppendLine().Append("## ").AppendLine(Humanize(subcategory.Name));
+                    headingWritten = true;
+                }
+                AppendRestOperation(markdown, operation, title, verb, requestPath, markerClass);
+                if (metadataOnlyEntries?.Contains(entryKey) == true)
+                {
+                    AppendRawMetadataFallback(markdown, operation);
+                }
             }
         }
+    }
+
+    private static void AppendRestOperation(
+        StringBuilder markdown,
+        JsonElement operation,
+        string title,
+        string verb,
+        string requestPath,
+        string? markerClass)
+    {
+        markdown.AppendLine().Append("### ").AppendLine(ToPlainText(title))
+            .AppendLine()
+            .Append('`').Append(verb).Append(' ').Append(requestPath).AppendLine("`");
+        AppendSemanticChangeMarker(markdown, markerClass);
+        AppendDescription(markdown, GetString(operation, "descriptionHTML"));
+        AppendRestParameters(markdown, operation, "parameters", "Parameters");
+        AppendRestParameters(markdown, operation, "bodyParameters", "Body parameters");
+        AppendStatusCodes(markdown, operation);
     }
 
     private static void AppendRestParameters(
@@ -260,6 +317,7 @@ internal static partial class ApiReferencePreviewRenderer
         StringBuilder markdown,
         JsonElement root,
         HashSet<string>? changedEntries,
+        HashSet<string>? metadataOnlyEntries,
         string? markerClass)
     {
         foreach (var sectionName in _graphQlSections)
@@ -271,7 +329,7 @@ internal static partial class ApiReferencePreviewRenderer
                 continue;
             }
 
-            markdown.AppendLine().Append("## ").AppendLine(Humanize(sectionName));
+            var headingWritten = false;
             foreach (var entity in section.EnumerateArray())
             {
                 if (entity.ValueKind != JsonValueKind.Object)
@@ -286,17 +344,35 @@ internal static partial class ApiReferencePreviewRenderer
                     continue;
                 }
 
-                markdown.AppendLine().Append("### ").AppendLine(ToPlainText(entityName));
-                AppendSemanticChangeMarker(markdown, markerClass);
-                AppendDescription(markdown, GetString(entity, "description"));
-                AppendGraphQlMembers(markdown, entity, "args", "Arguments");
-                AppendGraphQlMembers(markdown, entity, "fields", "Fields");
-                AppendGraphQlMembers(markdown, entity, "inputFields", "Input fields");
-                AppendGraphQlMembers(markdown, entity, "returnFields", "Return fields");
-                AppendGraphQlMembers(markdown, entity, "values", "Values");
-                AppendGraphQlMembers(markdown, entity, "possibleTypes", "Possible types");
+                if (!headingWritten)
+                {
+                    markdown.AppendLine().Append("## ").AppendLine(Humanize(sectionName));
+                    headingWritten = true;
+                }
+                AppendGraphQlEntity(markdown, entity, entityName, markerClass);
+                if (metadataOnlyEntries?.Contains(entryKey) == true)
+                {
+                    AppendRawMetadataFallback(markdown, entity);
+                }
             }
         }
+    }
+
+    private static void AppendGraphQlEntity(
+        StringBuilder markdown,
+        JsonElement entity,
+        string entityName,
+        string? markerClass)
+    {
+        markdown.AppendLine().Append("### ").AppendLine(ToPlainText(entityName));
+        AppendSemanticChangeMarker(markdown, markerClass);
+        AppendDescription(markdown, GetString(entity, "description"));
+        AppendGraphQlMembers(markdown, entity, "args", "Arguments");
+        AppendGraphQlMembers(markdown, entity, "fields", "Fields");
+        AppendGraphQlMembers(markdown, entity, "inputFields", "Input fields");
+        AppendGraphQlMembers(markdown, entity, "returnFields", "Return fields");
+        AppendGraphQlMembers(markdown, entity, "values", "Values");
+        AppendGraphQlMembers(markdown, entity, "possibleTypes", "Possible types");
     }
 
     private static void AppendGraphQlMembers(
@@ -363,8 +439,102 @@ internal static partial class ApiReferencePreviewRenderer
         {
             return string.Empty;
         }
-        var withoutTags = HtmlTagRegex().Replace(html, " ");
-        return WhiteSpaceRegex().Replace(WebUtility.HtmlDecode(withoutTags), " ").Trim();
+        var decoded = WebUtility.HtmlDecode(html);
+        var withoutTags = HtmlTagRegex().Replace(decoded, " ");
+        var normalized = WhiteSpaceRegex().Replace(withoutTags, " ").Trim();
+        return WebUtility.HtmlEncode(normalized);
+    }
+
+    private static HashSet<string> FindMetadataOnlyEntries(
+        ApiReferencePreviewDescriptor descriptor,
+        string? currentJson,
+        string? comparisonJson,
+        HashSet<string> changedEntries)
+    {
+        var current = BuildProjectedEntryMap(descriptor, currentJson);
+        var comparison = BuildProjectedEntryMap(descriptor, comparisonJson);
+        return changedEntries
+            .Where(key =>
+                current.TryGetValue(key, out var currentProjection)
+                && comparison.TryGetValue(key, out var comparisonProjection)
+                && string.Equals(currentProjection, comparisonProjection, StringComparison.Ordinal))
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static Dictionary<string, string> BuildProjectedEntryMap(
+        ApiReferencePreviewDescriptor descriptor,
+        string? json)
+    {
+        var entries = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return entries;
+        }
+
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            return entries;
+        }
+
+        if (descriptor.Kind == ApiReferenceKind.Rest)
+        {
+            foreach (var subcategory in document.RootElement.EnumerateObject())
+            {
+                if (subcategory.Value.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+                foreach (var operation in subcategory.Value.EnumerateArray())
+                {
+                    if (operation.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+                    var title = GetString(operation, "title") ?? "Untitled operation";
+                    var verb = GetString(operation, "verb")?.ToUpperInvariant() ?? "HTTP";
+                    var requestPath = GetString(operation, "requestPath") ?? "/";
+                    var markdown = new StringBuilder();
+                    AppendRestOperation(markdown, operation, title, verb, requestPath, markerClass: null);
+                    entries[BuildRestEntryKey(subcategory.Name, verb, requestPath)] = markdown.ToString();
+                }
+            }
+        }
+        else
+        {
+            foreach (var sectionName in _graphQlSections)
+            {
+                if (!document.RootElement.TryGetProperty(sectionName, out var section)
+                    || section.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+                foreach (var entity in section.EnumerateArray())
+                {
+                    if (entity.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+                    var entityName = GetString(entity, "name") ?? "Unnamed type";
+                    var markdown = new StringBuilder();
+                    AppendGraphQlEntity(markdown, entity, entityName, markerClass: null);
+                    entries[BuildGraphQlEntryKey(sectionName, entityName)] = markdown.ToString();
+                }
+            }
+        }
+        return entries;
+    }
+
+    private static void AppendRawMetadataFallback(StringBuilder markdown, JsonElement entry)
+    {
+        markdown.AppendLine()
+            .AppendLine("#### Generated metadata")
+            .AppendLine()
+            .AppendLine("Fields outside the rendered reference changed; the generated entry is shown below.")
+            .AppendLine()
+            .AppendLine("```json")
+            .AppendLine(JsonSerializer.Serialize(entry, _indentedJsonOptions))
+            .AppendLine("```");
     }
 
     private static HashSet<string> FindChangedEntries(
