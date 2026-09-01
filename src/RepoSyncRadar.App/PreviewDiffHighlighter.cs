@@ -58,7 +58,7 @@ internal static class PreviewDiffHighlighter
 
     private const int _maxExtractionAttempts = 6;
     private const long _maxPlanCells = 4_000_000;
-    private const long _maxLinearSpaceLcsCells = 8_000_000;
+    private const long _maxComparisonWork = 8_000_000;
     private const string _extractCodeLinesToken = "__RSR_EXTRACT_CODE_LINES__";
 
     private const string _extractBlocksScriptTemplate = """
@@ -448,7 +448,7 @@ internal static class PreviewDiffHighlighter
     {
         var beforeChangedPositions = new bool[beforeTexts.Length];
         var afterChangedPositions = new bool[afterTexts.Length];
-        var remainingComparisonWork = _maxLinearSpaceLcsCells;
+        var remainingComparisonWork = _maxComparisonWork;
         patienceAnchorScanCount = 0;
         MarkBoundedChanges(
             beforeTexts,
@@ -603,31 +603,16 @@ internal static class PreviewDiffHighlighter
             {
                 Array.Fill(beforeChanged, true, beforeStart, beforeLength);
                 Array.Fill(afterChanged, true, afterStart, afterLength);
-                if (TryReserveLinearSpaceLcsWork(ref remainingComparisonWork, beforeLength, afterLength))
-                {
-                    MarkLinearSpaceLcsMatches(
-                        beforeTexts,
-                        beforeStart,
-                        beforeEnd,
-                        afterTexts,
-                        afterStart,
-                        afterEnd,
-                        beforeChanged,
-                        afterChanged);
-                }
-                else
-                {
-                    MarkBudgetedFallbackMatches(
-                        beforeTexts,
-                        beforeStart,
-                        beforeEnd,
-                        afterTexts,
-                        afterStart,
-                        afterEnd,
-                        beforeChanged,
-                        afterChanged,
-                        ref remainingComparisonWork);
-                }
+                MarkBudgetedFallbackMatches(
+                    beforeTexts,
+                    beforeStart,
+                    beforeEnd,
+                    afterTexts,
+                    afterStart,
+                    afterEnd,
+                    beforeChanged,
+                    afterChanged,
+                    ref remainingComparisonWork);
                 continue;
             }
 
@@ -729,124 +714,6 @@ internal static class PreviewDiffHighlighter
         }
         Array.Fill(beforeChanged, true, beforeStart + beforeCursor, beforeLength - beforeCursor);
         Array.Fill(afterChanged, true, afterStart + afterCursor, afterLength - afterCursor);
-    }
-
-    private static void MarkLinearSpaceLcsMatches(
-        string[] beforeTexts,
-        int beforeStart,
-        int beforeEnd,
-        string[] afterTexts,
-        int afterStart,
-        int afterEnd,
-        bool[] beforeChanged,
-        bool[] afterChanged)
-    {
-        if (beforeStart >= beforeEnd || afterStart >= afterEnd)
-        {
-            return;
-        }
-        if (beforeEnd - beforeStart == 1)
-        {
-            for (var afterIndex = afterStart; afterIndex < afterEnd; afterIndex++)
-            {
-                if (string.Equals(beforeTexts[beforeStart], afterTexts[afterIndex], StringComparison.Ordinal))
-                {
-                    beforeChanged[beforeStart] = false;
-                    afterChanged[afterIndex] = false;
-                    break;
-                }
-            }
-            return;
-        }
-        if (afterEnd - afterStart == 1)
-        {
-            for (var beforeIndex = beforeStart; beforeIndex < beforeEnd; beforeIndex++)
-            {
-                if (string.Equals(beforeTexts[beforeIndex], afterTexts[afterStart], StringComparison.Ordinal))
-                {
-                    beforeChanged[beforeIndex] = false;
-                    afterChanged[afterStart] = false;
-                    break;
-                }
-            }
-            return;
-        }
-
-        var beforeMiddle = beforeStart + ((beforeEnd - beforeStart) / 2);
-        var forwardLengths = BuildLcsPrefixLengths(
-            beforeTexts,
-            beforeStart,
-            beforeMiddle,
-            afterTexts,
-            afterStart,
-            afterEnd);
-        var backwardLengths = BuildLcsSuffixLengths(
-            beforeTexts,
-            beforeMiddle,
-            beforeEnd,
-            afterTexts,
-            afterStart,
-            afterEnd);
-        var afterLength = afterEnd - afterStart;
-        var afterSplitOffset = 0;
-        var bestLength = -1;
-        for (var offset = 0; offset <= afterLength; offset++)
-        {
-            var length = forwardLengths[offset] + backwardLengths[offset];
-            if (length > bestLength)
-            {
-                bestLength = length;
-                afterSplitOffset = offset;
-            }
-        }
-
-        var afterMiddle = afterStart + afterSplitOffset;
-        MarkLinearSpaceLcsMatches(
-            beforeTexts,
-            beforeStart,
-            beforeMiddle,
-            afterTexts,
-            afterStart,
-            afterMiddle,
-            beforeChanged,
-            afterChanged);
-        MarkLinearSpaceLcsMatches(
-            beforeTexts,
-            beforeMiddle,
-            beforeEnd,
-            afterTexts,
-            afterMiddle,
-            afterEnd,
-            beforeChanged,
-            afterChanged);
-    }
-
-    private static int[] BuildLcsPrefixLengths(
-        string[] beforeTexts,
-        int beforeStart,
-        int beforeEnd,
-        string[] afterTexts,
-        int afterStart,
-        int afterEnd)
-    {
-        var afterLength = afterEnd - afterStart;
-        var previous = new int[afterLength + 1];
-        var current = new int[afterLength + 1];
-        for (var beforeIndex = beforeStart; beforeIndex < beforeEnd; beforeIndex++)
-        {
-            for (var afterOffset = 1; afterOffset <= afterLength; afterOffset++)
-            {
-                current[afterOffset] = string.Equals(
-                    beforeTexts[beforeIndex],
-                    afterTexts[afterStart + afterOffset - 1],
-                    StringComparison.Ordinal)
-                        ? previous[afterOffset - 1] + 1
-                        : Math.Max(previous[afterOffset], current[afterOffset - 1]);
-            }
-            (previous, current) = (current, previous);
-            Array.Clear(current);
-        }
-        return previous;
     }
 
     private static void MarkBudgetedFallbackMatches(
@@ -1056,34 +923,6 @@ internal static class PreviewDiffHighlighter
         }
     }
 
-    private static int[] BuildLcsSuffixLengths(
-        string[] beforeTexts,
-        int beforeStart,
-        int beforeEnd,
-        string[] afterTexts,
-        int afterStart,
-        int afterEnd)
-    {
-        var afterLength = afterEnd - afterStart;
-        var previous = new int[afterLength + 1];
-        var current = new int[afterLength + 1];
-        for (var beforeIndex = beforeEnd - 1; beforeIndex >= beforeStart; beforeIndex--)
-        {
-            for (var afterOffset = afterLength - 1; afterOffset >= 0; afterOffset--)
-            {
-                current[afterOffset] = string.Equals(
-                    beforeTexts[beforeIndex],
-                    afterTexts[afterStart + afterOffset],
-                    StringComparison.Ordinal)
-                        ? previous[afterOffset + 1] + 1
-                        : Math.Max(previous[afterOffset], current[afterOffset + 1]);
-            }
-            (previous, current) = (current, previous);
-            Array.Clear(current);
-        }
-        return previous;
-    }
-
     private static List<BlockAnchor> FindPatienceAnchors(
         string[] beforeTexts,
         int beforeStart,
@@ -1249,13 +1088,6 @@ internal static class PreviewDiffHighlighter
         long maximumCellCount = _maxPlanCells)
         => ((long)beforeBlockCount + 1) * (afterBlockCount + 1) > maximumCellCount;
 
-    internal static bool ExceedsLinearSpaceWorkBudget(int beforeBlockCount, int afterBlockCount)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(beforeBlockCount);
-        ArgumentOutOfRangeException.ThrowIfNegative(afterBlockCount);
-        return EstimateLinearSpaceLcsWork(beforeBlockCount, afterBlockCount) > _maxLinearSpaceLcsCells;
-    }
-
     private static bool TryReserveComparisonWork(
         ref long remainingComparisonWork,
         int beforeBlockCount,
@@ -1270,17 +1102,6 @@ internal static class PreviewDiffHighlighter
         remainingComparisonWork -= requestedWork;
         return true;
     }
-
-    private static bool TryReserveLinearSpaceLcsWork(
-        ref long remainingComparisonWork,
-        int beforeBlockCount,
-        int afterBlockCount)
-        => TryReserveLinearWork(
-            ref remainingComparisonWork,
-            EstimateLinearSpaceLcsWork(beforeBlockCount, afterBlockCount));
-
-    private static long EstimateLinearSpaceLcsWork(int beforeBlockCount, int afterBlockCount)
-        => 2L * beforeBlockCount * afterBlockCount;
 
     private static bool TryReserveLinearWork(ref long remainingComparisonWork, long requestedWork)
     {
