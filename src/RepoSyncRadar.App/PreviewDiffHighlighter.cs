@@ -507,6 +507,15 @@ internal static class PreviewDiffHighlighter
         {
             Array.Fill(beforeChanged, true, beforeStart, beforeLength);
             Array.Fill(afterChanged, true, afterStart, afterLength);
+            MarkLinearSpaceLcsMatches(
+                beforeTexts,
+                beforeStart,
+                beforeEnd,
+                afterTexts,
+                afterStart,
+                afterEnd,
+                beforeChanged,
+                afterChanged);
             return;
         }
 
@@ -586,6 +595,152 @@ internal static class PreviewDiffHighlighter
         }
         Array.Fill(beforeChanged, true, beforeStart + beforeCursor, beforeLength - beforeCursor);
         Array.Fill(afterChanged, true, afterStart + afterCursor, afterLength - afterCursor);
+    }
+
+    private static void MarkLinearSpaceLcsMatches(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged)
+    {
+        if (beforeStart >= beforeEnd || afterStart >= afterEnd)
+        {
+            return;
+        }
+        if (beforeEnd - beforeStart == 1)
+        {
+            for (var afterIndex = afterStart; afterIndex < afterEnd; afterIndex++)
+            {
+                if (string.Equals(beforeTexts[beforeStart], afterTexts[afterIndex], StringComparison.Ordinal))
+                {
+                    beforeChanged[beforeStart] = false;
+                    afterChanged[afterIndex] = false;
+                    break;
+                }
+            }
+            return;
+        }
+        if (afterEnd - afterStart == 1)
+        {
+            for (var beforeIndex = beforeStart; beforeIndex < beforeEnd; beforeIndex++)
+            {
+                if (string.Equals(beforeTexts[beforeIndex], afterTexts[afterStart], StringComparison.Ordinal))
+                {
+                    beforeChanged[beforeIndex] = false;
+                    afterChanged[afterStart] = false;
+                    break;
+                }
+            }
+            return;
+        }
+
+        var beforeMiddle = beforeStart + ((beforeEnd - beforeStart) / 2);
+        var forwardLengths = BuildLcsPrefixLengths(
+            beforeTexts,
+            beforeStart,
+            beforeMiddle,
+            afterTexts,
+            afterStart,
+            afterEnd);
+        var backwardLengths = BuildLcsSuffixLengths(
+            beforeTexts,
+            beforeMiddle,
+            beforeEnd,
+            afterTexts,
+            afterStart,
+            afterEnd);
+        var afterLength = afterEnd - afterStart;
+        var afterSplitOffset = 0;
+        var bestLength = -1;
+        for (var offset = 0; offset <= afterLength; offset++)
+        {
+            var length = forwardLengths[offset] + backwardLengths[offset];
+            if (length > bestLength)
+            {
+                bestLength = length;
+                afterSplitOffset = offset;
+            }
+        }
+
+        var afterMiddle = afterStart + afterSplitOffset;
+        MarkLinearSpaceLcsMatches(
+            beforeTexts,
+            beforeStart,
+            beforeMiddle,
+            afterTexts,
+            afterStart,
+            afterMiddle,
+            beforeChanged,
+            afterChanged);
+        MarkLinearSpaceLcsMatches(
+            beforeTexts,
+            beforeMiddle,
+            beforeEnd,
+            afterTexts,
+            afterMiddle,
+            afterEnd,
+            beforeChanged,
+            afterChanged);
+    }
+
+    private static int[] BuildLcsPrefixLengths(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd)
+    {
+        var afterLength = afterEnd - afterStart;
+        var previous = new int[afterLength + 1];
+        var current = new int[afterLength + 1];
+        for (var beforeIndex = beforeStart; beforeIndex < beforeEnd; beforeIndex++)
+        {
+            for (var afterOffset = 1; afterOffset <= afterLength; afterOffset++)
+            {
+                current[afterOffset] = string.Equals(
+                    beforeTexts[beforeIndex],
+                    afterTexts[afterStart + afterOffset - 1],
+                    StringComparison.Ordinal)
+                        ? previous[afterOffset - 1] + 1
+                        : Math.Max(previous[afterOffset], current[afterOffset - 1]);
+            }
+            (previous, current) = (current, previous);
+            Array.Clear(current);
+        }
+        return previous;
+    }
+
+    private static int[] BuildLcsSuffixLengths(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd)
+    {
+        var afterLength = afterEnd - afterStart;
+        var previous = new int[afterLength + 1];
+        var current = new int[afterLength + 1];
+        for (var beforeIndex = beforeEnd - 1; beforeIndex >= beforeStart; beforeIndex--)
+        {
+            for (var afterOffset = afterLength - 1; afterOffset >= 0; afterOffset--)
+            {
+                current[afterOffset] = string.Equals(
+                    beforeTexts[beforeIndex],
+                    afterTexts[afterStart + afterOffset],
+                    StringComparison.Ordinal)
+                        ? previous[afterOffset + 1] + 1
+                        : Math.Max(previous[afterOffset], current[afterOffset + 1]);
+            }
+            (previous, current) = (current, previous);
+            Array.Clear(current);
+        }
+        return previous;
     }
 
     private static List<BlockAnchor> FindPatienceAnchors(

@@ -788,6 +788,26 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Preserves_Repeated_Lines_Without_Patience_Anchors()
+    {
+        var beforeBlocks = Enumerable.Range(0, 2100)
+            .Select(index => new PreviewDiffBlock(index, "Repeated block"))
+            .ToArray();
+        var afterBlocks = beforeBlocks
+            .Select(block => block with { })
+            .ToArray();
+        afterBlocks[0] = new PreviewDiffBlock(0, "Changed first block");
+        afterBlocks[^1] = new PreviewDiffBlock(2099, "Changed last block");
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Equal(2, plan.BeforeChangedIndexes.Count);
+        Assert.Equal(2, plan.AfterChangedIndexes.Count);
+        Assert.DoesNotContain(1000, plan.BeforeChangedIndexes);
+        Assert.DoesNotContain(1000, plan.AfterChangedIndexes);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildAlignmentGapPlan_Fills_Shorter_Pane_At_Each_Hunk()
     {
         var changes = new[]
