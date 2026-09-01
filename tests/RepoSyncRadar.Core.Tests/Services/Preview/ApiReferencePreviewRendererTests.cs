@@ -140,6 +140,27 @@ public sealed class ApiReferencePreviewRendererTests
     }
 
     [Fact]
+    public void Escapes_Markdown_Links_From_Reference_Data()
+    {
+        const string json = """
+            {"teams":[{"title":"[Unsafe](javascript:alert(1))","verb":"get","requestPath":"/teams","descriptionHTML":"[Description](javascript:alert(2))"}]}
+            """;
+
+        var html = ApiReferencePreviewRenderer.RenderDocument(
+            "src/rest/data/fpt-2022-11-28/teams.json",
+            json,
+            "headsha",
+            "PR HEAD API reference",
+            diffAgainstJson: null,
+            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.DoesNotContain("<a ", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("href=\"javascript:", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("[Unsafe](javascript:alert(1))", html, StringComparison.Ordinal);
+        Assert.Contains("[Description](javascript:alert(2))", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Encodes_Raw_Json_Values_Used_In_Code_Contexts()
     {
         const string json = """
@@ -227,6 +248,18 @@ public sealed class ApiReferencePreviewRendererTests
             () => ApiReferencePreviewRenderer.BuildMarkdown(descriptor, """{"objects":{"name":"Workflow"}}"""));
 
         Assert.Contains("'objects' must be a JSON array", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Rejects_Unsupported_GraphQl_Section()
+    {
+        var descriptor = Assert.IsType<ApiReferencePreviewDescriptor>(
+            PreviewPathMapper.MapApiReferenceData("src/graphql/data/fpt/schema-actions.json"));
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => ApiReferencePreviewRenderer.BuildMarkdown(descriptor, """{"directives":[]}"""));
+
+        Assert.Contains("'directives' is not supported", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

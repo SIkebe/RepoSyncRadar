@@ -393,6 +393,15 @@ internal static partial class ApiReferencePreviewRenderer
         HashSet<string>? entriesWithChangedMetadata,
         string? markerClass)
     {
+        foreach (var property in root.EnumerateObject())
+        {
+            if (!_graphQlSections.Contains(property.Name, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"GraphQL API reference section '{property.Name}' is not supported.");
+            }
+        }
+
         foreach (var sectionName in _graphQlSections)
         {
             if (!root.TryGetProperty(sectionName, out var section))
@@ -577,7 +586,7 @@ internal static partial class ApiReferencePreviewRenderer
         var decoded = WebUtility.HtmlDecode(html);
         var withoutTags = HtmlTagRegex().Replace(decoded, " ");
         var normalized = WhiteSpaceRegex().Replace(withoutTags, " ").Trim();
-        return WebUtility.HtmlEncode(normalized);
+        return EncodeMarkdownText(normalized);
     }
 
     private static HashSet<string> FindEntriesWithChangedMetadata(
@@ -953,7 +962,19 @@ internal static partial class ApiReferencePreviewRenderer
             "</code>");
 
     private static string EncodeMarkdownText(string value)
-        => WebUtility.HtmlEncode(EscapeInline(value));
+    {
+        var normalized = EscapeInline(value);
+        var escaped = new StringBuilder(normalized.Length);
+        foreach (var character in normalized)
+        {
+            if (character is '\\' or '`' or '*' or '_' or '[' or ']' or '#')
+            {
+                escaped.Append('\\');
+            }
+            escaped.Append(character);
+        }
+        return WebUtility.HtmlEncode(escaped.ToString());
+    }
 
     private static string EscapeTable(string value)
         => EscapeInline(value).Replace("|", "\\|", StringComparison.Ordinal);
