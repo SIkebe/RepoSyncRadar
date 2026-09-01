@@ -1005,18 +1005,59 @@ public class CommitDetailTests
     }
 
     [Fact]
-    public void OpenInWebView_Button_Hidden_When_No_Mapping_And_No_Resolved_Url()
+    public void OpenInWebView_Starts_Api_Reference_Comparison_For_GraphQl_Data()
     {
-        // GraphQL schema file → not a content/*.md page, resolver also returns nothing.
-        var commit = MakeCommit(("src/graphql/data/fpt/schema.docs.graphql", 3, 3));
+        const string path = "src/graphql/data/fpt/schema-actions.json";
+        var commit = MakeCommit((path, 3, 3));
         var resolver = Substitute.For<IPathToUrlResolver>();
         resolver
             .ResolveAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>()));
+        var navigator = new PreviewNavigator();
+        PreviewComparisonRequest? captured = null;
+        navigator.NavigationRequested += (_, request) => captured = GetComparisonRequest(request);
+        var coordinator = Substitute.For<IPreviewCoordinator>();
+        coordinator.PrepareApiReferenceComparisonPreviewAsync(
+                commit.PrNumber,
+                commit.Sha,
+                path,
+                Arg.Any<IProgress<string>?>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<PreviewComparisonLink?>(new PreviewComparisonLink(
+                new Uri("http://localhost:4500/api-reference/before"),
+                new Uri("http://localhost:4500/api-reference/after"),
+                4500,
+                4500,
+                "parent1234567890",
+                commit.Sha)
+            {
+                OfficialUrl = new Uri("https://docs.github.com/en/graphql/reference/actions"),
+            }));
 
-        using var cut = RenderDetailWith(commit, resolver);
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator,
+            new PreviewSession(),
+            coordinator);
+        cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
 
-        Assert.Empty(cut.FindAll("[data-testid=\"commit-detail-open-in-webview\"]"));
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal("http://localhost:4500/api-reference/before", captured?.BeforeUrl.AbsoluteUri);
+            Assert.Equal("http://localhost:4500/api-reference/after", captured?.AfterUrl.AbsoluteUri);
+            Assert.Contains("API reference", captured?.BeforeLabel, StringComparison.Ordinal);
+            Assert.Equal(
+                "https://docs.github.com/en/graphql/reference/actions",
+                captured?.OfficialUrl?.AbsoluteUri);
+            Assert.Contains(path, cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
+        });
+        _ = coordinator.Received(1).PrepareApiReferenceComparisonPreviewAsync(
+            commit.PrNumber,
+            commit.Sha,
+            path,
+            Arg.Any<IProgress<string>?>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -59,6 +59,28 @@ public sealed class PreviewPathMapperTests
         Assert.False(PreviewPathMapper.IsMarkdown(repoPath));
     }
 
+    [Theory]
+    [InlineData("src/rest/data/fpt-2022-11-28/teams.json")]
+    [InlineData("src/rest/data/ghec-2026-03-10/copilot.json")]
+    [InlineData("src/rest/data/ghes-3.21-2022-11-28/orgs.json")]
+    [InlineData("src/graphql/data/fpt/schema-actions.json")]
+    [InlineData("src/graphql/data/ghes-3.21/schema-copilot.json")]
+    public void Detects_Api_Reference_Data(string repoPath)
+    {
+        Assert.True(PreviewPathMapper.IsApiReferenceData(repoPath));
+    }
+
+    [Theory]
+    [InlineData("src/rest/data/fpt-2022-11-28/schema.json")]
+    [InlineData("src/rest/data/version-index.json")]
+    [InlineData("src/graphql/data/fpt/category-map.json")]
+    [InlineData("src/graphql/data/fpt/schema.docs.graphql")]
+    [InlineData("src/webhooks/data/fpt/webhooks.json")]
+    public void Rejects_Non_Reference_Data(string repoPath)
+    {
+        Assert.False(PreviewPathMapper.IsApiReferenceData(repoPath));
+    }
+
     [Fact]
     public void Defaults_Language_To_En_When_Empty()
     {

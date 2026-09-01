@@ -3184,10 +3184,18 @@ var value = 1;
         Assert.Contains("right:0", html, StringComparison.Ordinal);
         Assert.Contains("width:10px", html, StringComparison.Ordinal);
         Assert.Contains(".rsr-rendered-diff-added,.rsr-rendered-diff-removed", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "const removedSelector = '.rsr-rendered-diff-removed'",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(".rsr-rendered-diff-added.rsr-rendered-diff-gap", html, StringComparison.Ordinal);
         Assert.Contains("document.querySelectorAll('[data-rsr-diff-navigation-index]')", html, StringComparison.Ordinal);
         Assert.Contains("groups.set(navigationIndex, { elements: [], removed: false })", html, StringComparison.Ordinal);
         Assert.Contains("element.closest(structuralBlockSelector)", html, StringComparison.Ordinal);
-        Assert.Contains("window[stateKey] = { scheduleBuild }", html, StringComparison.Ordinal);
+        Assert.Contains("let disabled = false", html, StringComparison.Ordinal);
+        Assert.Contains("if (disabled) { pairs = []; return; }", html, StringComparison.Ordinal);
+        Assert.Contains("const disable = () =>", html, StringComparison.Ordinal);
+        Assert.Contains("window[stateKey] = { scheduleBuild, disable }", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", html, StringComparison.Ordinal);
         Assert.Contains("const docHeight = Math.max(1, document.documentElement.scrollHeight)", html, StringComparison.Ordinal);
         Assert.Contains("const scrollbarSize = Math.max(0, window.innerWidth - document.documentElement.clientWidth)", html, StringComparison.Ordinal);

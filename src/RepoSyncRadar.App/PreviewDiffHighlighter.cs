@@ -1181,6 +1181,9 @@ td.rsr-preview-diff-alignment-gap {
 
         return $$"""
 (() => {
+  window.__repoSyncRadarDiffScrollbar?.disable?.();
+  document.getElementById('rsr-diff-scrollbar')?.remove();
+
   const styleId = 'rsr-preview-diff-style';
   if (!document.getElementById(styleId)) {
     const style = document.createElement('style');
@@ -1298,8 +1301,15 @@ td.rsr-preview-diff-alignment-gap {
         if (rects.length === 0) {
           return;
         }
+        const alignmentGapSelector =
+          '.rsr-preview-diff-alignment-gap,' +
+          '.rsr-preview-diff-alignment-gap-row,' +
+          '.rsr-preview-diff-alignment-gap-section';
+        const hasSubstantiveChange = elements.some(
+          (element) => !element.matches(alignmentGapSelector));
+        const isRemoval = hasSubstantiveChange ? pane === 'before' : pane === 'after';
         const marker = document.createElement('div');
-        marker.className = `rsr-preview-diff-scrollbar-marker ${pane === 'before' ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
+        marker.className = `rsr-preview-diff-scrollbar-marker ${isRemoval ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
         const absoluteTop = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
         const absoluteBottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
         const top = Math.max(0, Math.min(1, absoluteTop / maxScrollTop));
