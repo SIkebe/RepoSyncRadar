@@ -109,8 +109,59 @@ public sealed class BlazorShellE2ETests
             $"Sidebar pane should have ≥4px left padding; got {paddingLeftPx}px.");
     }
 
+    [Fact]
+    public async Task CommitDetail_Scrolls_Workbench_Without_DocumentOverflow()
+    {
+        var page = await GetBlazorPageAsync();
+        await SelectSeededCommitAsync(page);
+        await page.Locator(".file-change-visually-hidden")
+            .First
+            .WaitForAsync(new() { State = WaitForSelectorState.Attached, Timeout = 10000 });
+
+        var metrics = await page.EvaluateAsync<double[]>(
+            """
+            () => {
+                const documentRoot = document.documentElement;
+                const workbench = document.querySelector('.radar-workbench');
+                if (!workbench) {
+                    throw new Error('Workbench not found.');
+                }
+
+                workbench.scrollTop = workbench.scrollHeight;
+                documentRoot.scrollTop = documentRoot.scrollHeight;
+
+                return [
+                    documentRoot.scrollHeight,
+                    documentRoot.clientHeight,
+                    documentRoot.scrollTop,
+                    workbench.scrollHeight,
+                    workbench.clientHeight,
+                    workbench.scrollTop
+                ];
+            }
+            """);
+
+        Assert.Equal(metrics[1], metrics[0]);
+        Assert.Equal(0, metrics[2]);
+        Assert.True(metrics[3] > metrics[4], "The workbench should remain the vertical scroll container.");
+        Assert.True(metrics[5] > 0, "Scrolling the workbench should change its scroll position.");
+    }
+
     private async Task<IPage> GetBlazorPageAsync()
         => await E2EPageHelpers.GetBlazorPageAsync(_fixture.BlazorBrowser).ConfigureAwait(false);
+
+    private static async Task SelectSeededCommitAsync(IPage page)
+    {
+        var adoptedItem = page.Locator("[data-testid='sidebar-item-Adopted']");
+        await adoptedItem.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
+        await adoptedItem.ClickAsync();
+
+        var row = page.Locator($"[data-testid='commit-row'][data-sha='{SeededAppHostFixture.SeededSha}']");
+        await row.WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 15000 });
+        await row.ClickAsync();
+        await page.Locator("[data-testid='commit-detail-sha']")
+            .WaitForAsync(new() { State = WaitForSelectorState.Visible, Timeout = 10000 });
+    }
 
     private static async Task WaitForCommitListSettledAsync(IPage page)
     {
