@@ -4044,6 +4044,7 @@ internal static partial class MarkdownPreviewRenderer
             .Select(range => ExpandRenderedDiffRange(content, range))
             .Select(range => ExpandRenderedDiffRangeAroundChangedAnchor(content, range))
             .Select(range => SnapRangeOutsideLiquidTokens(content, range))
+            .Select(range => ExpandRangeAcrossMarkdownFormattingDelimiters(content, range))
             .Where(static range => range.Length > 0)
             .OrderBy(static range => range.Start)
             .ToArray();
@@ -4075,6 +4076,45 @@ internal static partial class MarkdownPreviewRenderer
                 mergedRanges[index]);
         }
         return markedContent;
+    }
+
+    private static InlineChangedRange ExpandRangeAcrossMarkdownFormattingDelimiters(
+        string content,
+        InlineChangedRange range)
+    {
+        var delimiter = content.Substring(range.Start, range.Length);
+        if (!IsMarkdownFormattingDelimiter(delimiter))
+        {
+            return range;
+        }
+
+        var canOpen = range.End < content.Length && !char.IsWhiteSpace(content[range.End]);
+        var canClose = range.Start > 0 && !char.IsWhiteSpace(content[range.Start - 1]);
+        var counterpartStart = canOpen && !canClose
+            ? content.IndexOf(delimiter, range.End, StringComparison.Ordinal)
+            : canClose && !canOpen
+                ? content.LastIndexOf(delimiter, range.Start - 1, StringComparison.Ordinal)
+                : -1;
+        if (counterpartStart < 0)
+        {
+            return range;
+        }
+
+        var start = Math.Min(range.Start, counterpartStart);
+        var end = Math.Max(range.End, counterpartStart + delimiter.Length);
+        return new InlineChangedRange(start, end - start);
+    }
+
+    private static bool IsMarkdownFormattingDelimiter(string value)
+    {
+        if (string.Equals(value, "~~", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return value.Length is >= 1 and <= 3
+            && value.All(character => character == value[0])
+            && value[0] is '*' or '_';
     }
 
     private static InlineChangedRange ExpandRenderedDiffRangeAroundChangedAnchor(

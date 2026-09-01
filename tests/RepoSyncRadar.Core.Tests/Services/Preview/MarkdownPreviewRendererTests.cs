@@ -3462,6 +3462,38 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Marks_Formatting_Only_Emphasis_Changes_Without_Breaking_Markdown()
+    {
+        const string beforeMarkdown = "**important**";
+        const string afterMarkdown = "important";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-removed\"><strong>important</strong></span>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">important</span>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-removed\">**", beforeHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Leaves_Shared_Text_Unmarked_In_Heavily_Rewritten_Paragraphs()
     {
         const string sharedSuffix = " You can do this in either of the following ways:";
