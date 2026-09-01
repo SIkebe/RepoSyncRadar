@@ -884,6 +884,30 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Uses_Positional_Matches_After_Myers_Budget_Is_Exhausted()
+    {
+        var beforeBlocks = Enumerable.Range(0, 3000)
+            .Select(index => new PreviewDiffBlock(
+                index,
+                index % 100 == 50 ? "Shared" : index % 2 == 0 ? "Before A" : "Before B"))
+            .ToArray();
+        var afterBlocks = Enumerable.Range(0, 3000)
+            .Select(index => new PreviewDiffBlock(
+                index,
+                index % 100 == 50 ? "Shared" : index % 2 == 0 ? "After A" : "After B"))
+            .ToArray();
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Equal(2970, plan.BeforeChangedIndexes.Count);
+        Assert.Equal(2970, plan.AfterChangedIndexes.Count);
+        Assert.DoesNotContain(50, plan.BeforeChangedIndexes);
+        Assert.DoesNotContain(1550, plan.AfterChangedIndexes);
+        Assert.Contains(0, plan.BeforeChangedIndexes);
+        Assert.Contains(2999, plan.AfterChangedIndexes);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildAlignmentGapPlan_Fills_Shorter_Pane_At_Each_Hunk()
     {
         var changes = new[]
@@ -1089,11 +1113,15 @@ public sealed class MainWindowPreviewComparisonTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "const inlineMarkerTargets = segment.elements.flatMap((element) => [",
+            "const resolvedTargets = segment.elements.flatMap((element) => {",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            ": substantiveTargets.length > 0 ? substantiveTargets : segment.elements",
+            "return element.matches(alignmentGapSelector) ? [] : [element]",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "resolvedTargets.length > 0 ? resolvedTargets : segment.elements",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -1413,24 +1441,15 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("pointer-events: none", script, StringComparison.Ordinal);
         Assert.Contains("overlay.setAttribute('aria-hidden', 'true')", script, StringComparison.Ordinal);
         Assert.Contains(
-            "!target.classList.contains('rsr-preview-diff-alignment-gap')",
+            "const resolvedTargets = targets.flatMap((target) => {",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "'.rsr-rendered-diff-added,.rsr-rendered-diff-removed'",
+            "return target.matches(alignmentGapSelector) ? [] : [target]",
             script,
             StringComparison.Ordinal);
-        Assert.Contains("...target.querySelectorAll(renderedDiffSelector)", script, StringComparison.Ordinal);
-        Assert.Contains("return Array.from(new Set(renderedDiffTargets))", script, StringComparison.Ordinal);
         Assert.Contains(
-            "target.classList.contains('rsr-preview-diff-block')",
-            script,
-            StringComparison.Ordinal);
-        Assert.Contains("return highlightedContentTargets", script, StringComparison.Ordinal);
-        Assert.Contains("if (alignmentGapTargets.length > 0)", script, StringComparison.Ordinal);
-        Assert.Contains("return alignmentGapTargets", script, StringComparison.Ordinal);
-        Assert.Contains(
-            "return contentTargets.length > 0 ? contentTargets : targets",
+            "return resolvedTargets.length > 0 ? resolvedTargets : targets",
             script,
             StringComparison.Ordinal);
         Assert.Contains("overlayTargets = resolveOverlayTargets()", script, StringComparison.Ordinal);

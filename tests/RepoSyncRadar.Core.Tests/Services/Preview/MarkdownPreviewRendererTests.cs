@@ -3427,7 +3427,7 @@ var value = 1;
     }
 
     [Fact]
-    public void RenderDocument_Marks_Disjoint_Paragraph_Changes_Without_Shared_Middle()
+    public void RenderDocument_Marks_Disjoint_Paragraph_Changes_While_Preserving_Shared_Middle()
     {
         const string beforeMarkdown = "stable prefix shared middle removed words stable suffix";
         const string afterMarkdown = "stable prefix inserted words shared middle stable suffix";

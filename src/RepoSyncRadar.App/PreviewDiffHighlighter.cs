@@ -1951,13 +1951,18 @@ td.rsr-preview-diff-alignment-gap {
             '.rsr-preview-diff-alignment-gap-section';
           const substantiveTargets = segment.elements.filter(
             (element) => !element.matches(alignmentGapSelector));
-          const inlineMarkerTargets = segment.elements.flatMap((element) => [
+          const resolvedTargets = segment.elements.flatMap((element) => {
+            const inlineTargets = [
               ...(element.matches(renderedDiffSelector) ? [element] : []),
               ...element.querySelectorAll(renderedDiffSelector),
-            ]);
-          const markerTargets = inlineMarkerTargets.length > 0
-            ? inlineMarkerTargets
-            : substantiveTargets.length > 0 ? substantiveTargets : segment.elements;
+            ];
+            if (inlineTargets.length > 0) {
+              return inlineTargets;
+            }
+            return element.matches(alignmentGapSelector) ? [] : [element];
+          });
+          const markerTargets =
+            resolvedTargets.length > 0 ? resolvedTargets : segment.elements;
           const rects = markerTargets
             .map((element) => element.getBoundingClientRect())
             .filter((rect) => rect.width > 0 && rect.height > 0);
@@ -2095,26 +2100,21 @@ td.rsr-preview-diff-alignment-gap {
   const renderedDiffSelector =
     '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
   const resolveOverlayTargets = () => {
-    const contentTargets = targets.filter(
-      (target) => !target.classList.contains('rsr-preview-diff-alignment-gap'));
-    const renderedDiffTargets = contentTargets.flatMap((target) => [
-      ...(target.matches(renderedDiffSelector) ? [target] : []),
-      ...target.querySelectorAll(renderedDiffSelector),
-    ]);
-    if (renderedDiffTargets.length > 0) {
-      return Array.from(new Set(renderedDiffTargets));
-    }
-    const highlightedContentTargets = contentTargets.filter(
-      (target) => target.classList.contains('rsr-preview-diff-block'));
-    if (highlightedContentTargets.length > 0) {
-      return highlightedContentTargets;
-    }
-    const alignmentGapTargets = targets.filter(
-      (target) => target.classList.contains('rsr-preview-diff-alignment-gap'));
-    if (alignmentGapTargets.length > 0) {
-      return alignmentGapTargets;
-    }
-    return contentTargets.length > 0 ? contentTargets : targets;
+    const alignmentGapSelector =
+      '.rsr-preview-diff-alignment-gap,' +
+      '.rsr-preview-diff-alignment-gap-row,' +
+      '.rsr-preview-diff-alignment-gap-section';
+    const resolvedTargets = targets.flatMap((target) => {
+      const inlineTargets = [
+        ...(target.matches(renderedDiffSelector) ? [target] : []),
+        ...target.querySelectorAll(renderedDiffSelector),
+      ];
+      if (inlineTargets.length > 0) {
+        return inlineTargets;
+      }
+      return target.matches(alignmentGapSelector) ? [] : [target];
+    });
+    return resolvedTargets.length > 0 ? resolvedTargets : targets;
   };
   let overlayTargets = resolveOverlayTargets();
   const root = document.scrollingElement || document.documentElement || document.body;
