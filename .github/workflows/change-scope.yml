@@ -9,7 +9,7 @@ on:
         type: string
     outputs:
       run_ci:
-        description: Whether the triggering change includes a non-Markdown file.
+        description: Whether the triggering change includes a CI-relevant file.
         value: ${{ jobs.detect.outputs.run_ci }}
 
 permissions:
@@ -22,7 +22,7 @@ defaults:
 
 jobs:
   detect:
-    name: Detect non-Markdown changes
+    name: Detect CI-relevant changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -83,7 +83,11 @@ jobs:
               $fromSha -notmatch '^0+$') {
             git cat-file -e "${fromSha}^{commit}" 2>$null
             if ($LASTEXITCODE -eq 0) {
-              git diff --quiet $fromSha $toSha -- . ':(exclude,icase,glob)**/*.md'
+              git diff --quiet $fromSha $toSha -- . `
+                ':(exclude,icase,glob)**/*.md' `
+                ':(exclude)apm.yml' `
+                ':(exclude)apm.lock.yaml' `
+                ':(exclude,glob).agents/skills/**'
               if ($LASTEXITCODE -eq 0) {
                 $runCi = $false
               } elseif ($LASTEXITCODE -ne 1) {
