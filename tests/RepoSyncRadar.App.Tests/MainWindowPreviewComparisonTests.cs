@@ -846,6 +846,8 @@ public sealed class MainWindowPreviewComparisonTests
     [Fact]
     public void PreviewDiffHighlighter_BuildPlan_Bounds_Work_For_Very_Large_Repeated_Regions()
     {
+        Assert.False(PreviewDiffHighlighter.ExceedsLinearSpaceWorkBudget(2000, 2000));
+        Assert.True(PreviewDiffHighlighter.ExceedsLinearSpaceWorkBudget(2800, 2800));
         Assert.True(PreviewDiffHighlighter.ExceedsLinearSpaceWorkBudget(3000, 3000));
 
         var beforeBlocks = Enumerable.Range(0, 3000)
@@ -1095,7 +1097,7 @@ public sealed class MainWindowPreviewComparisonTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            ": substantiveTargets",
+            ": substantiveTargets.length > 0 ? substantiveTargets : segment.elements",
             script,
             StringComparison.Ordinal);
         Assert.Contains(

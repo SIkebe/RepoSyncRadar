@@ -603,7 +603,7 @@ internal static class PreviewDiffHighlighter
             {
                 Array.Fill(beforeChanged, true, beforeStart, beforeLength);
                 Array.Fill(afterChanged, true, afterStart, afterLength);
-                if (TryReserveComparisonWork(ref remainingComparisonWork, beforeLength, afterLength))
+                if (TryReserveLinearSpaceLcsWork(ref remainingComparisonWork, beforeLength, afterLength))
                 {
                     MarkLinearSpaceLcsMatches(
                         beforeTexts,
@@ -1253,7 +1253,7 @@ internal static class PreviewDiffHighlighter
     {
         ArgumentOutOfRangeException.ThrowIfNegative(beforeBlockCount);
         ArgumentOutOfRangeException.ThrowIfNegative(afterBlockCount);
-        return (long)beforeBlockCount * afterBlockCount > _maxLinearSpaceLcsCells;
+        return EstimateLinearSpaceLcsWork(beforeBlockCount, afterBlockCount) > _maxLinearSpaceLcsCells;
     }
 
     private static bool TryReserveComparisonWork(
@@ -1270,6 +1270,17 @@ internal static class PreviewDiffHighlighter
         remainingComparisonWork -= requestedWork;
         return true;
     }
+
+    private static bool TryReserveLinearSpaceLcsWork(
+        ref long remainingComparisonWork,
+        int beforeBlockCount,
+        int afterBlockCount)
+        => TryReserveLinearWork(
+            ref remainingComparisonWork,
+            EstimateLinearSpaceLcsWork(beforeBlockCount, afterBlockCount));
+
+    private static long EstimateLinearSpaceLcsWork(int beforeBlockCount, int afterBlockCount)
+        => 2L * beforeBlockCount * afterBlockCount;
 
     private static bool TryReserveLinearWork(ref long remainingComparisonWork, long requestedWork)
     {
@@ -2125,7 +2136,7 @@ td.rsr-preview-diff-alignment-gap {
             ]);
           const markerTargets = inlineMarkerTargets.length > 0
             ? inlineMarkerTargets
-            : substantiveTargets;
+            : substantiveTargets.length > 0 ? substantiveTargets : segment.elements;
           const rects = markerTargets
             .map((element) => element.getBoundingClientRect())
             .filter((rect) => rect.width > 0 && rect.height > 0);

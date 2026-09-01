@@ -3053,7 +3053,11 @@ internal static partial class MarkdownPreviewRenderer
                 current++;
                 comparison++;
             }
-            else if (lengths[current + 1, comparison] >= lengths[current, comparison + 1])
+            else if (lengths[current + 1, comparison] > lengths[current, comparison + 1]
+                || (lengths[current + 1, comparison] == lengths[current, comparison + 1]
+                    && string.CompareOrdinal(
+                        contentTokens[current].Value,
+                        comparisonTokens[comparison].Value) < 0))
             {
                 changedTokens[current++] = true;
             }

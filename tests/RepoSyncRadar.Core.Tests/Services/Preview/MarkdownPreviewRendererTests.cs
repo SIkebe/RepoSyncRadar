@@ -3614,11 +3614,23 @@ var value = 1;
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
 
         Assert.Contains(
-            "<code><span class=\"rsr-rendered-diff-added\">pip</span></code><span class=\"rsr-rendered-diff-added\">,</span> and <code><span class=\"rsr-rendered-diff-added\">uv</span></code>.",
+            "<code><span class=\"rsr-rendered-diff-added\">pip</span></code>",
             afterHtml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "<span class=\"rsr-rendered-diff-removed\">and</span> <code>pip</code>.",
+            "<code><span class=\"rsr-rendered-diff-added\">uv</span></code>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<code><span class=\"rsr-rendered-diff-removed\">pip</span></code>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<span class=\"rsr-rendered-diff-added\">and</span>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<span class=\"rsr-rendered-diff-removed\">and</span>",
             beforeHtml,
             StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;/span&gt;", afterHtml, StringComparison.Ordinal);
