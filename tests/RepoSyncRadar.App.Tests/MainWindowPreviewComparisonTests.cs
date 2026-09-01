@@ -823,8 +823,30 @@ public sealed class MainWindowPreviewComparisonTests
 
         var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
 
-        Assert.Equal([0, 2999], plan.BeforeChangedIndexes);
-        Assert.Equal([0, 2999], plan.AfterChangedIndexes);
+        Assert.Equal(2, plan.BeforeChangedIndexes.Count);
+        Assert.Equal(2, plan.AfterChangedIndexes.Count);
+        Assert.DoesNotContain(1500, plan.BeforeChangedIndexes);
+        Assert.DoesNotContain(1500, plan.AfterChangedIndexes);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Recovers_Shifted_Repeated_Lines_Within_Work_Budget()
+    {
+        var beforeBlocks = Enumerable.Range(0, 3000)
+            .Select(index => new PreviewDiffBlock(index, index % 2 == 0 ? "A" : "B"))
+            .ToArray();
+        var afterBlocks = new[] { new PreviewDiffBlock(0, "Inserted block") }
+            .Concat(beforeBlocks.Take(2999))
+            .Append(new PreviewDiffBlock(3000, "Changed final block"))
+            .Select((block, index) => block with { Index = index })
+            .ToArray();
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Single(plan.BeforeChangedIndexes);
+        Assert.Equal(2, plan.AfterChangedIndexes.Count);
+        Assert.DoesNotContain(1500, plan.BeforeChangedIndexes);
+        Assert.DoesNotContain(1500, plan.AfterChangedIndexes);
     }
 
     [Fact]

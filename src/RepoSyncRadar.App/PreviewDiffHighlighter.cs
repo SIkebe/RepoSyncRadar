@@ -504,7 +504,7 @@ internal static class PreviewDiffHighlighter
             {
                 Array.Fill(beforeChanged, true, beforeStart, beforeLength);
                 Array.Fill(afterChanged, true, afterStart, afterLength);
-                MarkPositionallyAlignedMatches(
+                MarkBudgetedFallbackMatches(
                     beforeTexts,
                     beforeStart,
                     beforeEnd,
@@ -512,7 +512,8 @@ internal static class PreviewDiffHighlighter
                     afterStart,
                     afterEnd,
                     beforeChanged,
-                    afterChanged);
+                    afterChanged,
+                    ref remainingComparisonWork);
             }
             return;
         }
@@ -530,7 +531,7 @@ internal static class PreviewDiffHighlighter
             Array.Fill(afterChanged, true, afterStart, afterLength);
             if (!TryReserveComparisonWork(ref remainingComparisonWork, beforeLength, afterLength))
             {
-                MarkPositionallyAlignedMatches(
+                MarkBudgetedFallbackMatches(
                     beforeTexts,
                     beforeStart,
                     beforeEnd,
@@ -538,7 +539,8 @@ internal static class PreviewDiffHighlighter
                     afterStart,
                     afterEnd,
                     beforeChanged,
-                    afterChanged);
+                    afterChanged,
+                    ref remainingComparisonWork);
             }
             else
             {
@@ -752,6 +754,189 @@ internal static class PreviewDiffHighlighter
         }
         return previous;
     }
+
+    private static void MarkBudgetedFallbackMatches(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged,
+        ref long remainingComparisonWork)
+    {
+        if (!TryMarkMyersMatches(
+            beforeTexts,
+            beforeStart,
+            beforeEnd,
+            afterTexts,
+            afterStart,
+            afterEnd,
+            beforeChanged,
+            afterChanged,
+            ref remainingComparisonWork))
+        {
+            MarkPositionallyAlignedMatches(
+                beforeTexts,
+                beforeStart,
+                beforeEnd,
+                afterTexts,
+                afterStart,
+                afterEnd,
+                beforeChanged,
+                afterChanged);
+        }
+    }
+
+    private static bool TryMarkMyersMatches(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged,
+        ref long remainingComparisonWork)
+    {
+        var beforeLength = beforeEnd - beforeStart;
+        var afterLength = afterEnd - afterStart;
+        var maximumDistance = beforeLength + afterLength;
+        var layers = new List<int[]>(Math.Min(maximumDistance + 1, 4096));
+        long consumedWork = 0;
+
+        for (var distance = 0; distance <= maximumDistance; distance++)
+        {
+            var current = new int[(distance * 2) + 1];
+            var previous = distance == 0 ? null : layers[distance - 1];
+            for (var diagonal = -distance; diagonal <= distance; diagonal += 2)
+            {
+                if (++consumedWork > remainingComparisonWork)
+                {
+                    remainingComparisonWork = 0;
+                    return false;
+                }
+
+                int beforeOffset;
+                if (distance == 0)
+                {
+                    beforeOffset = 0;
+                }
+                else if (diagonal == -distance
+                    || (diagonal != distance
+                        && GetMyersLayerValue(previous!, distance - 1, diagonal - 1)
+                            < GetMyersLayerValue(previous!, distance - 1, diagonal + 1)))
+                {
+                    beforeOffset = GetMyersLayerValue(previous!, distance - 1, diagonal + 1);
+                }
+                else
+                {
+                    beforeOffset = GetMyersLayerValue(previous!, distance - 1, diagonal - 1) + 1;
+                }
+
+                var afterOffset = beforeOffset - diagonal;
+                while (beforeOffset < beforeLength && afterOffset < afterLength)
+                {
+                    if (++consumedWork > remainingComparisonWork)
+                    {
+                        remainingComparisonWork = 0;
+                        return false;
+                    }
+                    if (!string.Equals(
+                        beforeTexts[beforeStart + beforeOffset],
+                        afterTexts[afterStart + afterOffset],
+                        StringComparison.Ordinal))
+                    {
+                        break;
+                    }
+                    beforeOffset++;
+                    afterOffset++;
+                }
+                current[diagonal + distance] = beforeOffset;
+                if (beforeOffset >= beforeLength && afterOffset >= afterLength)
+                {
+                    layers.Add(current);
+                    remainingComparisonWork -= consumedWork;
+                    MarkMyersBacktrackMatches(
+                        beforeTexts,
+                        beforeStart,
+                        afterTexts,
+                        afterStart,
+                        beforeLength,
+                        afterLength,
+                        layers,
+                        beforeChanged,
+                        afterChanged);
+                    return true;
+                }
+            }
+            layers.Add(current);
+        }
+
+        remainingComparisonWork -= consumedWork;
+        return false;
+    }
+
+    private static void MarkMyersBacktrackMatches(
+        string[] beforeTexts,
+        int beforeStart,
+        string[] afterTexts,
+        int afterStart,
+        int beforeLength,
+        int afterLength,
+        List<int[]> layers,
+        bool[] beforeChanged,
+        bool[] afterChanged)
+    {
+        var beforeOffset = beforeLength;
+        var afterOffset = afterLength;
+        for (var distance = layers.Count - 1; distance > 0; distance--)
+        {
+            var diagonal = beforeOffset - afterOffset;
+            var previous = layers[distance - 1];
+            var previousDiagonal = diagonal == -distance
+                || (diagonal != distance
+                    && GetMyersLayerValue(previous, distance - 1, diagonal - 1)
+                        < GetMyersLayerValue(previous, distance - 1, diagonal + 1))
+                    ? diagonal + 1
+                    : diagonal - 1;
+            var previousBeforeOffset = GetMyersLayerValue(previous, distance - 1, previousDiagonal);
+            var previousAfterOffset = previousBeforeOffset - previousDiagonal;
+            while (beforeOffset > previousBeforeOffset && afterOffset > previousAfterOffset)
+            {
+                beforeOffset--;
+                afterOffset--;
+                if (!string.Equals(
+                    beforeTexts[beforeStart + beforeOffset],
+                    afterTexts[afterStart + afterOffset],
+                    StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Myers preview diff backtrack produced a non-matching diagonal.");
+                }
+                beforeChanged[beforeStart + beforeOffset] = false;
+                afterChanged[afterStart + afterOffset] = false;
+            }
+            if (beforeOffset == previousBeforeOffset)
+            {
+                afterOffset--;
+            }
+            else
+            {
+                beforeOffset--;
+            }
+        }
+        while (beforeOffset > 0 && afterOffset > 0)
+        {
+            beforeOffset--;
+            afterOffset--;
+            beforeChanged[beforeStart + beforeOffset] = false;
+            afterChanged[afterStart + afterOffset] = false;
+        }
+    }
+
+    private static int GetMyersLayerValue(int[] layer, int distance, int diagonal)
+        => layer[diagonal + distance];
 
     private static void MarkPositionallyAlignedMatches(
         string[] beforeTexts,
