@@ -808,6 +808,26 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Bounds_Work_For_Very_Large_Repeated_Regions()
+    {
+        Assert.True(PreviewDiffHighlighter.ExceedsLinearSpaceWorkBudget(3000, 3000));
+
+        var beforeBlocks = Enumerable.Range(0, 3000)
+            .Select(index => new PreviewDiffBlock(index, "Repeated block"))
+            .ToArray();
+        var afterBlocks = beforeBlocks
+            .Select(block => block with { })
+            .ToArray();
+        afterBlocks[0] = new PreviewDiffBlock(0, "Changed first block");
+        afterBlocks[^1] = new PreviewDiffBlock(2999, "Changed last block");
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Equal([0, 2999], plan.BeforeChangedIndexes);
+        Assert.Equal([0, 2999], plan.AfterChangedIndexes);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildAlignmentGapPlan_Fills_Shorter_Pane_At_Each_Hunk()
     {
         var changes = new[]

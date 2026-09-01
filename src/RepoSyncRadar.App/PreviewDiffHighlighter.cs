@@ -57,6 +57,7 @@ internal static class PreviewDiffHighlighter
 
     private const int _maxExtractionAttempts = 6;
     private const long _maxPlanCells = 4_000_000;
+    private const long _maxLinearSpaceLcsCells = 8_000_000;
     private const string _extractCodeLinesToken = "__RSR_EXTRACT_CODE_LINES__";
 
     private const string _extractBlocksScriptTemplate = """
@@ -431,6 +432,7 @@ internal static class PreviewDiffHighlighter
     {
         var beforeChangedPositions = new bool[beforeTexts.Length];
         var afterChangedPositions = new bool[afterTexts.Length];
+        var remainingComparisonWork = _maxLinearSpaceLcsCells;
         MarkBoundedChanges(
             beforeTexts,
             0,
@@ -439,7 +441,8 @@ internal static class PreviewDiffHighlighter
             0,
             afterTexts.Length,
             beforeChangedPositions,
-            afterChangedPositions);
+            afterChangedPositions,
+            ref remainingComparisonWork);
         return BuildPlanFromChangedPositions(
             beforeBlocks,
             afterBlocks,
@@ -457,7 +460,8 @@ internal static class PreviewDiffHighlighter
         int afterStart,
         int afterEnd,
         bool[] beforeChanged,
-        bool[] afterChanged)
+        bool[] afterChanged,
+        ref long remainingComparisonWork)
     {
         while (beforeStart < beforeEnd
             && afterStart < afterEnd
@@ -484,15 +488,32 @@ internal static class PreviewDiffHighlighter
         var afterLength = afterEnd - afterStart;
         if (!ExceedsPlanCellBudget(beforeLength, afterLength))
         {
-            MarkLcsChanges(
-                beforeTexts,
-                beforeStart,
-                beforeEnd,
-                afterTexts,
-                afterStart,
-                afterEnd,
-                beforeChanged,
-                afterChanged);
+            if (TryReserveComparisonWork(ref remainingComparisonWork, beforeLength, afterLength))
+            {
+                MarkLcsChanges(
+                    beforeTexts,
+                    beforeStart,
+                    beforeEnd,
+                    afterTexts,
+                    afterStart,
+                    afterEnd,
+                    beforeChanged,
+                    afterChanged);
+            }
+            else
+            {
+                Array.Fill(beforeChanged, true, beforeStart, beforeLength);
+                Array.Fill(afterChanged, true, afterStart, afterLength);
+                MarkPositionallyAlignedMatches(
+                    beforeTexts,
+                    beforeStart,
+                    beforeEnd,
+                    afterTexts,
+                    afterStart,
+                    afterEnd,
+                    beforeChanged,
+                    afterChanged);
+            }
             return;
         }
 
@@ -507,15 +528,30 @@ internal static class PreviewDiffHighlighter
         {
             Array.Fill(beforeChanged, true, beforeStart, beforeLength);
             Array.Fill(afterChanged, true, afterStart, afterLength);
-            MarkLinearSpaceLcsMatches(
-                beforeTexts,
-                beforeStart,
-                beforeEnd,
-                afterTexts,
-                afterStart,
-                afterEnd,
-                beforeChanged,
-                afterChanged);
+            if (!TryReserveComparisonWork(ref remainingComparisonWork, beforeLength, afterLength))
+            {
+                MarkPositionallyAlignedMatches(
+                    beforeTexts,
+                    beforeStart,
+                    beforeEnd,
+                    afterTexts,
+                    afterStart,
+                    afterEnd,
+                    beforeChanged,
+                    afterChanged);
+            }
+            else
+            {
+                MarkLinearSpaceLcsMatches(
+                    beforeTexts,
+                    beforeStart,
+                    beforeEnd,
+                    afterTexts,
+                    afterStart,
+                    afterEnd,
+                    beforeChanged,
+                    afterChanged);
+            }
             return;
         }
 
@@ -531,7 +567,8 @@ internal static class PreviewDiffHighlighter
                 afterCursor,
                 anchor.AfterIndex,
                 beforeChanged,
-                afterChanged);
+                afterChanged,
+                ref remainingComparisonWork);
             beforeCursor = anchor.BeforeIndex + 1;
             afterCursor = anchor.AfterIndex + 1;
         }
@@ -543,7 +580,8 @@ internal static class PreviewDiffHighlighter
             afterCursor,
             afterEnd,
             beforeChanged,
-            afterChanged);
+            afterChanged,
+            ref remainingComparisonWork);
     }
 
     private static void MarkLcsChanges(
@@ -713,6 +751,30 @@ internal static class PreviewDiffHighlighter
             Array.Clear(current);
         }
         return previous;
+    }
+
+    private static void MarkPositionallyAlignedMatches(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged)
+    {
+        var pairCount = Math.Min(beforeEnd - beforeStart, afterEnd - afterStart);
+        for (var offset = 0; offset < pairCount; offset++)
+        {
+            if (string.Equals(
+                beforeTexts[beforeStart + offset],
+                afterTexts[afterStart + offset],
+                StringComparison.Ordinal))
+            {
+                beforeChanged[beforeStart + offset] = false;
+                afterChanged[afterStart + offset] = false;
+            }
+        }
     }
 
     private static int[] BuildLcsSuffixLengths(
@@ -907,6 +969,28 @@ internal static class PreviewDiffHighlighter
         int afterBlockCount,
         long maximumCellCount = _maxPlanCells)
         => ((long)beforeBlockCount + 1) * (afterBlockCount + 1) > maximumCellCount;
+
+    internal static bool ExceedsLinearSpaceWorkBudget(int beforeBlockCount, int afterBlockCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(beforeBlockCount);
+        ArgumentOutOfRangeException.ThrowIfNegative(afterBlockCount);
+        return (long)beforeBlockCount * afterBlockCount > _maxLinearSpaceLcsCells;
+    }
+
+    private static bool TryReserveComparisonWork(
+        ref long remainingComparisonWork,
+        int beforeBlockCount,
+        int afterBlockCount)
+    {
+        var requestedWork = (long)beforeBlockCount * afterBlockCount;
+        if (requestedWork > remainingComparisonWork)
+        {
+            return false;
+        }
+
+        remainingComparisonWork -= requestedWork;
+        return true;
+    }
 
     private static int? FindAlignmentAnchorIndex(
         IReadOnlyList<PreviewDiffBlock> blocks,
