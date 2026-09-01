@@ -3010,6 +3010,120 @@ internal static partial class MarkdownPreviewRenderer
         return new InlineChangedRange(prefixLength, excerptEnd - prefixLength + 1);
     }
 
+    private static List<InlineChangedRange> FindGranularInlineChangedRanges(
+        string content,
+        string comparisonContent,
+        InlineChangedRange fallbackRange)
+    {
+        var contentTokens = TokenizeInlineDiff(content);
+        var comparisonTokens = TokenizeInlineDiff(comparisonContent);
+        if (contentTokens.Count == 0
+            || comparisonTokens.Count == 0
+            || (long)contentTokens.Count * comparisonTokens.Count > 250_000)
+        {
+            return [fallbackRange];
+        }
+
+        var lengths = new int[contentTokens.Count + 1, comparisonTokens.Count + 1];
+        for (var contentIndex = contentTokens.Count - 1; contentIndex >= 0; contentIndex--)
+        {
+            for (var comparisonIndex = comparisonTokens.Count - 1; comparisonIndex >= 0; comparisonIndex--)
+            {
+                lengths[contentIndex, comparisonIndex] = string.Equals(
+                    contentTokens[contentIndex].Value,
+                    comparisonTokens[comparisonIndex].Value,
+                    StringComparison.Ordinal)
+                    ? lengths[contentIndex + 1, comparisonIndex + 1] + 1
+                    : Math.Max(
+                        lengths[contentIndex + 1, comparisonIndex],
+                        lengths[contentIndex, comparisonIndex + 1]);
+            }
+        }
+
+        var changedTokens = new bool[contentTokens.Count];
+        var current = 0;
+        var comparison = 0;
+        while (current < contentTokens.Count && comparison < comparisonTokens.Count)
+        {
+            if (string.Equals(
+                contentTokens[current].Value,
+                comparisonTokens[comparison].Value,
+                StringComparison.Ordinal))
+            {
+                current++;
+                comparison++;
+            }
+            else if (lengths[current + 1, comparison] >= lengths[current, comparison + 1])
+            {
+                changedTokens[current++] = true;
+            }
+            else
+            {
+                comparison++;
+            }
+        }
+        Array.Fill(changedTokens, true, current, changedTokens.Length - current);
+
+        var ranges = new List<InlineChangedRange>();
+        for (var index = 0; index < changedTokens.Length;)
+        {
+            if (!changedTokens[index])
+            {
+                index++;
+                continue;
+            }
+
+            var start = contentTokens[index].Start;
+            var end = contentTokens[index].End;
+            index++;
+            while (index < changedTokens.Length
+                && changedTokens[index]
+                && string.IsNullOrWhiteSpace(content[end..contentTokens[index].Start]))
+            {
+                end = contentTokens[index].End;
+                index++;
+            }
+            ranges.Add(new InlineChangedRange(start, end - start));
+        }
+
+        var granularLength = ranges.Sum(static range => range.Length);
+        return granularLength > 0 && granularLength * 5 < fallbackRange.Length * 4
+            ? ranges
+            : [fallbackRange];
+    }
+
+    private static List<InlineDiffToken> TokenizeInlineDiff(string content)
+    {
+        var tokens = new List<InlineDiffToken>();
+        for (var index = 0; index < content.Length;)
+        {
+            if (char.IsWhiteSpace(content[index]))
+            {
+                index++;
+                continue;
+            }
+
+            var start = index;
+            if (char.IsLetterOrDigit(content[index]) || content[index] == '_')
+            {
+                index++;
+                while (index < content.Length
+                    && (char.IsLetterOrDigit(content[index]) || content[index] == '_'))
+                {
+                    index++;
+                }
+            }
+            else
+            {
+                index++;
+            }
+            tokens.Add(new InlineDiffToken(content[start..index], start, index));
+        }
+        return tokens;
+    }
+
+    private readonly record struct InlineDiffToken(string Value, int Start, int End);
+
     private readonly record struct InlineChangedRange(int Start, int Length)
     {
         public int End => Start + Length;
@@ -3921,15 +4035,42 @@ internal static partial class MarkdownPreviewRenderer
                 ? marked
                 : content;
         }
-        changedRange = ExpandRenderedDiffRange(content, changedRange);
-        changedRange = ExpandRenderedDiffRangeAroundChangedAnchor(content, changedRange);
-        changedRange = SnapRangeOutsideLiquidTokens(content, changedRange);
-        if (changedRange.Length == 0)
+
+        var changedRanges = FindGranularInlineChangedRanges(content, comparisonContent, changedRange)
+            .Select(range => ExpandRenderedDiffRange(content, range))
+            .Select(range => ExpandRenderedDiffRangeAroundChangedAnchor(content, range))
+            .Select(range => SnapRangeOutsideLiquidTokens(content, range))
+            .Where(static range => range.Length > 0)
+            .OrderBy(static range => range.Start)
+            .ToArray();
+        if (changedRanges.Length == 0)
         {
             return content;
         }
 
-        return WrapRenderedDiffRangePreservingInlineCode(content, markerClass, changedRange);
+        var mergedRanges = new List<InlineChangedRange>(changedRanges.Length);
+        foreach (var range in changedRanges)
+        {
+            if (mergedRanges.Count == 0 || range.Start > mergedRanges[^1].End)
+            {
+                mergedRanges.Add(range);
+                continue;
+            }
+
+            var previous = mergedRanges[^1];
+            var end = Math.Max(previous.End, range.End);
+            mergedRanges[^1] = new InlineChangedRange(previous.Start, end - previous.Start);
+        }
+
+        var markedContent = content;
+        for (var index = mergedRanges.Count - 1; index >= 0; index--)
+        {
+            markedContent = WrapRenderedDiffRangePreservingInlineCode(
+                markedContent,
+                markerClass,
+                mergedRanges[index]);
+        }
+        return markedContent;
     }
 
     private static InlineChangedRange ExpandRenderedDiffRangeAroundChangedAnchor(

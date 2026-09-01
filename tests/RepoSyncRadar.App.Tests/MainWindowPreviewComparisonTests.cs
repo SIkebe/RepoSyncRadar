@@ -1085,9 +1085,17 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("const splitMarkerSegments = (elements)", script, StringComparison.Ordinal);
         Assert.Contains("item.rect.top > previous.bottom + 2", script, StringComparison.Ordinal);
         Assert.Contains("splitMarkerSegments(elements).forEach((segment)", script, StringComparison.Ordinal);
-        Assert.Contains("const hasSubstantiveChange = segment.elements.some(", script, StringComparison.Ordinal);
+        Assert.Contains("const hasSubstantiveChange = substantiveTargets.length > 0", script, StringComparison.Ordinal);
         Assert.Contains(
-            "const isRemoval = hasSubstantiveChange ? pane === 'before' : pane === 'after'",
+            "const isRemoval = hasRemovedMarker !== hasAddedMarker",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "const inlineMarkerTargets = segment.elements.flatMap((element) => [",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            ": substantiveTargets",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -1095,12 +1103,12 @@ public sealed class MainWindowPreviewComparisonTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "document.querySelectorAll('.rsr-preview-diff-block,[data-rsr-diff-navigation-index]')",
+            "document.querySelectorAll('.rsr-preview-diff-target,[data-rsr-diff-navigation-index]')",
             script,
             StringComparison.Ordinal);
         Assert.Contains("`hunk-${navigationIndex}`", script, StringComparison.Ordinal);
-        Assert.Contains("Math.min(...segment.rects.map((rect) => rect.top))", script, StringComparison.Ordinal);
-        Assert.Contains("Math.max(...segment.rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
+        Assert.Contains("Math.min(...rects.map((rect) => rect.top))", script, StringComparison.Ordinal);
+        Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
         Assert.Contains("const documentHeight = Math.max(1, root.scrollHeight)", script, StringComparison.Ordinal);
         Assert.Contains("absoluteTop / documentHeight", script, StringComparison.Ordinal);
         Assert.Contains("(absoluteBottom - absoluteTop) / documentHeight", script, StringComparison.Ordinal);
@@ -1334,6 +1342,22 @@ public sealed class MainWindowPreviewComparisonTests
 
         Assert.Contains(".ghd-markdown-alert.rsr-preview-diff-block", script, StringComparison.Ordinal);
         Assert.Contains("padding: 8px 0 8px 14px", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ApplyPlanScript_Does_Not_Overlay_Rendered_Inline_Diffs()
+    {
+        var script = PreviewDiffHighlighter.BuildApplyPlanScript("[1]", "\"after\"");
+
+        Assert.Contains("element.classList.add('rsr-preview-diff-target')", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "!element.matches(renderedDiffSelector) && !element.querySelector(renderedDiffSelector)",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "const renderedDiffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed'",
+            script,
+            StringComparison.Ordinal);
     }
 
     [Fact]

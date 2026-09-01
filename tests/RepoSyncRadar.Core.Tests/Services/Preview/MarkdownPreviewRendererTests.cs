@@ -3427,6 +3427,41 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Marks_Disjoint_Paragraph_Changes_Without_Shared_Middle()
+    {
+        const string beforeMarkdown = "stable prefix shared middle removed words stable suffix";
+        const string afterMarkdown = "stable prefix inserted words shared middle stable suffix";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "stable prefix shared middle <span class=\"rsr-rendered-diff-removed\">removed words</span> stable suffix",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "stable prefix <span class=\"rsr-rendered-diff-added\">inserted words</span> shared middle stable suffix",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<span class=\"rsr-rendered-diff-added\">inserted words shared middle",
+            afterHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Leaves_Shared_Text_Unmarked_In_Heavily_Rewritten_Paragraphs()
     {
         const string sharedSuffix = " You can do this in either of the following ways:";
@@ -3579,11 +3614,11 @@ var value = 1;
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
 
         Assert.Contains(
-            "<code><span class=\"rsr-rendered-diff-added\">pip</span></code><span class=\"rsr-rendered-diff-added\">, and </span><code><span class=\"rsr-rendered-diff-added\">uv</span></code>.",
+            "<code><span class=\"rsr-rendered-diff-added\">pip</span></code><span class=\"rsr-rendered-diff-added\">,</span> and <code><span class=\"rsr-rendered-diff-added\">uv</span></code>.",
             afterHtml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "<span class=\"rsr-rendered-diff-removed\">and </span><code><span class=\"rsr-rendered-diff-removed\">pip</span></code>.",
+            "<span class=\"rsr-rendered-diff-removed\">and</span> <code>pip</code>.",
             beforeHtml,
             StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;/span&gt;", afterHtml, StringComparison.Ordinal);

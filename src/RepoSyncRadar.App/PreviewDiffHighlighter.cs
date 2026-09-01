@@ -2034,8 +2034,12 @@ td.rsr-preview-diff-alignment-gap {
     document.head.appendChild(style);
   }
 
-  document.querySelectorAll('.rsr-preview-diff-block,[data-rsr-diff-navigation-index]').forEach((element) => {
-    element.classList.remove('rsr-preview-diff-block', 'rsr-preview-diff-before', 'rsr-preview-diff-after');
+  document.querySelectorAll('.rsr-preview-diff-target,[data-rsr-diff-navigation-index]').forEach((element) => {
+    element.classList.remove(
+      'rsr-preview-diff-target',
+      'rsr-preview-diff-block',
+      'rsr-preview-diff-before',
+      'rsr-preview-diff-after');
     element.removeAttribute('data-rsr-diff-navigation-index');
   });
 
@@ -2043,14 +2047,18 @@ td.rsr-preview-diff-alignment-gap {
   const navigationIndexes = new Map(
     {{navigationTargetsJson}}.map((target) => [target.index, target.navigationIndex]));
   const pane = {{paneJson}};
+  const renderedDiffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
   changedIndexes.forEach((index) => {
     const element = document.querySelector(`[data-rsr-diff-index="${index}"]`);
     if (!element) {
       return;
     }
-    element.classList.add(
-      'rsr-preview-diff-block',
-      pane === 'before' ? 'rsr-preview-diff-before' : 'rsr-preview-diff-after');
+    element.classList.add('rsr-preview-diff-target');
+    if (!element.matches(renderedDiffSelector) && !element.querySelector(renderedDiffSelector)) {
+      element.classList.add(
+        'rsr-preview-diff-block',
+        pane === 'before' ? 'rsr-preview-diff-before' : 'rsr-preview-diff-after');
+    }
     if (navigationIndexes.has(index)) {
       element.setAttribute(
         'data-rsr-diff-navigation-index',
@@ -2062,7 +2070,7 @@ td.rsr-preview-diff-alignment-gap {
   const buildMarkers = () => {
     document.getElementById(markerRootId)?.remove();
     const markerElements = Array.from(
-      document.querySelectorAll('.rsr-preview-diff-block,[data-rsr-diff-navigation-index]'));
+      document.querySelectorAll('.rsr-preview-diff-target,[data-rsr-diff-navigation-index]'));
     if (markerElements.length === 0) {
       return;
     }
@@ -2109,13 +2117,33 @@ td.rsr-preview-diff-alignment-gap {
             '.rsr-preview-diff-alignment-gap,' +
             '.rsr-preview-diff-alignment-gap-row,' +
             '.rsr-preview-diff-alignment-gap-section';
-          const hasSubstantiveChange = segment.elements.some(
+          const substantiveTargets = segment.elements.filter(
             (element) => !element.matches(alignmentGapSelector));
-          const isRemoval = hasSubstantiveChange ? pane === 'before' : pane === 'after';
+          const inlineMarkerTargets = segment.elements.flatMap((element) => [
+              ...(element.matches(renderedDiffSelector) ? [element] : []),
+              ...element.querySelectorAll(renderedDiffSelector),
+            ]);
+          const markerTargets = inlineMarkerTargets.length > 0
+            ? inlineMarkerTargets
+            : substantiveTargets;
+          const rects = markerTargets
+            .map((element) => element.getBoundingClientRect())
+            .filter((rect) => rect.width > 0 && rect.height > 0);
+          if (rects.length === 0) {
+            return;
+          }
+          const hasSubstantiveChange = substantiveTargets.length > 0;
+          const hasRemovedMarker = markerTargets.some(
+            (element) => element.matches('.rsr-rendered-diff-removed'));
+          const hasAddedMarker = markerTargets.some(
+            (element) => element.matches('.rsr-rendered-diff-added'));
+          const isRemoval = hasRemovedMarker !== hasAddedMarker
+            ? hasRemovedMarker
+            : hasSubstantiveChange ? pane === 'before' : pane === 'after';
           const marker = document.createElement('div');
           marker.className = `rsr-preview-diff-scrollbar-marker ${isRemoval ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
-          const absoluteTop = Math.min(...segment.rects.map((rect) => rect.top)) + window.scrollY;
-          const absoluteBottom = Math.max(...segment.rects.map((rect) => rect.bottom)) + window.scrollY;
+          const absoluteTop = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
+          const absoluteBottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
           const top = Math.max(0, Math.min(1, absoluteTop / documentHeight));
           const height = Math.max(4, Math.min(window.innerHeight, ((absoluteBottom - absoluteTop) / documentHeight) * window.innerHeight));
           const markerTop = Math.max(0, Math.min(window.innerHeight - height, top * window.innerHeight));
