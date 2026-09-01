@@ -50,12 +50,13 @@ internal readonly record struct PreviewDiffNavigationResult(
 
 internal static class PreviewDiffHighlighter
 {
+    private readonly record struct BlockAnchor(int BeforeIndex, int AfterIndex);
+
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan _extractionRetryDelay = TimeSpan.FromMilliseconds(250);
 
     private const int _maxExtractionAttempts = 6;
-    private const long _maxGranularPlanCells = 1_000_000;
-    private const long _maxCoarsePlanCells = 4_000_000;
+    private const long _maxPlanCells = 4_000_000;
     private const string _extractCodeLinesToken = "__RSR_EXTRACT_CODE_LINES__";
 
     private const string _extractBlocksScriptTemplate = """
@@ -299,27 +300,9 @@ internal static class PreviewDiffHighlighter
         ArgumentNullException.ThrowIfNull(beforeView);
         ArgumentNullException.ThrowIfNull(afterView);
 
-        var blocks = await Task.WhenAll(
+        return await Task.WhenAll(
             ExtractBlocksAsync(beforeView),
             ExtractBlocksAsync(afterView));
-        if (!RequiresCoarseCodeBlockExtraction(blocks[0].Count, blocks[1].Count))
-        {
-            return blocks;
-        }
-
-        return await Task.WhenAll(
-            ExtractBlocksAsync(beforeView, extractCodeLines: false),
-            ExtractBlocksAsync(afterView, extractCodeLines: false));
-    }
-
-    internal static bool RequiresCoarseCodeBlockExtraction(int beforeBlockCount, int afterBlockCount)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(beforeBlockCount);
-        ArgumentOutOfRangeException.ThrowIfNegative(afterBlockCount);
-
-        return beforeBlockCount > 0
-            && afterBlockCount > 0
-            && ExceedsPlanCellBudget(beforeBlockCount, afterBlockCount);
     }
 
     internal static PreviewDiffPlan BuildPlan(
@@ -344,7 +327,7 @@ internal static class PreviewDiffHighlighter
 
         var beforeTexts = beforeBlocks.Select(block => NormalizeText(block.Text)).ToArray();
         var afterTexts = afterBlocks.Select(block => NormalizeText(block.Text)).ToArray();
-        if (ExceedsPlanCellBudget(beforeTexts.Length, afterTexts.Length, _maxCoarsePlanCells))
+        if (ExceedsPlanCellBudget(beforeTexts.Length, afterTexts.Length))
         {
             return BuildBoundedPlan(beforeBlocks, afterBlocks, beforeTexts, afterTexts);
         }
@@ -446,67 +429,328 @@ internal static class PreviewDiffHighlighter
         string[] beforeTexts,
         string[] afterTexts)
     {
-        var commonPrefixLength = 0;
-        while (commonPrefixLength < beforeTexts.Length
-            && commonPrefixLength < afterTexts.Length
-            && string.Equals(
-                beforeTexts[commonPrefixLength],
-                afterTexts[commonPrefixLength],
-                StringComparison.Ordinal))
-        {
-            commonPrefixLength++;
-        }
+        var beforeChangedPositions = new bool[beforeTexts.Length];
+        var afterChangedPositions = new bool[afterTexts.Length];
+        MarkBoundedChanges(
+            beforeTexts,
+            0,
+            beforeTexts.Length,
+            afterTexts,
+            0,
+            afterTexts.Length,
+            beforeChangedPositions,
+            afterChangedPositions);
+        return BuildPlanFromChangedPositions(
+            beforeBlocks,
+            afterBlocks,
+            beforeTexts,
+            afterTexts,
+            beforeChangedPositions,
+            afterChangedPositions);
+    }
 
-        var beforeEnd = beforeTexts.Length - 1;
-        var afterEnd = afterTexts.Length - 1;
-        while (beforeEnd >= commonPrefixLength
-            && afterEnd >= commonPrefixLength
-            && string.Equals(beforeTexts[beforeEnd], afterTexts[afterEnd], StringComparison.Ordinal))
+    private static void MarkBoundedChanges(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged)
+    {
+        while (beforeStart < beforeEnd
+            && afterStart < afterEnd
+            && string.Equals(beforeTexts[beforeStart], afterTexts[afterStart], StringComparison.Ordinal))
+        {
+            beforeStart++;
+            afterStart++;
+        }
+        while (beforeStart < beforeEnd
+            && afterStart < afterEnd
+            && string.Equals(beforeTexts[beforeEnd - 1], afterTexts[afterEnd - 1], StringComparison.Ordinal))
         {
             beforeEnd--;
             afterEnd--;
         }
-
-        var beforeChangedIndexes = beforeBlocks
-            .Skip(commonPrefixLength)
-            .Take(beforeEnd - commonPrefixLength + 1)
-            .Select(static block => block.Index)
-            .ToArray();
-        var afterChangedIndexes = afterBlocks
-            .Skip(commonPrefixLength)
-            .Take(afterEnd - commonPrefixLength + 1)
-            .Select(static block => block.Index)
-            .ToArray();
-        if (beforeChangedIndexes.Length == 0 && afterChangedIndexes.Length == 0)
+        if (beforeStart == beforeEnd || afterStart == afterEnd)
         {
-            return new PreviewDiffPlan([], [], []);
+            Array.Fill(beforeChanged, true, beforeStart, beforeEnd - beforeStart);
+            Array.Fill(afterChanged, true, afterStart, afterEnd - afterStart);
+            return;
         }
 
-        var beforeCursor = beforeEnd + 1;
-        var afterCursor = afterEnd + 1;
-        var advancePastCurrentAlignmentGroup =
-            IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, beforeChangedIndexes)
-            || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, afterChangedIndexes);
-        var change = new PreviewDiffChange(
-            beforeChangedIndexes,
-            afterChangedIndexes,
-            FindAlignmentAnchorIndex(
-                beforeBlocks,
+        var beforeLength = beforeEnd - beforeStart;
+        var afterLength = afterEnd - afterStart;
+        if (!ExceedsPlanCellBudget(beforeLength, afterLength))
+        {
+            MarkLcsChanges(
+                beforeTexts,
+                beforeStart,
+                beforeEnd,
+                afterTexts,
+                afterStart,
+                afterEnd,
+                beforeChanged,
+                afterChanged);
+            return;
+        }
+
+        var anchors = FindPatienceAnchors(
+            beforeTexts,
+            beforeStart,
+            beforeEnd,
+            afterTexts,
+            afterStart,
+            afterEnd);
+        if (anchors.Count == 0)
+        {
+            Array.Fill(beforeChanged, true, beforeStart, beforeLength);
+            Array.Fill(afterChanged, true, afterStart, afterLength);
+            return;
+        }
+
+        var beforeCursor = beforeStart;
+        var afterCursor = afterStart;
+        foreach (var anchor in anchors)
+        {
+            MarkBoundedChanges(
+                beforeTexts,
                 beforeCursor,
-                beforeChangedIndexes,
-                advancePastCurrentAlignmentGroup),
-            FindAlignmentAnchorIndex(
-                afterBlocks,
+                anchor.BeforeIndex,
+                afterTexts,
                 afterCursor,
-                afterChangedIndexes,
-                advancePastCurrentAlignmentGroup));
-        return new PreviewDiffPlan(beforeChangedIndexes, afterChangedIndexes, [change]);
+                anchor.AfterIndex,
+                beforeChanged,
+                afterChanged);
+            beforeCursor = anchor.BeforeIndex + 1;
+            afterCursor = anchor.AfterIndex + 1;
+        }
+        MarkBoundedChanges(
+            beforeTexts,
+            beforeCursor,
+            beforeEnd,
+            afterTexts,
+            afterCursor,
+            afterEnd,
+            beforeChanged,
+            afterChanged);
+    }
+
+    private static void MarkLcsChanges(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged)
+    {
+        var beforeLength = beforeEnd - beforeStart;
+        var afterLength = afterEnd - afterStart;
+        var lengths = new int[beforeLength + 1, afterLength + 1];
+        for (var beforeIndex = beforeLength - 1; beforeIndex >= 0; beforeIndex--)
+        {
+            for (var afterIndex = afterLength - 1; afterIndex >= 0; afterIndex--)
+            {
+                lengths[beforeIndex, afterIndex] = string.Equals(
+                    beforeTexts[beforeStart + beforeIndex],
+                    afterTexts[afterStart + afterIndex],
+                    StringComparison.Ordinal)
+                        ? lengths[beforeIndex + 1, afterIndex + 1] + 1
+                        : Math.Max(lengths[beforeIndex + 1, afterIndex], lengths[beforeIndex, afterIndex + 1]);
+            }
+        }
+
+        var beforeCursor = 0;
+        var afterCursor = 0;
+        while (beforeCursor < beforeLength && afterCursor < afterLength)
+        {
+            if (string.Equals(
+                beforeTexts[beforeStart + beforeCursor],
+                afterTexts[afterStart + afterCursor],
+                StringComparison.Ordinal))
+            {
+                beforeCursor++;
+                afterCursor++;
+            }
+            else if (lengths[beforeCursor + 1, afterCursor] >= lengths[beforeCursor, afterCursor + 1])
+            {
+                beforeChanged[beforeStart + beforeCursor++] = true;
+            }
+            else
+            {
+                afterChanged[afterStart + afterCursor++] = true;
+            }
+        }
+        Array.Fill(beforeChanged, true, beforeStart + beforeCursor, beforeLength - beforeCursor);
+        Array.Fill(afterChanged, true, afterStart + afterCursor, afterLength - afterCursor);
+    }
+
+    private static List<BlockAnchor> FindPatienceAnchors(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd)
+    {
+        var beforeOccurrences = BuildTextOccurrences(beforeTexts, beforeStart, beforeEnd);
+        var afterOccurrences = BuildTextOccurrences(afterTexts, afterStart, afterEnd);
+        var candidates = new List<BlockAnchor>();
+        for (var index = beforeStart; index < beforeEnd; index++)
+        {
+            var text = beforeTexts[index];
+            if (beforeOccurrences[text].Count == 1
+                && afterOccurrences.TryGetValue(text, out var afterOccurrence)
+                && afterOccurrence.Count == 1)
+            {
+                candidates.Add(new BlockAnchor(index, afterOccurrence.Index));
+            }
+        }
+        if (candidates.Count <= 1)
+        {
+            return candidates;
+        }
+
+        var tails = new int[candidates.Count];
+        var predecessors = new int[candidates.Count];
+        Array.Fill(predecessors, -1);
+        var length = 0;
+        for (var candidateIndex = 0; candidateIndex < candidates.Count; candidateIndex++)
+        {
+            var low = 0;
+            var high = length;
+            while (low < high)
+            {
+                var middle = low + ((high - low) / 2);
+                if (candidates[tails[middle]].AfterIndex < candidates[candidateIndex].AfterIndex)
+                {
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+            if (low > 0)
+            {
+                predecessors[candidateIndex] = tails[low - 1];
+            }
+            tails[low] = candidateIndex;
+            if (low == length)
+            {
+                length++;
+            }
+        }
+
+        var anchors = new List<BlockAnchor>(length);
+        var current = tails[length - 1];
+        while (current >= 0)
+        {
+            anchors.Add(candidates[current]);
+            current = predecessors[current];
+        }
+        anchors.Reverse();
+        return anchors;
+    }
+
+    private static Dictionary<string, (int Count, int Index)> BuildTextOccurrences(
+        string[] texts,
+        int start,
+        int end)
+    {
+        var occurrences = new Dictionary<string, (int Count, int Index)>(StringComparer.Ordinal);
+        for (var index = start; index < end; index++)
+        {
+            var text = texts[index];
+            occurrences[text] = occurrences.TryGetValue(text, out var occurrence)
+                ? (occurrence.Count + 1, occurrence.Index)
+                : (1, index);
+        }
+        return occurrences;
+    }
+
+    private static PreviewDiffPlan BuildPlanFromChangedPositions(
+        IReadOnlyList<PreviewDiffBlock> beforeBlocks,
+        IReadOnlyList<PreviewDiffBlock> afterBlocks,
+        string[] beforeTexts,
+        string[] afterTexts,
+        bool[] beforeChangedPositions,
+        bool[] afterChangedPositions)
+    {
+        var beforeChanged = new List<int>();
+        var afterChanged = new List<int>();
+        var changes = new List<PreviewDiffChange>();
+        var currentBeforeIndexes = new List<int>();
+        var currentAfterIndexes = new List<int>();
+        var beforeCursor = 0;
+        var afterCursor = 0;
+        void FlushChange()
+        {
+            if (currentBeforeIndexes.Count == 0 && currentAfterIndexes.Count == 0)
+            {
+                return;
+            }
+
+            var advancePastCurrentAlignmentGroup =
+                IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, currentBeforeIndexes)
+                || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, currentAfterIndexes);
+            changes.Add(new PreviewDiffChange(
+                currentBeforeIndexes.ToArray(),
+                currentAfterIndexes.ToArray(),
+                FindAlignmentAnchorIndex(
+                    beforeBlocks,
+                    beforeCursor,
+                    currentBeforeIndexes,
+                    advancePastCurrentAlignmentGroup),
+                FindAlignmentAnchorIndex(
+                    afterBlocks,
+                    afterCursor,
+                    currentAfterIndexes,
+                    advancePastCurrentAlignmentGroup)));
+            currentBeforeIndexes.Clear();
+            currentAfterIndexes.Clear();
+        }
+
+        while (beforeCursor < beforeBlocks.Count || afterCursor < afterBlocks.Count)
+        {
+            if (beforeCursor < beforeBlocks.Count
+                && afterCursor < afterBlocks.Count
+                && !beforeChangedPositions[beforeCursor]
+                && !afterChangedPositions[afterCursor]
+                && string.Equals(beforeTexts[beforeCursor], afterTexts[afterCursor], StringComparison.Ordinal))
+            {
+                FlushChange();
+                beforeCursor++;
+                afterCursor++;
+            }
+            else if (beforeCursor < beforeBlocks.Count && beforeChangedPositions[beforeCursor])
+            {
+                beforeChanged.Add(beforeBlocks[beforeCursor].Index);
+                currentBeforeIndexes.Add(beforeBlocks[beforeCursor].Index);
+                beforeCursor++;
+            }
+            else if (afterCursor < afterBlocks.Count && afterChangedPositions[afterCursor])
+            {
+                afterChanged.Add(afterBlocks[afterCursor].Index);
+                currentAfterIndexes.Add(afterBlocks[afterCursor].Index);
+                afterCursor++;
+            }
+            else
+            {
+                throw new InvalidOperationException("Bounded preview diff produced an unaligned unchanged block.");
+            }
+        }
+        FlushChange();
+        return new PreviewDiffPlan(beforeChanged, afterChanged, changes);
     }
 
     private static bool ExceedsPlanCellBudget(
         int beforeBlockCount,
         int afterBlockCount,
-        long maximumCellCount = _maxGranularPlanCells)
+        long maximumCellCount = _maxPlanCells)
         => ((long)beforeBlockCount + 1) * (afterBlockCount + 1) > maximumCellCount;
 
     private static int? FindAlignmentAnchorIndex(

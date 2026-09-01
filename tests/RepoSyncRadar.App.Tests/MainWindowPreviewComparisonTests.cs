@@ -709,23 +709,6 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(3, change.AfterAnchorIndex);
     }
 
-    [Theory]
-    [InlineData(999, 999, false)]
-    [InlineData(1000, 1000, true)]
-    [InlineData(3000, 3001, true)]
-    [InlineData(0, 3000, false)]
-    public void PreviewDiffHighlighter_RequiresCoarseCodeBlockExtraction_Bounds_Lcs_Matrix(
-        int beforeBlockCount,
-        int afterBlockCount,
-        bool expected)
-    {
-        Assert.Equal(
-            expected,
-            PreviewDiffHighlighter.RequiresCoarseCodeBlockExtraction(
-                beforeBlockCount,
-                afterBlockCount));
-    }
-
     [Fact]
     public void PreviewDiffHighlighter_BuildExtractBlocksScript_Can_Collapse_Code_Lines()
     {
@@ -742,7 +725,7 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
-    public void PreviewDiffHighlighter_BuildPlan_Preserves_Separate_Hunks_After_Coarse_Extraction()
+    public void PreviewDiffHighlighter_BuildPlan_Preserves_Separate_Hunks_Within_Detailed_Limit()
     {
         var beforeBlocks = Enumerable.Range(0, 1000)
             .Select(index => new PreviewDiffBlock(index, $"Shared block {index}"))
@@ -765,7 +748,7 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
-    public void PreviewDiffHighlighter_BuildPlan_Bounds_Very_Large_Comparisons()
+    public void PreviewDiffHighlighter_BuildPlan_Preserves_Separate_Changes_In_Very_Large_Comparisons()
     {
         var beforeBlocks = Enumerable.Range(0, 2100)
             .Select(index => new PreviewDiffBlock(index, $"Shared block {index}"))
@@ -778,11 +761,30 @@ public sealed class MainWindowPreviewComparisonTests
 
         var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
 
-        var change = Assert.Single(plan.Changes);
-        Assert.Equal(500, change.BeforeIndexes[0]);
-        Assert.Equal(1500, change.BeforeIndexes[^1]);
-        Assert.Equal(1501, change.BeforeAnchorIndex);
-        Assert.Equal(1501, change.AfterAnchorIndex);
+        Assert.Equal(2, plan.Changes.Count);
+        Assert.Equal([500], plan.Changes[0].BeforeIndexes);
+        Assert.Equal([500], plan.Changes[0].AfterIndexes);
+        Assert.Equal([1500], plan.Changes[1].BeforeIndexes);
+        Assert.Equal([1500], plan.Changes[1].AfterIndexes);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Uses_Patience_Anchors_Across_Large_Changed_Window()
+    {
+        var beforeBlocks = Enumerable.Range(0, 2100)
+            .Select(index => new PreviewDiffBlock(index, $"Shared block {index}"))
+            .ToArray();
+        var afterBlocks = beforeBlocks
+            .Select(block => block with { })
+            .ToArray();
+        afterBlocks[0] = new PreviewDiffBlock(0, "Changed first block");
+        afterBlocks[^1] = new PreviewDiffBlock(2099, "Changed last block");
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Equal([0, 2099], plan.BeforeChangedIndexes);
+        Assert.Equal([0, 2099], plan.AfterChangedIndexes);
+        Assert.Equal(2, plan.Changes.Count);
     }
 
     [Fact]
