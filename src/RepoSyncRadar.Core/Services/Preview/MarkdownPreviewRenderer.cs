@@ -437,9 +437,12 @@ internal static partial class MarkdownPreviewRenderer
     const selector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
     const structuralBlockSelector = 'pre,li,td,th,blockquote,.ghd-markdown-alert';
     const textBlockSelector = 'p,h1,h2,h3,h4,h5,h6';
+    const removedSelector =
+        '.rsr-rendered-diff-removed:not(.rsr-rendered-diff-gap),' +
+        '.rsr-rendered-diff-added.rsr-rendered-diff-gap';
     const isRemoved = (element) =>
-        element.matches('.rsr-rendered-diff-removed') ||
-        element.querySelector('.rsr-rendered-diff-removed') !== null;
+        element.matches(removedSelector) ||
+        element.querySelector(removedSelector) !== null;
     const collectTargets = () => {
         const annotated = Array.from(
             document.querySelectorAll('[data-rsr-diff-navigation-index]'));
@@ -471,6 +474,7 @@ internal static partial class MarkdownPreviewRenderer
         return targets;
     };
     let pairs = [];
+    let disabled = false;
     const position = () => {
         if (pairs.length === 0) return;
         const docHeight = Math.max(1, document.documentElement.scrollHeight);
@@ -500,6 +504,7 @@ internal static partial class MarkdownPreviewRenderer
     };
     const build = () => {
         document.getElementById(markerRootId)?.remove();
+        if (disabled) { pairs = []; return; }
         const targets = collectTargets();
         if (targets.length === 0) { pairs = []; return; }
         const rail = document.createElement('div');
@@ -523,10 +528,15 @@ internal static partial class MarkdownPreviewRenderer
             build();
         }));
     };
+    const disable = () => {
+        disabled = true;
+        pairs = [];
+        document.getElementById(markerRootId)?.remove();
+    };
     document.addEventListener('DOMContentLoaded', scheduleBuild, { once: true });
     window.addEventListener('load', scheduleBuild, { once: true });
     window.addEventListener('resize', scheduleBuild, { passive: true });
-    window[stateKey] = { scheduleBuild };
+    window[stateKey] = { scheduleBuild, disable };
     window.setTimeout(scheduleBuild, 250);
 })();
 """);

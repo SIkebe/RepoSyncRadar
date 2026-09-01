@@ -919,7 +919,8 @@ public partial class MainWindow : Window
                 comparisonRequest.AfterLabel,
                 comparisonRequest.FilePath,
                 comparisonRequest.FileOrdinal,
-                comparisonRequest.FileCount);
+                comparisonRequest.FileCount,
+                comparisonRequest.OfficialUrl);
             ShowInitialComparisonLoadingStatus(comparisonRequest);
             NavigatePreviewPane(DocsView, comparisonRequest.BeforeUrl);
             NavigatePreviewPane(PreviewView, url);
@@ -962,7 +963,8 @@ public partial class MainWindow : Window
             request.AfterLabel,
             request.FilePath,
             request.FileOrdinal,
-            request.FileCount);
+            request.FileCount,
+            request.OfficialUrl);
         ShowInitialComparisonLoadingStatus(request);
         UpdateDocsVersionSelector(request);
         NavigatePreviewPane(DocsView, request.BeforeUrl);
@@ -2104,11 +2106,12 @@ public partial class MainWindow : Window
         string rightLabel = "PR HEAD localhost",
         string? filePath = null,
         int? fileOrdinal = null,
-        int? fileCount = null)
+        int? fileCount = null,
+        Uri? officialUrl = null)
     {
         OfficialDocsHeaderText.Text = leftLabel;
         PreviewDocsHeaderText.Text = rightLabel;
-        SetComparisonFilePath(filePath, fileOrdinal, fileCount);
+        SetComparisonFilePath(filePath, fileOrdinal, fileCount, officialUrl);
         PreviewDocsSplitter.Visibility = Visibility.Visible;
         PreviewDocsHeader.Visibility = Visibility.Visible;
         PreviewViewHost.Visibility = Visibility.Visible;
@@ -2256,7 +2259,11 @@ public partial class MainWindow : Window
         ShowPreviewPaneStatus(isBeforePane: false, "PR HEAD ページを準備中…", detail);
     }
 
-    private void SetComparisonFilePath(string? filePath, int? fileOrdinal, int? fileCount)
+    private void SetComparisonFilePath(
+        string? filePath,
+        int? fileOrdinal,
+        int? fileCount,
+        Uri? officialUrl = null)
     {
         var text = BuildComparisonFilePathLabel(filePath);
         var indexText = BuildComparisonFileIndexLabel(fileOrdinal, fileCount);
@@ -2267,7 +2274,7 @@ public partial class MainWindow : Window
         SetFileBadge(OfficialDocsFileBadge, OfficialDocsFileBadgeText, indexText);
         SetFileBadge(PreviewDocsFileBadge, PreviewDocsFileBadgeText, indexText);
         UpdatePreviewFileNavigationButtons(fileOrdinal, fileCount);
-        UpdateOpenOfficialDocsButton(filePath);
+        UpdateOpenOfficialDocsButton(filePath, officialUrl);
     }
 
     private void UpdatePreviewFileNavigationButtons(int? fileOrdinal, int? fileCount)
@@ -2292,9 +2299,9 @@ public partial class MainWindow : Window
             state.IsVisible ? BuildPreviewFileNavigationToolTip(PreviewFileNavigationDirection.Next, state) : "次のファイル差分へ");
     }
 
-    private void UpdateOpenOfficialDocsButton(string? filePath)
+    private void UpdateOpenOfficialDocsButton(string? filePath, Uri? officialUrl = null)
     {
-        _openOfficialDocsUri = BuildOfficialDocsUri(filePath);
+        _openOfficialDocsUri = officialUrl ?? BuildOfficialDocsUri(filePath);
         if (_openOfficialDocsUri is null)
         {
             OpenOfficialDocsButton.Visibility = Visibility.Collapsed;

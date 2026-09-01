@@ -65,6 +65,17 @@ public interface IPreviewCoordinator
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Renders generated REST or GraphQL reference data from the first parent and
+    /// PR HEAD into docs-style pages and hosts them for side-by-side comparison.
+    /// </summary>
+    Task<PreviewComparisonLink?> PrepareApiReferenceComparisonPreviewAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Analyzes a Markdown file without starting the preview server so the file list can
     /// identify renames, rendered-body changes, and source-only changes before the user
     /// opens the comparison.
@@ -168,6 +179,9 @@ public sealed record PreviewComparisonLink(
 
     /// <summary>reusable を展開して確認できる参照元 content ページ。</summary>
     public IReadOnlyList<string> ReusableReferencePaths { get; init; } = [];
+
+    /// <summary>Canonical public docs.github.com page represented by this preview, when available.</summary>
+    public Uri? OfficialUrl { get; init; }
 }
 
 /// <summary>Lightweight Markdown change information available before opening a preview.</summary>
@@ -415,6 +429,101 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
             RenderedFilePath = prepared.RenderedFilePath,
             ReusableReferenceCount = prepared.ReusableReferencePaths.Count,
             ReusableReferencePaths = prepared.ReusableReferencePaths,
+        };
+    }
+
+    public async Task<PreviewComparisonLink?> PrepareApiReferenceComparisonPreviewAsync(
+        int prNumber,
+        string sha,
+        string filePath,
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(prNumber);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sha);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        if (!PreviewPathMapper.IsApiReferenceData(filePath))
+        {
+            throw new InvalidOperationException($"'{filePath}' は API reference data ではありません。");
+        }
+        if (!_worktree.IsEnabled)
+        {
+            LogDisabled(_logger);
+            return null;
+        }
+
+        var preparedSession = await EnsurePreparedSessionAsync(prNumber, sha, progress, cancellationToken)
+            .ConfigureAwait(false);
+        if (preparedSession is null)
+        {
+            return null;
+        }
+
+        var normalizedPath = NormalizeRepoPathForComparison(filePath);
+        var beforePath = preparedSession.PreviousPaths.GetValueOrDefault(normalizedPath, normalizedPath);
+        progress?.Report($"{filePath} の API reference data を読み込み中…");
+        var beforeJsonTask = _worktree.ReadFileTextAsync(
+            preparedSession.BeforeSha,
+            beforePath,
+            cancellationToken);
+        var afterJsonTask = _worktree.ReadFileTextAsync(sha, normalizedPath, cancellationToken);
+        await Task.WhenAll(beforeJsonTask, afterJsonTask).ConfigureAwait(false);
+        var beforeJson = await beforeJsonTask.ConfigureAwait(false);
+        var afterJson = await afterJsonTask.ConfigureAwait(false);
+        if (beforeJson is null && afterJson is null)
+        {
+            throw new InvalidOperationException($"'{filePath}' を比較元と PR HEAD のどちらからも読み込めませんでした。");
+        }
+
+        progress?.Report("公式 API reference のページ構造へレンダリング中…");
+        var beforeHtml = ApiReferencePreviewRenderer.RenderDocument(
+            beforePath,
+            beforeJson,
+            preparedSession.BeforeSha,
+            $"Before {ShortSha(preparedSession.BeforeSha)} API reference",
+            afterJson,
+            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = ApiReferencePreviewRenderer.RenderDocument(
+            normalizedPath,
+            afterJson,
+            sha,
+            $"PR HEAD {ShortSha(sha)} API reference",
+            beforeJson,
+            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        var pages = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["/api-reference/before"] = beforeHtml,
+            ["/api-reference/after"] = afterHtml,
+        };
+
+        var port = _portAllocator.AllocateSingle(_options.PreviewBasePort, GetReusablePorts());
+        progress?.Report($"API reference 比較プレビューを起動中… (ポート {port.ToString(CultureInfo.InvariantCulture)})");
+        await _contentServer.StartAsync(
+            port,
+            pages,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            cancellationToken).ConfigureAwait(false);
+        ReplaceActiveMarkdownAssetRoot(null);
+        _session.Activate(port);
+
+        var generation = Interlocked.Increment(ref _markdownPreviewGeneration);
+        var query = string.Create(
+            CultureInfo.InvariantCulture,
+            $"file={Uri.EscapeDataString(normalizedPath)}&r={generation}");
+        return new PreviewComparisonLink(
+            new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/api-reference/before?{query}")),
+            new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/api-reference/after?{query}")),
+            port,
+            port,
+            preparedSession.BeforeSha,
+            sha)
+        {
+            RequestedFilePath = normalizedPath,
+            RenderedFilePath = normalizedPath,
+            OfficialUrl = ApiReferencePreviewRenderer.ResolveOfficialUrl(
+                normalizedPath,
+                beforeJson,
+                afterJson),
         };
     }
 
@@ -981,6 +1090,9 @@ public sealed partial class PreviewCoordinator : IPreviewCoordinator
 
     private static string NormalizeRepoPathForComparison(string path)
         => path.Trim().Replace('\\', '/').TrimStart('/');
+
+    private static string ShortSha(string sha)
+        => sha.Length <= 7 ? sha : sha[..7];
 
     /// <summary>
     /// §Step 19.10 (perf): 同一 (prNumber, sha) で繰り返し呼ばれても重い前準備

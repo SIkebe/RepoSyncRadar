@@ -975,11 +975,22 @@ public sealed class MainWindowPreviewComparisonTests
     {
         var script = PreviewDiffHighlighter.BuildApplyPlanScript("[1,2]", "\"after\"");
 
+        Assert.Contains("window.__repoSyncRadarDiffScrollbar?.disable?.()", script, StringComparison.Ordinal);
+        Assert.Contains("document.getElementById('rsr-diff-scrollbar')?.remove()", script, StringComparison.Ordinal);
         Assert.Contains("rsr-preview-diff-scrollbar", script, StringComparison.Ordinal);
         Assert.Contains("rsr-preview-diff-scrollbar-marker-after", script, StringComparison.Ordinal);
         Assert.Contains("right: 24px", script, StringComparison.Ordinal);
         Assert.Contains("width: 10px", script, StringComparison.Ordinal);
         Assert.Contains("const markerGroups = new Map()", script, StringComparison.Ordinal);
+        Assert.Contains("const hasSubstantiveChange = elements.some(", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "const isRemoval = hasSubstantiveChange ? pane === 'before' : pane === 'after'",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "${isRemoval ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains(
             "document.querySelectorAll('.rsr-preview-diff-block,[data-rsr-diff-navigation-index]')",
             script,

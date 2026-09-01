@@ -77,7 +77,8 @@ public sealed record PreviewComparisonRequest(
     int? FileCount = null,
     DocsVersion? CurrentVersion = null,
     IReadOnlyList<DocsVersion>? AffectedVersions = null,
-    int SourceChangeCount = 0);
+    int SourceChangeCount = 0,
+    Uri? OfficialUrl = null);
 
 public union PreviewNavigationRequest(Uri, PreviewComparisonRequest);
 

@@ -192,9 +192,9 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
 
 ## 5. オプション機能
 
-### 5.1 ローカル Markdown プレビュー
+### 5.1 ローカルドキュメントプレビュー
 
-`DocsRepository` セクションを埋めておくと、PR HEAD の Markdown 変更を bare clone から読み出し、アプリ内の Markdown/Liquid レンダラーとローカル content server で before/after 比較できます。空のままなら **完全に no-op** で他機能には影響しません。起動時に bare clone を事前作成したい場合だけ `DocsRepository:PrewarmOnStartup` を `true` にしてください。既定では、初回起動だけで `github/docs` の大きな clone/fetch は始まりません。
+`DocsRepository` セクションを埋めておくと、PR HEAD の Markdown と生成済み REST / GraphQL API reference data を bare clone から読み出し、アプリ内レンダラーとローカル content server で before/after 比較できます。空のままなら **完全に no-op** で他機能には影響しません。起動時に bare clone を事前作成したい場合だけ `DocsRepository:PrewarmOnStartup` を `true` にしてください。既定では、初回起動だけで `github/docs` の大きな clone/fetch は始まりません。
 
 #### 使い方
 
@@ -203,13 +203,14 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
    - 初回のみ `git clone --bare <DocsRepoUrl> <BareCloneDir>`
    - `git fetch origin +refs/pull/{PR}/head:...` で PR head を取得
    - `git rev-parse <sha>^` で変更前の親コミットを解決
-   - `git show` / `git ls-tree` / `git grep` でクリックした Markdown と参照先 reusable/data/AUTOTITLE 対象だけを bare clone から読む
-   - Markdown/Liquid を HTML に変換し、`PreviewBasePort` から空いている 1 port のローカル content server で before/after を配信
+   - `git show` / `git ls-tree` / `git grep` でクリックした Markdown、参照先 reusable/data/AUTOTITLE、または REST / GraphQL の生成済み JSON を bare clone から読む
+   - Markdown/Liquid、または API reference の endpoint/type/parameter/field/status 構造を HTML に変換し、`PreviewBasePort` から空いている 1 port のローカル content server で before/after を配信
 3. 右側の WebView2 が左右 2 ペインになり、左に変更前 localhost、右に PR HEAD localhost を表示します。読み込み完了後、変更された本文ブロックは左側に取り消し線、右側に淡いハイライトで表示され、最初の差分へ自動で移動します。一方のペインだけにある追加・削除部分は、反対側へ VS Code 風の斜線ギャップを入れて後続ブロックの高さを揃えます。未変更の本文を挟まない連続した変更は、選択枠と右端の差分マーカーも含めて 1 つの差分として表示されます。右上の矢印または `F7` / `Shift+F7` で次・前の差分へ両ペインを同期して移動できます。公式 `docs.github.com` が既に更新済みでも、コミット単位の見た目差分を確認できます
 
 #### 前提
 
 - Node.js / npm は不要です。プレビューはアプリ内の .NET Markdown/Liquid レンダラーで生成します。
+- API reference data は変更された endpoint または GraphQL type/query/mutation だけを展開し、大きな生成済み JSON でも変更箇所を直接確認できるようにします。
 - WebView2 の URL allow-list は `https` のみ通すデフォルトに加え、`PreviewSession` がプレビュー中に割り当てた `http://localhost:<port>` だけを動的に許可します。前回プロセスの異常終了などで `PreviewBasePort` が既に使われている場合は、次の空き port にずらします。
 
 #### キャッシュのクリーンアップ
@@ -224,8 +225,8 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
 #### 仕組み
 
 - [`DocsWorktreeManager`](../src/RepoSyncRadar.Core/Services/Preview/DocsWorktreeManager.cs) が `git clone --bare` した親リポから Markdown と参照ファイルを SHA 指定で読みます
-- [`PreviewCoordinator`](../src/RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs) が clone → fetch → parent 解決 → Markdown/Liquid render → `LocalPreviewContentServer` 起動 → `PreviewSession.Activate(port)` を 1 ステップで束ねます
-- [`PreviewPathMapper`](../src/RepoSyncRadar.Core/Services/Preview/PreviewPathMapper.cs) が `content/foo/bar.md` を `/en/foo/bar` に、`content/index.md` を `/en` に変換します
+- [`PreviewCoordinator`](../src/RepoSyncRadar.Core/Services/Preview/PreviewCoordinator.cs) が clone → fetch → parent 解決 → Markdown/Liquid または API reference render → `LocalPreviewContentServer` 起動 → `PreviewSession.Activate(port)` を 1 ステップで束ねます
+- [`PreviewPathMapper`](../src/RepoSyncRadar.Core/Services/Preview/PreviewPathMapper.cs) が Markdown の公開 URL と、`src/rest/data/.../*.json` / `src/graphql/data/.../schema-*.json` の API reference 対象を識別します
 - Markdown 内の相対画像や `/assets/...` 参照は、必要なファイルだけを bare clone から asset cache に展開して配信します
 - Markdown 内の相対リンクとルート相対リンクは、表示中の Docs バージョンに対応する公式 `docs.github.com` URL へ変換します
 

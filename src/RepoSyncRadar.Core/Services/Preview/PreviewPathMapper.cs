@@ -65,4 +65,128 @@ public static class PreviewPathMapper
         => !string.IsNullOrWhiteSpace(repoPath)
             && (repoPath.EndsWith(_markdownExt, StringComparison.OrdinalIgnoreCase)
                 || repoPath.EndsWith(_markdownLongExt, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Returns true for generated REST or GraphQL reference data that is rendered
+    /// into the corresponding pages on docs.github.com.
+    /// </summary>
+    public static bool IsApiReferenceData(string repoPath)
+        => MapApiReferenceData(repoPath) is not null;
+
+    internal static ApiReferencePreviewDescriptor? MapApiReferenceData(string repoPath)
+    {
+        if (string.IsNullOrWhiteSpace(repoPath))
+        {
+            return null;
+        }
+
+        var normalized = repoPath.Replace('\\', '/').TrimStart('/');
+        const string restPrefix = "src/rest/data/";
+        if (normalized.StartsWith(restPrefix, StringComparison.Ordinal)
+            && normalized.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            var segments = normalized[restPrefix.Length..].Split('/');
+            if (segments.Length != 2
+                || !TryParseVersionDirectory(segments[0], out var version, out var apiVersion))
+            {
+                return null;
+            }
+
+            var category = segments[1][..^".json".Length];
+            return IsReferenceCategory(category)
+                ? new ApiReferencePreviewDescriptor(
+                    ApiReferenceKind.Rest,
+                    version,
+                    apiVersion,
+                    category,
+                    $"/en/rest/{category}")
+                : null;
+        }
+
+        const string graphqlPrefix = "src/graphql/data/";
+        if (normalized.StartsWith(graphqlPrefix, StringComparison.Ordinal)
+            && normalized.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            var segments = normalized[graphqlPrefix.Length..].Split('/');
+            const string schemaPrefix = "schema-";
+            if (segments.Length != 2
+                || !TryParseVersionDirectory(segments[0], out var version, out _)
+                || !segments[1].StartsWith(schemaPrefix, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            var category = segments[1][schemaPrefix.Length..^".json".Length];
+            return IsReferenceCategory(category)
+                ? new ApiReferencePreviewDescriptor(
+                    ApiReferenceKind.GraphQl,
+                    version,
+                    ApiVersion: null,
+                    category,
+                    $"/en/graphql/reference/{category}")
+                : null;
+        }
+
+        return null;
+    }
+
+    private static bool TryParseVersionDirectory(
+        string directory,
+        out string version,
+        out string? apiVersion)
+    {
+        version = string.Empty;
+        apiVersion = null;
+        if (directory.Equals("fpt", StringComparison.Ordinal)
+            || directory.Equals("ghec", StringComparison.Ordinal))
+        {
+            version = directory;
+            return true;
+        }
+
+        var dateSeparator = directory.LastIndexOf('-');
+        if (directory.Length > 11
+            && dateSeparator == directory.Length - 3
+            && DateOnly.TryParseExact(
+                directory[^10..],
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out _))
+        {
+            apiVersion = directory[^10..];
+            directory = directory[..^11];
+        }
+
+        if (directory.Equals("fpt", StringComparison.Ordinal)
+            || directory.Equals("ghec", StringComparison.Ordinal)
+            || (directory.StartsWith("ghes-", StringComparison.Ordinal)
+                && Version.TryParse(directory["ghes-".Length..], out _)))
+        {
+            version = directory;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsReferenceCategory(string category)
+        => !string.IsNullOrWhiteSpace(category)
+            && !category.Equals("schema", StringComparison.OrdinalIgnoreCase)
+            && !category.Equals("category-map", StringComparison.OrdinalIgnoreCase)
+            && !category.Equals("changelog", StringComparison.OrdinalIgnoreCase)
+            && !category.Equals("previews", StringComparison.OrdinalIgnoreCase);
 }
+
+internal enum ApiReferenceKind
+{
+    Rest,
+    GraphQl,
+}
+
+internal sealed record ApiReferencePreviewDescriptor(
+    ApiReferenceKind Kind,
+    string Version,
+    string? ApiVersion,
+    string Category,
+    string OfficialPath);

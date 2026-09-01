@@ -134,9 +134,11 @@
   <data name="CommitDetail.FileViewed.UnmarkTitle" xml:space="preserve"><value>Unmark {0} as viewed</value></data>
   <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>Preparing local preview for {0}...</value></data>
   <data name="CommitDetail.MarkdownComparisonOpened" xml:space="preserve"><value>Opened {0} as a Markdown parent / PR HEAD comparison</value></data>
+  <data name="CommitDetail.ApiReferenceComparisonOpened" xml:space="preserve"><value>Opened {0} in the official API reference page structure for parent / PR HEAD comparison</value></data>
   <data name="CommitDetail.MarkdownReusableUsageOpened" xml:space="preserve"><value>Opened {0} through usage page {1}</value></data>
   <data name="CommitDetail.MarkdownReusableUsageOpenedMultiple" xml:space="preserve"><value>Opened {0} through usage page {1} ({2}/{3})</value></data>
   <data name="CommitDetail.MarkdownPreviewPreparing" xml:space="preserve"><value>Preparing Markdown comparison for {0}...</value></data>
+  <data name="CommitDetail.ApiReferencePreviewPreparing" xml:space="preserve"><value>Rendering {0} in the official API reference page structure...</value></data>
   <data name="CommitDetail.NoPreviewableFiles" xml:space="preserve"><value>No comparable files</value></data>
   <data name="CommitDetail.NoPublishableUrl" xml:space="preserve"><value>This file does not map to a published docs URL</value></data>
   <data name="CommitDetail.OperationCanceled" xml:space="preserve"><value>{0} was canceled</value></data>
@@ -151,6 +153,7 @@
   <data name="CommitDetail.PreviewPosition" xml:space="preserve"><value>Preview target {0} / {1}</value></data>
   <data name="CommitDetail.PreviewTitle.LocalComparison" xml:space="preserve"><value>Open this file in WebView2 with local previews for the parent commit and PR HEAD side by side</value></data>
   <data name="CommitDetail.PreviewTitle.MarkdownComparison" xml:space="preserve"><value>Render Markdown and open the parent commit vs PR HEAD diff in WebView2</value></data>
+  <data name="CommitDetail.PreviewTitle.ApiReferenceComparison" xml:space="preserve"><value>Render REST / GraphQL generated data in the official API reference page structure and open the parent commit vs PR HEAD diff in WebView2</value></data>
   <data name="CommitDetail.PreviewTitle.Official" xml:space="preserve"><value>Open the official docs page in WebView2</value></data>
   <data name="CommitDetail.PreviewDisabled" xml:space="preserve"><value>Preview is disabled (DocsRepository is not configured)</value></data>
   <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>Preview startup</value></data>

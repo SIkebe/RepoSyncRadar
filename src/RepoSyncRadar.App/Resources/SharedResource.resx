@@ -134,9 +134,11 @@
   <data name="CommitDetail.FileViewed.UnmarkTitle" xml:space="preserve"><value>{0} の確認済みを解除します</value></data>
   <data name="CommitDetail.LocalPreviewPreparing" xml:space="preserve"><value>{0} のローカルプレビューを準備中…</value></data>
   <data name="CommitDetail.MarkdownComparisonOpened" xml:space="preserve"><value>{0} を Markdown として変更前 / PR HEAD で比較表示しました</value></data>
+  <data name="CommitDetail.ApiReferenceComparisonOpened" xml:space="preserve"><value>{0} を公式 API reference のページ構造で変更前 / PR HEAD 比較表示しました</value></data>
   <data name="CommitDetail.MarkdownReusableUsageOpened" xml:space="preserve"><value>{0} を使用箇所 {1} で比較表示しました</value></data>
   <data name="CommitDetail.MarkdownReusableUsageOpenedMultiple" xml:space="preserve"><value>{0} を使用箇所 {1} で比較表示しました ({2}/{3})</value></data>
   <data name="CommitDetail.MarkdownPreviewPreparing" xml:space="preserve"><value>{0} を Markdown として比較準備中…</value></data>
+  <data name="CommitDetail.ApiReferencePreviewPreparing" xml:space="preserve"><value>{0} を公式 API reference のページ構造へレンダリング中…</value></data>
   <data name="CommitDetail.NoPreviewableFiles" xml:space="preserve"><value>比較可能なファイルなし</value></data>
   <data name="CommitDetail.NoPublishableUrl" xml:space="preserve"><value>このファイルは公開ドキュメント URL に対応していません</value></data>
   <data name="CommitDetail.OperationCanceled" xml:space="preserve"><value>{0}を中止しました</value></data>
@@ -151,6 +153,7 @@
   <data name="CommitDetail.PreviewPosition" xml:space="preserve"><value>プレビュー対象 {0} / {1}</value></data>
   <data name="CommitDetail.PreviewTitle.LocalComparison" xml:space="preserve"><value>変更前コミットと PR HEAD のローカルプレビューを並べて、このファイルを WebView2 で開きます</value></data>
   <data name="CommitDetail.PreviewTitle.MarkdownComparison" xml:space="preserve"><value>Markdown をレンダリングして変更前コミットと PR HEAD の差分を WebView2 で開きます</value></data>
+  <data name="CommitDetail.PreviewTitle.ApiReferenceComparison" xml:space="preserve"><value>REST / GraphQL の生成データを公式 API reference のページ構造へレンダリングし、変更前コミットと PR HEAD の差分を WebView2 で開きます</value></data>
   <data name="CommitDetail.PreviewTitle.Official" xml:space="preserve"><value>公式ドキュメントを WebView2 で開きます</value></data>
   <data name="CommitDetail.PreviewDisabled" xml:space="preserve"><value>プレビュー機能は無効です (DocsRepository 未設定)</value></data>
   <data name="CommitDetail.PreviewStartup" xml:space="preserve"><value>プレビュー起動</value></data>

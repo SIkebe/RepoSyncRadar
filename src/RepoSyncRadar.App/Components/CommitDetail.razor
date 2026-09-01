@@ -1009,12 +1009,15 @@
     private static bool IsMarkdownPreviewable(CommitFile file)
         => PreviewPathMapper.IsMarkdown(file.Path);
 
+    private static bool IsApiReferencePreviewable(CommitFile file)
+        => PreviewPathMapper.IsApiReferenceData(file.Path);
+
     private static bool IsReusableMarkdownFile(CommitFile file)
         => file.Path.Replace('\\', '/').StartsWith("data/reusables/", StringComparison.Ordinal)
             && file.Path.EndsWith(".md", StringComparison.OrdinalIgnoreCase);
 
     private bool IsLocalComparisonPreviewable(CommitFile file)
-        => IsPreviewMappable(file) || IsMarkdownPreviewable(file);
+        => IsPreviewMappable(file) || IsMarkdownPreviewable(file) || IsApiReferencePreviewable(file);
 
     private string BuildPreviewTitle(CommitFile file, Uri? currentTarget)
     {
@@ -1025,6 +1028,10 @@
         if (IsMarkdownPreviewable(file))
         {
             return L["CommitDetail.PreviewTitle.MarkdownComparison"];
+        }
+        if (IsApiReferencePreviewable(file))
+        {
+            return L["CommitDetail.PreviewTitle.ApiReferenceComparison"];
         }
         return currentTarget?.AbsoluteUri ?? L["CommitDetail.PreviewTitle.Official"];
     }
@@ -1216,10 +1223,17 @@
 
         var commit = Commit;
 
-        if (commit is not null && IsMarkdownPreviewable(file)
+        if (commit is not null && (IsMarkdownPreviewable(file) || IsApiReferencePreviewable(file))
             && Services.GetService<IPreviewCoordinator>() is { } markdownCoordinator)
         {
-            var operation = StartPreviewOperation(commit.Sha, file.Path, L["CommitDetail.MarkdownPreviewPreparing", file.Path], L["CommitDetail.PreviewStartup"]);
+            var isApiReference = IsApiReferencePreviewable(file);
+            var operation = StartPreviewOperation(
+                commit.Sha,
+                file.Path,
+                isApiReference
+                    ? L["CommitDetail.ApiReferencePreviewPreparing", file.Path]
+                    : L["CommitDetail.MarkdownPreviewPreparing", file.Path],
+                L["CommitDetail.PreviewStartup"]);
             var token = operation.Cancellation.Token;
             operation.PollTask = Task.Run(
                 () => PollPreviewProgressAsync(token),
@@ -1234,7 +1248,14 @@
                         StateHasChanged();
                     });
                 });
-                var link = IsReusableMarkdownFile(file)
+                var link = isApiReference
+                    ? await markdownCoordinator.PrepareApiReferenceComparisonPreviewAsync(
+                        commit.PrNumber,
+                        commit.Sha,
+                        file.Path,
+                        progress,
+                        token)
+                    : IsReusableMarkdownFile(file)
                     ? await markdownCoordinator.PrepareMarkdownReusableComparisonPreviewAsync(
                         commit.PrNumber,
                         commit.Sha,
@@ -1268,19 +1289,22 @@
                     navigator.PublishComparison(new PreviewComparisonRequest(
                         link.BeforeUrl,
                         link.AfterUrl,
-                        L["CommitDetail.BeforeLabel", ShortSha(link.BeforeSha), "Markdown"],
-                        $"PR HEAD {ShortSha(link.AfterSha)} Markdown",
+                        L["CommitDetail.BeforeLabel", ShortSha(link.BeforeSha), isApiReference ? "API reference" : "Markdown"],
+                        $"PR HEAD {ShortSha(link.AfterSha)} {(isApiReference ? "API reference" : "Markdown")}",
                         renderedPath,
                         previewPosition.Ordinal,
                         previewPosition.Total,
                         CurrentVersion: link.CurrentVersion,
                         AffectedVersions: link.AffectedVersions,
-                        SourceChangeCount: link.SourceChangeCount));
+                        SourceChangeCount: link.SourceChangeCount,
+                        OfficialUrl: link.OfficialUrl));
                     _activePreviewPath = file.Path;
                     _activeVersion = link.CurrentVersion;
                     StartPredictiveFilePrewarm(commit, file, link.CurrentVersion);
                     _previewStatus = string.Equals(renderedPath, file.Path, StringComparison.Ordinal)
-                        ? L["CommitDetail.MarkdownComparisonOpened", file.Path]
+                        ? isApiReference
+                            ? L["CommitDetail.ApiReferenceComparisonOpened", file.Path]
+                            : L["CommitDetail.MarkdownComparisonOpened", file.Path]
                         : BuildReusableUsageStatus(file.Path, renderedPath, link.ReusableReferencePaths);
                     return true;
                 }

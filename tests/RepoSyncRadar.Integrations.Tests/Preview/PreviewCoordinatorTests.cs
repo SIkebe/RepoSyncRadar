@@ -51,6 +51,7 @@ public sealed class PreviewCoordinatorTests : IDisposable
                 {
                     capturedPages[page.Key] = page.Value;
                 }
+
                 contentServer.IsRunning.Returns(true);
                 contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
                 return Task.CompletedTask;
@@ -84,6 +85,94 @@ public sealed class PreviewCoordinatorTests : IDisposable
         Assert.True(session.IsAllowed(link.AfterUrl));
         Assert.Contains("rsr-rendered-diff-removed\">Old</span> entry", capturedPages["/markdown/before"], StringComparison.Ordinal);
         Assert.Contains("rsr-rendered-diff-added\">New</span> entry", capturedPages["/markdown/after"], StringComparison.Ordinal);
+        await contentServer.Received(1).StartAsync(
+            4500,
+            Arg.Any<IReadOnlyDictionary<string, string>>(),
+            Arg.Is<IReadOnlyDictionary<string, string>>(roots => roots.Count == 0),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PrepareApiReferenceComparisonPreviewAsync_Renders_Rest_Data_Without_Npm_Server()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var bare = Path.Combine(_tempRoot, "bare-api-reference");
+        var worktreeRoot = Path.Combine(_tempRoot, "worktrees-api-reference");
+        var runner = Substitute.For<IProcessRunner>();
+        runner.RunAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, string.Empty, string.Empty)));
+        runner.RunAsync(
+                "git",
+                Arg.Is<string>(arguments => arguments.Contains("rev-parse headsha^", StringComparison.Ordinal)),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new ProcessRunResult(0, "parentsha\n", string.Empty)));
+        var capturedPages = new Dictionary<string, string>(StringComparer.Ordinal);
+        var contentServer = Substitute.For<ILocalPreviewContentServer>();
+        contentServer.StartAsync(
+                Arg.Any<int>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                foreach (var page in call.ArgAt<IReadOnlyDictionary<string, string>>(1))
+                {
+                    capturedPages[page.Key] = page.Value;
+                }
+                contentServer.IsRunning.Returns(true);
+                contentServer.CurrentPort.Returns(call.ArgAt<int>(0));
+                return Task.CompletedTask;
+            });
+        const string sourcePath = "src/rest/data/fpt-2022-11-28/teams.json";
+        var session = new PreviewSession();
+        var sut = BuildSut(
+            runner,
+            bare,
+            "https://example.invalid/docs.git",
+            worktreeRoot,
+            previewBasePort: 4500,
+            session: session,
+            contentServer: contentServer,
+            onObjectSourceMaterialized: (path, sha) =>
+            {
+                var description = string.Equals(sha, "parentsha", StringComparison.Ordinal)
+                    ? "Old description."
+                    : "New description.";
+                WriteRepoFile(
+                    path,
+                    sourcePath,
+                    $$"""
+                        {
+                          "teams": [{
+                            "title": "List teams",
+                            "verb": "get",
+                            "requestPath": "/teams",
+                            "descriptionHTML": "<p>{{description}}</p>",
+                            "parameters": [],
+                            "bodyParameters": [],
+                            "statusCodes": []
+                          }]
+                        }
+                        """);
+            });
+
+        var link = await sut.PrepareApiReferenceComparisonPreviewAsync(
+            123,
+            "headsha",
+            sourcePath,
+            cancellationToken: ct);
+
+        Assert.NotNull(link);
+        Assert.Contains("/api-reference/before", link!.BeforeUrl.AbsoluteUri, StringComparison.Ordinal);
+        Assert.Contains("/api-reference/after", link.AfterUrl.AbsoluteUri, StringComparison.Ordinal);
+        Assert.Equal(
+            "https://docs.github.com/en/rest/teams/teams?apiVersion=2022-11-28",
+            link.OfficialUrl?.AbsoluteUri);
+        Assert.Contains("rsr-rendered-diff-removed", capturedPages["/api-reference/before"], StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", capturedPages["/api-reference/after"], StringComparison.Ordinal);
+        Assert.Contains("New", capturedPages["/api-reference/after"], StringComparison.Ordinal);
+        Assert.True(session.IsAllowed(link.AfterUrl));
         await contentServer.Received(1).StartAsync(
             4500,
             Arg.Any<IReadOnlyDictionary<string, string>>(),
