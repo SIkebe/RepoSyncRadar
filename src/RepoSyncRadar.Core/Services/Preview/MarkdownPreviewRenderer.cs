@@ -4082,26 +4082,43 @@ internal static partial class MarkdownPreviewRenderer
         string content,
         InlineChangedRange range)
     {
-        var delimiter = content.Substring(range.Start, range.Length);
+        var delimiterCharacter = content[range.Start];
+        if (content.AsSpan(range.Start, range.Length).ContainsAnyExcept(delimiterCharacter))
+        {
+            return range;
+        }
+
+        var delimiterStart = range.Start;
+        while (delimiterStart > 0 && content[delimiterStart - 1] == delimiterCharacter)
+        {
+            delimiterStart--;
+        }
+        var delimiterEnd = range.End;
+        while (delimiterEnd < content.Length && content[delimiterEnd] == delimiterCharacter)
+        {
+            delimiterEnd++;
+        }
+
+        var delimiter = content[delimiterStart..delimiterEnd];
         if (!IsMarkdownFormattingDelimiter(delimiter))
         {
             return range;
         }
 
-        var canOpen = range.End < content.Length && !char.IsWhiteSpace(content[range.End]);
-        var canClose = range.Start > 0 && !char.IsWhiteSpace(content[range.Start - 1]);
+        var canOpen = delimiterEnd < content.Length && !char.IsWhiteSpace(content[delimiterEnd]);
+        var canClose = delimiterStart > 0 && !char.IsWhiteSpace(content[delimiterStart - 1]);
         var counterpartStart = canOpen && !canClose
-            ? content.IndexOf(delimiter, range.End, StringComparison.Ordinal)
+            ? content.IndexOf(delimiter, delimiterEnd, StringComparison.Ordinal)
             : canClose && !canOpen
-                ? content.LastIndexOf(delimiter, range.Start - 1, StringComparison.Ordinal)
+                ? content.LastIndexOf(delimiter, delimiterStart - 1, StringComparison.Ordinal)
                 : -1;
         if (counterpartStart < 0)
         {
             return range;
         }
 
-        var start = Math.Min(range.Start, counterpartStart);
-        var end = Math.Max(range.End, counterpartStart + delimiter.Length);
+        var start = Math.Min(delimiterStart, counterpartStart);
+        var end = Math.Max(delimiterEnd, counterpartStart + delimiter.Length);
         return new InlineChangedRange(start, end - start);
     }
 
