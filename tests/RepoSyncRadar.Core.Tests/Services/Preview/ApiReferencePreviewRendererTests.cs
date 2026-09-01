@@ -37,9 +37,12 @@ public sealed class ApiReferencePreviewRendererTests
         var markdown = ApiReferencePreviewRenderer.BuildMarkdown(descriptor, json);
 
         Assert.Contains("# REST API reference: teams", markdown, StringComparison.Ordinal);
-        Assert.Contains("`GET /orgs/{org}/teams`", markdown, StringComparison.Ordinal);
-        Assert.Contains("| `org` | `path` | yes | The organization name. |", markdown, StringComparison.Ordinal);
-        Assert.Contains("| `200` | OK |", markdown, StringComparison.Ordinal);
+        Assert.Contains("<code>GET /orgs/{org}/teams</code>", markdown, StringComparison.Ordinal);
+        Assert.Contains(
+            "| <code>org</code> | <code>path</code> | yes | The organization name. |",
+            markdown,
+            StringComparison.Ordinal);
+        Assert.Contains("| <code>200</code> | OK |", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("<p>", markdown, StringComparison.Ordinal);
     }
 
@@ -66,7 +69,10 @@ public sealed class ApiReferencePreviewRendererTests
 
         Assert.Contains("# GraphQL API reference: actions", markdown, StringComparison.Ordinal);
         Assert.Contains("### Workflow", markdown, StringComparison.Ordinal);
-        Assert.Contains("| `name` | `String!` | The workflow name. |", markdown, StringComparison.Ordinal);
+        Assert.Contains(
+            "| <code>name</code> | <code>String!</code> | The workflow name. |",
+            markdown,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -94,10 +100,16 @@ public sealed class ApiReferencePreviewRendererTests
         var markdown = ApiReferencePreviewRenderer.BuildMarkdown(descriptor, json);
 
         Assert.Contains("## Queries", markdown, StringComparison.Ordinal);
-        Assert.Contains("| `key` | `String!` | The SPDX ID. |", markdown, StringComparison.Ordinal);
+        Assert.Contains(
+            "| <code>key</code> | <code>String!</code> | The SPDX ID. |",
+            markdown,
+            StringComparison.Ordinal);
         Assert.Contains("## Mutations", markdown, StringComparison.Ordinal);
         Assert.Contains("#### Return fields", markdown, StringComparison.Ordinal);
-        Assert.Contains("| `assignable` | `Assignable` | The item. |", markdown, StringComparison.Ordinal);
+        Assert.Contains(
+            "| <code>assignable</code> | <code>Assignable</code> | The item. |",
+            markdown,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -114,6 +126,58 @@ public sealed class ApiReferencePreviewRendererTests
         Assert.Contains("### List teams", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("<img", markdown, StringComparison.Ordinal);
         Assert.DoesNotContain("onerror", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Encodes_Raw_Json_Values_Used_In_Code_Contexts()
+    {
+        const string json = """
+            {
+              "<img src=x onerror=alert(0)>teams":[{
+                "title":"List teams",
+                "verb":"get",
+                "requestPath":"/teams`<img src=x onerror=alert(1)>",
+                "parameters":[{
+                  "name":"org`<img src=x onerror=alert(2)>",
+                  "in":"path|query",
+                  "required":true
+                }],
+                "statusCodes":[{"httpStatusCode":"200`<img src=x onerror=alert(3)>"}]
+              }]
+            }
+            """;
+        var descriptor = Assert.IsType<ApiReferencePreviewDescriptor>(
+            PreviewPathMapper.MapApiReferenceData("src/rest/data/fpt-2022-11-28/teams.json"));
+
+        var markdown = ApiReferencePreviewRenderer.BuildMarkdown(descriptor, json);
+
+        Assert.DoesNotContain("<img", markdown, StringComparison.Ordinal);
+        Assert.Contains("&lt;img", markdown, StringComparison.Ordinal);
+        Assert.Contains("<code>path&#124;query</code>", markdown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Encodes_GraphQl_Member_Values_Used_In_Code_Contexts()
+    {
+        const string json = """
+            {
+              "objects":[{
+                "name":"Workflow",
+                "fields":[{
+                  "name":"name`<img src=x onerror=alert(1)>",
+                  "type":"String|Int`<img src=x onerror=alert(2)>"
+                }]
+              }]
+            }
+            """;
+        var descriptor = Assert.IsType<ApiReferencePreviewDescriptor>(
+            PreviewPathMapper.MapApiReferenceData("src/graphql/data/fpt/schema-actions.json"));
+
+        var markdown = ApiReferencePreviewRenderer.BuildMarkdown(descriptor, json);
+
+        Assert.DoesNotContain("<img", markdown, StringComparison.Ordinal);
+        Assert.Contains("&lt;img", markdown, StringComparison.Ordinal);
+        Assert.Contains("String&#124;Int", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -173,13 +237,13 @@ public sealed class ApiReferencePreviewRendererTests
     }
 
     [Fact]
-    public void RenderDocument_Shows_Raw_Fallback_For_Metadata_Only_Changes()
+    public void RenderDocument_Shows_Raw_Fallback_When_Rendered_And_Metadata_Fields_Change()
     {
         const string beforeJson = """
-            {"objects":[{"name":"Workflow","description":"<p>An Actions workflow.</p>","isDeprecated":false}]}
+            {"objects":[{"name":"Workflow","description":"<p>Old description.</p>","isDeprecated":false}]}
             """;
         const string afterJson = """
-            {"objects":[{"name":"Workflow","description":"<p>An Actions workflow.</p>","isDeprecated":true}]}
+            {"objects":[{"name":"Workflow","description":"<p>New description.</p>","isDeprecated":true}]}
             """;
 
         var html = ApiReferencePreviewRenderer.RenderDocument(

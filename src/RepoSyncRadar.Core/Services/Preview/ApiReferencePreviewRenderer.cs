@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 
 namespace RepoSyncRadar.Core.Services.Preview;
@@ -45,7 +46,7 @@ internal static partial class ApiReferencePreviewRenderer
         var descriptor = PreviewPathMapper.MapApiReferenceData(repoPath)
             ?? throw new InvalidOperationException($"'{repoPath}' は API reference data ではありません。");
         var changedEntries = FindChangedEntries(descriptor, json, diffAgainstJson);
-        var metadataOnlyEntries = FindMetadataOnlyEntries(
+        var entriesWithChangedMetadata = FindEntriesWithChangedMetadata(
             descriptor,
             json,
             diffAgainstJson,
@@ -54,20 +55,25 @@ internal static partial class ApiReferencePreviewRenderer
             descriptor,
             json,
             changedEntries,
-            metadataOnlyEntries,
+            entriesWithChangedMetadata,
             markerClass: null);
         var comparisonMarkdown = BuildMarkdown(
             descriptor,
             diffAgainstJson,
             changedEntries,
-            metadataOnlyEntries,
+            entriesWithChangedMetadata,
             markerClass: null);
         if (CountLines(markdown) > 4_000 || CountLines(comparisonMarkdown) > 4_000)
         {
             var markerClass = diffSide == MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before
                 ? "rsr-rendered-diff-removed"
                 : "rsr-rendered-diff-added";
-            markdown = BuildMarkdown(descriptor, json, changedEntries, metadataOnlyEntries, markerClass);
+            markdown = BuildMarkdown(
+                descriptor,
+                json,
+                changedEntries,
+                entriesWithChangedMetadata,
+                markerClass);
             comparisonMarkdown = null;
             diffSide = MarkdownPreviewRenderer.RenderedMarkdownDiffSide.None;
         }
@@ -86,7 +92,7 @@ internal static partial class ApiReferencePreviewRenderer
             descriptor,
             json,
             changedEntries: null,
-            metadataOnlyEntries: null,
+            entriesWithChangedMetadata: null,
             markerClass: null);
 
     internal static Uri ResolveOfficialUrl(
@@ -123,7 +129,7 @@ internal static partial class ApiReferencePreviewRenderer
         ApiReferencePreviewDescriptor descriptor,
         string? json,
         HashSet<string>? changedEntries,
-        HashSet<string>? metadataOnlyEntries,
+        HashSet<string>? entriesWithChangedMetadata,
         string? markerClass)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
@@ -153,7 +159,7 @@ internal static partial class ApiReferencePreviewRenderer
                 markdown,
                 document.RootElement,
                 changedEntries,
-                metadataOnlyEntries,
+                entriesWithChangedMetadata,
                 markerClass);
         }
         else
@@ -162,7 +168,7 @@ internal static partial class ApiReferencePreviewRenderer
                 markdown,
                 document.RootElement,
                 changedEntries,
-                metadataOnlyEntries,
+                entriesWithChangedMetadata,
                 markerClass);
         }
         return markdown.ToString();
@@ -189,7 +195,7 @@ internal static partial class ApiReferencePreviewRenderer
         StringBuilder markdown,
         JsonElement root,
         HashSet<string>? changedEntries,
-        HashSet<string>? metadataOnlyEntries,
+        HashSet<string>? entriesWithChangedMetadata,
         string? markerClass)
     {
         foreach (var subcategory in root.EnumerateObject().OrderBy(static property => property.Name, StringComparer.Ordinal))
@@ -218,11 +224,12 @@ internal static partial class ApiReferencePreviewRenderer
 
                 if (!headingWritten)
                 {
-                    markdown.AppendLine().Append("## ").AppendLine(Humanize(subcategory.Name));
+                    markdown.AppendLine().Append("## ")
+                        .AppendLine(ToPlainText(Humanize(subcategory.Name)));
                     headingWritten = true;
                 }
                 AppendRestOperation(markdown, operation, title, verb, requestPath, markerClass);
-                if (metadataOnlyEntries?.Contains(entryKey) == true)
+                if (entriesWithChangedMetadata?.Contains(entryKey) == true)
                 {
                     AppendRawMetadataFallback(markdown, operation);
                 }
@@ -240,7 +247,7 @@ internal static partial class ApiReferencePreviewRenderer
     {
         markdown.AppendLine().Append("### ").AppendLine(ToPlainText(title))
             .AppendLine()
-            .Append('`').Append(verb).Append(' ').Append(requestPath).AppendLine("`");
+            .AppendLine(RenderCode(string.Concat(verb, " ", requestPath)));
         AppendSemanticChangeMarker(markdown, markerClass);
         AppendDescription(markdown, GetString(operation, "descriptionHTML"));
         AppendRestParameters(markdown, operation, "parameters", "Parameters");
@@ -278,8 +285,8 @@ internal static partial class ApiReferencePreviewRenderer
         var location = GetString(parameter, "in") ?? GetString(parameter, "type") ?? GetSchemaType(parameter);
         var required = GetBoolean(parameter, "required") || GetBoolean(parameter, "isRequired") ? "yes" : "no";
         var description = GetString(parameter, "description");
-        markdown.Append("| `").Append(EscapeTable(name)).Append("` | `")
-            .Append(EscapeTable(location)).Append("` | ").Append(required).Append(" | ")
+        markdown.Append("| ").Append(RenderCode(name)).Append(" | ")
+            .Append(RenderCode(location)).Append(" | ").Append(required).Append(" | ")
             .Append(EscapeTable(ToPlainText(description))).AppendLine(" |");
 
         if (parameter.TryGetProperty("childParamsGroups", out var children)
@@ -307,8 +314,9 @@ internal static partial class ApiReferencePreviewRenderer
             .AppendLine("| --- | --- |");
         foreach (var status in statuses.EnumerateArray())
         {
-            markdown.Append("| `").Append(EscapeTable(GetString(status, "httpStatusCode") ?? string.Empty))
-                .Append("` | ").Append(EscapeTable(ToPlainText(GetString(status, "description"))))
+            markdown.Append("| ")
+                .Append(RenderCode(GetString(status, "httpStatusCode") ?? string.Empty))
+                .Append(" | ").Append(EscapeTable(ToPlainText(GetString(status, "description"))))
                 .AppendLine(" |");
         }
     }
@@ -317,7 +325,7 @@ internal static partial class ApiReferencePreviewRenderer
         StringBuilder markdown,
         JsonElement root,
         HashSet<string>? changedEntries,
-        HashSet<string>? metadataOnlyEntries,
+        HashSet<string>? entriesWithChangedMetadata,
         string? markerClass)
     {
         foreach (var sectionName in _graphQlSections)
@@ -350,7 +358,7 @@ internal static partial class ApiReferencePreviewRenderer
                     headingWritten = true;
                 }
                 AppendGraphQlEntity(markdown, entity, entityName, markerClass);
-                if (metadataOnlyEntries?.Contains(entryKey) == true)
+                if (entriesWithChangedMetadata?.Contains(entryKey) == true)
                 {
                     AppendRawMetadataFallback(markdown, entity);
                 }
@@ -394,9 +402,9 @@ internal static partial class ApiReferencePreviewRenderer
             .AppendLine("| --- | --- | --- |");
         foreach (var member in members.EnumerateArray())
         {
-            markdown.Append("| `").Append(EscapeTable(GetString(member, "name") ?? string.Empty))
-                .Append("` | `").Append(EscapeTable(GetString(member, "type") ?? string.Empty))
-                .Append("` | ").Append(EscapeTable(ToPlainText(GetString(member, "description"))))
+            markdown.Append("| ").Append(RenderCode(GetString(member, "name") ?? string.Empty))
+                .Append(" | ").Append(RenderCode(GetString(member, "type") ?? string.Empty))
+                .Append(" | ").Append(EscapeTable(ToPlainText(GetString(member, "description"))))
                 .AppendLine(" |");
         }
     }
@@ -445,23 +453,24 @@ internal static partial class ApiReferencePreviewRenderer
         return WebUtility.HtmlEncode(normalized);
     }
 
-    private static HashSet<string> FindMetadataOnlyEntries(
+    private static HashSet<string> FindEntriesWithChangedMetadata(
         ApiReferencePreviewDescriptor descriptor,
         string? currentJson,
         string? comparisonJson,
         HashSet<string> changedEntries)
     {
-        var current = BuildProjectedEntryMap(descriptor, currentJson);
-        var comparison = BuildProjectedEntryMap(descriptor, comparisonJson);
+        var current = BuildUnrenderedMetadataMap(descriptor, currentJson);
+        var comparison = BuildUnrenderedMetadataMap(descriptor, comparisonJson);
         return changedEntries
             .Where(key =>
-                current.TryGetValue(key, out var currentProjection)
-                && comparison.TryGetValue(key, out var comparisonProjection)
-                && string.Equals(currentProjection, comparisonProjection, StringComparison.Ordinal))
+                !string.Equals(
+                    current.GetValueOrDefault(key, string.Empty),
+                    comparison.GetValueOrDefault(key, string.Empty),
+                    StringComparison.Ordinal))
             .ToHashSet(StringComparer.Ordinal);
     }
 
-    private static Dictionary<string, string> BuildProjectedEntryMap(
+    private static Dictionary<string, string> BuildUnrenderedMetadataMap(
         ApiReferencePreviewDescriptor descriptor,
         string? json)
     {
@@ -491,12 +500,10 @@ internal static partial class ApiReferencePreviewRenderer
                     {
                         continue;
                     }
-                    var title = GetString(operation, "title") ?? "Untitled operation";
                     var verb = GetString(operation, "verb")?.ToUpperInvariant() ?? "HTTP";
                     var requestPath = GetString(operation, "requestPath") ?? "/";
-                    var markdown = new StringBuilder();
-                    AppendRestOperation(markdown, operation, title, verb, requestPath, markerClass: null);
-                    entries[BuildRestEntryKey(subcategory.Name, verb, requestPath)] = markdown.ToString();
+                    entries[BuildRestEntryKey(subcategory.Name, verb, requestPath)] =
+                        GetRestUnrenderedMetadata(operation);
                 }
             }
         }
@@ -515,15 +522,108 @@ internal static partial class ApiReferencePreviewRenderer
                     {
                         continue;
                     }
-                    var entityName = GetString(entity, "name") ?? "Unnamed type";
-                    var markdown = new StringBuilder();
-                    AppendGraphQlEntity(markdown, entity, entityName, markerClass: null);
-                    entries[BuildGraphQlEntryKey(sectionName, entityName)] = markdown.ToString();
+                    entries[BuildGraphQlEntryKey(
+                        sectionName,
+                        GetString(entity, "name") ?? "Unnamed type")] =
+                        GetGraphQlUnrenderedMetadata(entity);
                 }
             }
         }
         return entries;
     }
+
+    private static string GetRestUnrenderedMetadata(JsonElement operation)
+    {
+        var metadata = ParseObject(operation);
+        RemoveProperties(metadata, "title", "verb", "requestPath", "descriptionHTML");
+        StripObjectArray(metadata, "parameters", StripRestParameterMetadata);
+        StripObjectArray(metadata, "bodyParameters", StripRestParameterMetadata);
+        StripObjectArray(
+            metadata,
+            "statusCodes",
+            static status => RemoveProperties(status, "httpStatusCode", "description"));
+        return SerializeMetadata(metadata);
+    }
+
+    private static void StripRestParameterMetadata(JsonObject parameter)
+    {
+        RemoveProperties(parameter, "name", "in", "type", "required", "isRequired", "description");
+        if (parameter["schema"] is JsonObject schema)
+        {
+            schema.Remove("type");
+            if (schema.Count == 0)
+            {
+                parameter.Remove("schema");
+            }
+        }
+        StripObjectArray(parameter, "childParamsGroups", StripRestParameterMetadata);
+    }
+
+    private static string GetGraphQlUnrenderedMetadata(JsonElement entity)
+    {
+        var metadata = ParseObject(entity);
+        RemoveProperties(metadata, "name", "description");
+        foreach (var propertyName in new[]
+                 {
+                     "args",
+                     "fields",
+                     "inputFields",
+                     "returnFields",
+                     "values",
+                     "possibleTypes",
+                 })
+        {
+            StripObjectArray(
+                metadata,
+                propertyName,
+                static member => RemoveProperties(member, "name", "type", "description"));
+        }
+        return SerializeMetadata(metadata);
+    }
+
+    private static JsonObject ParseObject(JsonElement element)
+        => JsonNode.Parse(element.GetRawText())?.AsObject()
+            ?? throw new InvalidOperationException("API reference entry must be a JSON object.");
+
+    private static void StripObjectArray(
+        JsonObject parent,
+        string propertyName,
+        Action<JsonObject> stripRenderedProperties)
+    {
+        if (parent[propertyName] is not JsonArray items)
+        {
+            return;
+        }
+
+        var hasMetadata = false;
+        foreach (var item in items)
+        {
+            if (item is JsonObject itemObject)
+            {
+                stripRenderedProperties(itemObject);
+                hasMetadata |= itemObject.Count > 0;
+            }
+            else if (item is not null)
+            {
+                hasMetadata = true;
+            }
+        }
+        if (!hasMetadata)
+        {
+            parent.Remove(propertyName);
+        }
+    }
+
+    private static void RemoveProperties(JsonObject value, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            value.Remove(propertyName);
+        }
+    }
+
+    private static string SerializeMetadata(JsonObject metadata)
+        => metadata.Count == 0 ? string.Empty : metadata.ToJsonString();
 
     private static void AppendRawMetadataFallback(StringBuilder markdown, JsonElement entry)
     {
@@ -677,6 +777,12 @@ internal static partial class ApiReferencePreviewRenderer
         => value.Replace("\r", " ", StringComparison.Ordinal)
             .Replace("\n", " ", StringComparison.Ordinal)
             .Trim();
+
+    private static string RenderCode(string value)
+        => string.Concat(
+            "<code>",
+            WebUtility.HtmlEncode(EscapeInline(value)).Replace("|", "&#124;", StringComparison.Ordinal),
+            "</code>");
 
     private static string EscapeTable(string value)
         => EscapeInline(value).Replace("|", "\\|", StringComparison.Ordinal);
