@@ -51,6 +51,7 @@ internal readonly record struct PreviewDiffNavigationResult(
 internal static class PreviewDiffHighlighter
 {
     private readonly record struct BlockAnchor(int BeforeIndex, int AfterIndex);
+    private readonly record struct BlockRange(int BeforeStart, int BeforeEnd, int AfterStart, int AfterEnd);
 
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan _extractionRetryDelay = TimeSpan.FromMilliseconds(250);
@@ -463,48 +464,104 @@ internal static class PreviewDiffHighlighter
         bool[] afterChanged,
         ref long remainingComparisonWork)
     {
-        while (beforeStart < beforeEnd
-            && afterStart < afterEnd
-            && string.Equals(beforeTexts[beforeStart], afterTexts[afterStart], StringComparison.Ordinal))
+        var pending = new Stack<BlockRange>();
+        pending.Push(new BlockRange(beforeStart, beforeEnd, afterStart, afterEnd));
+        while (pending.TryPop(out var range))
         {
-            beforeStart++;
-            afterStart++;
-        }
-        while (beforeStart < beforeEnd
-            && afterStart < afterEnd
-            && string.Equals(beforeTexts[beforeEnd - 1], afterTexts[afterEnd - 1], StringComparison.Ordinal))
-        {
-            beforeEnd--;
-            afterEnd--;
-        }
-        if (beforeStart == beforeEnd || afterStart == afterEnd)
-        {
-            Array.Fill(beforeChanged, true, beforeStart, beforeEnd - beforeStart);
-            Array.Fill(afterChanged, true, afterStart, afterEnd - afterStart);
-            return;
-        }
-
-        var beforeLength = beforeEnd - beforeStart;
-        var afterLength = afterEnd - afterStart;
-        if (!ExceedsPlanCellBudget(beforeLength, afterLength))
-        {
-            if (TryReserveComparisonWork(ref remainingComparisonWork, beforeLength, afterLength))
+            beforeStart = range.BeforeStart;
+            beforeEnd = range.BeforeEnd;
+            afterStart = range.AfterStart;
+            afterEnd = range.AfterEnd;
+            while (beforeStart < beforeEnd && afterStart < afterEnd)
             {
-                MarkLcsChanges(
-                    beforeTexts,
-                    beforeStart,
-                    beforeEnd,
-                    afterTexts,
-                    afterStart,
-                    afterEnd,
-                    beforeChanged,
-                    afterChanged);
+                if (!TryReserveLinearWork(ref remainingComparisonWork, 1))
+                {
+                    MarkBudgetedFallbackRange(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged,
+                        ref remainingComparisonWork);
+                    goto NextRange;
+                }
+                if (!string.Equals(beforeTexts[beforeStart], afterTexts[afterStart], StringComparison.Ordinal))
+                {
+                    break;
+                }
+                beforeStart++;
+                afterStart++;
             }
-            else
+            while (beforeStart < beforeEnd && afterStart < afterEnd)
             {
-                Array.Fill(beforeChanged, true, beforeStart, beforeLength);
-                Array.Fill(afterChanged, true, afterStart, afterLength);
-                MarkBudgetedFallbackMatches(
+                if (!TryReserveLinearWork(ref remainingComparisonWork, 1))
+                {
+                    MarkBudgetedFallbackRange(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged,
+                        ref remainingComparisonWork);
+                    goto NextRange;
+                }
+                if (!string.Equals(beforeTexts[beforeEnd - 1], afterTexts[afterEnd - 1], StringComparison.Ordinal))
+                {
+                    break;
+                }
+                beforeEnd--;
+                afterEnd--;
+            }
+            if (beforeStart == beforeEnd || afterStart == afterEnd)
+            {
+                Array.Fill(beforeChanged, true, beforeStart, beforeEnd - beforeStart);
+                Array.Fill(afterChanged, true, afterStart, afterEnd - afterStart);
+                continue;
+            }
+
+            var beforeLength = beforeEnd - beforeStart;
+            var afterLength = afterEnd - afterStart;
+            if (!ExceedsPlanCellBudget(beforeLength, afterLength))
+            {
+                if (TryReserveComparisonWork(ref remainingComparisonWork, beforeLength, afterLength))
+                {
+                    MarkLcsChanges(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged);
+                }
+                else
+                {
+                    MarkBudgetedFallbackRange(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged,
+                        ref remainingComparisonWork);
+                }
+                continue;
+            }
+
+            if (!TryReserveLinearWork(
+                ref remainingComparisonWork,
+                EstimatePatienceAnchorWork(beforeLength, afterLength)))
+            {
+                MarkBudgetedFallbackRange(
                     beforeTexts,
                     beforeStart,
                     beforeEnd,
@@ -514,72 +571,90 @@ internal static class PreviewDiffHighlighter
                     beforeChanged,
                     afterChanged,
                     ref remainingComparisonWork);
+                continue;
             }
-            return;
-        }
+            var anchors = FindPatienceAnchors(
+                beforeTexts,
+                beforeStart,
+                beforeEnd,
+                afterTexts,
+                afterStart,
+                afterEnd);
+            if (anchors.Count == 0)
+            {
+                Array.Fill(beforeChanged, true, beforeStart, beforeLength);
+                Array.Fill(afterChanged, true, afterStart, afterLength);
+                if (TryReserveComparisonWork(ref remainingComparisonWork, beforeLength, afterLength))
+                {
+                    MarkLinearSpaceLcsMatches(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged);
+                }
+                else
+                {
+                    MarkBudgetedFallbackMatches(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged,
+                        ref remainingComparisonWork);
+                }
+                continue;
+            }
 
-        var anchors = FindPatienceAnchors(
+            var beforeCursor = beforeStart;
+            var afterCursor = afterStart;
+            var partitions = new List<BlockRange>(anchors.Count + 1);
+            foreach (var anchor in anchors)
+            {
+                partitions.Add(new BlockRange(
+                    beforeCursor,
+                    anchor.BeforeIndex,
+                    afterCursor,
+                    anchor.AfterIndex));
+                beforeCursor = anchor.BeforeIndex + 1;
+                afterCursor = anchor.AfterIndex + 1;
+            }
+            partitions.Add(new BlockRange(beforeCursor, beforeEnd, afterCursor, afterEnd));
+            for (var index = partitions.Count - 1; index >= 0; index--)
+            {
+                pending.Push(partitions[index]);
+            }
+
+        NextRange:
+            continue;
+        }
+    }
+
+    private static void MarkBudgetedFallbackRange(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged,
+        ref long remainingComparisonWork)
+    {
+        Array.Fill(beforeChanged, true, beforeStart, beforeEnd - beforeStart);
+        Array.Fill(afterChanged, true, afterStart, afterEnd - afterStart);
+        MarkBudgetedFallbackMatches(
             beforeTexts,
             beforeStart,
             beforeEnd,
             afterTexts,
             afterStart,
-            afterEnd);
-        if (anchors.Count == 0)
-        {
-            Array.Fill(beforeChanged, true, beforeStart, beforeLength);
-            Array.Fill(afterChanged, true, afterStart, afterLength);
-            if (!TryReserveComparisonWork(ref remainingComparisonWork, beforeLength, afterLength))
-            {
-                MarkBudgetedFallbackMatches(
-                    beforeTexts,
-                    beforeStart,
-                    beforeEnd,
-                    afterTexts,
-                    afterStart,
-                    afterEnd,
-                    beforeChanged,
-                    afterChanged,
-                    ref remainingComparisonWork);
-            }
-            else
-            {
-                MarkLinearSpaceLcsMatches(
-                    beforeTexts,
-                    beforeStart,
-                    beforeEnd,
-                    afterTexts,
-                    afterStart,
-                    afterEnd,
-                    beforeChanged,
-                    afterChanged);
-            }
-            return;
-        }
-
-        var beforeCursor = beforeStart;
-        var afterCursor = afterStart;
-        foreach (var anchor in anchors)
-        {
-            MarkBoundedChanges(
-                beforeTexts,
-                beforeCursor,
-                anchor.BeforeIndex,
-                afterTexts,
-                afterCursor,
-                anchor.AfterIndex,
-                beforeChanged,
-                afterChanged,
-                ref remainingComparisonWork);
-            beforeCursor = anchor.BeforeIndex + 1;
-            afterCursor = anchor.AfterIndex + 1;
-        }
-        MarkBoundedChanges(
-            beforeTexts,
-            beforeCursor,
-            beforeEnd,
-            afterTexts,
-            afterCursor,
             afterEnd,
             beforeChanged,
             afterChanged,
@@ -1175,6 +1250,31 @@ internal static class PreviewDiffHighlighter
 
         remainingComparisonWork -= requestedWork;
         return true;
+    }
+
+    private static bool TryReserveLinearWork(ref long remainingComparisonWork, long requestedWork)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(requestedWork);
+        if (requestedWork > remainingComparisonWork)
+        {
+            return false;
+        }
+
+        remainingComparisonWork -= requestedWork;
+        return true;
+    }
+
+    private static long EstimatePatienceAnchorWork(int beforeBlockCount, int afterBlockCount)
+    {
+        var maximumCandidateCount = Math.Min(beforeBlockCount, afterBlockCount);
+        var binarySearchSteps = 0;
+        for (var remainingCandidates = maximumCandidateCount; remainingCandidates > 0; remainingCandidates >>= 1)
+        {
+            binarySearchSteps++;
+        }
+
+        return (2L * (beforeBlockCount + (long)afterBlockCount))
+            + ((long)maximumCandidateCount * binarySearchSteps);
     }
 
     private static int? FindAlignmentAnchorIndex(

@@ -788,6 +788,37 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Bounds_Patience_Scans_For_Reverse_Unique_Regions()
+    {
+        const int reversedBlockCount = 20_000;
+        var stablePrefix = Enumerable.Range(0, 10)
+            .Select(index => new PreviewDiffBlock(index, $"Stable prefix {index}"));
+        var reversedRegion = Enumerable.Range(0, reversedBlockCount)
+            .Select(index => $"Unique reversed block {index}")
+            .ToArray();
+        var stableSuffix = Enumerable.Range(0, 10)
+            .Select(index => $"Stable suffix {index}")
+            .ToArray();
+        var beforeBlocks = stablePrefix
+            .Concat(reversedRegion.Select(text => new PreviewDiffBlock(0, text)))
+            .Concat(stableSuffix.Select(text => new PreviewDiffBlock(0, text)))
+            .Select((block, index) => block with { Index = index })
+            .ToArray();
+        var afterBlocks = stablePrefix
+            .Concat(reversedRegion.Reverse().Select(text => new PreviewDiffBlock(0, text)))
+            .Concat(stableSuffix.Select(text => new PreviewDiffBlock(0, text)))
+            .Select((block, index) => block with { Index = index })
+            .ToArray();
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.DoesNotContain(5, plan.BeforeChangedIndexes);
+        Assert.DoesNotContain(5, plan.AfterChangedIndexes);
+        Assert.DoesNotContain(beforeBlocks.Length - 5, plan.BeforeChangedIndexes);
+        Assert.DoesNotContain(afterBlocks.Length - 5, plan.AfterChangedIndexes);
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildPlan_Preserves_Repeated_Lines_Without_Patience_Anchors()
     {
         var beforeBlocks = Enumerable.Range(0, 2100)
