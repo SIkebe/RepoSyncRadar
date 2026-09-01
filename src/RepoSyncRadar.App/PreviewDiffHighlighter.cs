@@ -311,8 +311,17 @@ internal static class PreviewDiffHighlighter
         IReadOnlyList<PreviewDiffBlock> beforeBlocks,
         IReadOnlyList<PreviewDiffBlock> afterBlocks)
     {
+        return BuildPlan(beforeBlocks, afterBlocks, out _);
+    }
+
+    internal static PreviewDiffPlan BuildPlan(
+        IReadOnlyList<PreviewDiffBlock> beforeBlocks,
+        IReadOnlyList<PreviewDiffBlock> afterBlocks,
+        out int patienceAnchorScanCount)
+    {
         ArgumentNullException.ThrowIfNull(beforeBlocks);
         ArgumentNullException.ThrowIfNull(afterBlocks);
+        patienceAnchorScanCount = 0;
 
         if (beforeBlocks.Count == 0 || afterBlocks.Count == 0)
         {
@@ -331,7 +340,12 @@ internal static class PreviewDiffHighlighter
         var afterTexts = afterBlocks.Select(block => NormalizeText(block.Text)).ToArray();
         if (ExceedsPlanCellBudget(beforeTexts.Length, afterTexts.Length))
         {
-            return BuildBoundedPlan(beforeBlocks, afterBlocks, beforeTexts, afterTexts);
+            return BuildBoundedPlan(
+                beforeBlocks,
+                afterBlocks,
+                beforeTexts,
+                afterTexts,
+                out patienceAnchorScanCount);
         }
 
         var lengths = new int[beforeTexts.Length + 1, afterTexts.Length + 1];
@@ -429,11 +443,13 @@ internal static class PreviewDiffHighlighter
         IReadOnlyList<PreviewDiffBlock> beforeBlocks,
         IReadOnlyList<PreviewDiffBlock> afterBlocks,
         string[] beforeTexts,
-        string[] afterTexts)
+        string[] afterTexts,
+        out int patienceAnchorScanCount)
     {
         var beforeChangedPositions = new bool[beforeTexts.Length];
         var afterChangedPositions = new bool[afterTexts.Length];
         var remainingComparisonWork = _maxLinearSpaceLcsCells;
+        patienceAnchorScanCount = 0;
         MarkBoundedChanges(
             beforeTexts,
             0,
@@ -443,7 +459,8 @@ internal static class PreviewDiffHighlighter
             afterTexts.Length,
             beforeChangedPositions,
             afterChangedPositions,
-            ref remainingComparisonWork);
+            ref remainingComparisonWork,
+            ref patienceAnchorScanCount);
         return BuildPlanFromChangedPositions(
             beforeBlocks,
             afterBlocks,
@@ -462,7 +479,8 @@ internal static class PreviewDiffHighlighter
         int afterEnd,
         bool[] beforeChanged,
         bool[] afterChanged,
-        ref long remainingComparisonWork)
+        ref long remainingComparisonWork,
+        ref int patienceAnchorScanCount)
     {
         var pending = new Stack<BlockRange>();
         pending.Push(new BlockRange(beforeStart, beforeEnd, afterStart, afterEnd));
@@ -573,6 +591,7 @@ internal static class PreviewDiffHighlighter
                     ref remainingComparisonWork);
                 continue;
             }
+            patienceAnchorScanCount++;
             var anchors = FindPatienceAnchors(
                 beforeTexts,
                 beforeStart,
