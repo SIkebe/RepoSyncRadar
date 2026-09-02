@@ -1540,19 +1540,23 @@ public sealed class MainWindowPreviewComparisonTests
             "'.rsr-rendered-diff-added,.rsr-rendered-diff-removed'",
             script,
             StringComparison.Ordinal);
-        Assert.Contains("...target.querySelectorAll(renderedDiffSelector)", script, StringComparison.Ordinal);
-        Assert.Contains("return Array.from(new Set(renderedDiffTargets))", script, StringComparison.Ordinal);
         Assert.Contains(
-            "target.classList.contains('rsr-preview-diff-block')",
+            "const substantiveContentTargets = contentTargets.filter(",
             script,
             StringComparison.Ordinal);
-        Assert.Contains("return highlightedContentTargets", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "target.classList.contains('rsr-preview-diff-target')",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("...target.querySelectorAll(renderedDiffSelector)", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "return renderedDiffTargets.length > 0 ? renderedDiffTargets : [target]",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("return Array.from(new Set(resolvedContentTargets))", script, StringComparison.Ordinal);
         Assert.Contains("if (alignmentGapTargets.length > 0)", script, StringComparison.Ordinal);
         Assert.Contains("return alignmentGapTargets", script, StringComparison.Ordinal);
-        Assert.Contains(
-            "return contentTargets.length > 0 ? contentTargets : targets",
-            script,
-            StringComparison.Ordinal);
+        Assert.Contains("return targets", script, StringComparison.Ordinal);
         Assert.Contains("overlayTargets = resolveOverlayTargets()", script, StringComparison.Ordinal);
         Assert.Contains("Math.min(...rects.map((rect) => rect.left))", script, StringComparison.Ordinal);
         Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
