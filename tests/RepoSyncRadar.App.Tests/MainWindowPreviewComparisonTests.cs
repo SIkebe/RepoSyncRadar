@@ -965,7 +965,6 @@ public sealed class MainWindowPreviewComparisonTests
 
         var beforeGap = Assert.Single(gaps.Before);
         Assert.Equal(0, beforeGap.NavigationIndex);
-        Assert.Equal([0], beforeGap.NavigationIndexes);
         Assert.Equal(1, beforeGap.AnchorIndex);
         Assert.Equal(80, beforeGap.Height, precision: 3);
         Assert.Empty(gaps.After);
@@ -1098,9 +1097,6 @@ public sealed class MainWindowPreviewComparisonTests
             "insertGapAfter(\n          table,",
             applyScript,
             StringComparison.Ordinal);
-        Assert.Contains("gap.navigationIndexes", applyScript, StringComparison.Ordinal);
-        Assert.Contains("placeholder.style.position = 'absolute'", applyScript, StringComparison.Ordinal);
-        Assert.Contains("placeholder.style.inset = '0'", applyScript, StringComparison.Ordinal);
         Assert.Contains(
             ".rsr-preview-diff-alignment-gap-section",
             applyScript,

@@ -3161,13 +3161,36 @@ internal static partial class MarkdownPreviewRenderer
                 group.Any(static gap => gap.ContainsMarkdownFormatting),
                 group.Any(static gap => gap.ContainsInlineHtml)))
             .ToArray();
-        var hasFormattingGap = gaps.Any(static gap =>
-            gap.ContainsMarkdownFormatting || gap.ContainsInlineHtml);
-        var htmlGapRanges = gaps
-            .Where(static gap => gap.ContainsInlineHtml)
+        var currentTagHtmlGaps = gaps
+            .Where(gap =>
+                gap.ContainsInlineHtml
+                && IsPositionInsideInlineHtmlTag(content, gap.Index))
+            .ToArray();
+        var externalHtmlGaps = gaps
+            .Where(gap =>
+                gap.ContainsInlineHtml
+                && !IsPositionInsideInlineHtmlTag(content, gap.Index))
+            .OrderBy(static gap => gap.Index)
+            .ToArray();
+        InlineChangedRange? pairedExternalHtmlRange = externalHtmlGaps.Length == 2
+            && externalHtmlGaps[1].Index > externalHtmlGaps[0].Index
+            && !ranges.Any(range =>
+                range.Start < externalHtmlGaps[1].Index
+                && externalHtmlGaps[0].Index < range.End)
+                ? new InlineChangedRange(
+                    externalHtmlGaps[0].Index,
+                    externalHtmlGaps[1].Index - externalHtmlGaps[0].Index)
+                : null;
+        var hasFormattingGap = gaps.Any(static gap => gap.ContainsMarkdownFormatting)
+            || currentTagHtmlGaps.Length > 0
+            || pairedExternalHtmlRange is not null;
+        var htmlGapRanges = currentTagHtmlGaps
             .Select(gap => new InlineChangedRange(
                 Math.Min(gap.Index, content.Length - 1),
-                1));
+                1))
+            .Concat(pairedExternalHtmlRange is { } pairedRange
+                ? [pairedRange]
+                : []);
         var changedRanges = granularLength > 0 && granularLength * 5 < fallbackRange.Length * 4
             ? ranges
             : gaps.Length > 0
@@ -3179,7 +3202,9 @@ internal static partial class MarkdownPreviewRenderer
             changedRanges.Concat(htmlGapRanges).ToArray(),
             gaps
                 .Where(gap =>
-                    !gap.ContainsInlineHtml
+                    (!gap.ContainsInlineHtml
+                        || (!IsPositionInsideInlineHtmlTag(content, gap.Index)
+                            && pairedExternalHtmlRange is null))
                     && (granularLength > 0 || !gap.ContainsMarkdownFormatting))
                 .Select(static gap => gap.Index)
                 .ToArray());

@@ -31,8 +31,7 @@ internal sealed record PreviewDiffChange(
 internal sealed record PreviewDiffAlignmentGap(
     [property: JsonPropertyName("anchorIndex")] int? AnchorIndex,
     [property: JsonPropertyName("height")] double Height,
-    [property: JsonPropertyName("navigationIndex")] int NavigationIndex,
-    [property: JsonPropertyName("navigationIndexes")] IReadOnlyList<int>? NavigationIndexes = null);
+    [property: JsonPropertyName("navigationIndex")] int NavigationIndex);
 
 internal sealed record PreviewDiffAlignmentGapPlan(
     IReadOnlyList<PreviewDiffAlignmentGap> Before,
@@ -1411,8 +1410,7 @@ internal static class PreviewDiffHighlighter
                 beforeGaps.Add(new PreviewDiffAlignmentGap(
                     change.BeforeAnchorIndex,
                     height,
-                    navigationIndex,
-                    navigationIndexes));
+                    navigationIndex));
                 cumulativeBeforeGap += height;
             }
             else
@@ -1420,8 +1418,7 @@ internal static class PreviewDiffHighlighter
                 afterGaps.Add(new PreviewDiffAlignmentGap(
                     change.AfterAnchorIndex,
                     delta,
-                    navigationIndex,
-                    navigationIndexes));
+                    navigationIndex));
                 cumulativeAfterGap += delta;
             }
         }
@@ -1593,25 +1590,12 @@ td.rsr-preview-diff-alignment-gap {
       `${separatorHeight.toFixed(2)}px`);
     element.style.height = `${height.toFixed(2)}px`;
   };
-  const createGap = (height, navigationIndex, tagName = 'div', navigationIndexes = null) => {
+  const createGap = (height, navigationIndex, tagName = 'div') => {
     const element = document.createElement(tagName);
     element.className = 'rsr-preview-diff-alignment-gap';
     element.setAttribute('aria-hidden', 'true');
     element.setAttribute('role', 'presentation');
     element.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
-    element.style.position = 'relative';
-    (navigationIndexes || []).forEach((index) => {
-      if (index === navigationIndex) {
-        return;
-      }
-      const placeholder = document.createElement('span');
-      placeholder.setAttribute('aria-hidden', 'true');
-      placeholder.setAttribute('data-rsr-diff-navigation-index', String(index));
-      placeholder.style.display = 'block';
-      placeholder.style.position = 'absolute';
-      placeholder.style.inset = '0';
-      element.appendChild(placeholder);
-    });
     setGapHeight(element, height);
     return element;
   };
@@ -1749,7 +1733,7 @@ td.rsr-preview-diff-alignment-gap {
       gapRow.className = 'rsr-preview-diff-alignment-gap-row';
       gapRow.setAttribute('aria-hidden', 'true');
       gapRow.setAttribute('role', 'presentation');
-      const gapCell = createGap(height, gap.navigationIndex, 'td', gap.navigationIndexes);
+      const gapCell = createGap(height, gap.navigationIndex, 'td');
       const table = row.closest('table');
       gapCell.colSpan = getTableColumnCount(table);
       gapRow.appendChild(gapCell);
@@ -1760,7 +1744,7 @@ td.rsr-preview-diff-alignment-gap {
       const tagName = anchor.matches('.rsr-code-line') ? 'span' : 'div';
       insertGapBefore(
         anchor,
-        createGap(height, gap.navigationIndex, tagName, gap.navigationIndexes),
+        createGap(height, gap.navigationIndex, tagName),
         height);
       return;
     }
@@ -1772,7 +1756,7 @@ td.rsr-preview-diff-alignment-gap {
       if (terminalRow.parentElement?.matches('tfoot')) {
         insertGapAfter(
           table,
-          createGap(height, gap.navigationIndex, 'div', gap.navigationIndexes),
+          createGap(height, gap.navigationIndex),
           height);
         return;
       }
@@ -1784,7 +1768,7 @@ td.rsr-preview-diff-alignment-gap {
       gapRow.className = 'rsr-preview-diff-alignment-gap-row';
       gapRow.setAttribute('aria-hidden', 'true');
       gapRow.setAttribute('role', 'presentation');
-      const gapCell = createGap(height, gap.navigationIndex, 'td', gap.navigationIndexes);
+      const gapCell = createGap(height, gap.navigationIndex, 'td');
       gapCell.colSpan = getTableColumnCount(table);
       gapRow.appendChild(gapCell);
       gapSection.appendChild(gapRow);
@@ -1804,15 +1788,11 @@ td.rsr-preview-diff-alignment-gap {
         : terminalContext.matches('li') ? 'li' : 'div';
       insertGapAfter(
         terminalContext,
-        createGap(height, gap.navigationIndex, tagName, gap.navigationIndexes),
+        createGap(height, gap.navigationIndex, tagName),
         height);
       return;
     }
-    root.appendChild(createGap(
-      height,
-      gap.navigationIndex,
-      'div',
-      gap.navigationIndexes));
+    root.appendChild(createGap(height, gap.navigationIndex));
   });
   window.__repoSyncRadarDiffNavigation?.refresh?.();
   window.__repoSyncRadarDiffScrollbar?.scheduleBuild?.();

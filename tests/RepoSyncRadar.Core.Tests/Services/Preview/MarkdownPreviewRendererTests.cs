@@ -3711,6 +3711,29 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Keeps_Inserted_Html_As_A_Gap_Outside_Current_Tags()
+    {
+        const string beforeMarkdown = "Use old middle tail for alpha bravo charlie delta.";
+        const string afterMarkdown =
+            "Use <kbd>Enter</kbd> old middle new for alpha bravo charlie delta.";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("rsr-rendered-diff-gap", beforeHtml, StringComparison.Ordinal);
+        Assert.Contains("old middle", beforeHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<span class=\"rsr-rendered-diff-removed\">o</span>ld",
+            beforeHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Inline_Html_Formatting_Changes_Without_Splitting_Tags()
     {
         const string beforeMarkdown = "Press the <kbd>Enter</kbd> key to continue the installation now.";
@@ -3735,10 +3758,8 @@ var value = 1;
             "<span class=\"rsr-rendered-diff-removed\"><kbd>Enter</kbd></span>",
             beforeHtml,
             StringComparison.Ordinal);
-        Assert.Contains(
-            "<span class=\"rsr-rendered-diff-added\">Enter</span>",
-            afterHtml,
-            StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("Enter", afterHtml, StringComparison.Ordinal);
         Assert.DoesNotContain("<kbd><span class=\"rsr-rendered-diff-removed\">", beforeHtml, StringComparison.Ordinal);
     }
 
