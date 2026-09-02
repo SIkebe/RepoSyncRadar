@@ -1,4 +1,5 @@
 using Microsoft.Playwright;
+using RepoSyncRadar.Core.Services.Preview;
 using System.Reflection;
 using System.Text.Json;
 using Xunit;
@@ -254,6 +255,280 @@ public sealed class DocsViewE2ETests
         {
             await page.CloseAsync();
         }
+    }
+
+    [Fact]
+    public async Task Preview_Diff_Scrollbar_Splits_Separated_Targets_In_One_Hunk()
+    {
+        var script = GetHighlighterScript(
+            "BuildApplyPlanScript",
+            "[0,1,2]",
+            "\"after\"",
+            """[{"index":0,"navigationIndex":0},{"index":1,"navigationIndex":0},{"index":2,"navigationIndex":0}]""");
+        var page = await CreateDocsPageAsync();
+        try
+        {
+            await page.SetViewportSizeAsync(800, 600);
+            await page.SetContentAsync(
+                """
+                <main style="height: 1600px">
+                  <div data-rsr-diff-index="0" style="height: 20px; width: 200px">First</div>
+                  <div data-rsr-diff-index="1" style="height: 20px; width: 200px">Adjacent</div>
+                  <div style="height: 300px"></div>
+                  <div data-rsr-diff-index="2" style="height: 20px; width: 200px">Separated</div>
+                </main>
+                """);
+
+            await page.EvaluateAsync<int>(script);
+            var geometry = await page.EvaluateAsync<JsonElement>(
+                """
+                () => {
+                    const markers = Array.from(
+                        document.querySelectorAll('.rsr-preview-diff-scrollbar-marker'));
+                    const root = document.scrollingElement || document.documentElement;
+                    const viewport = window.innerHeight;
+                    const groups = [
+                        [
+                            document.querySelector('[data-rsr-diff-index="0"]'),
+                            document.querySelector('[data-rsr-diff-index="1"]'),
+                        ],
+                        [document.querySelector('[data-rsr-diff-index="2"]')],
+                    ];
+                    const expected = groups.map(elements => {
+                        const rects = elements.map(element => element.getBoundingClientRect());
+                        const top = Math.min(...rects.map(rect => rect.top)) + window.scrollY;
+                        const bottom = Math.max(...rects.map(rect => rect.bottom)) + window.scrollY;
+                        const height = Math.max(
+                            4,
+                            Math.min(viewport, ((bottom - top) / root.scrollHeight) * viewport));
+                        return {
+                            top: Math.max(
+                                0,
+                                Math.min(viewport - height, (top / root.scrollHeight) * viewport)),
+                            height,
+                        };
+                    });
+                    return {
+                        markerCount: markers.length,
+                        actual: markers.map(marker => {
+                            const rect = marker.getBoundingClientRect();
+                            return { top: rect.top, height: rect.height };
+                        }),
+                        expected,
+                    };
+                }
+                """);
+
+            Assert.Equal(2, geometry.GetProperty("markerCount").GetInt32());
+            var actual = geometry.GetProperty("actual").EnumerateArray().ToArray();
+            var expected = geometry.GetProperty("expected").EnumerateArray().ToArray();
+            for (var index = 0; index < expected.Length; index++)
+            {
+                Assert.Equal(
+                    expected[index].GetProperty("top").GetDouble(),
+                    actual[index].GetProperty("top").GetDouble(),
+                    precision: 1);
+                Assert.Equal(
+                    expected[index].GetProperty("height").GetDouble(),
+                    actual[index].GetProperty("height").GetDouble(),
+                    precision: 1);
+            }
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
+    }
+
+    [Theory]
+    [InlineData("rendered")]
+    [InlineData("fallback")]
+    [InlineData("one-sided")]
+    public async Task Preview_Diff_Navigation_Centers_The_Visible_Change_Target(string scenario)
+    {
+        var script = GetHighlighterScript("BuildNavigateToDiffScript", 0);
+        var markup = scenario switch
+        {
+            "rendered" => """
+                <div data-rsr-diff-navigation-index="0"
+                     style="height: 600px; position: absolute; top: 300px; width: 500px">
+                  <span id="expected" class="rsr-rendered-diff-added"
+                        style="display: block; height: 40px; position: absolute; top: 240px; width: 180px">Changed</span>
+                </div>
+                <div class="rsr-preview-diff-alignment-gap" data-rsr-diff-navigation-index="0"
+                     style="height: 100px; position: absolute; top: 1100px; width: 500px"></div>
+                """,
+            "fallback" => """
+                <div id="expected" class="rsr-preview-diff-block"
+                     data-rsr-diff-navigation-index="0"
+                     style="height: 40px; position: absolute; top: 700px; width: 500px">Changed</div>
+                <div class="rsr-preview-diff-alignment-gap" data-rsr-diff-navigation-index="0"
+                     style="height: 100px; position: absolute; top: 1100px; width: 500px"></div>
+                """,
+            "one-sided" => """
+                <div data-rsr-diff-navigation-index="0"
+                     style="height: 700px; position: absolute; top: 200px; width: 500px">Unchanged container</div>
+                <div id="expected" class="rsr-preview-diff-alignment-gap"
+                     data-rsr-diff-navigation-index="0"
+                     style="height: 100px; position: absolute; top: 1100px; width: 500px"></div>
+                """,
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
+        };
+        var page = await CreateDocsPageAsync();
+        try
+        {
+            await page.SetViewportSizeAsync(800, 400);
+            await page.SetContentAsync(
+                $"""
+                <main style="height: 1800px; position: relative">
+                  {markup}
+                </main>
+                """);
+
+            var navigationResult = await page.EvaluateAsync<JsonElement>(script);
+            var geometry = await page.EvaluateAsync<JsonElement>(
+                """
+                () => {
+                    const expected = document.getElementById('expected').getBoundingClientRect();
+                    const overlay = document.getElementById(
+                        'rsr-preview-diff-active-overlay').getBoundingClientRect();
+                    return {
+                        expectedTop: expected.top,
+                        expectedHeight: expected.height,
+                        actualTop: overlay.top,
+                        actualHeight: overlay.height,
+                        viewportCenter: window.innerHeight / 2,
+                        targetCenter: expected.top + expected.height / 2,
+                    };
+                }
+                """);
+
+            Assert.True(navigationResult.GetProperty("found").GetBoolean());
+            Assert.Equal(
+                geometry.GetProperty("expectedTop").GetDouble(),
+                geometry.GetProperty("actualTop").GetDouble(),
+                precision: 1);
+            Assert.Equal(
+                geometry.GetProperty("expectedHeight").GetDouble(),
+                geometry.GetProperty("actualHeight").GetDouble(),
+                precision: 1);
+            Assert.InRange(
+                Math.Abs(
+                    geometry.GetProperty("viewportCenter").GetDouble() -
+                    geometry.GetProperty("targetCenter").GetDouble()),
+                0,
+                0.5);
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Rendered_Diff_Scrollbar_Uses_Changed_Cell_And_Point_Gap_Bounds()
+    {
+        const string beforeMarkdown = """
+            | Model | Status |
+            | --- | --- |
+            | Alpha | Old |
+            | Beta | Stable |
+            """;
+        const string afterMarkdown = """
+            | Model | Status |
+            | --- | --- |
+            | Alpha | New |
+            | Beta | Stable |
+            """;
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        var page = await CreateDocsPageAsync();
+        try
+        {
+            await page.SetViewportSizeAsync(800, 600);
+            await page.SetContentAsync(html);
+            var geometry = await page.EvaluateAsync<JsonElement>(
+                """
+                async () => {
+                    const changed = document.querySelector('.rsr-rendered-diff-added');
+                    const cell = changed.closest('td');
+                    const table = changed.closest('table');
+                    table.style.height = '600px';
+                    table.setAttribute('data-rsr-diff-navigation-index', '0');
+                    const point = document.createElement('div');
+                    point.className = 'rsr-preview-diff-alignment-gap';
+                    point.setAttribute('data-rsr-diff-navigation-index', '1');
+                    point.style.height = '240px';
+                    document.querySelector('article').appendChild(point);
+                    window.__repoSyncRadarDiffScrollbar.scheduleBuild();
+                    await new Promise(resolve => requestAnimationFrame(
+                        () => requestAnimationFrame(resolve)));
+                    const markers = Array.from(
+                        document.querySelectorAll('.rsr-diff-scrollbar-marker'));
+                    const cellRect = cell.getBoundingClientRect();
+                    const tableRect = table.getBoundingClientRect();
+                    const markerRect = markers[0].getBoundingClientRect();
+                    const docHeight = Math.max(1, document.documentElement.scrollHeight);
+                    const viewport = window.innerHeight;
+                    const scrollbarSize = Math.max(
+                        0,
+                        window.innerWidth - document.documentElement.clientWidth);
+                    const buttonSize = Math.min(scrollbarSize, viewport / 4);
+                    const trackHeight = Math.max(1, viewport - buttonSize * 2);
+                    const expectedCenter =
+                        buttonSize +
+                        ((cellRect.top + cellRect.bottom) / 2 / docHeight) * trackHeight;
+                    return {
+                        markerCount: markers.length,
+                        cellMarkerCenter: markerRect.top + markerRect.height / 2,
+                        expectedCellCenter: expectedCenter,
+                        cellMarkerHeight: markerRect.height,
+                        projectedTableHeight: (tableRect.height / docHeight) * trackHeight,
+                        pointMarkerHeight: markers.at(-1).getBoundingClientRect().height,
+                    };
+                }
+                """);
+
+            Assert.Equal(2, geometry.GetProperty("markerCount").GetInt32());
+            Assert.InRange(
+                Math.Abs(
+                    geometry.GetProperty("expectedCellCenter").GetDouble() -
+                    geometry.GetProperty("cellMarkerCenter").GetDouble()),
+                0,
+                0.5);
+            Assert.True(
+                geometry.GetProperty("cellMarkerHeight").GetDouble()
+                < geometry.GetProperty("projectedTableHeight").GetDouble());
+            Assert.Equal(6, geometry.GetProperty("pointMarkerHeight").GetDouble());
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
+    }
+
+    private static string GetHighlighterScript(string methodName, params object[] arguments)
+    {
+        var appAssemblyPath = Path.ChangeExtension(AppHost.ResolveAppExePath(), ".dll");
+        var appAssembly = Assembly.LoadFrom(appAssemblyPath);
+        var highlighterType = appAssembly.GetType(
+            "RepoSyncRadar.App.PreviewDiffHighlighter",
+            throwOnError: true)!;
+        return Assert.IsType<string>(
+            highlighterType
+                .GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static)!
+                .Invoke(null, arguments));
+    }
+
+    private async Task<IPage> CreateDocsPageAsync()
+    {
+        var context = Assert.Single(_fixture.DocsBrowser.Contexts);
+        return await context.NewPageAsync();
     }
 
     private static async Task<string> WaitForPinnedColorModeAsync(IPage page)
