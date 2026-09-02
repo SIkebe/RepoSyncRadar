@@ -1537,15 +1537,20 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("pointer-events: none", script, StringComparison.Ordinal);
         Assert.Contains("overlay.setAttribute('aria-hidden', 'true')", script, StringComparison.Ordinal);
         Assert.Contains(
-            "const resolvedTargets = targets.flatMap((target) => {",
+            "'.rsr-rendered-diff-added,.rsr-rendered-diff-removed'",
             script,
             StringComparison.Ordinal);
+        Assert.Contains("...target.querySelectorAll(renderedDiffSelector)", script, StringComparison.Ordinal);
+        Assert.Contains("return Array.from(new Set(renderedDiffTargets))", script, StringComparison.Ordinal);
         Assert.Contains(
-            "return target.matches(alignmentGapSelector) ? [] : [target]",
+            "target.classList.contains('rsr-preview-diff-block')",
             script,
             StringComparison.Ordinal);
+        Assert.Contains("return highlightedContentTargets", script, StringComparison.Ordinal);
+        Assert.Contains("if (alignmentGapTargets.length > 0)", script, StringComparison.Ordinal);
+        Assert.Contains("return alignmentGapTargets", script, StringComparison.Ordinal);
         Assert.Contains(
-            "return resolvedTargets.length > 0 ? resolvedTargets : targets",
+            "return contentTargets.length > 0 ? contentTargets : targets",
             script,
             StringComparison.Ordinal);
         Assert.Contains("overlayTargets = resolveOverlayTargets()", script, StringComparison.Ordinal);

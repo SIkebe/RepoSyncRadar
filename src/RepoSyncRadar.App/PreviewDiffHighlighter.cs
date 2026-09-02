@@ -2287,17 +2287,26 @@ td.rsr-preview-diff-navigation-placeholder {
     const isAlignmentGapTarget = (target) =>
       target.matches(alignmentGapSelector)
         || target.closest(alignmentGapSelector) !== null;
-    const resolvedTargets = targets.flatMap((target) => {
-      const inlineTargets = [
-        ...(target.matches(renderedDiffSelector) ? [target] : []),
-        ...target.querySelectorAll(renderedDiffSelector),
-      ];
-      if (inlineTargets.length > 0) {
-        return inlineTargets;
-      }
-      return isAlignmentGapTarget(target) ? [] : [target];
-    });
-    return resolvedTargets.length > 0 ? resolvedTargets : targets;
+    const contentTargets = targets.filter(
+      (target) => !isAlignmentGapTarget(target));
+    const renderedDiffTargets = contentTargets.flatMap((target) => [
+      ...(target.matches(renderedDiffSelector) ? [target] : []),
+      ...target.querySelectorAll(renderedDiffSelector),
+    ]);
+    if (renderedDiffTargets.length > 0) {
+      return Array.from(new Set(renderedDiffTargets));
+    }
+    const highlightedContentTargets = contentTargets.filter(
+      (target) => target.classList.contains('rsr-preview-diff-block'));
+    if (highlightedContentTargets.length > 0) {
+      return highlightedContentTargets;
+    }
+    const alignmentGapTargets = targets.filter(
+      (target) => isAlignmentGapTarget(target));
+    if (alignmentGapTargets.length > 0) {
+      return alignmentGapTargets;
+    }
+    return contentTargets.length > 0 ? contentTargets : targets;
   };
   let overlayTargets = resolveOverlayTargets();
   const root = document.scrollingElement || document.documentElement || document.body;
