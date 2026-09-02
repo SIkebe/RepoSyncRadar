@@ -2105,8 +2105,11 @@ td.rsr-preview-diff-alignment-gap {
             '.rsr-preview-diff-alignment-gap,' +
             '.rsr-preview-diff-alignment-gap-row,' +
             '.rsr-preview-diff-alignment-gap-section';
+          const isAlignmentGapTarget = (element) =>
+            element.matches(alignmentGapSelector)
+              || element.closest(alignmentGapSelector) !== null;
           const substantiveTargets = segment.elements.filter(
-            (element) => !element.matches(alignmentGapSelector));
+            (element) => !isAlignmentGapTarget(element));
           const resolvedTargets = segment.elements.flatMap((element) => {
             const inlineTargets = [
               ...(element.matches(renderedDiffSelector) ? [element] : []),
@@ -2115,7 +2118,7 @@ td.rsr-preview-diff-alignment-gap {
             if (inlineTargets.length > 0) {
               return inlineTargets;
             }
-            return element.matches(alignmentGapSelector) ? [] : [element];
+            return isAlignmentGapTarget(element) ? [] : [element];
           });
           const markerTargets =
             resolvedTargets.length > 0 ? resolvedTargets : segment.elements;
@@ -2260,6 +2263,9 @@ td.rsr-preview-diff-alignment-gap {
       '.rsr-preview-diff-alignment-gap,' +
       '.rsr-preview-diff-alignment-gap-row,' +
       '.rsr-preview-diff-alignment-gap-section';
+    const isAlignmentGapTarget = (target) =>
+      target.matches(alignmentGapSelector)
+        || target.closest(alignmentGapSelector) !== null;
     const resolvedTargets = targets.flatMap((target) => {
       const inlineTargets = [
         ...(target.matches(renderedDiffSelector) ? [target] : []),
@@ -2268,7 +2274,7 @@ td.rsr-preview-diff-alignment-gap {
       if (inlineTargets.length > 0) {
         return inlineTargets;
       }
-      return target.matches(alignmentGapSelector) ? [] : [target];
+      return isAlignmentGapTarget(target) ? [] : [target];
     });
     return resolvedTargets.length > 0 ? resolvedTargets : targets;
   };

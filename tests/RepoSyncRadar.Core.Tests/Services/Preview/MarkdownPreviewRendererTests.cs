@@ -3561,6 +3561,45 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Localizes_Formatting_Only_Changes_Beside_Formatted_Siblings()
+    {
+        const string beforeMarkdown = "**first** and **second**";
+        const string afterMarkdown = "first and **second**";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-removed\"><strong>first</strong></span> and <strong>second</strong>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">first</span> and <strong>second</strong>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "rsr-rendered-diff-removed\"><strong>second</strong>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "rsr-rendered-diff-added\"><strong>second</strong>",
+            afterHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Bold_To_Italic_Changes_Without_Splitting_Delimiter_Runs()
     {
         const string beforeMarkdown = "**alpha bravo charlie delta**";

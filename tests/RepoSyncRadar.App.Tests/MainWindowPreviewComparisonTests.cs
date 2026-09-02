@@ -1186,7 +1186,7 @@ public sealed class MainWindowPreviewComparisonTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "return element.matches(alignmentGapSelector) ? [] : [element]",
+            "return isAlignmentGapTarget(element) ? [] : [element]",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
@@ -1214,6 +1214,25 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("marker.style.height", script, StringComparison.Ordinal);
         Assert.Contains(
             "window.__repoSyncRadarDiffScrollbar = { scheduleBuild: buildMarkers }",
+            script,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ApplyPlanScript_Treats_Navigation_Placeholders_As_Alignment_Gaps()
+    {
+        var script = PreviewDiffHighlighter.BuildApplyPlanScript("[1,2]", "\"before\"");
+
+        Assert.Contains(
+            "element.closest(alignmentGapSelector) !== null",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "(element) => !isAlignmentGapTarget(element)",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "return isAlignmentGapTarget(element) ? [] : [element]",
             script,
             StringComparison.Ordinal);
     }

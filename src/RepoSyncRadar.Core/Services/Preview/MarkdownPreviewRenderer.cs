@@ -3209,14 +3209,10 @@ internal static partial class MarkdownPreviewRenderer
             .Concat(pairedExternalHtmlRange is { } pairedRange
                 ? [pairedRange]
                 : []);
-        var currentFormattingTokens = contentTokens
-            .Where(static token => IsMarkdownFormattingToken(token.Value))
-            .ToArray();
-        var formattingOnlyRange = currentFormattingTokens.Length > 0
-            ? new InlineChangedRange(
-                currentFormattingTokens[0].Start,
-                currentFormattingTokens[^1].End - currentFormattingTokens[0].Start)
-            : fallbackRange;
+        var formattingOnlyRange = FindFormattingOnlyChangedRange(
+            contentTokens,
+            comparisonTokens,
+            fallbackRange);
         var changedRanges = isFormattingOnlyChange
             ? [formattingOnlyRange]
             : useGranularRanges
@@ -3239,6 +3235,78 @@ internal static partial class MarkdownPreviewRenderer
 
     private static bool IsMarkdownFormattingToken(string value)
         => value is "*" or "_" or "~" or "`";
+
+    private static InlineChangedRange FindFormattingOnlyChangedRange(
+        IReadOnlyList<InlineDiffToken> contentTokens,
+        IReadOnlyList<InlineDiffToken> comparisonTokens,
+        InlineChangedRange fallbackRange)
+    {
+        var contentSemanticIndexes = Enumerable.Range(0, contentTokens.Count)
+            .Where(index => !IsMarkdownFormattingToken(contentTokens[index].Value))
+            .ToArray();
+        var comparisonSemanticIndexes = Enumerable.Range(0, comparisonTokens.Count)
+            .Where(index => !IsMarkdownFormattingToken(comparisonTokens[index].Value))
+            .ToArray();
+        if (contentSemanticIndexes.Length != comparisonSemanticIndexes.Length)
+        {
+            return fallbackRange;
+        }
+
+        var changedBoundaries = Enumerable.Range(0, contentSemanticIndexes.Length + 1)
+            .Where(boundary => !GetFormattingTokensAtBoundary(
+                    contentTokens,
+                    contentSemanticIndexes,
+                    boundary)
+                .Select(static token => token.Value)
+                .SequenceEqual(
+                    GetFormattingTokensAtBoundary(
+                        comparisonTokens,
+                        comparisonSemanticIndexes,
+                        boundary)
+                        .Select(static token => token.Value),
+                    StringComparer.Ordinal))
+            .ToArray();
+        if (changedBoundaries.Length == 0)
+        {
+            return fallbackRange;
+        }
+
+        var firstBoundary = changedBoundaries[0];
+        var lastBoundary = changedBoundaries[^1];
+        var firstFormattingTokens = GetFormattingTokensAtBoundary(
+            contentTokens,
+            contentSemanticIndexes,
+            firstBoundary);
+        var lastFormattingTokens = GetFormattingTokensAtBoundary(
+            contentTokens,
+            contentSemanticIndexes,
+            lastBoundary);
+        var start = firstFormattingTokens.Length > 0
+            ? firstFormattingTokens[0].Start
+            : firstBoundary < contentSemanticIndexes.Length
+                ? contentTokens[contentSemanticIndexes[firstBoundary]].Start
+                : fallbackRange.Start;
+        var end = lastFormattingTokens.Length > 0
+            ? lastFormattingTokens[^1].End
+            : lastBoundary > 0
+                ? contentTokens[contentSemanticIndexes[lastBoundary - 1]].End
+                : fallbackRange.End;
+        return end > start ? new InlineChangedRange(start, end - start) : fallbackRange;
+    }
+
+    private static InlineDiffToken[] GetFormattingTokensAtBoundary(
+        IReadOnlyList<InlineDiffToken> tokens,
+        int[] semanticIndexes,
+        int boundary)
+    {
+        var start = boundary == 0 ? 0 : semanticIndexes[boundary - 1] + 1;
+        var end = boundary == semanticIndexes.Length ? tokens.Count : semanticIndexes[boundary];
+        return tokens
+            .Skip(start)
+            .Take(end - start)
+            .Where(static token => IsMarkdownFormattingToken(token.Value))
+            .ToArray();
+    }
 
     private static int CalculateGranularChangedLength(
         string content,
