@@ -3829,6 +3829,72 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Keeps_Independent_Void_Html_Insertions_As_Separate_Gaps()
+    {
+        const string beforeMarkdown = "Start A middle B end";
+        const string afterMarkdown =
+            "Start <img src=\"a\"> A middle <img src=\"b\"> B end";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        var paragraphStart = beforeHtml.IndexOf("<p>", StringComparison.Ordinal);
+        var paragraphEnd = beforeHtml.IndexOf("</p>", paragraphStart, StringComparison.Ordinal) + 4;
+        var paragraph = beforeHtml[paragraphStart..paragraphEnd];
+        Assert.Equal(
+            2,
+            paragraph.Split("rsr-rendered-diff-gap", StringSplitOptions.None).Length - 1);
+        Assert.Contains("A middle", paragraph, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "rsr-rendered-diff-removed\">A middle",
+            paragraph,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Prefers_Aligned_Formatting_Matches_For_Repeated_Text()
+    {
+        const string beforeMarkdown =
+            """
+            **first phrase** middle tail
+
+            first phrase middle **tail**
+            """;
+        const string afterMarkdown =
+            """
+            *first phrase* middle tail
+
+            first phrase middle *tail*
+            """;
+
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\"><em>first phrase</em></span> middle tail",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "first phrase middle <span class=\"rsr-rendered-diff-added\"><em>tail</em></span>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "first phrase middle <span class=\"rsr-rendered-diff-added\"><em>first phrase</em>",
+            afterHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Uses_Symmetric_Granularity_For_Unequal_Token_Lengths()
     {
         const string beforeMarkdown = "a x b common one two three four";

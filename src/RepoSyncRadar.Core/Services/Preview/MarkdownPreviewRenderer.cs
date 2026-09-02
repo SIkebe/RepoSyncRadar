@@ -3043,6 +3043,7 @@ internal static partial class MarkdownPreviewRenderer
         var changedTokens = new bool[contentTokens.Count];
         var comparisonChangedTokens = new bool[comparisonTokens.Count];
         var gapTokenBoundaries = new List<InlineGapBoundary>();
+        var inlineHtmlGapBoundaries = new List<InlineHtmlGapBoundary>();
         var current = 0;
         var comparison = 0;
         var advanceCurrentOnTie =
@@ -3071,6 +3072,11 @@ internal static partial class MarkdownPreviewRenderer
                 var containsInlineHtml = IsPositionInsideInlineHtmlTag(
                     comparisonContent,
                     comparisonTokens[comparison].Start);
+                AddInlineHtmlGapBoundary(
+                    inlineHtmlGapBoundaries,
+                    comparisonContent,
+                    comparisonTokens[comparison].Start,
+                    current);
                 if (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1].Boundary != current)
                 {
                     gapTokenBoundaries.Add(new InlineGapBoundary(
@@ -3102,6 +3108,11 @@ internal static partial class MarkdownPreviewRenderer
             var containsInlineHtml = IsPositionInsideInlineHtmlTag(
                 comparisonContent,
                 comparisonTokens[comparison].Start);
+            AddInlineHtmlGapBoundary(
+                inlineHtmlGapBoundaries,
+                comparisonContent,
+                comparisonTokens[comparison].Start,
+                contentTokens.Count);
             if (gapTokenBoundaries.Count == 0
                 || gapTokenBoundaries[^1].Boundary != contentTokens.Count)
             {
@@ -3187,24 +3198,11 @@ internal static partial class MarkdownPreviewRenderer
                 gap.ContainsInlineHtml
                 && IsPositionInsideInlineHtmlTag(content, gap.Index))
             .ToArray();
-        var externalHtmlGaps = gaps
-            .Where(gap =>
-                gap.ContainsInlineHtml
-                && !IsPositionInsideInlineHtmlTag(content, gap.Index))
-            .OrderBy(static gap => gap.Index)
-            .ToArray();
-        var externalHtmlGapRanges = Enumerable.Range(0, externalHtmlGaps.Length / 2)
-            .Select(pairIndex => (
-                Start: externalHtmlGaps[pairIndex * 2].Index,
-                End: externalHtmlGaps[(pairIndex * 2) + 1].Index))
-            .Where(pair =>
-                pair.End > pair.Start
-                && !ranges.Any(range =>
-                    range.Start < pair.End && pair.Start < range.End))
-            .Select(static pair => new InlineChangedRange(
-                pair.Start,
-                pair.End - pair.Start))
-            .ToArray();
+        var externalHtmlGapRanges = FindExternalHtmlGapRanges(
+            content,
+            contentTokens,
+            inlineHtmlGapBoundaries,
+            ranges);
         var htmlGapRanges = currentTagHtmlGaps
             .Select(gap => new InlineChangedRange(
                 Math.Min(gap.Index, content.Length - 1),
@@ -3218,7 +3216,7 @@ internal static partial class MarkdownPreviewRenderer
             IsPositionInsideInlineHtmlTag(content, range.Start));
         var formattingOnlyRanges = hasCurrentInlineHtmlFormattingRanges
             ? ranges
-            : externalHtmlGapRanges.Length > 0
+            : inlineHtmlGapBoundaries.Count > 0
                 ? []
                 : markdownFormattingOnlyRanges;
         var changedRanges = isFormattingOnlyChange
@@ -3248,6 +3246,94 @@ internal static partial class MarkdownPreviewRenderer
     private static bool IsInlineFormattingToken(string content, InlineDiffToken token)
         => IsMarkdownFormattingToken(token.Value)
             || IsPositionInsideInlineHtmlTag(content, token.Start);
+
+    private static void AddInlineHtmlGapBoundary(
+        List<InlineHtmlGapBoundary> boundaries,
+        string content,
+        int position,
+        int tokenBoundary)
+    {
+        if (position < 0 || position >= content.Length)
+        {
+            return;
+        }
+
+        var tagStart = content.LastIndexOf('<', position);
+        if (tagStart < 0
+            || boundaries.Any(boundary => boundary.TagStart == tagStart))
+        {
+            return;
+        }
+
+        var tagEnd = FindHtmlTagEnd(content, tagStart);
+        if (position >= tagEnd)
+        {
+            return;
+        }
+
+        var tag = content[tagStart..tagEnd];
+        var tagName = GetHtmlTagName(tag, out var isClosing);
+        if (tagName.Length == 0)
+        {
+            return;
+        }
+
+        boundaries.Add(new InlineHtmlGapBoundary(
+            tokenBoundary,
+            tagStart,
+            tagName,
+            isClosing,
+            !isClosing
+                && (IsHtmlVoidElement(tagName)
+                    || tag.AsSpan().TrimEnd().EndsWith("/>", StringComparison.Ordinal))));
+    }
+
+    private static InlineChangedRange[] FindExternalHtmlGapRanges(
+        string content,
+        IReadOnlyList<InlineDiffToken> contentTokens,
+        IReadOnlyList<InlineHtmlGapBoundary> boundaries,
+        IReadOnlyList<InlineChangedRange> changedRanges)
+    {
+        var openElements = new List<(InlineHtmlGapBoundary Boundary, int Index)>();
+        var pairedRanges = new List<InlineChangedRange>();
+        foreach (var boundary in boundaries)
+        {
+            var index = boundary.TokenBoundary == contentTokens.Count
+                ? content.Length
+                : contentTokens[boundary.TokenBoundary].Start;
+            if (IsPositionInsideInlineHtmlTag(content, index) || boundary.IsVoid)
+            {
+                continue;
+            }
+            if (!boundary.IsClosing)
+            {
+                openElements.Add((boundary, index));
+                continue;
+            }
+
+            var openingIndex = openElements.FindLastIndex(opening =>
+                string.Equals(
+                    opening.Boundary.TagName,
+                    boundary.TagName,
+                    StringComparison.Ordinal));
+            if (openingIndex < 0)
+            {
+                continue;
+            }
+
+            var opening = openElements[openingIndex];
+            openElements.RemoveRange(openingIndex, openElements.Count - openingIndex);
+            if (index > opening.Index
+                && !changedRanges.Any(range =>
+                    range.Start < index && opening.Index < range.End))
+            {
+                pairedRanges.Add(new InlineChangedRange(
+                    opening.Index,
+                    index - opening.Index));
+            }
+        }
+        return pairedRanges.ToArray();
+    }
 
     private static List<InlineChangedRange> FindFormattingOnlyChangedRanges(
         IReadOnlyList<InlineDiffToken> contentTokens,
@@ -3421,6 +3507,13 @@ internal static partial class MarkdownPreviewRenderer
         int Index,
         bool ContainsMarkdownFormatting,
         bool ContainsInlineHtml);
+
+    private readonly record struct InlineHtmlGapBoundary(
+        int TokenBoundary,
+        int TagStart,
+        string TagName,
+        bool IsClosing,
+        bool IsVoid);
 
     private readonly record struct InlineChangedRange(int Start, int Length)
     {
@@ -4867,10 +4960,19 @@ internal static partial class MarkdownPreviewRenderer
         string? alignedContent = null;
         if (alignedComparisonLine is not null
             && TryGetMarkableRenderedDiffParts(alignedComparisonLine, out var alignedParts)
-            && alignedParts.Kind == currentParts.Kind
-            && HasMeaningfulAlignedSimilarity(currentParts.Content, alignedParts.Content))
+            && alignedParts.Kind == currentParts.Kind)
         {
-            alignedContent = alignedParts.Content;
+            if (string.Equals(
+                GetInlineFormattingInsensitiveContent(currentParts.Content),
+                GetInlineFormattingInsensitiveContent(alignedParts.Content),
+                StringComparison.Ordinal))
+            {
+                return alignedParts.Content;
+            }
+            if (HasMeaningfulAlignedSimilarity(currentParts.Content, alignedParts.Content))
+            {
+                alignedContent = alignedParts.Content;
+            }
         }
 
         string? prefixOrSuffixMatch = null;
@@ -4938,11 +5040,18 @@ internal static partial class MarkdownPreviewRenderer
     }
 
     private static string GetInlineFormattingInsensitiveContent(string content)
-        => new(
+    {
+        var withoutFormatting = new string(
             HtmlTagRegex()
                 .Replace(content, string.Empty)
                 .Where(static character => character is not ('*' or '_' or '~' or '`'))
                 .ToArray());
+        return string.Join(
+            ' ',
+            withoutFormatting.Split(
+                (char[]?)null,
+                StringSplitOptions.RemoveEmptyEntries));
+    }
 
     private static bool HasMeaningfulAlignedSimilarity(string currentContent, string comparisonContent)
     {
