@@ -1154,6 +1154,16 @@
     private async Task SetFileViewedAsync(CommitFile file, ChangeEventArgs args)
     {
         var viewed = args.Value is bool value && value;
+        await SetFileViewedAsync(file, viewed);
+    }
+
+    private async Task SetFileViewedAsync(CommitFile file, bool viewed)
+    {
+        if ((file.ViewedAt is not null) == viewed)
+        {
+            return;
+        }
+
         var previous = file.ViewedAt;
         file.ViewedAt = viewed ? DateTime.UtcNow : null;
 
@@ -1306,6 +1316,7 @@
                             ? L["CommitDetail.ApiReferenceComparisonOpened", file.Path]
                             : L["CommitDetail.MarkdownComparisonOpened", file.Path]
                         : BuildReusableUsageStatus(file.Path, renderedPath, link.ReusableReferencePaths);
+                    await SetFileViewedAsync(file, viewed: true);
                     return true;
                 }
                 if (CanUpdatePreviewFeedback(operation))
@@ -1344,6 +1355,7 @@
             _activePreviewPath = file.Path;
             _previewStatus = null;
             _previewStatusIsCleanup = false;
+            await SetFileViewedAsync(file, viewed: true);
             return true;
         }
 
@@ -1353,6 +1365,7 @@
             _activePreviewPath = file.Path;
             _previewStatus = null;
             _previewStatusIsCleanup = false;
+            await SetFileViewedAsync(file, viewed: true);
             return true;
         }
 

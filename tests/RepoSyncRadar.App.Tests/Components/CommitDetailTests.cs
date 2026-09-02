@@ -1016,6 +1016,7 @@ public class CommitDetailTests
         var navigator = new PreviewNavigator();
         PreviewComparisonRequest? captured = null;
         navigator.NavigationRequested += (_, request) => captured = GetComparisonRequest(request);
+        var repository = Substitute.For<IRadarRepository>();
         var coordinator = Substitute.For<IPreviewCoordinator>();
         coordinator.PrepareApiReferenceComparisonPreviewAsync(
                 commit.PrNumber,
@@ -1039,7 +1040,8 @@ public class CommitDetailTests
             resolver,
             navigator,
             new PreviewSession(),
-            coordinator);
+            coordinator,
+            repository: repository);
         cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
 
         cut.WaitForAssertion(() =>
@@ -1051,12 +1053,21 @@ public class CommitDetailTests
                 "https://docs.github.com/en/graphql/reference/actions",
                 captured?.OfficialUrl?.AbsoluteUri);
             Assert.Contains(path, cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
+            Assert.NotNull(commit.Files[0].ViewedAt);
+            Assert.Equal(
+                string.Empty,
+                cut.Find($"[data-testid=\"commit-detail-file-viewed\"][data-path=\"{path}\"]").GetAttribute("checked"));
         });
         _ = coordinator.Received(1).PrepareApiReferenceComparisonPreviewAsync(
             commit.PrNumber,
             commit.Sha,
             path,
             Arg.Any<IProgress<string>?>(),
+            Arg.Any<CancellationToken>());
+        _ = repository.Received(1).SetCommitFileViewedAsync(
+            commit.Sha,
+            path,
+            true,
             Arg.Any<CancellationToken>());
     }
 
@@ -1497,6 +1508,7 @@ public class CommitDetailTests
 
         var navigator = new PreviewNavigator();
         var session = new PreviewSession();
+        var repository = Substitute.For<IRadarRepository>();
         var coordinator = Substitute.For<IPreviewCoordinator>();
         coordinator.PrepareMarkdownComparisonPreviewAsync(
                 Arg.Any<int>(),
@@ -1507,14 +1519,28 @@ public class CommitDetailTests
                 Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<PreviewComparisonLink?>(null));
 
-        using var cut = RenderDetailWith(commit, resolver, navigator, session, coordinator);
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator,
+            session,
+            coordinator,
+            repository: repository);
         cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
 
         cut.WaitForAssertion(() =>
+        {
             Assert.Contains(
                 "プレビュー機能は無効",
                 cut.Find("[data-testid=\"commit-detail-file\"][data-path=\"content/copilot/about-copilot.md\"] [data-testid=\"commit-detail-preview-status\"]").TextContent,
-                StringComparison.Ordinal));
+                StringComparison.Ordinal);
+            Assert.Null(commit.Files[0].ViewedAt);
+        });
+        _ = repository.DidNotReceive().SetCommitFileViewedAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
