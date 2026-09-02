@@ -1280,7 +1280,7 @@ td.rsr-preview-diff-alignment-gap {
       return;
     }
     const root = document.scrollingElement || document.documentElement || document.body;
-    const maxScrollTop = Math.max(1, root.scrollHeight - window.innerHeight);
+    const documentHeight = Math.max(1, root.scrollHeight);
     const rail = document.createElement('div');
     rail.id = markerRootId;
     rail.className = 'rsr-preview-diff-scrollbar';
@@ -1294,30 +1294,48 @@ td.rsr-preview-diff-alignment-gap {
         }
         markerGroups.get(groupKey).push(element);
       });
+      const splitMarkerSegments = (elements) => {
+        const items = elements
+          .map((element) => ({ element, rect: element.getBoundingClientRect() }))
+          .filter((item) => item.rect.width > 0 && item.rect.height > 0)
+          .sort((left, right) => left.rect.top - right.rect.top);
+        const segments = [];
+        items.forEach((item) => {
+          const previous = segments.at(-1);
+          if (!previous || item.rect.top > previous.bottom + 2) {
+            segments.push({
+              elements: [item.element],
+              rects: [item.rect],
+              bottom: item.rect.bottom,
+            });
+            return;
+          }
+          previous.elements.push(item.element);
+          previous.rects.push(item.rect);
+          previous.bottom = Math.max(previous.bottom, item.rect.bottom);
+        });
+        return segments;
+      };
       markerGroups.forEach((elements) => {
-        const rects = elements
-          .map((element) => element.getBoundingClientRect())
-          .filter((rect) => rect.width > 0 && rect.height > 0);
-        if (rects.length === 0) {
-          return;
-        }
-        const alignmentGapSelector =
-          '.rsr-preview-diff-alignment-gap,' +
-          '.rsr-preview-diff-alignment-gap-row,' +
-          '.rsr-preview-diff-alignment-gap-section';
-        const hasSubstantiveChange = elements.some(
-          (element) => !element.matches(alignmentGapSelector));
-        const isRemoval = hasSubstantiveChange ? pane === 'before' : pane === 'after';
-        const marker = document.createElement('div');
-        marker.className = `rsr-preview-diff-scrollbar-marker ${isRemoval ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
-        const absoluteTop = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
-        const absoluteBottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
-        const top = Math.max(0, Math.min(1, absoluteTop / maxScrollTop));
-        const height = Math.max(4, Math.min(window.innerHeight, ((absoluteBottom - absoluteTop) / maxScrollTop) * window.innerHeight));
-        const markerTop = Math.max(0, Math.min(window.innerHeight - height, top * window.innerHeight));
-        marker.style.top = `${markerTop.toFixed(1)}px`;
-        marker.style.height = `${height.toFixed(1)}px`;
-        rail.appendChild(marker);
+        splitMarkerSegments(elements).forEach((segment) => {
+          const alignmentGapSelector =
+            '.rsr-preview-diff-alignment-gap,' +
+            '.rsr-preview-diff-alignment-gap-row,' +
+            '.rsr-preview-diff-alignment-gap-section';
+          const hasSubstantiveChange = segment.elements.some(
+            (element) => !element.matches(alignmentGapSelector));
+          const isRemoval = hasSubstantiveChange ? pane === 'before' : pane === 'after';
+          const marker = document.createElement('div');
+          marker.className = `rsr-preview-diff-scrollbar-marker ${isRemoval ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
+          const absoluteTop = Math.min(...segment.rects.map((rect) => rect.top)) + window.scrollY;
+          const absoluteBottom = Math.max(...segment.rects.map((rect) => rect.bottom)) + window.scrollY;
+          const top = Math.max(0, Math.min(1, absoluteTop / documentHeight));
+          const height = Math.max(4, Math.min(window.innerHeight, ((absoluteBottom - absoluteTop) / documentHeight) * window.innerHeight));
+          const markerTop = Math.max(0, Math.min(window.innerHeight - height, top * window.innerHeight));
+          marker.style.top = `${markerTop.toFixed(1)}px`;
+          marker.style.height = `${height.toFixed(1)}px`;
+          rail.appendChild(marker);
+        });
       });
       document.body.appendChild(rail);
   };
@@ -1427,10 +1445,29 @@ td.rsr-preview-diff-alignment-gap {
   if (targets.length === 0) {
     return { found: false };
   }
+  const renderedDiffSelector =
+    '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
   const resolveOverlayTargets = () => {
-    const substantiveTargets = targets.filter(
+    const contentTargets = targets.filter(
       (target) => !target.classList.contains('rsr-preview-diff-alignment-gap'));
-    return substantiveTargets.length > 0 ? substantiveTargets : targets;
+    const renderedDiffTargets = contentTargets.flatMap((target) => [
+      ...(target.matches(renderedDiffSelector) ? [target] : []),
+      ...target.querySelectorAll(renderedDiffSelector),
+    ]);
+    if (renderedDiffTargets.length > 0) {
+      return Array.from(new Set(renderedDiffTargets));
+    }
+    const highlightedContentTargets = contentTargets.filter(
+      (target) => target.classList.contains('rsr-preview-diff-block'));
+    if (highlightedContentTargets.length > 0) {
+      return highlightedContentTargets;
+    }
+    const alignmentGapTargets = targets.filter(
+      (target) => target.classList.contains('rsr-preview-diff-alignment-gap'));
+    if (alignmentGapTargets.length > 0) {
+      return alignmentGapTargets;
+    }
+    return contentTargets.length > 0 ? contentTargets : targets;
   };
   let overlayTargets = resolveOverlayTargets();
   const root = document.scrollingElement || document.documentElement || document.body;

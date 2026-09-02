@@ -3190,8 +3190,17 @@ var value = 1;
             StringComparison.Ordinal);
         Assert.DoesNotContain(".rsr-rendered-diff-added.rsr-rendered-diff-gap", html, StringComparison.Ordinal);
         Assert.Contains("document.querySelectorAll('[data-rsr-diff-navigation-index]')", html, StringComparison.Ordinal);
-        Assert.Contains("groups.set(navigationIndex, { elements: [], removed: false })", html, StringComparison.Ordinal);
-        Assert.Contains("element.closest(structuralBlockSelector)", html, StringComparison.Ordinal);
+        Assert.Contains("...element.querySelectorAll(selector)", html, StringComparison.Ordinal);
+        Assert.Contains("if (diffElements.length === 0)", html, StringComparison.Ordinal);
+        Assert.Contains("point: true", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "`${structuralBlockSelector},${textBlockSelector}`",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "nearestBlock === element || element.contains(nearestBlock)",
+            html,
+            StringComparison.Ordinal);
         Assert.Contains("let disabled = false", html, StringComparison.Ordinal);
         Assert.Contains("if (disabled) { pairs = []; return; }", html, StringComparison.Ordinal);
         Assert.Contains("const disable = () =>", html, StringComparison.Ordinal);
@@ -3204,6 +3213,7 @@ var value = 1;
         Assert.Contains("const absTop = Math.min(...rects.map(rect => rect.top)) + scrollY", html, StringComparison.Ordinal);
         Assert.Contains("const absBottom = Math.max(...rects.map(rect => rect.bottom)) + scrollY", html, StringComparison.Ordinal);
         Assert.Contains("const center = (absTop + absBottom) / 2 / docHeight", html, StringComparison.Ordinal);
+        Assert.Contains("const height = pair.point", html, StringComparison.Ordinal);
         Assert.Contains("trackTop + center * trackHeight - height / 2", html, StringComparison.Ordinal);
         Assert.Contains("markerTop.toFixed(1)", html, StringComparison.Ordinal);
         Assert.Contains("marker.style.height", html, StringComparison.Ordinal);

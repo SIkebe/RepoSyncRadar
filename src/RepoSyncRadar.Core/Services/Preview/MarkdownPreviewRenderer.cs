@@ -445,17 +445,38 @@ internal static partial class MarkdownPreviewRenderer
         const annotated = Array.from(
             document.querySelectorAll('[data-rsr-diff-navigation-index]'));
         if (annotated.length > 0) {
-            const groups = new Map();
+            const seen = new Set();
+            const targets = [];
             annotated.forEach(element => {
-                const navigationIndex = element.getAttribute('data-rsr-diff-navigation-index');
-                if (!groups.has(navigationIndex)) {
-                    groups.set(navigationIndex, { elements: [], removed: false });
+                const diffElements = [
+                    ...(element.matches(selector) ? [element] : []),
+                    ...element.querySelectorAll(selector),
+                ];
+                if (diffElements.length === 0) {
+                    targets.push({
+                        elements: [element],
+                        removed: isRemoved(element),
+                        point: true,
+                    });
+                    return;
                 }
-                const group = groups.get(navigationIndex);
-                group.elements.push(element);
-                group.removed = group.removed || isRemoved(element);
+                diffElements.forEach(diffElement => {
+                    const nearestBlock = diffElement.closest(
+                        `${structuralBlockSelector},${textBlockSelector}`);
+                    const target = nearestBlock &&
+                        (nearestBlock === element || element.contains(nearestBlock))
+                            ? nearestBlock
+                            : element;
+                    if (seen.has(target)) return;
+                    seen.add(target);
+                    targets.push({
+                        elements: [target],
+                        removed: isRemoved(target),
+                        point: false,
+                    });
+                });
             });
-            return Array.from(groups.values());
+            return targets;
         }
 
         const seen = new Set();
@@ -467,7 +488,7 @@ internal static partial class MarkdownPreviewRenderer
                 element;
             if (seen.has(target)) return;
             seen.add(target);
-            targets.push({ elements: [target], removed: isRemoved(target) });
+            targets.push({ elements: [target], removed: isRemoved(target), point: false });
         });
         return targets;
     };
@@ -494,7 +515,9 @@ internal static partial class MarkdownPreviewRenderer
             const absTop = Math.min(...rects.map(rect => rect.top)) + scrollY;
             const absBottom = Math.max(...rects.map(rect => rect.bottom)) + scrollY;
             const center = (absTop + absBottom) / 2 / docHeight;
-            const height = Math.max(6, Math.min(trackHeight, ((absBottom - absTop) / docHeight) * trackHeight));
+            const height = pair.point
+                ? 6
+                : Math.max(6, Math.min(trackHeight, ((absBottom - absTop) / docHeight) * trackHeight));
             const markerTop = Math.max(trackTop, Math.min(trackTop + trackHeight - height, trackTop + center * trackHeight - height / 2));
             pair.marker.style.top = `${markerTop.toFixed(1)}px`;
             pair.marker.style.height = `${height.toFixed(1)}px`;
@@ -512,7 +535,7 @@ internal static partial class MarkdownPreviewRenderer
             const marker = document.createElement('div');
             marker.className = 'rsr-diff-scrollbar-marker ' + (target.removed ? 'rsr-diff-scrollbar-marker--removed' : 'rsr-diff-scrollbar-marker--added');
             rail.appendChild(marker);
-            return { elements: target.elements, marker };
+            return { elements: target.elements, marker, point: target.point };
         });
         document.body.appendChild(rail);
         position();
