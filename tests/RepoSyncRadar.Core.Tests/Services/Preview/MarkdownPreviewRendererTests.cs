@@ -3600,6 +3600,45 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Separates_Disjoint_Formatting_Only_Changes()
+    {
+        const string beforeMarkdown = "**first** middle **third**";
+        const string afterMarkdown = "first middle third";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-removed\"><strong>first</strong></span> middle <span class=\"rsr-rendered-diff-removed\"><strong>third</strong></span>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">first</span> middle <span class=\"rsr-rendered-diff-added\">third</span>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "rsr-rendered-diff-removed\"> middle ",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "rsr-rendered-diff-added\"> middle ",
+            afterHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Bold_To_Italic_Changes_Without_Splitting_Delimiter_Runs()
     {
         const string beforeMarkdown = "**alpha bravo charlie delta**";
