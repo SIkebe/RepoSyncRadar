@@ -66,7 +66,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Keep experimental API warning suppressions local to the integration that requires them.
 - Keep session file-change tracking disabled until RepoSyncRadar has a user-visible rewind flow; current radar tools do not edit workspace files.
 - Treat SDK capabilities as unavailable until confirmed in the installed package's public API. Do not rely on runtime internals or prompt-only structured-output guarantees.
-- Keep `scripts/CopilotCliRelease.props` synchronized with the SDK package's `CopilotCliVersion`. If the package download target cannot resolve that CLI, use official GitHub Release assets with published SHA-256 verification.
+- Keep `scripts/CopilotCliRelease.props` synchronized with the SDK package's `CopilotCliVersion`. If the package download target cannot resolve that CLI, use official GitHub Release assets with published SHA-256 verification. Published builds must preserve every SDK-generated native runtime asset, including hidden marker files and nested runtime dependencies, rather than copying only `copilot.exe`.
 
 ### Client And Telemetry
 
