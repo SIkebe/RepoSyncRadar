@@ -1599,6 +1599,7 @@ td.rsr-preview-diff-alignment-gap {
     element.setAttribute('aria-hidden', 'true');
     element.setAttribute('role', 'presentation');
     element.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
+    element.style.position = 'relative';
     (navigationIndexes || []).forEach((index) => {
       if (index === navigationIndex) {
         return;
@@ -1607,7 +1608,8 @@ td.rsr-preview-diff-alignment-gap {
       placeholder.setAttribute('aria-hidden', 'true');
       placeholder.setAttribute('data-rsr-diff-navigation-index', String(index));
       placeholder.style.display = 'block';
-      placeholder.style.height = '0';
+      placeholder.style.position = 'absolute';
+      placeholder.style.inset = '0';
       element.appendChild(placeholder);
     });
     setGapHeight(element, height);

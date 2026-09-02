@@ -3064,18 +3064,28 @@ internal static partial class MarkdownPreviewRenderer
             }
             else
             {
-                var containsInlineFormatting = IsInlineFormattingToken(
+                var containsMarkdownFormatting = IsMarkdownFormattingToken(
+                    comparisonTokens[comparison].Value);
+                var containsInlineHtml = IsPositionInsideInlineHtmlTag(
                     comparisonContent,
-                    comparisonTokens[comparison]);
+                    comparisonTokens[comparison].Start);
                 if (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1].Boundary != current)
                 {
-                    gapTokenBoundaries.Add(new InlineGapBoundary(current, containsInlineFormatting));
+                    gapTokenBoundaries.Add(new InlineGapBoundary(
+                        current,
+                        containsMarkdownFormatting,
+                        containsInlineHtml));
                 }
-                else if (containsInlineFormatting)
+                else if (containsMarkdownFormatting || containsInlineHtml)
                 {
                     gapTokenBoundaries[^1] = gapTokenBoundaries[^1] with
                     {
-                        ContainsInlineFormatting = true,
+                        ContainsMarkdownFormatting =
+                            gapTokenBoundaries[^1].ContainsMarkdownFormatting
+                            || containsMarkdownFormatting,
+                        ContainsInlineHtml =
+                            gapTokenBoundaries[^1].ContainsInlineHtml
+                            || containsInlineHtml,
                     };
                 }
                 comparison++;
@@ -3084,21 +3094,29 @@ internal static partial class MarkdownPreviewRenderer
         Array.Fill(changedTokens, true, current, changedTokens.Length - current);
         while (comparison < comparisonTokens.Count)
         {
-            var containsInlineFormatting = IsInlineFormattingToken(
+            var containsMarkdownFormatting = IsMarkdownFormattingToken(
+                comparisonTokens[comparison].Value);
+            var containsInlineHtml = IsPositionInsideInlineHtmlTag(
                 comparisonContent,
-                comparisonTokens[comparison]);
+                comparisonTokens[comparison].Start);
             if (gapTokenBoundaries.Count == 0
                 || gapTokenBoundaries[^1].Boundary != contentTokens.Count)
             {
                 gapTokenBoundaries.Add(new InlineGapBoundary(
                     contentTokens.Count,
-                    containsInlineFormatting));
+                    containsMarkdownFormatting,
+                    containsInlineHtml));
             }
-            else if (containsInlineFormatting)
+            else if (containsMarkdownFormatting || containsInlineHtml)
             {
                 gapTokenBoundaries[^1] = gapTokenBoundaries[^1] with
                 {
-                    ContainsInlineFormatting = true,
+                    ContainsMarkdownFormatting =
+                        gapTokenBoundaries[^1].ContainsMarkdownFormatting
+                        || containsMarkdownFormatting,
+                    ContainsInlineHtml =
+                        gapTokenBoundaries[^1].ContainsInlineHtml
+                        || containsInlineHtml,
                 };
             }
             comparison++;
@@ -3135,13 +3153,21 @@ internal static partial class MarkdownPreviewRenderer
                 gap.Boundary == contentTokens.Count
                     ? content.Length
                     : contentTokens[gap.Boundary].Start,
-                gap.ContainsInlineFormatting))
+                gap.ContainsMarkdownFormatting,
+                gap.ContainsInlineHtml))
             .GroupBy(static gap => gap.Index)
             .Select(static group => new InlineGap(
                 group.Key,
-                group.Any(static gap => gap.ContainsInlineFormatting)))
+                group.Any(static gap => gap.ContainsMarkdownFormatting),
+                group.Any(static gap => gap.ContainsInlineHtml)))
             .ToArray();
-        var hasFormattingGap = gaps.Any(static gap => gap.ContainsInlineFormatting);
+        var hasFormattingGap = gaps.Any(static gap =>
+            gap.ContainsMarkdownFormatting || gap.ContainsInlineHtml);
+        var htmlGapRanges = gaps
+            .Where(static gap => gap.ContainsInlineHtml)
+            .Select(gap => new InlineChangedRange(
+                Math.Min(gap.Index, content.Length - 1),
+                1));
         var changedRanges = granularLength > 0 && granularLength * 5 < fallbackRange.Length * 4
             ? ranges
             : gaps.Length > 0
@@ -3150,23 +3176,22 @@ internal static partial class MarkdownPreviewRenderer
                 ? []
                 : [fallbackRange];
         return new GranularInlineDiff(
-            changedRanges,
+            changedRanges.Concat(htmlGapRanges).ToArray(),
             gaps
-                .Where(gap => granularLength > 0 || !gap.ContainsInlineFormatting)
+                .Where(gap =>
+                    !gap.ContainsInlineHtml
+                    && (granularLength > 0 || !gap.ContainsMarkdownFormatting))
                 .Select(static gap => gap.Index)
                 .ToArray());
     }
 
-    private static bool IsInlineFormattingToken(string content, InlineDiffToken token)
-        => token.Value is "*" or "_" or "~" or "`"
-            || IsPositionInsideInlineHtmlTag(content, token.Start);
+    private static bool IsMarkdownFormattingToken(string value)
+        => value is "*" or "_" or "~" or "`";
 
     private static bool IsPositionInsideInlineHtmlTag(string content, int position)
     {
         var openingIndex = content.LastIndexOf('<', position);
-        var closingIndex = content.LastIndexOf('>', position);
-        return openingIndex > closingIndex
-            && content.IndexOf('>', position) >= position;
+        return openingIndex >= 0 && position < FindHtmlTagEnd(content, openingIndex);
     }
 
     private static List<InlineDiffToken> TokenizeInlineDiff(string content)
@@ -3203,11 +3228,13 @@ internal static partial class MarkdownPreviewRenderer
 
     private readonly record struct InlineGapBoundary(
         int Boundary,
-        bool ContainsInlineFormatting);
+        bool ContainsMarkdownFormatting,
+        bool ContainsInlineHtml);
 
     private readonly record struct InlineGap(
         int Index,
-        bool ContainsInlineFormatting);
+        bool ContainsMarkdownFormatting,
+        bool ContainsInlineHtml);
 
     private readonly record struct InlineChangedRange(int Start, int Length)
     {
@@ -4304,7 +4331,7 @@ internal static partial class MarkdownPreviewRenderer
 
     private static bool IsMarkdownFormattingDelimiter(string value)
     {
-        if (value.Length is >= 1 and <= 3 && value.All(static character => character == '`'))
+        if (value.Length >= 1 && value.All(static character => character == '`'))
         {
             return true;
         }

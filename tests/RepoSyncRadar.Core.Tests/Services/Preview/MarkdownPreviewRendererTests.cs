@@ -3625,6 +3625,34 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Marks_Four_Backtick_Code_Formatting_Changes()
+    {
+        const string beforeMarkdown = "Press ````alpha bravo charlie delta```` now.";
+        const string afterMarkdown = "Press alpha bravo charlie delta now.";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<code><span class=\"rsr-rendered-diff-removed\">alpha bravo charlie delta</span></code>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", afterHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_Mixed_Formatting_And_Text_Gaps()
     {
         const string beforeMarkdown = "**alpha bravo** middle";
@@ -3650,6 +3678,36 @@ var value = 1;
         Assert.Contains("rsr-rendered-diff-removed", afterHtml, StringComparison.Ordinal);
         Assert.Contains("rsr-rendered-diff-added", afterHtml, StringComparison.Ordinal);
         Assert.Contains("inserted", afterHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Does_Not_Insert_Mixed_Diff_Gaps_Inside_Html_Tags()
+    {
+        const string beforeMarkdown =
+            "Use <kbd>Enter</kbd> old for alpha bravo charlie delta.";
+        const string afterMarkdown =
+            "Use <kbd class=\"new\">Enter</kbd> new for alpha bravo charlie delta.";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("rsr-rendered-diff-removed", beforeHtml, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-added", afterHtml, StringComparison.Ordinal);
+        Assert.Contains("<kbd class=\"new\">Enter</kbd>", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("<kbd class=\"new\"<span", afterHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"new<span", afterHtml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3914,6 +3972,14 @@ var value = 1;
             StringComparison.Ordinal);
         Assert.DoesNotContain(
             "<span class=\"rsr-rendered-diff-removed\">and</span>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<span class=\"rsr-rendered-diff-added\">, and </span>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<span class=\"rsr-rendered-diff-removed\">and </span>",
             beforeHtml,
             StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;/span&gt;", afterHtml, StringComparison.Ordinal);

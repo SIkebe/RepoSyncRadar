@@ -1099,6 +1099,8 @@ public sealed class MainWindowPreviewComparisonTests
             applyScript,
             StringComparison.Ordinal);
         Assert.Contains("gap.navigationIndexes", applyScript, StringComparison.Ordinal);
+        Assert.Contains("placeholder.style.position = 'absolute'", applyScript, StringComparison.Ordinal);
+        Assert.Contains("placeholder.style.inset = '0'", applyScript, StringComparison.Ordinal);
         Assert.Contains(
             ".rsr-preview-diff-alignment-gap-section",
             applyScript,
