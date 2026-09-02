@@ -1355,7 +1355,6 @@
             _activePreviewPath = file.Path;
             _previewStatus = null;
             _previewStatusIsCleanup = false;
-            await SetFileViewedAsync(file, viewed: true);
             return true;
         }
 
@@ -1365,7 +1364,6 @@
             _activePreviewPath = file.Path;
             _previewStatus = null;
             _previewStatusIsCleanup = false;
-            await SetFileViewedAsync(file, viewed: true);
             return true;
         }
 

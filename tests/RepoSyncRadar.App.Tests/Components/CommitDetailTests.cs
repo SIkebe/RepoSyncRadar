@@ -1084,8 +1084,15 @@ public class CommitDetailTests
         Uri? captured = null;
         navigator.NavigationRequested += (_, request) => captured = GetUriRequest(request);
         var session = new PreviewSession(); // inactive (no Activate call)
+        var repository = Substitute.For<IRadarRepository>();
 
-        using var cut = RenderDetailWith(commit, resolver, navigator, session);
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator,
+            session,
+            coordinator: null,
+            repository: repository);
         cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
 
         Assert.NotNull(captured);
@@ -1094,6 +1101,12 @@ public class CommitDetailTests
         Assert.Equal(
             "https://docs.github.com/en/copilot/about-copilot",
             captured!.AbsoluteUri);
+        Assert.Null(commit.Files[0].ViewedAt);
+        _ = repository.DidNotReceive().SetCommitFileViewedAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -1949,12 +1962,25 @@ public class CommitDetailTests
         navigator.NavigationRequested += (_, request) => captured = GetUriRequest(request);
         var session = new PreviewSession();
         session.Activate(4500);
+        var repository = Substitute.For<IRadarRepository>();
 
-        using var cut = RenderDetailWith(commit, resolver, navigator, session);
+        using var cut = RenderDetailWith(
+            commit,
+            resolver,
+            navigator,
+            session,
+            coordinator: null,
+            repository: repository);
         cut.Find("[data-testid=\"commit-detail-open-in-webview\"]").Click();
 
         Assert.NotNull(captured);
         Assert.Equal("http://localhost:4500/en/copilot/about-copilot", captured!.AbsoluteUri);
+        Assert.Null(commit.Files[0].ViewedAt);
+        _ = repository.DidNotReceive().SetCommitFileViewedAsync(
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            Arg.Any<bool>(),
+            Arg.Any<CancellationToken>());
     }
 
     private static Uri? GetUriRequest(PreviewNavigationRequest request)
