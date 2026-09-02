@@ -1476,7 +1476,10 @@ internal static class PreviewDiffHighlighter
   const scrollingRoot = document.scrollingElement || document.documentElement || document.body;
   const scrollTop = window.scrollY || scrollingRoot?.scrollTop || 0;
   const existingGapElements = Array.from(
-    document.querySelectorAll('.rsr-preview-diff-alignment-gap-row,.rsr-preview-diff-alignment-gap'));
+    document.querySelectorAll(
+      '.rsr-preview-diff-alignment-gap-row,' +
+      '.rsr-preview-diff-alignment-gap,' +
+      '.rsr-preview-diff-navigation-placeholder'));
   existingGapElements.forEach((element) => {
     element.style.setProperty('display', 'none', 'important');
   });
@@ -1596,6 +1599,21 @@ td.rsr-preview-diff-alignment-gap {
   display: table-cell !important;
   width: auto !important;
 }
+.rsr-preview-diff-navigation-placeholder {
+  background: none !important;
+  border: 0 !important;
+  box-sizing: border-box !important;
+  display: block !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  position: relative !important;
+  width: 100% !important;
+}
+td.rsr-preview-diff-navigation-placeholder {
+  display: table-cell !important;
+  width: auto !important;
+}
 `;
     document.head.appendChild(style);
   }
@@ -1603,7 +1621,8 @@ td.rsr-preview-diff-alignment-gap {
   document.querySelectorAll(
     '.rsr-preview-diff-alignment-gap-section,' +
     '.rsr-preview-diff-alignment-gap-row,' +
-    '.rsr-preview-diff-alignment-gap').forEach((element) => {
+    '.rsr-preview-diff-alignment-gap,' +
+    '.rsr-preview-diff-navigation-placeholder').forEach((element) => {
     element.remove();
   });
   const root =
@@ -1634,7 +1653,7 @@ td.rsr-preview-diff-alignment-gap {
   };
   const createNavigationPlaceholder = (navigationIndex, tagName = 'div') => {
     const container = document.createElement(tagName);
-    container.className = 'rsr-preview-diff-alignment-gap';
+    container.className = 'rsr-preview-diff-navigation-placeholder';
     container.setAttribute('aria-hidden', 'true');
     container.setAttribute('role', 'presentation');
     container.style.height = '0';
@@ -2104,7 +2123,8 @@ td.rsr-preview-diff-alignment-gap {
           const alignmentGapSelector =
             '.rsr-preview-diff-alignment-gap,' +
             '.rsr-preview-diff-alignment-gap-row,' +
-            '.rsr-preview-diff-alignment-gap-section';
+            '.rsr-preview-diff-alignment-gap-section,' +
+            '.rsr-preview-diff-navigation-placeholder';
           const isAlignmentGapTarget = (element) =>
             element.matches(alignmentGapSelector)
               || element.closest(alignmentGapSelector) !== null;
@@ -2262,7 +2282,8 @@ td.rsr-preview-diff-alignment-gap {
     const alignmentGapSelector =
       '.rsr-preview-diff-alignment-gap,' +
       '.rsr-preview-diff-alignment-gap-row,' +
-      '.rsr-preview-diff-alignment-gap-section';
+      '.rsr-preview-diff-alignment-gap-section,' +
+      '.rsr-preview-diff-navigation-placeholder';
     const isAlignmentGapTarget = (target) =>
       target.matches(alignmentGapSelector)
         || target.closest(alignmentGapSelector) !== null;

@@ -1075,7 +1075,7 @@ public sealed class MainWindowPreviewComparisonTests
             """[{"anchorIndex":1,"height":80,"navigationIndex":0}]""");
 
         Assert.Contains(
-            "document.querySelectorAll('.rsr-preview-diff-alignment-gap-row,.rsr-preview-diff-alignment-gap')",
+            "'.rsr-preview-diff-navigation-placeholder'",
             measureScript,
             StringComparison.Ordinal);
         Assert.Contains("style.setProperty('display', 'none', 'important')", measureScript, StringComparison.Ordinal);
@@ -1147,6 +1147,14 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.DoesNotContain("anchor?.closest('.ghd-", applyScript, StringComparison.Ordinal);
         Assert.Contains("diffElements.at(-1)", applyScript, StringComparison.Ordinal);
         Assert.Contains("gap.navigationOnly ? 0", applyScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "container.className = 'rsr-preview-diff-navigation-placeholder'",
+            applyScript,
+            StringComparison.Ordinal);
+        Assert.Contains(".rsr-preview-diff-navigation-placeholder {", applyScript, StringComparison.Ordinal);
+        Assert.Contains("background: none !important", applyScript, StringComparison.Ordinal);
+        Assert.Contains("border: 0 !important", applyScript, StringComparison.Ordinal);
+        Assert.Contains("height: 0 !important", applyScript, StringComparison.Ordinal);
         Assert.Contains("target.style.height = '1px'", applyScript, StringComparison.Ordinal);
         Assert.Contains(
             "terminalElement.closest('li') ||",
