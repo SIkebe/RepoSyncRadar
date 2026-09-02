@@ -3427,6 +3427,34 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Does_Not_Treat_Unmatched_LessThan_As_Inline_Html()
+    {
+        const string beforeMarkdown =
+            "The calculated result uses x < y while preserving the stable shared context and old value.";
+        const string afterMarkdown =
+            "The calculated result uses x < y while preserving the stable shared context and new value.";
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        const string unchangedPrefix =
+            "The calculated result uses x &lt; y while preserving the stable shared context and ";
+        var prefixIndex = html.IndexOf(unchangedPrefix, StringComparison.Ordinal);
+        var markerIndex = html.IndexOf(
+            "<span class=\"rsr-rendered-diff-added\">",
+            StringComparison.Ordinal);
+
+        Assert.True(prefixIndex >= 0);
+        Assert.True(markerIndex >= prefixIndex + unchangedPrefix.Length);
+        Assert.Contains("new", html[markerIndex..], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Disjoint_Paragraph_Changes_While_Preserving_Shared_Middle()
     {
         const string beforeMarkdown = "stable prefix shared middle removed words stable suffix";

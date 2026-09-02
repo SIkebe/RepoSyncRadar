@@ -3266,7 +3266,10 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var tagEnd = FindHtmlTagEnd(content, tagStart);
-        if (position >= tagEnd)
+        if (tagEnd <= tagStart
+            || tagEnd > content.Length
+            || content[tagEnd - 1] != '>'
+            || position >= tagEnd)
         {
             return;
         }
@@ -3463,7 +3466,16 @@ internal static partial class MarkdownPreviewRenderer
             return false;
         }
         var openingIndex = content.LastIndexOf('<', position);
-        return openingIndex >= 0 && position < FindHtmlTagEnd(content, openingIndex);
+        if (openingIndex < 0)
+        {
+            return false;
+        }
+
+        var tagEnd = FindHtmlTagEnd(content, openingIndex);
+        return tagEnd > openingIndex
+            && tagEnd <= content.Length
+            && content[tagEnd - 1] == '>'
+            && position < tagEnd;
     }
 
     private static List<InlineDiffToken> TokenizeInlineDiff(string content)
@@ -4498,7 +4510,9 @@ internal static partial class MarkdownPreviewRenderer
         while ((cursor = content.IndexOf('<', cursor)) >= 0)
         {
             var tagEnd = FindHtmlTagEnd(content, cursor);
-            if (tagEnd <= cursor || tagEnd > content.Length)
+            if (tagEnd <= cursor
+                || tagEnd > content.Length
+                || content[tagEnd - 1] != '>')
             {
                 break;
             }
