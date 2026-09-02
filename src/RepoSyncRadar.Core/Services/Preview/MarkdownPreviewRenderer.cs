@@ -3010,7 +3010,7 @@ internal static partial class MarkdownPreviewRenderer
         return new InlineChangedRange(prefixLength, excerptEnd - prefixLength + 1);
     }
 
-    private static List<InlineChangedRange> FindGranularInlineChangedRanges(
+    private static GranularInlineDiff FindGranularInlineChangedRanges(
         string content,
         string comparisonContent,
         InlineChangedRange fallbackRange)
@@ -3021,7 +3021,7 @@ internal static partial class MarkdownPreviewRenderer
             || comparisonTokens.Count == 0
             || (long)contentTokens.Count * comparisonTokens.Count > 250_000)
         {
-            return [fallbackRange];
+            return new GranularInlineDiff([fallbackRange], []);
         }
 
         var lengths = new int[contentTokens.Count + 1, comparisonTokens.Count + 1];
@@ -3041,6 +3041,7 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var changedTokens = new bool[contentTokens.Count];
+        var gapTokenBoundaries = new List<int>();
         var current = 0;
         var comparison = 0;
         while (current < contentTokens.Count && comparison < comparisonTokens.Count)
@@ -3063,10 +3064,19 @@ internal static partial class MarkdownPreviewRenderer
             }
             else
             {
+                if (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1] != current)
+                {
+                    gapTokenBoundaries.Add(current);
+                }
                 comparison++;
             }
         }
         Array.Fill(changedTokens, true, current, changedTokens.Length - current);
+        if (comparison < comparisonTokens.Count
+            && (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1] != contentTokens.Count))
+        {
+            gapTokenBoundaries.Add(contentTokens.Count);
+        }
 
         var ranges = new List<InlineChangedRange>();
         for (var index = 0; index < changedTokens.Length;)
@@ -3091,9 +3101,21 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var granularLength = ranges.Sum(static range => range.Length);
-        return granularLength > 0 && granularLength * 5 < fallbackRange.Length * 4
+        var gapIndexes = gapTokenBoundaries
+            .Where(boundary =>
+                (boundary == 0 || !changedTokens[boundary - 1])
+                && (boundary == changedTokens.Length || !changedTokens[boundary]))
+            .Select(boundary => boundary == contentTokens.Count
+                ? content.Length
+                : contentTokens[boundary].Start)
+            .Distinct()
+            .ToArray();
+        var changedRanges = granularLength > 0 && granularLength * 5 < fallbackRange.Length * 4
             ? ranges
-            : [fallbackRange];
+            : gapIndexes.Length > 0 && granularLength == 0
+                ? []
+                : [fallbackRange];
+        return new GranularInlineDiff(changedRanges, gapIndexes);
     }
 
     private static List<InlineDiffToken> TokenizeInlineDiff(string content)
@@ -3132,6 +3154,10 @@ internal static partial class MarkdownPreviewRenderer
     {
         public int End => Start + Length;
     }
+
+    private readonly record struct GranularInlineDiff(
+        IReadOnlyList<InlineChangedRange> ChangedRanges,
+        IReadOnlyList<int> GapIndexes);
 
     private enum VersionChangeExcerptSide
     {
@@ -4042,7 +4068,8 @@ internal static partial class MarkdownPreviewRenderer
                 : content;
         }
 
-        var changedRanges = FindGranularInlineChangedRanges(content, comparisonContent, changedRange)
+        var granularDiff = FindGranularInlineChangedRanges(content, comparisonContent, changedRange);
+        var changedRanges = granularDiff.ChangedRanges
             .Select(range => ExpandRenderedDiffRange(content, range))
             .Select(range => ExpandRenderedDiffRangeAroundChangedAnchor(content, range))
             .Select(range => SnapRangeOutsideLiquidTokens(content, range))
@@ -4050,7 +4077,7 @@ internal static partial class MarkdownPreviewRenderer
             .Where(static range => range.Length > 0)
             .OrderBy(static range => range.Start)
             .ToArray();
-        if (changedRanges.Length == 0)
+        if (changedRanges.Length == 0 && granularDiff.GapIndexes.Count == 0)
         {
             return content;
         }
@@ -4069,13 +4096,18 @@ internal static partial class MarkdownPreviewRenderer
             mergedRanges[^1] = new InlineChangedRange(previous.Start, end - previous.Start);
         }
 
+        var operations = mergedRanges
+            .Select(static range => (Position: range.Start, Range: (InlineChangedRange?)range))
+            .Concat(granularDiff.GapIndexes.Select(static index => (Position: index, Range: (InlineChangedRange?)null)))
+            .OrderByDescending(static operation => operation.Position);
         var markedContent = content;
-        for (var index = mergedRanges.Count - 1; index >= 0; index--)
+        foreach (var operation in operations)
         {
-            markedContent = WrapRenderedDiffRangePreservingInlineCode(
-                markedContent,
-                markerClass,
-                mergedRanges[index]);
+            markedContent = operation.Range is { } range
+                ? WrapRenderedDiffRangePreservingInlineCode(markedContent, markerClass, range)
+                : markedContent[..operation.Position]
+                    + BuildRenderedDiffGapMarker(markerClass)
+                    + markedContent[operation.Position..];
         }
         return markedContent;
     }
@@ -4238,12 +4270,17 @@ internal static partial class MarkdownPreviewRenderer
             return false;
         }
 
+        var marker = BuildRenderedDiffGapMarker(markerClass);
+        marked = content[..insertionIndex] + marker + content[insertionIndex..];
+        return true;
+    }
+
+    private static string BuildRenderedDiffGapMarker(string markerClass)
+    {
         var gapClass = string.Equals(markerClass, "rsr-rendered-diff-added", StringComparison.Ordinal)
             ? "rsr-rendered-diff-removed"
             : "rsr-rendered-diff-added";
-        var marker = "<span class=\"" + gapClass + " rsr-rendered-diff-gap\" aria-hidden=\"true\"></span>";
-        marked = content[..insertionIndex] + marker + content[insertionIndex..];
-        return true;
+        return "<span class=\"" + gapClass + " rsr-rendered-diff-gap\" aria-hidden=\"true\"></span>";
     }
 
     private static InlineChangedRange ExpandRenderedDiffRange(string content, InlineChangedRange changedRange)

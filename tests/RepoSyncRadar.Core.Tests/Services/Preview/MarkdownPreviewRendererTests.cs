@@ -3448,16 +3448,43 @@ var value = 1;
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
         Assert.Contains(
-            "stable prefix shared middle <span class=\"rsr-rendered-diff-removed\">removed words</span> stable suffix",
+            "<span class=\"rsr-rendered-diff-removed\">removed words</span>",
             beforeHtml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "stable prefix <span class=\"rsr-rendered-diff-added\">inserted words</span> shared middle stable suffix",
+            "<span class=\"rsr-rendered-diff-added\">inserted words</span>",
             afterHtml,
+            StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(beforeHtml, "rsr-rendered-diff-added rsr-rendered-diff-gap"));
+        Assert.Equal(1, CountOccurrences(afterHtml, "rsr-rendered-diff-removed rsr-rendered-diff-gap"));
+        Assert.DoesNotContain(
+            "<span class=\"rsr-rendered-diff-removed\">shared middle",
+            beforeHtml,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
             "<span class=\"rsr-rendered-diff-added\">inserted words shared middle",
             afterHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Uses_Separate_Gaps_For_Multiple_Paragraph_Insertions()
+    {
+        const string beforeMarkdown = "stable prefix shared middle stable suffix";
+        const string afterMarkdown = "stable prefix inserted words shared middle more words stable suffix";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "parentsha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Equal(2, CountOccurrences(beforeHtml, "rsr-rendered-diff-added rsr-rendered-diff-gap"));
+        Assert.DoesNotContain(
+            "<span class=\"rsr-rendered-diff-removed\">shared middle</span>",
+            beforeHtml,
             StringComparison.Ordinal);
     }
 
