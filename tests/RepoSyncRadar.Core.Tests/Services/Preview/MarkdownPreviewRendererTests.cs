@@ -3563,8 +3563,8 @@ var value = 1;
     [Fact]
     public void RenderDocument_Marks_Bold_To_Italic_Changes_Without_Splitting_Delimiter_Runs()
     {
-        const string beforeMarkdown = "**important**";
-        const string afterMarkdown = "*important*";
+        const string beforeMarkdown = "**alpha bravo charlie delta**";
+        const string afterMarkdown = "*alpha bravo charlie delta*";
 
         var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
             "content/sample.md",
@@ -3582,11 +3582,11 @@ var value = 1;
             diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
 
         Assert.Contains(
-            "<span class=\"rsr-rendered-diff-removed\"><strong>important</strong></span>",
+            "<span class=\"rsr-rendered-diff-removed\"><strong>alpha bravo charlie delta</strong></span>",
             beforeHtml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "<span class=\"rsr-rendered-diff-added\"><em>important</em></span>",
+            "<em><span class=\"rsr-rendered-diff-added\">alpha bravo charlie delta</span></em>",
             afterHtml,
             StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-removed\">*", beforeHtml, StringComparison.Ordinal);

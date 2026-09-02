@@ -3042,6 +3042,7 @@ internal static partial class MarkdownPreviewRenderer
 
         var changedTokens = new bool[contentTokens.Count];
         var gapTokenBoundaries = new List<int>();
+        var comparisonGapContainsMarkdownFormatting = false;
         var current = 0;
         var comparison = 0;
         while (current < contentTokens.Count && comparison < comparisonTokens.Count)
@@ -3064,6 +3065,8 @@ internal static partial class MarkdownPreviewRenderer
             }
             else
             {
+                comparisonGapContainsMarkdownFormatting |= IsMarkdownFormattingToken(
+                    comparisonTokens[comparison].Value);
                 if (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1] != current)
                 {
                     gapTokenBoundaries.Add(current);
@@ -3077,6 +3080,9 @@ internal static partial class MarkdownPreviewRenderer
         {
             gapTokenBoundaries.Add(contentTokens.Count);
         }
+        comparisonGapContainsMarkdownFormatting |= comparisonTokens
+            .Skip(comparison)
+            .Any(static token => IsMarkdownFormattingToken(token.Value));
 
         var ranges = new List<InlineChangedRange>();
         for (var index = 0; index < changedTokens.Length;)
@@ -3112,11 +3118,18 @@ internal static partial class MarkdownPreviewRenderer
             .ToArray();
         var changedRanges = granularLength > 0 && granularLength * 5 < fallbackRange.Length * 4
             ? ranges
-            : gapIndexes.Length > 0 && granularLength == 0
+            : gapIndexes.Length > 0
+                && granularLength == 0
+                && !comparisonGapContainsMarkdownFormatting
                 ? []
                 : [fallbackRange];
-        return new GranularInlineDiff(changedRanges, gapIndexes);
+        return new GranularInlineDiff(
+            changedRanges,
+            comparisonGapContainsMarkdownFormatting ? [] : gapIndexes);
     }
+
+    private static bool IsMarkdownFormattingToken(string value)
+        => value is "*" or "_" or "~";
 
     private static List<InlineDiffToken> TokenizeInlineDiff(string content)
     {
