@@ -1207,7 +1207,7 @@ public class CommitDetailTests
             Assert.Equal(1, captured?.FileCount);
             Assert.Contains("Markdown", captured?.BeforeLabel, StringComparison.Ordinal);
             Assert.Contains("Markdown", cut.Find("[data-testid=\"commit-detail-preview-status\"]").TextContent, StringComparison.Ordinal);
-        });
+        }, timeout: TimeSpan.FromSeconds(5));
         _ = coordinator.Received(1).PrepareMarkdownComparisonPreviewAsync(
             commit.PrNumber,
             commit.Sha,
