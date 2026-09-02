@@ -342,6 +342,64 @@ public sealed class ApiReferencePreviewRendererTests
     }
 
     [Fact]
+    public void RenderDocument_Highlights_Only_Changed_Lines_In_Generated_Metadata()
+    {
+        var sharedMetadata = string.Join(
+            ",\n",
+            Enumerable.Range(0, 40).Select(static index => $"\"field{index}\": \"value{index}\""));
+        var beforeJson = $$"""
+            {
+              "teams": [{
+                "serverUrl": "https://api.github.com",
+                "verb": "post",
+                "requestPath": "/orgs/{org}/teams",
+                "title": "Create a team",
+                "parameters": [],
+                "bodyParameters": [],
+                "statusCodes": [],
+                "legacyMetadata": {
+                  {{sharedMetadata}}
+                }
+              }]
+            }
+            """;
+        var afterJson = $$"""
+            {
+              "teams": [{
+                "serverUrl": "https://api.github.com",
+                "verb": "post",
+                "requestPath": "/orgs/{org}/teams",
+                "title": "Create a team",
+                "parameters": [],
+                "bodyParameters": [],
+                "statusCodes": [],
+                "currentMetadata": {
+                  {{sharedMetadata}}
+                }
+              }]
+            }
+            """;
+
+        var beforeHtml = ApiReferencePreviewRenderer.RenderDocument(
+            "src/rest/data/fpt-2022-11-28/teams.json",
+            beforeJson,
+            "parentsha",
+            "Parent API reference",
+            afterJson,
+            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = ApiReferencePreviewRenderer.RenderDocument(
+            "src/rest/data/fpt-2022-11-28/teams.json",
+            afterJson,
+            "headsha",
+            "PR HEAD API reference",
+            beforeJson,
+            MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Equal(1, CountBodyOccurrences(beforeHtml, "rsr-rendered-diff-removed"));
+        Assert.Equal(1, CountBodyOccurrences(afterHtml, "rsr-rendered-diff-added"));
+    }
+
+    [Fact]
     public void Resolves_Rest_Official_Url_To_Changed_Subcategory()
     {
         const string beforeJson = """
@@ -359,6 +417,13 @@ public sealed class ApiReferencePreviewRendererTests
         Assert.Equal(
             "https://docs.github.com/en/rest/enterprise-teams/enterprise-team-members?apiVersion=2022-11-28",
             url.AbsoluteUri);
+    }
+
+    private static int CountBodyOccurrences(string html, string search)
+    {
+        var bodyStart = html.IndexOf("<body", StringComparison.Ordinal);
+        Assert.True(bodyStart >= 0);
+        return html[bodyStart..].Split(search, StringSplitOptions.None).Length - 1;
     }
 
     [Fact]

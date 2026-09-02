@@ -3317,6 +3317,7 @@ internal static partial class MarkdownPreviewRenderer
         HashSet<int> changedIndexes,
         out int blockEndIndex)
     {
+        const int maximumBridgeLineCount = 32;
         blockEndIndex = -1;
         if (!IsNamedCodeStructuralBlockOpeningLine(lines[startIndex]))
         {
@@ -3339,7 +3340,8 @@ internal static partial class MarkdownPreviewRenderer
             if (depth <= 0)
             {
                 blockEndIndex = index;
-                if (HasMatchingCodeStructuralBlockBody(lines, startIndex, blockEndIndex, comparisonLines))
+                if (blockEndIndex - startIndex > maximumBridgeLineCount
+                    || HasMatchingCodeStructuralBlockBody(lines, startIndex, blockEndIndex, comparisonLines))
                 {
                     return false;
                 }
