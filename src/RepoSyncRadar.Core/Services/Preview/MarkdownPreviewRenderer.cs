@@ -3041,8 +3041,7 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var changedTokens = new bool[contentTokens.Count];
-        var gapTokenBoundaries = new List<int>();
-        var comparisonGapContainsInlineFormatting = false;
+        var gapTokenBoundaries = new List<InlineGapBoundary>();
         var current = 0;
         var comparison = 0;
         while (current < contentTokens.Count && comparison < comparisonTokens.Count)
@@ -3065,25 +3064,45 @@ internal static partial class MarkdownPreviewRenderer
             }
             else
             {
-                comparisonGapContainsInlineFormatting |= IsInlineFormattingToken(
+                var containsInlineFormatting = IsInlineFormattingToken(
                     comparisonContent,
                     comparisonTokens[comparison]);
-                if (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1] != current)
+                if (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1].Boundary != current)
                 {
-                    gapTokenBoundaries.Add(current);
+                    gapTokenBoundaries.Add(new InlineGapBoundary(current, containsInlineFormatting));
+                }
+                else if (containsInlineFormatting)
+                {
+                    gapTokenBoundaries[^1] = gapTokenBoundaries[^1] with
+                    {
+                        ContainsInlineFormatting = true,
+                    };
                 }
                 comparison++;
             }
         }
         Array.Fill(changedTokens, true, current, changedTokens.Length - current);
-        if (comparison < comparisonTokens.Count
-            && (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1] != contentTokens.Count))
+        while (comparison < comparisonTokens.Count)
         {
-            gapTokenBoundaries.Add(contentTokens.Count);
+            var containsInlineFormatting = IsInlineFormattingToken(
+                comparisonContent,
+                comparisonTokens[comparison]);
+            if (gapTokenBoundaries.Count == 0
+                || gapTokenBoundaries[^1].Boundary != contentTokens.Count)
+            {
+                gapTokenBoundaries.Add(new InlineGapBoundary(
+                    contentTokens.Count,
+                    containsInlineFormatting));
+            }
+            else if (containsInlineFormatting)
+            {
+                gapTokenBoundaries[^1] = gapTokenBoundaries[^1] with
+                {
+                    ContainsInlineFormatting = true,
+                };
+            }
+            comparison++;
         }
-        comparisonGapContainsInlineFormatting |= comparisonTokens
-            .Skip(comparison)
-            .Any(token => IsInlineFormattingToken(comparisonContent, token));
 
         var ranges = new List<InlineChangedRange>();
         for (var index = 0; index < changedTokens.Length;)
@@ -3108,25 +3127,34 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var granularLength = ranges.Sum(static range => range.Length);
-        var gapIndexes = gapTokenBoundaries
-            .Where(boundary =>
-                (boundary == 0 || !changedTokens[boundary - 1])
-                && (boundary == changedTokens.Length || !changedTokens[boundary]))
-            .Select(boundary => boundary == contentTokens.Count
-                ? content.Length
-                : contentTokens[boundary].Start)
-            .Distinct()
+        var gaps = gapTokenBoundaries
+            .Where(gap =>
+                (gap.Boundary == 0 || !changedTokens[gap.Boundary - 1])
+                && (gap.Boundary == changedTokens.Length || !changedTokens[gap.Boundary]))
+            .Select(gap => new InlineGap(
+                gap.Boundary == contentTokens.Count
+                    ? content.Length
+                    : contentTokens[gap.Boundary].Start,
+                gap.ContainsInlineFormatting))
+            .GroupBy(static gap => gap.Index)
+            .Select(static group => new InlineGap(
+                group.Key,
+                group.Any(static gap => gap.ContainsInlineFormatting)))
             .ToArray();
+        var hasFormattingGap = gaps.Any(static gap => gap.ContainsInlineFormatting);
         var changedRanges = granularLength > 0 && granularLength * 5 < fallbackRange.Length * 4
             ? ranges
-            : gapIndexes.Length > 0
+            : gaps.Length > 0
                 && granularLength == 0
-                && !comparisonGapContainsInlineFormatting
+                && !hasFormattingGap
                 ? []
                 : [fallbackRange];
         return new GranularInlineDiff(
             changedRanges,
-            comparisonGapContainsInlineFormatting ? [] : gapIndexes);
+            gaps
+                .Where(gap => granularLength > 0 || !gap.ContainsInlineFormatting)
+                .Select(static gap => gap.Index)
+                .ToArray());
     }
 
     private static bool IsInlineFormattingToken(string content, InlineDiffToken token)
@@ -3172,6 +3200,14 @@ internal static partial class MarkdownPreviewRenderer
     }
 
     private readonly record struct InlineDiffToken(string Value, int Start, int End);
+
+    private readonly record struct InlineGapBoundary(
+        int Boundary,
+        bool ContainsInlineFormatting);
+
+    private readonly record struct InlineGap(
+        int Index,
+        bool ContainsInlineFormatting);
 
     private readonly record struct InlineChangedRange(int Start, int Length)
     {

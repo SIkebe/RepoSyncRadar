@@ -792,6 +792,7 @@ public sealed class MainWindowPreviewComparisonTests
             Assert.Single(change.BeforeIndexes);
             Assert.Single(change.AfterIndexes);
         });
+        Assert.True(plan.Changes.Count > PreviewDiffHighlighter.MaximumAlignedChangeCount);
     }
 
     [Fact]
@@ -1049,16 +1050,17 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("overflow-anchor: none", measureScript, StringComparison.Ordinal);
         Assert.Contains("target?.matches('pre') ? target : target?.closest('pre')", measureScript, StringComparison.Ordinal);
         Assert.Contains("[1,2].forEach((index)", measureScript, StringComparison.Ordinal);
-        Assert.Contains(
-            "Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1)",
-            measureScript,
-            StringComparison.Ordinal);
+        Assert.Contains("const diffElementsByIndex = new Map(", measureScript, StringComparison.Ordinal);
+        Assert.Contains("diffElementsByIndex.get(index)", measureScript, StringComparison.Ordinal);
+        Assert.Contains("diffElements.at(-1)", measureScript, StringComparison.Ordinal);
         Assert.Contains("repeating-linear-gradient", applyScript, StringComparison.Ordinal);
         Assert.Contains("td.rsr-preview-diff-alignment-gap", applyScript, StringComparison.Ordinal);
         Assert.Contains("display: table-cell", applyScript, StringComparison.Ordinal);
         Assert.Contains("rsr-preview-diff-alignment-gap-row", applyScript, StringComparison.Ordinal);
         Assert.Contains("gapRow.className = 'rsr-preview-diff-alignment-gap-row'", applyScript, StringComparison.Ordinal);
         Assert.Contains("const tableColumnCounts = new WeakMap()", applyScript, StringComparison.Ordinal);
+        Assert.Contains("const diffElementsByIndex = new Map(", applyScript, StringComparison.Ordinal);
+        Assert.Contains("diffElementsByIndex.get(gap.anchorIndex)", applyScript, StringComparison.Ordinal);
         Assert.Contains("tableColumnCounts.get(table)", applyScript, StringComparison.Ordinal);
         Assert.Contains("tableColumnCounts.set(table, widestColumnCount)", applyScript, StringComparison.Ordinal);
         Assert.Contains("const sectionEndRowIndexes = new Map()", applyScript, StringComparison.Ordinal);
@@ -1101,10 +1103,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("return window.scrollY || scrollingRoot?.scrollTop || 0", applyScript, StringComparison.Ordinal);
         Assert.Contains("anchor.matches('.rsr-code-line') ? 'span' : 'div'", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("anchor?.closest('.ghd-", applyScript, StringComparison.Ordinal);
-        Assert.Contains(
-            "Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1)",
-            applyScript,
-            StringComparison.Ordinal);
+        Assert.Contains("diffElements.at(-1)", applyScript, StringComparison.Ordinal);
         Assert.Contains(
             "terminalElement.closest('li') ||",
             applyScript,

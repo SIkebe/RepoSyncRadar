@@ -50,6 +50,7 @@ internal readonly record struct PreviewDiffNavigationResult(
 
 internal static class PreviewDiffHighlighter
 {
+    internal const int MaximumAlignedChangeCount = 512;
     private readonly record struct BlockAnchor(int BeforeIndex, int AfterIndex);
     private readonly record struct BlockRange(int BeforeStart, int BeforeEnd, int AfterStart, int AfterEnd);
 
@@ -1218,6 +1219,10 @@ internal static class PreviewDiffHighlighter
         {
             return;
         }
+        if (changes.Count > MaximumAlignedChangeCount)
+        {
+            return;
+        }
 
         var beforeAnchorsJson = JsonSerializer.Serialize(
             changes.Select(static change => change.BeforeAnchorIndex),
@@ -1444,10 +1449,13 @@ pre.rsr-preview-diff-aligned-code code {
   root.querySelectorAll('pre.rsr-preview-diff-aligned-code').forEach((element) => {
     element.classList.remove('rsr-preview-diff-aligned-code');
   });
+  const diffElements = Array.from(root.querySelectorAll('[data-rsr-diff-index]'));
+  const diffElementsByIndex = new Map(
+    diffElements.map((element) => [Number(element.getAttribute('data-rsr-diff-index')), element]));
   {{codeWrappingIndexesJson}}.forEach((index) => {
     const target = index >= 0
-      ? document.querySelector(`[data-rsr-diff-index="${index}"]`)
-      : Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1);
+      ? diffElementsByIndex.get(index)
+      : diffElements.at(-1);
     const codeBlock = target?.matches('pre') ? target : target?.closest('pre');
     codeBlock?.classList.add('rsr-preview-diff-aligned-code');
   });
@@ -1455,7 +1463,7 @@ pre.rsr-preview-diff-aligned-code code {
       if (anchorIndex === null) {
         return root.getBoundingClientRect().bottom + window.scrollY;
       }
-      const anchor = document.querySelector(`[data-rsr-diff-index="${anchorIndex}"]`);
+      const anchor = diffElementsByIndex.get(anchorIndex);
       return anchor
         ? anchor.getBoundingClientRect().top + window.scrollY
         : null;
@@ -1675,11 +1683,14 @@ td.rsr-preview-diff-alignment-gap {
     return widestColumnCount;
   };
   const gaps = {{gapsJson}};
+  const diffElements = Array.from(root.querySelectorAll('[data-rsr-diff-index]'));
+  const diffElementsByIndex = new Map(
+    diffElements.map((element) => [Number(element.getAttribute('data-rsr-diff-index')), element]));
   gaps.forEach((gap) => {
     const height = Math.max(1, Number(gap.height) || 0);
     const anchor = gap.anchorIndex === null
       ? null
-      : document.querySelector(`[data-rsr-diff-index="${gap.anchorIndex}"]`);
+      : diffElementsByIndex.get(gap.anchorIndex);
     const row = anchor?.closest('tr');
     if (row?.parentNode) {
       const gapRow = document.createElement('tr');
@@ -1699,7 +1710,7 @@ td.rsr-preview-diff-alignment-gap {
       return;
     }
     const terminalElement =
-      Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1);
+      diffElements.at(-1);
     const terminalRow = terminalElement?.closest('tr');
     if (terminalRow?.parentNode) {
       const table = terminalRow.closest('table');
@@ -1911,8 +1922,11 @@ td.rsr-preview-diff-alignment-gap {
     {{navigationTargetsJson}}.map((target) => [target.index, target.navigationIndex]));
   const pane = {{paneJson}};
   const renderedDiffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
+  const diffElementsByIndex = new Map(
+    Array.from(document.querySelectorAll('[data-rsr-diff-index]'))
+      .map((element) => [Number(element.getAttribute('data-rsr-diff-index')), element]));
   changedIndexes.forEach((index) => {
-    const element = document.querySelector(`[data-rsr-diff-index="${index}"]`);
+    const element = diffElementsByIndex.get(index);
     if (!element) {
       return;
     }
