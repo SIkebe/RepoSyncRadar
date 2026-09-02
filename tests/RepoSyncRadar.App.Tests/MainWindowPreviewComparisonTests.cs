@@ -769,6 +769,32 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_BuildPlan_Handles_Many_Aligned_Hunks()
+    {
+        const int blockCount = 4_000;
+        var beforeBlocks = Enumerable.Range(0, blockCount)
+            .Select(index => new PreviewDiffBlock(
+                index,
+                $"Shared block {index}",
+                $"row-{index}"))
+            .ToArray();
+        var afterBlocks = beforeBlocks
+            .Select((block, index) => index % 2 == 0
+                ? block with { }
+                : block with { Text = $"Changed block {index}" })
+            .ToArray();
+
+        var plan = PreviewDiffHighlighter.BuildPlan(beforeBlocks, afterBlocks);
+
+        Assert.Equal(blockCount / 2, plan.Changes.Count);
+        Assert.All(plan.Changes, change =>
+        {
+            Assert.Single(change.BeforeIndexes);
+            Assert.Single(change.AfterIndexes);
+        });
+    }
+
+    [Fact]
     public void PreviewDiffHighlighter_BuildPlan_Uses_Patience_Anchors_Across_Large_Changed_Window()
     {
         var beforeBlocks = Enumerable.Range(0, 2100)

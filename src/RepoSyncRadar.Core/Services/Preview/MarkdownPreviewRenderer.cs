@@ -3042,7 +3042,7 @@ internal static partial class MarkdownPreviewRenderer
 
         var changedTokens = new bool[contentTokens.Count];
         var gapTokenBoundaries = new List<int>();
-        var comparisonGapContainsMarkdownFormatting = false;
+        var comparisonGapContainsInlineFormatting = false;
         var current = 0;
         var comparison = 0;
         while (current < contentTokens.Count && comparison < comparisonTokens.Count)
@@ -3065,8 +3065,9 @@ internal static partial class MarkdownPreviewRenderer
             }
             else
             {
-                comparisonGapContainsMarkdownFormatting |= IsMarkdownFormattingToken(
-                    comparisonTokens[comparison].Value);
+                comparisonGapContainsInlineFormatting |= IsInlineFormattingToken(
+                    comparisonContent,
+                    comparisonTokens[comparison]);
                 if (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1] != current)
                 {
                     gapTokenBoundaries.Add(current);
@@ -3080,9 +3081,9 @@ internal static partial class MarkdownPreviewRenderer
         {
             gapTokenBoundaries.Add(contentTokens.Count);
         }
-        comparisonGapContainsMarkdownFormatting |= comparisonTokens
+        comparisonGapContainsInlineFormatting |= comparisonTokens
             .Skip(comparison)
-            .Any(static token => IsMarkdownFormattingToken(token.Value));
+            .Any(token => IsInlineFormattingToken(comparisonContent, token));
 
         var ranges = new List<InlineChangedRange>();
         for (var index = 0; index < changedTokens.Length;)
@@ -3120,16 +3121,25 @@ internal static partial class MarkdownPreviewRenderer
             ? ranges
             : gapIndexes.Length > 0
                 && granularLength == 0
-                && !comparisonGapContainsMarkdownFormatting
+                && !comparisonGapContainsInlineFormatting
                 ? []
                 : [fallbackRange];
         return new GranularInlineDiff(
             changedRanges,
-            comparisonGapContainsMarkdownFormatting ? [] : gapIndexes);
+            comparisonGapContainsInlineFormatting ? [] : gapIndexes);
     }
 
-    private static bool IsMarkdownFormattingToken(string value)
-        => value is "*" or "_" or "~";
+    private static bool IsInlineFormattingToken(string content, InlineDiffToken token)
+        => token.Value is "*" or "_" or "~" or "`"
+            || IsPositionInsideInlineHtmlTag(content, token.Start);
+
+    private static bool IsPositionInsideInlineHtmlTag(string content, int position)
+    {
+        var openingIndex = content.LastIndexOf('<', position);
+        var closingIndex = content.LastIndexOf('>', position);
+        return openingIndex > closingIndex
+            && content.IndexOf('>', position) >= position;
+    }
 
     private static List<InlineDiffToken> TokenizeInlineDiff(string content)
     {
@@ -4086,6 +4096,7 @@ internal static partial class MarkdownPreviewRenderer
             .Select(range => ExpandRenderedDiffRange(content, range))
             .Select(range => ExpandRenderedDiffRangeAroundChangedAnchor(content, range))
             .Select(range => SnapRangeOutsideLiquidTokens(content, range))
+            .Select(range => ExpandRangeAcrossInlineHtmlElement(content, range))
             .Select(range => ExpandRangeAcrossMarkdownFormattingDelimiters(content, range))
             .Where(static range => range.Length > 0)
             .OrderBy(static range => range.Start)
@@ -4131,6 +4142,62 @@ internal static partial class MarkdownPreviewRenderer
 
     internal static bool IsGapStrictlyInsideChangedRange(int gapIndex, int rangeStart, int rangeEnd)
         => gapIndex > rangeStart && gapIndex < rangeEnd;
+
+    private static InlineChangedRange ExpandRangeAcrossInlineHtmlElement(
+        string content,
+        InlineChangedRange range)
+    {
+        var tagStart = content.LastIndexOf('<', range.Start);
+        var previousTagEnd = content.LastIndexOf('>', range.Start);
+        if (tagStart < 0 || tagStart < previousTagEnd)
+        {
+            return range;
+        }
+
+        var tagEnd = content.IndexOf('>', tagStart);
+        if (tagEnd < 0 || range.End > tagEnd + 1)
+        {
+            return range;
+        }
+
+        var nameStart = tagStart + 1;
+        var isClosingTag = nameStart < content.Length && content[nameStart] == '/';
+        if (isClosingTag)
+        {
+            nameStart++;
+        }
+        var nameEnd = nameStart;
+        while (nameEnd < tagEnd
+            && (char.IsLetterOrDigit(content[nameEnd]) || content[nameEnd] is '-' or ':'))
+        {
+            nameEnd++;
+        }
+        if (nameEnd == nameStart)
+        {
+            return range;
+        }
+
+        var tagName = content[nameStart..nameEnd];
+        if (isClosingTag)
+        {
+            var openingStart = content.LastIndexOf(
+                "<" + tagName,
+                tagStart,
+                StringComparison.OrdinalIgnoreCase);
+            return openingStart >= 0
+                ? new InlineChangedRange(openingStart, tagEnd + 1 - openingStart)
+                : range;
+        }
+
+        var closingText = "</" + tagName + ">";
+        var closingStart = content.IndexOf(
+            closingText,
+            tagEnd + 1,
+            StringComparison.OrdinalIgnoreCase);
+        return closingStart >= 0
+            ? new InlineChangedRange(tagStart, closingStart + closingText.Length - tagStart)
+            : range;
+    }
 
     private static InlineChangedRange ExpandRangeAcrossMarkdownFormattingDelimiters(
         string content,
@@ -4178,6 +4245,10 @@ internal static partial class MarkdownPreviewRenderer
 
     private static bool IsMarkdownFormattingDelimiter(string value)
     {
+        if (value.Length is >= 1 and <= 3 && value.All(static character => character == '`'))
+        {
+            return true;
+        }
         if (string.Equals(value, "~~", StringComparison.Ordinal))
         {
             return true;

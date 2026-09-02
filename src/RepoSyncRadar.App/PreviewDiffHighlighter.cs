@@ -370,6 +370,8 @@ internal static class PreviewDiffHighlighter
         var currentAfterIndexes = new List<int>();
         var beforeCursor = 0;
         var afterCursor = 0;
+        var beforeAlignmentGroups = BuildAlignmentGroupsByIndex(beforeBlocks);
+        var afterAlignmentGroups = BuildAlignmentGroupsByIndex(afterBlocks);
         void FlushChange()
         {
             if (currentBeforeIndexes.Count == 0 && currentAfterIndexes.Count == 0)
@@ -378,18 +380,28 @@ internal static class PreviewDiffHighlighter
             }
 
             var advancePastCurrentAlignmentGroup =
-                IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, currentBeforeIndexes)
-                || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, currentAfterIndexes);
+                IsAnchorInChangedAlignmentGroup(
+                    beforeBlocks,
+                    beforeAlignmentGroups,
+                    beforeCursor,
+                    currentBeforeIndexes)
+                || IsAnchorInChangedAlignmentGroup(
+                    afterBlocks,
+                    afterAlignmentGroups,
+                    afterCursor,
+                    currentAfterIndexes);
             changes.Add(new PreviewDiffChange(
                 currentBeforeIndexes.ToArray(),
                 currentAfterIndexes.ToArray(),
                 FindAlignmentAnchorIndex(
                     beforeBlocks,
+                    beforeAlignmentGroups,
                     beforeCursor,
                     currentBeforeIndexes,
                     advancePastCurrentAlignmentGroup),
                 FindAlignmentAnchorIndex(
                     afterBlocks,
+                    afterAlignmentGroups,
                     afterCursor,
                     currentAfterIndexes,
                     advancePastCurrentAlignmentGroup)));
@@ -1022,6 +1034,8 @@ internal static class PreviewDiffHighlighter
         var currentAfterIndexes = new List<int>();
         var beforeCursor = 0;
         var afterCursor = 0;
+        var beforeAlignmentGroups = BuildAlignmentGroupsByIndex(beforeBlocks);
+        var afterAlignmentGroups = BuildAlignmentGroupsByIndex(afterBlocks);
         void FlushChange()
         {
             if (currentBeforeIndexes.Count == 0 && currentAfterIndexes.Count == 0)
@@ -1030,18 +1044,28 @@ internal static class PreviewDiffHighlighter
             }
 
             var advancePastCurrentAlignmentGroup =
-                IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, currentBeforeIndexes)
-                || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, currentAfterIndexes);
+                IsAnchorInChangedAlignmentGroup(
+                    beforeBlocks,
+                    beforeAlignmentGroups,
+                    beforeCursor,
+                    currentBeforeIndexes)
+                || IsAnchorInChangedAlignmentGroup(
+                    afterBlocks,
+                    afterAlignmentGroups,
+                    afterCursor,
+                    currentAfterIndexes);
             changes.Add(new PreviewDiffChange(
                 currentBeforeIndexes.ToArray(),
                 currentAfterIndexes.ToArray(),
                 FindAlignmentAnchorIndex(
                     beforeBlocks,
+                    beforeAlignmentGroups,
                     beforeCursor,
                     currentBeforeIndexes,
                     advancePastCurrentAlignmentGroup),
                 FindAlignmentAnchorIndex(
                     afterBlocks,
+                    afterAlignmentGroups,
                     afterCursor,
                     currentAfterIndexes,
                     advancePastCurrentAlignmentGroup)));
@@ -1130,6 +1154,7 @@ internal static class PreviewDiffHighlighter
 
     private static int? FindAlignmentAnchorIndex(
         IReadOnlyList<PreviewDiffBlock> blocks,
+        IReadOnlyDictionary<int, string?> alignmentGroupsByIndex,
         int cursor,
         IReadOnlyCollection<int> changedIndexes,
         bool advancePastCurrentAlignmentGroup)
@@ -1139,10 +1164,10 @@ internal static class PreviewDiffHighlighter
             return null;
         }
 
-        var changedIndexSet = changedIndexes.ToHashSet();
-        var changedGroups = blocks
-            .Where(block => changedIndexSet.Contains(block.Index) && block.AlignmentGroup is not null)
-            .Select(static block => block.AlignmentGroup!)
+        var changedGroups = changedIndexes
+            .Select(index => alignmentGroupsByIndex.GetValueOrDefault(index))
+            .Where(static group => group is not null)
+            .Select(static group => group!)
             .ToHashSet(StringComparer.Ordinal);
         if (advancePastCurrentAlignmentGroup && blocks[cursor].AlignmentGroup is { } currentGroup)
         {
@@ -1160,6 +1185,7 @@ internal static class PreviewDiffHighlighter
 
     private static bool IsAnchorInChangedAlignmentGroup(
         IReadOnlyList<PreviewDiffBlock> blocks,
+        IReadOnlyDictionary<int, string?> alignmentGroupsByIndex,
         int cursor,
         IReadOnlyCollection<int> changedIndexes)
     {
@@ -1168,11 +1194,16 @@ internal static class PreviewDiffHighlighter
             return false;
         }
 
-        var changedIndexSet = changedIndexes.ToHashSet();
-        return blocks.Any(
-            block => changedIndexSet.Contains(block.Index)
-                && string.Equals(block.AlignmentGroup, anchorGroup, StringComparison.Ordinal));
+        return changedIndexes.Any(index =>
+            string.Equals(
+                alignmentGroupsByIndex.GetValueOrDefault(index),
+                anchorGroup,
+                StringComparison.Ordinal));
     }
+
+    private static Dictionary<int, string?> BuildAlignmentGroupsByIndex(
+        IReadOnlyList<PreviewDiffBlock> blocks)
+        => blocks.ToDictionary(static block => block.Index, static block => block.AlignmentGroup);
 
     internal static async Task ApplyAlignmentGapsAsync(
         WebView2CompositionControl beforeView,

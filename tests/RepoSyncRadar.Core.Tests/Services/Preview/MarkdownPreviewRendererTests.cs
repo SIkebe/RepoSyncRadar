@@ -3594,6 +3594,69 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Marks_Inline_Code_Formatting_Changes()
+    {
+        const string beforeMarkdown = "Press `alpha bravo charlie delta`.";
+        const string afterMarkdown = "Press alpha bravo charlie delta.";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<code><span class=\"rsr-rendered-diff-removed\">alpha bravo charlie delta</span></code>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">alpha bravo charlie delta</span>",
+            afterHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Marks_Inline_Html_Formatting_Changes_Without_Splitting_Tags()
+    {
+        const string beforeMarkdown = "Press the <kbd>Enter</kbd> key to continue the installation now.";
+        const string afterMarkdown = "Press the Enter key to continue the installation now.";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-removed\"><kbd>Enter</kbd></span>",
+            beforeHtml,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "<span class=\"rsr-rendered-diff-added\">Enter</span>",
+            afterHtml,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("<kbd><span class=\"rsr-rendered-diff-removed\">", beforeHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Leaves_Shared_Text_Unmarked_In_Heavily_Rewritten_Paragraphs()
     {
         const string sharedSuffix = " You can do this in either of the following ways:";
