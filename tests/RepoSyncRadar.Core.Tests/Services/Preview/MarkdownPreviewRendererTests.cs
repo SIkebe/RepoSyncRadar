@@ -3721,6 +3721,30 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Does_Not_Shrink_Link_Change_Around_Inline_Html()
+    {
+        const string beforeMarkdown =
+            "Use <kbd>Enter</kbd>, then read [the old guide](/old) for alpha bravo charlie delta.";
+        const string afterMarkdown =
+            "Use <kbd>Enter</kbd>, then read [the new guide](/new) for alpha bravo charlie delta.";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("rsr-rendered-diff-removed", beforeHtml, StringComparison.Ordinal);
+        Assert.Contains("the old guide", beforeHtml, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "<span class=\"rsr-rendered-diff-removed\"><kbd>Enter</kbd></span>, then read <a",
+            beforeHtml,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Leaves_Shared_Text_Unmarked_In_Heavily_Rewritten_Paragraphs()
     {
         const string sharedSuffix = " You can do this in either of the following ways:";

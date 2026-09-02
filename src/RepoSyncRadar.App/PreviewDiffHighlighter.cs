@@ -1219,22 +1219,19 @@ internal static class PreviewDiffHighlighter
         {
             return;
         }
-        if (changes.Count > MaximumAlignedChangeCount)
-        {
-            return;
-        }
+        var alignmentChanges = CoalesceChangesForAlignment(changes);
 
         var beforeAnchorsJson = JsonSerializer.Serialize(
-            changes.Select(static change => change.BeforeAnchorIndex),
+            alignmentChanges.Select(static change => change.BeforeAnchorIndex),
             _jsonOptions);
         var afterAnchorsJson = JsonSerializer.Serialize(
-            changes.Select(static change => change.AfterAnchorIndex),
+            alignmentChanges.Select(static change => change.AfterAnchorIndex),
             _jsonOptions);
         var beforeCodeWrappingIndexesJson = JsonSerializer.Serialize(
-            GetCodeWrappingCandidateIndexes(changes, PreviewDiffPane.Before),
+            GetCodeWrappingCandidateIndexes(alignmentChanges, PreviewDiffPane.Before),
             _jsonOptions);
         var afterCodeWrappingIndexesJson = JsonSerializer.Serialize(
-            GetCodeWrappingCandidateIndexes(changes, PreviewDiffPane.After),
+            GetCodeWrappingCandidateIndexes(alignmentChanges, PreviewDiffPane.After),
             _jsonOptions);
         var measurements = await Task.WhenAll(
             beforeView.ExecuteScriptAsync(BuildMeasureAlignmentAnchorsScript(
@@ -1250,8 +1247,8 @@ internal static class PreviewDiffHighlighter
             return;
         }
 
-        if (beforeMeasurement.Offsets.Length != changes.Count
-            || afterMeasurement.Offsets.Length != changes.Count
+        if (beforeMeasurement.Offsets.Length != alignmentChanges.Count
+            || afterMeasurement.Offsets.Length != alignmentChanges.Count
             || beforeMeasurement.Offsets.Any(static offset => offset is null)
             || afterMeasurement.Offsets.Any(static offset => offset is null))
         {
@@ -1259,7 +1256,7 @@ internal static class PreviewDiffHighlighter
         }
 
         var gapPlan = BuildAlignmentGapPlan(
-            changes,
+            alignmentChanges,
             beforeMeasurement.Offsets.Select(static offset => offset!.Value).ToArray(),
             afterMeasurement.Offsets.Select(static offset => offset!.Value).ToArray());
         var synchronizedScrollTop = ResolveSynchronizedScrollTop(
@@ -1293,6 +1290,32 @@ internal static class PreviewDiffHighlighter
         await Task.WhenAll(
             beforeView.ExecuteScriptAsync(finalScrollScript),
             afterView.ExecuteScriptAsync(finalScrollScript));
+    }
+
+    internal static IReadOnlyList<PreviewDiffChange> CoalesceChangesForAlignment(
+        IReadOnlyList<PreviewDiffChange> changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        if (changes.Count <= MaximumAlignedChangeCount)
+        {
+            return changes;
+        }
+
+        var batchSize = (int)Math.Ceiling(changes.Count / (double)MaximumAlignedChangeCount);
+        var coalesced = new List<PreviewDiffChange>(
+            (changes.Count + batchSize - 1) / batchSize);
+        for (var start = 0; start < changes.Count; start += batchSize)
+        {
+            var count = Math.Min(batchSize, changes.Count - start);
+            var batch = changes.Skip(start).Take(count);
+            var last = changes[start + count - 1];
+            coalesced.Add(new PreviewDiffChange(
+                batch.SelectMany(static change => change.BeforeIndexes).ToArray(),
+                batch.SelectMany(static change => change.AfterIndexes).ToArray(),
+                last.BeforeAnchorIndex,
+                last.AfterAnchorIndex));
+        }
+        return coalesced;
     }
 
     internal static double ResolveSynchronizedScrollTop(double beforeScrollTop, double afterScrollTop)

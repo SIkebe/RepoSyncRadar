@@ -4241,9 +4241,14 @@ internal static partial class MarkdownPreviewRenderer
                 candidates.Add(opening.TagRange);
             }
         }
-        return candidates.Count == 0
-            ? range
-            : candidates.MinBy(static candidate => candidate.Length);
+        var expandedStart = range.Start;
+        var expandedEnd = range.End;
+        foreach (var candidate in candidates)
+        {
+            expandedStart = Math.Min(expandedStart, candidate.Start);
+            expandedEnd = Math.Max(expandedEnd, candidate.End);
+        }
+        return new InlineChangedRange(expandedStart, expandedEnd - expandedStart);
     }
 
     private static bool RangesIntersect(InlineChangedRange left, InlineChangedRange right)

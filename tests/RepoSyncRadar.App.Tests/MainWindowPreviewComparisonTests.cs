@@ -793,6 +793,18 @@ public sealed class MainWindowPreviewComparisonTests
             Assert.Single(change.AfterIndexes);
         });
         Assert.True(plan.Changes.Count > PreviewDiffHighlighter.MaximumAlignedChangeCount);
+
+        var alignmentChanges = PreviewDiffHighlighter.CoalesceChangesForAlignment(plan.Changes);
+
+        Assert.InRange(alignmentChanges.Count, 1, PreviewDiffHighlighter.MaximumAlignedChangeCount);
+        Assert.Equal(plan.Changes[^1].BeforeAnchorIndex, alignmentChanges[^1].BeforeAnchorIndex);
+        Assert.Equal(plan.Changes[^1].AfterAnchorIndex, alignmentChanges[^1].AfterAnchorIndex);
+        Assert.Equal(
+            plan.Changes.Sum(static change => change.BeforeIndexes.Count),
+            alignmentChanges.Sum(static change => change.BeforeIndexes.Count));
+        Assert.Equal(
+            plan.Changes.Sum(static change => change.AfterIndexes.Count),
+            alignmentChanges.Sum(static change => change.AfterIndexes.Count));
     }
 
     [Fact]
