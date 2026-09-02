@@ -4147,57 +4147,75 @@ internal static partial class MarkdownPreviewRenderer
         string content,
         InlineChangedRange range)
     {
-        var tagStart = content.LastIndexOf('<', range.Start);
-        var previousTagEnd = content.LastIndexOf('>', range.Start);
-        if (tagStart < 0 || tagStart < previousTagEnd)
+        var openElements = new List<InlineHtmlOpenElement>();
+        var candidates = new List<InlineChangedRange>();
+        var cursor = 0;
+        while ((cursor = content.IndexOf('<', cursor)) >= 0)
         {
-            return range;
+            var tagEnd = FindHtmlTagEnd(content, cursor);
+            if (tagEnd <= cursor || tagEnd > content.Length)
+            {
+                break;
+            }
+
+            var tagRange = new InlineChangedRange(cursor, tagEnd - cursor);
+            var tag = content[cursor..tagEnd];
+            var tagName = GetHtmlTagName(tag, out var isClosing);
+            if (tagName.Length == 0)
+            {
+                cursor = tagEnd;
+                continue;
+            }
+
+            if (isClosing)
+            {
+                var openingIndex = openElements.FindLastIndex(element =>
+                    string.Equals(element.TagName, tagName, StringComparison.Ordinal));
+                if (openingIndex >= 0)
+                {
+                    var opening = openElements[openingIndex];
+                    if (RangesIntersect(range, opening.TagRange) || RangesIntersect(range, tagRange))
+                    {
+                        candidates.Add(new InlineChangedRange(
+                            opening.TagRange.Start,
+                            tagEnd - opening.TagRange.Start));
+                    }
+                    openElements.RemoveRange(openingIndex, openElements.Count - openingIndex);
+                }
+            }
+            else if (IsHtmlVoidElement(tagName)
+                || tag.AsSpan().TrimEnd().EndsWith("/>", StringComparison.Ordinal))
+            {
+                if (RangesIntersect(range, tagRange))
+                {
+                    candidates.Add(tagRange);
+                }
+            }
+            else
+            {
+                openElements.Add(new InlineHtmlOpenElement(tagName, tagRange));
+            }
+            cursor = tagEnd;
         }
 
-        var tagEnd = content.IndexOf('>', tagStart);
-        if (tagEnd < 0 || range.End > tagEnd + 1)
+        foreach (var opening in openElements)
         {
-            return range;
+            if (RangesIntersect(range, opening.TagRange))
+            {
+                candidates.Add(opening.TagRange);
+            }
         }
-
-        var nameStart = tagStart + 1;
-        var isClosingTag = nameStart < content.Length && content[nameStart] == '/';
-        if (isClosingTag)
-        {
-            nameStart++;
-        }
-        var nameEnd = nameStart;
-        while (nameEnd < tagEnd
-            && (char.IsLetterOrDigit(content[nameEnd]) || content[nameEnd] is '-' or ':'))
-        {
-            nameEnd++;
-        }
-        if (nameEnd == nameStart)
-        {
-            return range;
-        }
-
-        var tagName = content[nameStart..nameEnd];
-        if (isClosingTag)
-        {
-            var openingStart = content.LastIndexOf(
-                "<" + tagName,
-                tagStart,
-                StringComparison.OrdinalIgnoreCase);
-            return openingStart >= 0
-                ? new InlineChangedRange(openingStart, tagEnd + 1 - openingStart)
-                : range;
-        }
-
-        var closingText = "</" + tagName + ">";
-        var closingStart = content.IndexOf(
-            closingText,
-            tagEnd + 1,
-            StringComparison.OrdinalIgnoreCase);
-        return closingStart >= 0
-            ? new InlineChangedRange(tagStart, closingStart + closingText.Length - tagStart)
-            : range;
+        return candidates.Count == 0
+            ? range
+            : candidates.MinBy(static candidate => candidate.Length);
     }
+
+    private static bool RangesIntersect(InlineChangedRange left, InlineChangedRange right)
+        => left.Start < right.End && right.Start < left.End;
+
+    private readonly record struct InlineHtmlOpenElement(
+        string TagName,
+        InlineChangedRange TagRange);
 
     private static InlineChangedRange ExpandRangeAcrossMarkdownFormattingDelimiters(
         string content,

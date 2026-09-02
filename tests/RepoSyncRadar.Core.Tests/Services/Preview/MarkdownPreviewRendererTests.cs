@@ -3656,6 +3656,42 @@ var value = 1;
         Assert.DoesNotContain("<kbd><span class=\"rsr-rendered-diff-removed\">", beforeHtml, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(
+        "Use <img src=\"old>image.png\" alt=\"Example\"> here for alpha bravo charlie delta.",
+        "Use <img src=\"new>image.png\" alt=\"Example\"> here for alpha bravo charlie delta.",
+        "<span class=\"rsr-rendered-diff-removed\"><img src=\"old>image.png\" alt=\"Example\"></span>",
+        "<span class=\"rsr-rendered-diff-added\"><img src=\"new>image.png\" alt=\"Example\"></span>")]
+    [InlineData(
+        "Use <kbd><kbd class=\"old\">Enter</kbd></kbd> here for alpha bravo charlie delta.",
+        "Use <kbd><kbd class=\"new\">Enter</kbd></kbd> here for alpha bravo charlie delta.",
+        "<kbd><span class=\"rsr-rendered-diff-removed\"><kbd class=\"old\">Enter</kbd></span></kbd>",
+        "<kbd><span class=\"rsr-rendered-diff-added\"><kbd class=\"new\">Enter</kbd></span></kbd>")]
+    public void RenderDocument_Marks_Inline_Html_Attribute_And_Nested_Changes_Safely(
+        string beforeMarkdown,
+        string afterMarkdown,
+        string expectedBefore,
+        string expectedAfter)
+    {
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains(expectedBefore, beforeHtml, StringComparison.Ordinal);
+        Assert.Contains(expectedAfter, afterHtml, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void RenderDocument_Leaves_Shared_Text_Unmarked_In_Heavily_Rewritten_Paragraphs()
     {
