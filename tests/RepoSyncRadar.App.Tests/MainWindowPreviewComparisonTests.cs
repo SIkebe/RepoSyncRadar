@@ -982,7 +982,10 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("right: 24px", script, StringComparison.Ordinal);
         Assert.Contains("width: 10px", script, StringComparison.Ordinal);
         Assert.Contains("const markerGroups = new Map()", script, StringComparison.Ordinal);
-        Assert.Contains("const hasSubstantiveChange = elements.some(", script, StringComparison.Ordinal);
+        Assert.Contains("const splitMarkerSegments = (elements)", script, StringComparison.Ordinal);
+        Assert.Contains("item.rect.top > previous.bottom + 2", script, StringComparison.Ordinal);
+        Assert.Contains("splitMarkerSegments(elements).forEach((segment)", script, StringComparison.Ordinal);
+        Assert.Contains("const hasSubstantiveChange = segment.elements.some(", script, StringComparison.Ordinal);
         Assert.Contains(
             "const isRemoval = hasSubstantiveChange ? pane === 'before' : pane === 'after'",
             script,
@@ -996,9 +999,12 @@ public sealed class MainWindowPreviewComparisonTests
             script,
             StringComparison.Ordinal);
         Assert.Contains("`hunk-${navigationIndex}`", script, StringComparison.Ordinal);
-        Assert.Contains("Math.min(...rects.map((rect) => rect.top))", script, StringComparison.Ordinal);
-        Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
-        Assert.Contains("(absoluteBottom - absoluteTop) / maxScrollTop", script, StringComparison.Ordinal);
+        Assert.Contains("Math.min(...segment.rects.map((rect) => rect.top))", script, StringComparison.Ordinal);
+        Assert.Contains("Math.max(...segment.rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
+        Assert.Contains("const documentHeight = Math.max(1, root.scrollHeight)", script, StringComparison.Ordinal);
+        Assert.Contains("absoluteTop / documentHeight", script, StringComparison.Ordinal);
+        Assert.Contains("(absoluteBottom - absoluteTop) / documentHeight", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("root.scrollHeight - window.innerHeight", script, StringComparison.Ordinal);
         Assert.Contains("window.innerHeight - height", script, StringComparison.Ordinal);
         Assert.Contains("markerTop.toFixed(1)", script, StringComparison.Ordinal);
         Assert.Contains("marker.style.top", script, StringComparison.Ordinal);
@@ -1289,7 +1295,15 @@ public sealed class MainWindowPreviewComparisonTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "return substantiveTargets.length > 0 ? substantiveTargets : targets",
+            "'.rsr-rendered-diff-added,.rsr-rendered-diff-removed'",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("...target.querySelectorAll(renderedDiffSelector)", script, StringComparison.Ordinal);
+        Assert.Contains("return Array.from(new Set(renderedDiffTargets))", script, StringComparison.Ordinal);
+        Assert.Contains("if (alignmentGapTargets.length > 0)", script, StringComparison.Ordinal);
+        Assert.Contains("return alignmentGapTargets", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "return contentTargets.length > 0 ? contentTargets : targets",
             script,
             StringComparison.Ordinal);
         Assert.Contains("overlayTargets = resolveOverlayTargets()", script, StringComparison.Ordinal);
