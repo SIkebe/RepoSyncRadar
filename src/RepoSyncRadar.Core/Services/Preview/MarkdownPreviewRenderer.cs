@@ -3010,10 +3010,531 @@ internal static partial class MarkdownPreviewRenderer
         return new InlineChangedRange(prefixLength, excerptEnd - prefixLength + 1);
     }
 
+    private static GranularInlineDiff FindGranularInlineChangedRanges(
+        string content,
+        string comparisonContent,
+        InlineChangedRange fallbackRange)
+    {
+        var contentTokens = TokenizeInlineDiff(content);
+        var comparisonTokens = TokenizeInlineDiff(comparisonContent);
+        if (contentTokens.Count == 0
+            || comparisonTokens.Count == 0
+            || (long)contentTokens.Count * comparisonTokens.Count > 250_000)
+        {
+            return new GranularInlineDiff([fallbackRange], []);
+        }
+
+        var lengths = new int[contentTokens.Count + 1, comparisonTokens.Count + 1];
+        for (var contentIndex = contentTokens.Count - 1; contentIndex >= 0; contentIndex--)
+        {
+            for (var comparisonIndex = comparisonTokens.Count - 1; comparisonIndex >= 0; comparisonIndex--)
+            {
+                lengths[contentIndex, comparisonIndex] = string.Equals(
+                    contentTokens[contentIndex].Value,
+                    comparisonTokens[comparisonIndex].Value,
+                    StringComparison.Ordinal)
+                    ? lengths[contentIndex + 1, comparisonIndex + 1] + 1
+                    : Math.Max(
+                        lengths[contentIndex + 1, comparisonIndex],
+                        lengths[contentIndex, comparisonIndex + 1]);
+            }
+        }
+
+        var changedTokens = new bool[contentTokens.Count];
+        var comparisonChangedTokens = new bool[comparisonTokens.Count];
+        var gapTokenBoundaries = new List<InlineGapBoundary>();
+        var inlineHtmlGapBoundaries = new List<InlineHtmlGapBoundary>();
+        var current = 0;
+        var comparison = 0;
+        var advanceCurrentOnTie =
+            string.CompareOrdinal(content, comparisonContent) <= 0;
+        while (current < contentTokens.Count && comparison < comparisonTokens.Count)
+        {
+            if (string.Equals(
+                contentTokens[current].Value,
+                comparisonTokens[comparison].Value,
+                StringComparison.Ordinal))
+            {
+                current++;
+                comparison++;
+            }
+            else if (lengths[current + 1, comparison] > lengths[current, comparison + 1]
+                || (lengths[current + 1, comparison] == lengths[current, comparison + 1]
+                    && advanceCurrentOnTie))
+            {
+                changedTokens[current++] = true;
+            }
+            else
+            {
+                comparisonChangedTokens[comparison] = true;
+                var containsMarkdownFormatting = IsMarkdownFormattingToken(
+                    comparisonTokens[comparison].Value);
+                var containsInlineHtml = IsPositionInsideInlineHtmlTag(
+                    comparisonContent,
+                    comparisonTokens[comparison].Start);
+                AddInlineHtmlGapBoundary(
+                    inlineHtmlGapBoundaries,
+                    comparisonContent,
+                    comparisonTokens[comparison].Start,
+                    current);
+                if (gapTokenBoundaries.Count == 0 || gapTokenBoundaries[^1].Boundary != current)
+                {
+                    gapTokenBoundaries.Add(new InlineGapBoundary(
+                        current,
+                        containsMarkdownFormatting,
+                        containsInlineHtml));
+                }
+                else if (containsMarkdownFormatting || containsInlineHtml)
+                {
+                    gapTokenBoundaries[^1] = gapTokenBoundaries[^1] with
+                    {
+                        ContainsMarkdownFormatting =
+                            gapTokenBoundaries[^1].ContainsMarkdownFormatting
+                            || containsMarkdownFormatting,
+                        ContainsInlineHtml =
+                            gapTokenBoundaries[^1].ContainsInlineHtml
+                            || containsInlineHtml,
+                    };
+                }
+                comparison++;
+            }
+        }
+        Array.Fill(changedTokens, true, current, changedTokens.Length - current);
+        while (comparison < comparisonTokens.Count)
+        {
+            comparisonChangedTokens[comparison] = true;
+            var containsMarkdownFormatting = IsMarkdownFormattingToken(
+                comparisonTokens[comparison].Value);
+            var containsInlineHtml = IsPositionInsideInlineHtmlTag(
+                comparisonContent,
+                comparisonTokens[comparison].Start);
+            AddInlineHtmlGapBoundary(
+                inlineHtmlGapBoundaries,
+                comparisonContent,
+                comparisonTokens[comparison].Start,
+                contentTokens.Count);
+            if (gapTokenBoundaries.Count == 0
+                || gapTokenBoundaries[^1].Boundary != contentTokens.Count)
+            {
+                gapTokenBoundaries.Add(new InlineGapBoundary(
+                    contentTokens.Count,
+                    containsMarkdownFormatting,
+                    containsInlineHtml));
+            }
+            else if (containsMarkdownFormatting || containsInlineHtml)
+            {
+                gapTokenBoundaries[^1] = gapTokenBoundaries[^1] with
+                {
+                    ContainsMarkdownFormatting =
+                        gapTokenBoundaries[^1].ContainsMarkdownFormatting
+                        || containsMarkdownFormatting,
+                    ContainsInlineHtml =
+                        gapTokenBoundaries[^1].ContainsInlineHtml
+                        || containsInlineHtml,
+                };
+            }
+            comparison++;
+        }
+
+        var ranges = new List<InlineChangedRange>();
+        for (var index = 0; index < changedTokens.Length;)
+        {
+            if (!changedTokens[index])
+            {
+                index++;
+                continue;
+            }
+
+            var start = contentTokens[index].Start;
+            var end = contentTokens[index].End;
+            index++;
+            while (index < changedTokens.Length
+                && changedTokens[index]
+                && string.IsNullOrWhiteSpace(content[end..contentTokens[index].Start]))
+            {
+                end = contentTokens[index].End;
+                index++;
+            }
+            ranges.Add(new InlineChangedRange(start, end - start));
+        }
+
+        var granularLength = ranges.Sum(static range => range.Length);
+        var comparisonGranularLength = CalculateGranularChangedLength(
+            comparisonContent,
+            comparisonTokens,
+            comparisonChangedTokens);
+        var comparisonFallbackLength =
+            FindInlineChangedRange(comparisonContent, content).Length;
+        var useGranularRanges = granularLength > 0
+            && comparisonGranularLength > 0
+            && (granularLength * 5 < fallbackRange.Length * 4
+                || comparisonGranularLength * 5 < comparisonFallbackLength * 4);
+        var isFormattingOnlyChange = contentTokens
+            .Where(token => !IsInlineFormattingToken(content, token))
+            .Select(static token => token.Value)
+            .SequenceEqual(
+                comparisonTokens
+                    .Where(token => !IsInlineFormattingToken(comparisonContent, token))
+                    .Select(static token => token.Value),
+                StringComparer.Ordinal);
+        var gaps = gapTokenBoundaries
+            .Where(gap =>
+                (gap.Boundary == 0 || !changedTokens[gap.Boundary - 1])
+                && (gap.Boundary == changedTokens.Length || !changedTokens[gap.Boundary]))
+            .Select(gap => new InlineGap(
+                gap.Boundary == contentTokens.Count
+                    ? content.Length
+                    : contentTokens[gap.Boundary].Start,
+                gap.ContainsMarkdownFormatting,
+                gap.ContainsInlineHtml))
+            .GroupBy(static gap => gap.Index)
+            .Select(static group => new InlineGap(
+                group.Key,
+                group.Any(static gap => gap.ContainsMarkdownFormatting),
+                group.Any(static gap => gap.ContainsInlineHtml)))
+            .ToArray();
+        var currentTagHtmlGaps = gaps
+            .Where(gap =>
+                gap.ContainsInlineHtml
+                && IsPositionInsideInlineHtmlTag(content, gap.Index))
+            .ToArray();
+        var externalHtmlGapRanges = FindExternalHtmlGapRanges(
+            content,
+            contentTokens,
+            inlineHtmlGapBoundaries,
+            ranges);
+        var htmlGapRanges = currentTagHtmlGaps
+            .Select(gap => new InlineChangedRange(
+                Math.Min(gap.Index, content.Length - 1),
+                1))
+            .Concat(externalHtmlGapRanges);
+        var markdownFormattingOnlyRanges = FindFormattingOnlyChangedRanges(
+            contentTokens,
+            comparisonTokens,
+            fallbackRange);
+        var hasCurrentInlineHtmlFormattingRanges = ranges.Any(range =>
+            IsPositionInsideInlineHtmlTag(content, range.Start));
+        var formattingOnlyRanges = hasCurrentInlineHtmlFormattingRanges
+            ? ranges
+            : inlineHtmlGapBoundaries.Count > 0
+                ? []
+                : markdownFormattingOnlyRanges;
+        var changedRanges = isFormattingOnlyChange
+            ? formattingOnlyRanges
+            : useGranularRanges
+                ? ranges
+                : gaps.Length > 0 && granularLength == 0
+                    ? []
+                    : [fallbackRange];
+        return new GranularInlineDiff(
+            changedRanges.Concat(htmlGapRanges).ToArray(),
+            gaps
+                .Where(gap =>
+                    (!gap.ContainsInlineHtml
+                        || (!IsPositionInsideInlineHtmlTag(content, gap.Index)
+                            && !externalHtmlGapRanges.Any(range =>
+                                gap.Index == range.Start || gap.Index == range.End)))
+                    && (!isFormattingOnlyChange || !gap.ContainsMarkdownFormatting)
+                    && (granularLength > 0 || !gap.ContainsMarkdownFormatting))
+                .Select(static gap => gap.Index)
+                .ToArray());
+    }
+
+    private static bool IsMarkdownFormattingToken(string value)
+        => value is "*" or "_" or "~" or "`";
+
+    private static bool IsInlineFormattingToken(string content, InlineDiffToken token)
+        => IsMarkdownFormattingToken(token.Value)
+            || IsPositionInsideInlineHtmlTag(content, token.Start);
+
+    private static void AddInlineHtmlGapBoundary(
+        List<InlineHtmlGapBoundary> boundaries,
+        string content,
+        int position,
+        int tokenBoundary)
+    {
+        if (position < 0 || position >= content.Length)
+        {
+            return;
+        }
+
+        var tagStart = content.LastIndexOf('<', position);
+        if (tagStart < 0
+            || boundaries.Any(boundary => boundary.TagStart == tagStart))
+        {
+            return;
+        }
+
+        var tagEnd = FindHtmlTagEnd(content, tagStart);
+        if (tagEnd <= tagStart
+            || tagEnd > content.Length
+            || content[tagEnd - 1] != '>'
+            || position >= tagEnd)
+        {
+            return;
+        }
+
+        var tag = content[tagStart..tagEnd];
+        var tagName = GetHtmlTagName(tag, out var isClosing);
+        if (tagName.Length == 0)
+        {
+            return;
+        }
+
+        boundaries.Add(new InlineHtmlGapBoundary(
+            tokenBoundary,
+            tagStart,
+            tagName,
+            isClosing,
+            !isClosing
+                && (IsHtmlVoidElement(tagName)
+                    || tag.AsSpan().TrimEnd().EndsWith("/>", StringComparison.Ordinal))));
+    }
+
+    private static InlineChangedRange[] FindExternalHtmlGapRanges(
+        string content,
+        IReadOnlyList<InlineDiffToken> contentTokens,
+        IReadOnlyList<InlineHtmlGapBoundary> boundaries,
+        IReadOnlyList<InlineChangedRange> changedRanges)
+    {
+        var openElements = new List<(InlineHtmlGapBoundary Boundary, int Index)>();
+        var pairedRanges = new List<InlineChangedRange>();
+        foreach (var boundary in boundaries)
+        {
+            var index = boundary.TokenBoundary == contentTokens.Count
+                ? content.Length
+                : contentTokens[boundary.TokenBoundary].Start;
+            if (IsPositionInsideInlineHtmlTag(content, index) || boundary.IsVoid)
+            {
+                continue;
+            }
+            if (!boundary.IsClosing)
+            {
+                openElements.Add((boundary, index));
+                continue;
+            }
+
+            var openingIndex = openElements.FindLastIndex(opening =>
+                string.Equals(
+                    opening.Boundary.TagName,
+                    boundary.TagName,
+                    StringComparison.Ordinal));
+            if (openingIndex < 0)
+            {
+                continue;
+            }
+
+            var opening = openElements[openingIndex];
+            openElements.RemoveRange(openingIndex, openElements.Count - openingIndex);
+            if (index > opening.Index
+                && !changedRanges.Any(range =>
+                    range.Start < index && opening.Index < range.End))
+            {
+                pairedRanges.Add(new InlineChangedRange(
+                    opening.Index,
+                    index - opening.Index));
+            }
+        }
+        return pairedRanges.ToArray();
+    }
+
+    private static List<InlineChangedRange> FindFormattingOnlyChangedRanges(
+        IReadOnlyList<InlineDiffToken> contentTokens,
+        IReadOnlyList<InlineDiffToken> comparisonTokens,
+        InlineChangedRange fallbackRange)
+    {
+        var contentSemanticIndexes = Enumerable.Range(0, contentTokens.Count)
+            .Where(index => !IsMarkdownFormattingToken(contentTokens[index].Value))
+            .ToArray();
+        var comparisonSemanticIndexes = Enumerable.Range(0, comparisonTokens.Count)
+            .Where(index => !IsMarkdownFormattingToken(comparisonTokens[index].Value))
+            .ToArray();
+        if (contentSemanticIndexes.Length != comparisonSemanticIndexes.Length)
+        {
+            return [fallbackRange];
+        }
+
+        var changedBoundaries = Enumerable.Range(0, contentSemanticIndexes.Length + 1)
+            .Where(boundary => !GetFormattingTokensAtBoundary(
+                    contentTokens,
+                    contentSemanticIndexes,
+                    boundary)
+                .Select(static token => token.Value)
+                .SequenceEqual(
+                    GetFormattingTokensAtBoundary(
+                        comparisonTokens,
+                        comparisonSemanticIndexes,
+                        boundary)
+                        .Select(static token => token.Value),
+                    StringComparer.Ordinal))
+            .ToArray();
+        if (changedBoundaries.Length == 0)
+        {
+            return [fallbackRange];
+        }
+
+        var formattingRanges = new List<InlineChangedRange>();
+        for (var index = 0; index < changedBoundaries.Length; index += 2)
+        {
+            var firstBoundary = changedBoundaries[index];
+            var lastBoundary = changedBoundaries[Math.Min(index + 1, changedBoundaries.Length - 1)];
+            formattingRanges.Add(CreateFormattingOnlyChangedRange(
+                contentTokens,
+                contentSemanticIndexes,
+                firstBoundary,
+                lastBoundary,
+                fallbackRange));
+        }
+        return formattingRanges;
+    }
+
+    private static InlineChangedRange CreateFormattingOnlyChangedRange(
+        IReadOnlyList<InlineDiffToken> contentTokens,
+        int[] contentSemanticIndexes,
+        int firstBoundary,
+        int lastBoundary,
+        InlineChangedRange fallbackRange)
+    {
+        var firstFormattingTokens = GetFormattingTokensAtBoundary(
+            contentTokens,
+            contentSemanticIndexes,
+            firstBoundary);
+        var lastFormattingTokens = GetFormattingTokensAtBoundary(
+            contentTokens,
+            contentSemanticIndexes,
+            lastBoundary);
+        var start = firstFormattingTokens.Length > 0
+            ? firstFormattingTokens[0].Start
+            : firstBoundary < contentSemanticIndexes.Length
+                ? contentTokens[contentSemanticIndexes[firstBoundary]].Start
+                : fallbackRange.Start;
+        var end = lastFormattingTokens.Length > 0
+            ? lastFormattingTokens[^1].End
+            : lastBoundary > 0
+                ? contentTokens[contentSemanticIndexes[lastBoundary - 1]].End
+                : fallbackRange.End;
+        return end > start ? new InlineChangedRange(start, end - start) : fallbackRange;
+    }
+
+    private static InlineDiffToken[] GetFormattingTokensAtBoundary(
+        IReadOnlyList<InlineDiffToken> tokens,
+        int[] semanticIndexes,
+        int boundary)
+    {
+        var start = boundary == 0 ? 0 : semanticIndexes[boundary - 1] + 1;
+        var end = boundary == semanticIndexes.Length ? tokens.Count : semanticIndexes[boundary];
+        return tokens
+            .Skip(start)
+            .Take(end - start)
+            .Where(static token => IsMarkdownFormattingToken(token.Value))
+            .ToArray();
+    }
+
+    private static int CalculateGranularChangedLength(
+        string content,
+        IReadOnlyList<InlineDiffToken> tokens,
+        bool[] changedTokens)
+    {
+        var length = 0;
+        for (var index = 0; index < changedTokens.Length;)
+        {
+            if (!changedTokens[index])
+            {
+                index++;
+                continue;
+            }
+
+            var start = tokens[index].Start;
+            var end = tokens[index].End;
+            index++;
+            while (index < changedTokens.Length
+                && changedTokens[index]
+                && string.IsNullOrWhiteSpace(content[end..tokens[index].Start]))
+            {
+                end = tokens[index].End;
+                index++;
+            }
+            length += end - start;
+        }
+        return length;
+    }
+
+    private static bool IsPositionInsideInlineHtmlTag(string content, int position)
+    {
+        if (position < 0 || position >= content.Length)
+        {
+            return false;
+        }
+        var openingIndex = content.LastIndexOf('<', position);
+        if (openingIndex < 0)
+        {
+            return false;
+        }
+
+        var tagEnd = FindHtmlTagEnd(content, openingIndex);
+        return tagEnd > openingIndex
+            && tagEnd <= content.Length
+            && content[tagEnd - 1] == '>'
+            && position < tagEnd;
+    }
+
+    private static List<InlineDiffToken> TokenizeInlineDiff(string content)
+    {
+        var tokens = new List<InlineDiffToken>();
+        for (var index = 0; index < content.Length;)
+        {
+            if (char.IsWhiteSpace(content[index]))
+            {
+                index++;
+                continue;
+            }
+
+            var start = index;
+            if (char.IsLetterOrDigit(content[index]) || content[index] == '_')
+            {
+                index++;
+                while (index < content.Length
+                    && (char.IsLetterOrDigit(content[index]) || content[index] == '_'))
+                {
+                    index++;
+                }
+            }
+            else
+            {
+                index++;
+            }
+            tokens.Add(new InlineDiffToken(content[start..index], start, index));
+        }
+        return tokens;
+    }
+
+    private readonly record struct InlineDiffToken(string Value, int Start, int End);
+
+    private readonly record struct InlineGapBoundary(
+        int Boundary,
+        bool ContainsMarkdownFormatting,
+        bool ContainsInlineHtml);
+
+    private readonly record struct InlineGap(
+        int Index,
+        bool ContainsMarkdownFormatting,
+        bool ContainsInlineHtml);
+
+    private readonly record struct InlineHtmlGapBoundary(
+        int TokenBoundary,
+        int TagStart,
+        string TagName,
+        bool IsClosing,
+        bool IsVoid);
+
     private readonly record struct InlineChangedRange(int Start, int Length)
     {
         public int End => Start + Length;
     }
+
+    private readonly record struct GranularInlineDiff(
+        IReadOnlyList<InlineChangedRange> ChangedRanges,
+        IReadOnlyList<int> GapIndexes);
 
     private enum VersionChangeExcerptSide
     {
@@ -3199,6 +3720,7 @@ internal static partial class MarkdownPreviewRenderer
         HashSet<int> changedIndexes,
         out int blockEndIndex)
     {
+        const int maximumBridgeLineCount = 32;
         blockEndIndex = -1;
         if (!IsNamedCodeStructuralBlockOpeningLine(lines[startIndex]))
         {
@@ -3217,6 +3739,10 @@ internal static partial class MarkdownPreviewRenderer
 
         for (var index = startIndex + 1; index < endIndex; index++)
         {
+            if (index - startIndex > maximumBridgeLineCount)
+            {
+                return false;
+            }
             depth += CountCodeStructuralBracketDelta(lines[index]);
             if (depth <= 0)
             {
@@ -3921,15 +4447,198 @@ internal static partial class MarkdownPreviewRenderer
                 ? marked
                 : content;
         }
-        changedRange = ExpandRenderedDiffRange(content, changedRange);
-        changedRange = ExpandRenderedDiffRangeAroundChangedAnchor(content, changedRange);
-        changedRange = SnapRangeOutsideLiquidTokens(content, changedRange);
-        if (changedRange.Length == 0)
+
+        var granularDiff = FindGranularInlineChangedRanges(content, comparisonContent, changedRange);
+        var changedRanges = granularDiff.ChangedRanges
+            .Select(range => ExpandRenderedDiffRange(content, range))
+            .Select(range => ExpandRenderedDiffRangeAroundChangedAnchor(content, range))
+            .Select(range => SnapRangeOutsideLiquidTokens(content, range))
+            .Select(range => ExpandRangeAcrossInlineHtmlElement(content, range))
+            .Select(range => ExpandRangeAcrossMarkdownFormattingDelimiters(content, range))
+            .Where(static range => range.Length > 0)
+            .OrderBy(static range => range.Start)
+            .ToArray();
+        if (changedRanges.Length == 0 && granularDiff.GapIndexes.Count == 0)
         {
             return content;
         }
 
-        return WrapRenderedDiffRangePreservingInlineCode(content, markerClass, changedRange);
+        var mergedRanges = new List<InlineChangedRange>(changedRanges.Length);
+        foreach (var range in changedRanges)
+        {
+            if (mergedRanges.Count == 0 || range.Start > mergedRanges[^1].End)
+            {
+                mergedRanges.Add(range);
+                continue;
+            }
+
+            var previous = mergedRanges[^1];
+            var end = Math.Max(previous.End, range.End);
+            mergedRanges[^1] = new InlineChangedRange(previous.Start, end - previous.Start);
+        }
+
+        var gapIndexes = granularDiff.GapIndexes
+            .Where(index => !mergedRanges.Any(
+                range => IsGapStrictlyInsideChangedRange(index, range.Start, range.End)))
+            .ToArray();
+        var operations = mergedRanges
+            .Select(static range => (Position: range.Start, Range: (InlineChangedRange?)range))
+            .Concat(gapIndexes.Select(static index => (Position: index, Range: (InlineChangedRange?)null)))
+            .OrderByDescending(static operation => operation.Position);
+        var markedContent = content;
+        foreach (var operation in operations)
+        {
+            markedContent = operation.Range is { } range
+                ? WrapRenderedDiffRangePreservingInlineCode(markedContent, markerClass, range)
+                : markedContent[..operation.Position]
+                    + BuildRenderedDiffGapMarker(markerClass)
+                    + markedContent[operation.Position..];
+        }
+        return markedContent;
+    }
+
+    internal static bool IsGapStrictlyInsideChangedRange(int gapIndex, int rangeStart, int rangeEnd)
+        => gapIndex > rangeStart && gapIndex < rangeEnd;
+
+    private static InlineChangedRange ExpandRangeAcrossInlineHtmlElement(
+        string content,
+        InlineChangedRange range)
+    {
+        var openElements = new List<InlineHtmlOpenElement>();
+        var candidates = new List<InlineChangedRange>();
+        var cursor = 0;
+        while ((cursor = content.IndexOf('<', cursor)) >= 0)
+        {
+            var tagEnd = FindHtmlTagEnd(content, cursor);
+            if (tagEnd <= cursor
+                || tagEnd > content.Length
+                || content[tagEnd - 1] != '>')
+            {
+                break;
+            }
+
+            var tagRange = new InlineChangedRange(cursor, tagEnd - cursor);
+            var tag = content[cursor..tagEnd];
+            var tagName = GetHtmlTagName(tag, out var isClosing);
+            if (tagName.Length == 0)
+            {
+                cursor = tagEnd;
+                continue;
+            }
+
+            if (isClosing)
+            {
+                var openingIndex = openElements.FindLastIndex(element =>
+                    string.Equals(element.TagName, tagName, StringComparison.Ordinal));
+                if (openingIndex >= 0)
+                {
+                    var opening = openElements[openingIndex];
+                    if (RangesIntersect(range, opening.TagRange) || RangesIntersect(range, tagRange))
+                    {
+                        candidates.Add(new InlineChangedRange(
+                            opening.TagRange.Start,
+                            tagEnd - opening.TagRange.Start));
+                    }
+                    openElements.RemoveRange(openingIndex, openElements.Count - openingIndex);
+                }
+            }
+            else if (IsHtmlVoidElement(tagName)
+                || tag.AsSpan().TrimEnd().EndsWith("/>", StringComparison.Ordinal))
+            {
+                if (RangesIntersect(range, tagRange))
+                {
+                    candidates.Add(tagRange);
+                }
+            }
+            else
+            {
+                openElements.Add(new InlineHtmlOpenElement(tagName, tagRange));
+            }
+            cursor = tagEnd;
+        }
+
+        foreach (var opening in openElements)
+        {
+            if (RangesIntersect(range, opening.TagRange))
+            {
+                candidates.Add(opening.TagRange);
+            }
+        }
+        var expandedStart = range.Start;
+        var expandedEnd = range.End;
+        foreach (var candidate in candidates)
+        {
+            expandedStart = Math.Min(expandedStart, candidate.Start);
+            expandedEnd = Math.Max(expandedEnd, candidate.End);
+        }
+        return new InlineChangedRange(expandedStart, expandedEnd - expandedStart);
+    }
+
+    private static bool RangesIntersect(InlineChangedRange left, InlineChangedRange right)
+        => left.Start < right.End && right.Start < left.End;
+
+    private readonly record struct InlineHtmlOpenElement(
+        string TagName,
+        InlineChangedRange TagRange);
+
+    private static InlineChangedRange ExpandRangeAcrossMarkdownFormattingDelimiters(
+        string content,
+        InlineChangedRange range)
+    {
+        var delimiterCharacter = content[range.Start];
+        if (content.AsSpan(range.Start, range.Length).ContainsAnyExcept(delimiterCharacter))
+        {
+            return range;
+        }
+
+        var delimiterStart = range.Start;
+        while (delimiterStart > 0 && content[delimiterStart - 1] == delimiterCharacter)
+        {
+            delimiterStart--;
+        }
+        var delimiterEnd = range.End;
+        while (delimiterEnd < content.Length && content[delimiterEnd] == delimiterCharacter)
+        {
+            delimiterEnd++;
+        }
+
+        var delimiter = content[delimiterStart..delimiterEnd];
+        if (!IsMarkdownFormattingDelimiter(delimiter))
+        {
+            return range;
+        }
+
+        var canOpen = delimiterEnd < content.Length && !char.IsWhiteSpace(content[delimiterEnd]);
+        var canClose = delimiterStart > 0 && !char.IsWhiteSpace(content[delimiterStart - 1]);
+        var counterpartStart = canOpen && !canClose
+            ? content.IndexOf(delimiter, delimiterEnd, StringComparison.Ordinal)
+            : canClose && !canOpen
+                ? content.LastIndexOf(delimiter, delimiterStart - 1, StringComparison.Ordinal)
+                : -1;
+        if (counterpartStart < 0)
+        {
+            return range;
+        }
+
+        var start = Math.Min(delimiterStart, counterpartStart);
+        var end = Math.Max(delimiterEnd, counterpartStart + delimiter.Length);
+        return new InlineChangedRange(start, end - start);
+    }
+
+    private static bool IsMarkdownFormattingDelimiter(string value)
+    {
+        if (value.Length >= 1 && value.All(static character => character == '`'))
+        {
+            return true;
+        }
+        if (string.Equals(value, "~~", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return value.Length is >= 1 and <= 3
+            && value.All(character => character == value[0])
+            && value[0] is '*' or '_';
     }
 
     private static InlineChangedRange ExpandRenderedDiffRangeAroundChangedAnchor(
@@ -4034,12 +4743,17 @@ internal static partial class MarkdownPreviewRenderer
             return false;
         }
 
+        var marker = BuildRenderedDiffGapMarker(markerClass);
+        marked = content[..insertionIndex] + marker + content[insertionIndex..];
+        return true;
+    }
+
+    private static string BuildRenderedDiffGapMarker(string markerClass)
+    {
         var gapClass = string.Equals(markerClass, "rsr-rendered-diff-added", StringComparison.Ordinal)
             ? "rsr-rendered-diff-removed"
             : "rsr-rendered-diff-added";
-        var marker = "<span class=\"" + gapClass + " rsr-rendered-diff-gap\" aria-hidden=\"true\"></span>";
-        marked = content[..insertionIndex] + marker + content[insertionIndex..];
-        return true;
+        return "<span class=\"" + gapClass + " rsr-rendered-diff-gap\" aria-hidden=\"true\"></span>";
     }
 
     private static InlineChangedRange ExpandRenderedDiffRange(string content, InlineChangedRange changedRange)
@@ -4260,22 +4974,40 @@ internal static partial class MarkdownPreviewRenderer
         string? alignedContent = null;
         if (alignedComparisonLine is not null
             && TryGetMarkableRenderedDiffParts(alignedComparisonLine, out var alignedParts)
-            && alignedParts.Kind == currentParts.Kind
-            && HasMeaningfulAlignedSimilarity(currentParts.Content, alignedParts.Content))
+            && alignedParts.Kind == currentParts.Kind)
         {
-            alignedContent = alignedParts.Content;
+            if (string.Equals(
+                GetInlineFormattingInsensitiveContent(currentParts.Content),
+                GetInlineFormattingInsensitiveContent(alignedParts.Content),
+                StringComparison.Ordinal))
+            {
+                return alignedParts.Content;
+            }
+            if (HasMeaningfulAlignedSimilarity(currentParts.Content, alignedParts.Content))
+            {
+                alignedContent = alignedParts.Content;
+            }
         }
 
         string? prefixOrSuffixMatch = null;
         var prefixOrSuffixScore = 0;
         string? bestContent = null;
         var bestScore = 0;
+        var bestComparisonLength = 0;
         foreach (var comparisonLine in comparisonLines)
         {
             if (!TryGetMarkableRenderedDiffParts(comparisonLine, out var comparisonParts)
                 || comparisonParts.Kind != currentParts.Kind)
             {
                 continue;
+            }
+
+            if (string.Equals(
+                GetInlineFormattingInsensitiveContent(currentParts.Content),
+                GetInlineFormattingInsensitiveContent(comparisonParts.Content),
+                StringComparison.Ordinal))
+            {
+                return comparisonParts.Content;
             }
 
             if (currentParts.Content.StartsWith(comparisonParts.Content, StringComparison.Ordinal)
@@ -4297,6 +5029,7 @@ internal static partial class MarkdownPreviewRenderer
             {
                 bestScore = score;
                 bestContent = comparisonParts.Content;
+                bestComparisonLength = comparisonParts.Content.Length;
             }
         }
 
@@ -4311,13 +5044,27 @@ internal static partial class MarkdownPreviewRenderer
         // unrelated sentences that both start with "If the app"). Require both
         // a small absolute overlap and a meaningful ratio so short real updates
         // like "Old entry" -> "New entry" still get inline marking.
-        var minimumScore = Math.Max(4, currentParts.Content.Length / 3);
-        if (bestScore >= minimumScore && bestScore * 5 >= currentParts.Content.Length * 3)
+        var maximumLength = Math.Max(currentParts.Content.Length, bestComparisonLength);
+        if (bestScore >= 4 && bestScore * 2 >= maximumLength)
         {
             return bestContent;
         }
 
         return alignedContent;
+    }
+
+    private static string GetInlineFormattingInsensitiveContent(string content)
+    {
+        var withoutFormatting = new string(
+            HtmlTagRegex()
+                .Replace(content, string.Empty)
+                .Where(static character => character is not ('*' or '_' or '~' or '`'))
+                .ToArray());
+        return string.Join(
+            ' ',
+            withoutFormatting.Split(
+                (char[]?)null,
+                StringSplitOptions.RemoveEmptyEntries));
     }
 
     private static bool HasMeaningfulAlignedSimilarity(string currentContent, string comparisonContent)

@@ -25,12 +25,14 @@ internal sealed record PreviewDiffChange(
     IReadOnlyList<int> BeforeIndexes,
     IReadOnlyList<int> AfterIndexes,
     int? BeforeAnchorIndex,
-    int? AfterAnchorIndex);
+    int? AfterAnchorIndex,
+    IReadOnlyList<int>? AlignmentNavigationIndexes = null);
 
 internal sealed record PreviewDiffAlignmentGap(
     [property: JsonPropertyName("anchorIndex")] int? AnchorIndex,
     [property: JsonPropertyName("height")] double Height,
-    [property: JsonPropertyName("navigationIndex")] int NavigationIndex);
+    [property: JsonPropertyName("navigationIndex")] int NavigationIndex,
+    [property: JsonPropertyName("navigationOnly")] bool NavigationOnly = false);
 
 internal sealed record PreviewDiffAlignmentGapPlan(
     IReadOnlyList<PreviewDiffAlignmentGap> Before,
@@ -50,12 +52,16 @@ internal readonly record struct PreviewDiffNavigationResult(
 
 internal static class PreviewDiffHighlighter
 {
+    internal const int MaximumAlignedChangeCount = 512;
+    private readonly record struct BlockAnchor(int BeforeIndex, int AfterIndex);
+    private readonly record struct BlockRange(int BeforeStart, int BeforeEnd, int AfterStart, int AfterEnd);
+
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan _extractionRetryDelay = TimeSpan.FromMilliseconds(250);
 
     private const int _maxExtractionAttempts = 6;
-    private const long _maxGranularPlanCells = 1_000_000;
-    private const long _maxCoarsePlanCells = 4_000_000;
+    private const long _maxPlanCells = 4_000_000;
+    private const long _maxComparisonWork = 8_000_000;
     private const string _extractCodeLinesToken = "__RSR_EXTRACT_CODE_LINES__";
 
     private const string _extractBlocksScriptTemplate = """
@@ -299,35 +305,26 @@ internal static class PreviewDiffHighlighter
         ArgumentNullException.ThrowIfNull(beforeView);
         ArgumentNullException.ThrowIfNull(afterView);
 
-        var blocks = await Task.WhenAll(
+        return await Task.WhenAll(
             ExtractBlocksAsync(beforeView),
             ExtractBlocksAsync(afterView));
-        if (!RequiresCoarseCodeBlockExtraction(blocks[0].Count, blocks[1].Count))
-        {
-            return blocks;
-        }
-
-        return await Task.WhenAll(
-            ExtractBlocksAsync(beforeView, extractCodeLines: false),
-            ExtractBlocksAsync(afterView, extractCodeLines: false));
-    }
-
-    internal static bool RequiresCoarseCodeBlockExtraction(int beforeBlockCount, int afterBlockCount)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegative(beforeBlockCount);
-        ArgumentOutOfRangeException.ThrowIfNegative(afterBlockCount);
-
-        return beforeBlockCount > 0
-            && afterBlockCount > 0
-            && ExceedsPlanCellBudget(beforeBlockCount, afterBlockCount);
     }
 
     internal static PreviewDiffPlan BuildPlan(
         IReadOnlyList<PreviewDiffBlock> beforeBlocks,
         IReadOnlyList<PreviewDiffBlock> afterBlocks)
     {
+        return BuildPlan(beforeBlocks, afterBlocks, out _);
+    }
+
+    internal static PreviewDiffPlan BuildPlan(
+        IReadOnlyList<PreviewDiffBlock> beforeBlocks,
+        IReadOnlyList<PreviewDiffBlock> afterBlocks,
+        out int patienceAnchorScanCount)
+    {
         ArgumentNullException.ThrowIfNull(beforeBlocks);
         ArgumentNullException.ThrowIfNull(afterBlocks);
+        patienceAnchorScanCount = 0;
 
         if (beforeBlocks.Count == 0 || afterBlocks.Count == 0)
         {
@@ -344,9 +341,14 @@ internal static class PreviewDiffHighlighter
 
         var beforeTexts = beforeBlocks.Select(block => NormalizeText(block.Text)).ToArray();
         var afterTexts = afterBlocks.Select(block => NormalizeText(block.Text)).ToArray();
-        if (ExceedsPlanCellBudget(beforeTexts.Length, afterTexts.Length, _maxCoarsePlanCells))
+        if (ExceedsPlanCellBudget(beforeTexts.Length, afterTexts.Length))
         {
-            return BuildBoundedPlan(beforeBlocks, afterBlocks, beforeTexts, afterTexts);
+            return BuildBoundedPlan(
+                beforeBlocks,
+                afterBlocks,
+                beforeTexts,
+                afterTexts,
+                out patienceAnchorScanCount);
         }
 
         var lengths = new int[beforeTexts.Length + 1, afterTexts.Length + 1];
@@ -371,6 +373,8 @@ internal static class PreviewDiffHighlighter
         var currentAfterIndexes = new List<int>();
         var beforeCursor = 0;
         var afterCursor = 0;
+        var beforeAlignmentGroups = BuildAlignmentGroupsByIndex(beforeBlocks);
+        var afterAlignmentGroups = BuildAlignmentGroupsByIndex(afterBlocks);
         void FlushChange()
         {
             if (currentBeforeIndexes.Count == 0 && currentAfterIndexes.Count == 0)
@@ -379,18 +383,28 @@ internal static class PreviewDiffHighlighter
             }
 
             var advancePastCurrentAlignmentGroup =
-                IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, currentBeforeIndexes)
-                || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, currentAfterIndexes);
+                IsAnchorInChangedAlignmentGroup(
+                    beforeBlocks,
+                    beforeAlignmentGroups,
+                    beforeCursor,
+                    currentBeforeIndexes)
+                || IsAnchorInChangedAlignmentGroup(
+                    afterBlocks,
+                    afterAlignmentGroups,
+                    afterCursor,
+                    currentAfterIndexes);
             changes.Add(new PreviewDiffChange(
                 currentBeforeIndexes.ToArray(),
                 currentAfterIndexes.ToArray(),
                 FindAlignmentAnchorIndex(
                     beforeBlocks,
+                    beforeAlignmentGroups,
                     beforeCursor,
                     currentBeforeIndexes,
                     advancePastCurrentAlignmentGroup),
                 FindAlignmentAnchorIndex(
                     afterBlocks,
+                    afterAlignmentGroups,
                     afterCursor,
                     currentAfterIndexes,
                     advancePastCurrentAlignmentGroup)));
@@ -444,73 +458,706 @@ internal static class PreviewDiffHighlighter
         IReadOnlyList<PreviewDiffBlock> beforeBlocks,
         IReadOnlyList<PreviewDiffBlock> afterBlocks,
         string[] beforeTexts,
-        string[] afterTexts)
+        string[] afterTexts,
+        out int patienceAnchorScanCount)
     {
-        var commonPrefixLength = 0;
-        while (commonPrefixLength < beforeTexts.Length
-            && commonPrefixLength < afterTexts.Length
-            && string.Equals(
-                beforeTexts[commonPrefixLength],
-                afterTexts[commonPrefixLength],
+        var beforeChangedPositions = new bool[beforeTexts.Length];
+        var afterChangedPositions = new bool[afterTexts.Length];
+        var remainingComparisonWork = _maxComparisonWork;
+        patienceAnchorScanCount = 0;
+        MarkBoundedChanges(
+            beforeTexts,
+            0,
+            beforeTexts.Length,
+            afterTexts,
+            0,
+            afterTexts.Length,
+            beforeChangedPositions,
+            afterChangedPositions,
+            ref remainingComparisonWork,
+            ref patienceAnchorScanCount);
+        return BuildPlanFromChangedPositions(
+            beforeBlocks,
+            afterBlocks,
+            beforeTexts,
+            afterTexts,
+            beforeChangedPositions,
+            afterChangedPositions);
+    }
+
+    private static void MarkBoundedChanges(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged,
+        ref long remainingComparisonWork,
+        ref int patienceAnchorScanCount)
+    {
+        var pending = new Stack<BlockRange>();
+        pending.Push(new BlockRange(beforeStart, beforeEnd, afterStart, afterEnd));
+        while (pending.TryPop(out var range))
+        {
+            beforeStart = range.BeforeStart;
+            beforeEnd = range.BeforeEnd;
+            afterStart = range.AfterStart;
+            afterEnd = range.AfterEnd;
+            while (beforeStart < beforeEnd && afterStart < afterEnd)
+            {
+                if (!TryReserveLinearWork(ref remainingComparisonWork, 1))
+                {
+                    MarkBudgetedFallbackRange(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged,
+                        ref remainingComparisonWork);
+                    goto NextRange;
+                }
+                if (!string.Equals(beforeTexts[beforeStart], afterTexts[afterStart], StringComparison.Ordinal))
+                {
+                    break;
+                }
+                beforeStart++;
+                afterStart++;
+            }
+            while (beforeStart < beforeEnd && afterStart < afterEnd)
+            {
+                if (!TryReserveLinearWork(ref remainingComparisonWork, 1))
+                {
+                    MarkBudgetedFallbackRange(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged,
+                        ref remainingComparisonWork);
+                    goto NextRange;
+                }
+                if (!string.Equals(beforeTexts[beforeEnd - 1], afterTexts[afterEnd - 1], StringComparison.Ordinal))
+                {
+                    break;
+                }
+                beforeEnd--;
+                afterEnd--;
+            }
+            if (beforeStart == beforeEnd || afterStart == afterEnd)
+            {
+                Array.Fill(beforeChanged, true, beforeStart, beforeEnd - beforeStart);
+                Array.Fill(afterChanged, true, afterStart, afterEnd - afterStart);
+                continue;
+            }
+
+            var beforeLength = beforeEnd - beforeStart;
+            var afterLength = afterEnd - afterStart;
+            if (!ExceedsPlanCellBudget(beforeLength, afterLength))
+            {
+                if (TryReserveComparisonWork(ref remainingComparisonWork, beforeLength, afterLength))
+                {
+                    MarkLcsChanges(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged);
+                }
+                else
+                {
+                    MarkBudgetedFallbackRange(
+                        beforeTexts,
+                        beforeStart,
+                        beforeEnd,
+                        afterTexts,
+                        afterStart,
+                        afterEnd,
+                        beforeChanged,
+                        afterChanged,
+                        ref remainingComparisonWork);
+                }
+                continue;
+            }
+
+            if (!TryReserveLinearWork(
+                ref remainingComparisonWork,
+                EstimatePatienceAnchorWork(beforeLength, afterLength)))
+            {
+                MarkBudgetedFallbackRange(
+                    beforeTexts,
+                    beforeStart,
+                    beforeEnd,
+                    afterTexts,
+                    afterStart,
+                    afterEnd,
+                    beforeChanged,
+                    afterChanged,
+                    ref remainingComparisonWork);
+                continue;
+            }
+            patienceAnchorScanCount++;
+            var anchors = FindPatienceAnchors(
+                beforeTexts,
+                beforeStart,
+                beforeEnd,
+                afterTexts,
+                afterStart,
+                afterEnd);
+            if (anchors.Count == 0)
+            {
+                Array.Fill(beforeChanged, true, beforeStart, beforeLength);
+                Array.Fill(afterChanged, true, afterStart, afterLength);
+                MarkBudgetedFallbackMatches(
+                    beforeTexts,
+                    beforeStart,
+                    beforeEnd,
+                    afterTexts,
+                    afterStart,
+                    afterEnd,
+                    beforeChanged,
+                    afterChanged,
+                    ref remainingComparisonWork);
+                continue;
+            }
+
+            var beforeCursor = beforeStart;
+            var afterCursor = afterStart;
+            var partitions = new List<BlockRange>(anchors.Count + 1);
+            foreach (var anchor in anchors)
+            {
+                partitions.Add(new BlockRange(
+                    beforeCursor,
+                    anchor.BeforeIndex,
+                    afterCursor,
+                    anchor.AfterIndex));
+                beforeCursor = anchor.BeforeIndex + 1;
+                afterCursor = anchor.AfterIndex + 1;
+            }
+            partitions.Add(new BlockRange(beforeCursor, beforeEnd, afterCursor, afterEnd));
+            for (var index = partitions.Count - 1; index >= 0; index--)
+            {
+                pending.Push(partitions[index]);
+            }
+
+        NextRange:
+            continue;
+        }
+    }
+
+    private static void MarkBudgetedFallbackRange(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged,
+        ref long remainingComparisonWork)
+    {
+        Array.Fill(beforeChanged, true, beforeStart, beforeEnd - beforeStart);
+        Array.Fill(afterChanged, true, afterStart, afterEnd - afterStart);
+        MarkBudgetedFallbackMatches(
+            beforeTexts,
+            beforeStart,
+            beforeEnd,
+            afterTexts,
+            afterStart,
+            afterEnd,
+            beforeChanged,
+            afterChanged,
+            ref remainingComparisonWork);
+    }
+
+    private static void MarkLcsChanges(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged)
+    {
+        var beforeLength = beforeEnd - beforeStart;
+        var afterLength = afterEnd - afterStart;
+        var lengths = new int[beforeLength + 1, afterLength + 1];
+        for (var beforeIndex = beforeLength - 1; beforeIndex >= 0; beforeIndex--)
+        {
+            for (var afterIndex = afterLength - 1; afterIndex >= 0; afterIndex--)
+            {
+                lengths[beforeIndex, afterIndex] = string.Equals(
+                    beforeTexts[beforeStart + beforeIndex],
+                    afterTexts[afterStart + afterIndex],
+                    StringComparison.Ordinal)
+                        ? lengths[beforeIndex + 1, afterIndex + 1] + 1
+                        : Math.Max(lengths[beforeIndex + 1, afterIndex], lengths[beforeIndex, afterIndex + 1]);
+            }
+        }
+
+        var beforeCursor = 0;
+        var afterCursor = 0;
+        while (beforeCursor < beforeLength && afterCursor < afterLength)
+        {
+            if (string.Equals(
+                beforeTexts[beforeStart + beforeCursor],
+                afterTexts[afterStart + afterCursor],
                 StringComparison.Ordinal))
+            {
+                beforeCursor++;
+                afterCursor++;
+            }
+            else if (lengths[beforeCursor + 1, afterCursor] >= lengths[beforeCursor, afterCursor + 1])
+            {
+                beforeChanged[beforeStart + beforeCursor++] = true;
+            }
+            else
+            {
+                afterChanged[afterStart + afterCursor++] = true;
+            }
+        }
+        Array.Fill(beforeChanged, true, beforeStart + beforeCursor, beforeLength - beforeCursor);
+        Array.Fill(afterChanged, true, afterStart + afterCursor, afterLength - afterCursor);
+    }
+
+    private static void MarkBudgetedFallbackMatches(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged,
+        ref long remainingComparisonWork)
+    {
+        if (!TryMarkMyersMatches(
+            beforeTexts,
+            beforeStart,
+            beforeEnd,
+            afterTexts,
+            afterStart,
+            afterEnd,
+            beforeChanged,
+            afterChanged,
+            ref remainingComparisonWork))
         {
-            commonPrefixLength++;
+            MarkPositionallyAlignedMatches(
+                beforeTexts,
+                beforeStart,
+                beforeEnd,
+                afterTexts,
+                afterStart,
+                afterEnd,
+                beforeChanged,
+                afterChanged);
+        }
+    }
+
+    private static bool TryMarkMyersMatches(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged,
+        ref long remainingComparisonWork)
+    {
+        var beforeLength = beforeEnd - beforeStart;
+        var afterLength = afterEnd - afterStart;
+        var maximumDistance = beforeLength + afterLength;
+        var layers = new List<int[]>(Math.Min(maximumDistance + 1, 4096));
+        long consumedWork = 0;
+
+        for (var distance = 0; distance <= maximumDistance; distance++)
+        {
+            var current = new int[(distance * 2) + 1];
+            var previous = distance == 0 ? null : layers[distance - 1];
+            for (var diagonal = -distance; diagonal <= distance; diagonal += 2)
+            {
+                if (++consumedWork > remainingComparisonWork)
+                {
+                    remainingComparisonWork = 0;
+                    return false;
+                }
+
+                int beforeOffset;
+                if (distance == 0)
+                {
+                    beforeOffset = 0;
+                }
+                else if (diagonal == -distance
+                    || (diagonal != distance
+                        && GetMyersLayerValue(previous!, distance - 1, diagonal - 1)
+                            < GetMyersLayerValue(previous!, distance - 1, diagonal + 1)))
+                {
+                    beforeOffset = GetMyersLayerValue(previous!, distance - 1, diagonal + 1);
+                }
+                else
+                {
+                    beforeOffset = GetMyersLayerValue(previous!, distance - 1, diagonal - 1) + 1;
+                }
+
+                var afterOffset = beforeOffset - diagonal;
+                while (beforeOffset < beforeLength && afterOffset < afterLength)
+                {
+                    if (++consumedWork > remainingComparisonWork)
+                    {
+                        remainingComparisonWork = 0;
+                        return false;
+                    }
+                    if (!string.Equals(
+                        beforeTexts[beforeStart + beforeOffset],
+                        afterTexts[afterStart + afterOffset],
+                        StringComparison.Ordinal))
+                    {
+                        break;
+                    }
+                    beforeOffset++;
+                    afterOffset++;
+                }
+                current[diagonal + distance] = beforeOffset;
+                if (beforeOffset >= beforeLength && afterOffset >= afterLength)
+                {
+                    layers.Add(current);
+                    remainingComparisonWork -= consumedWork;
+                    MarkMyersBacktrackMatches(
+                        beforeTexts,
+                        beforeStart,
+                        afterTexts,
+                        afterStart,
+                        beforeLength,
+                        afterLength,
+                        layers,
+                        beforeChanged,
+                        afterChanged);
+                    return true;
+                }
+            }
+            layers.Add(current);
         }
 
-        var beforeEnd = beforeTexts.Length - 1;
-        var afterEnd = afterTexts.Length - 1;
-        while (beforeEnd >= commonPrefixLength
-            && afterEnd >= commonPrefixLength
-            && string.Equals(beforeTexts[beforeEnd], afterTexts[afterEnd], StringComparison.Ordinal))
+        remainingComparisonWork -= consumedWork;
+        return false;
+    }
+
+    private static void MarkMyersBacktrackMatches(
+        string[] beforeTexts,
+        int beforeStart,
+        string[] afterTexts,
+        int afterStart,
+        int beforeLength,
+        int afterLength,
+        List<int[]> layers,
+        bool[] beforeChanged,
+        bool[] afterChanged)
+    {
+        var beforeOffset = beforeLength;
+        var afterOffset = afterLength;
+        for (var distance = layers.Count - 1; distance > 0; distance--)
         {
-            beforeEnd--;
-            afterEnd--;
+            var diagonal = beforeOffset - afterOffset;
+            var previous = layers[distance - 1];
+            var previousDiagonal = diagonal == -distance
+                || (diagonal != distance
+                    && GetMyersLayerValue(previous, distance - 1, diagonal - 1)
+                        < GetMyersLayerValue(previous, distance - 1, diagonal + 1))
+                    ? diagonal + 1
+                    : diagonal - 1;
+            var previousBeforeOffset = GetMyersLayerValue(previous, distance - 1, previousDiagonal);
+            var previousAfterOffset = previousBeforeOffset - previousDiagonal;
+            while (beforeOffset > previousBeforeOffset && afterOffset > previousAfterOffset)
+            {
+                beforeOffset--;
+                afterOffset--;
+                if (!string.Equals(
+                    beforeTexts[beforeStart + beforeOffset],
+                    afterTexts[afterStart + afterOffset],
+                    StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("Myers preview diff backtrack produced a non-matching diagonal.");
+                }
+                beforeChanged[beforeStart + beforeOffset] = false;
+                afterChanged[afterStart + afterOffset] = false;
+            }
+            if (beforeOffset == previousBeforeOffset)
+            {
+                afterOffset--;
+            }
+            else
+            {
+                beforeOffset--;
+            }
+        }
+        while (beforeOffset > 0 && afterOffset > 0)
+        {
+            beforeOffset--;
+            afterOffset--;
+            beforeChanged[beforeStart + beforeOffset] = false;
+            afterChanged[afterStart + afterOffset] = false;
+        }
+    }
+
+    private static int GetMyersLayerValue(int[] layer, int distance, int diagonal)
+        => layer[diagonal + distance];
+
+    private static void MarkPositionallyAlignedMatches(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd,
+        bool[] beforeChanged,
+        bool[] afterChanged)
+    {
+        var pairCount = Math.Min(beforeEnd - beforeStart, afterEnd - afterStart);
+        for (var offset = 0; offset < pairCount; offset++)
+        {
+            if (string.Equals(
+                beforeTexts[beforeStart + offset],
+                afterTexts[afterStart + offset],
+                StringComparison.Ordinal))
+            {
+                beforeChanged[beforeStart + offset] = false;
+                afterChanged[afterStart + offset] = false;
+            }
+        }
+    }
+
+    private static List<BlockAnchor> FindPatienceAnchors(
+        string[] beforeTexts,
+        int beforeStart,
+        int beforeEnd,
+        string[] afterTexts,
+        int afterStart,
+        int afterEnd)
+    {
+        var beforeOccurrences = BuildTextOccurrences(beforeTexts, beforeStart, beforeEnd);
+        var afterOccurrences = BuildTextOccurrences(afterTexts, afterStart, afterEnd);
+        var candidates = new List<BlockAnchor>();
+        for (var index = beforeStart; index < beforeEnd; index++)
+        {
+            var text = beforeTexts[index];
+            if (beforeOccurrences[text].Count == 1
+                && afterOccurrences.TryGetValue(text, out var afterOccurrence)
+                && afterOccurrence.Count == 1)
+            {
+                candidates.Add(new BlockAnchor(index, afterOccurrence.Index));
+            }
+        }
+        if (candidates.Count <= 1)
+        {
+            return candidates;
         }
 
-        var beforeChangedIndexes = beforeBlocks
-            .Skip(commonPrefixLength)
-            .Take(beforeEnd - commonPrefixLength + 1)
-            .Select(static block => block.Index)
-            .ToArray();
-        var afterChangedIndexes = afterBlocks
-            .Skip(commonPrefixLength)
-            .Take(afterEnd - commonPrefixLength + 1)
-            .Select(static block => block.Index)
-            .ToArray();
-        if (beforeChangedIndexes.Length == 0 && afterChangedIndexes.Length == 0)
+        var tails = new int[candidates.Count];
+        var predecessors = new int[candidates.Count];
+        Array.Fill(predecessors, -1);
+        var length = 0;
+        for (var candidateIndex = 0; candidateIndex < candidates.Count; candidateIndex++)
         {
-            return new PreviewDiffPlan([], [], []);
+            var low = 0;
+            var high = length;
+            while (low < high)
+            {
+                var middle = low + ((high - low) / 2);
+                if (candidates[tails[middle]].AfterIndex < candidates[candidateIndex].AfterIndex)
+                {
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle;
+                }
+            }
+            if (low > 0)
+            {
+                predecessors[candidateIndex] = tails[low - 1];
+            }
+            tails[low] = candidateIndex;
+            if (low == length)
+            {
+                length++;
+            }
         }
 
-        var beforeCursor = beforeEnd + 1;
-        var afterCursor = afterEnd + 1;
-        var advancePastCurrentAlignmentGroup =
-            IsAnchorInChangedAlignmentGroup(beforeBlocks, beforeCursor, beforeChangedIndexes)
-            || IsAnchorInChangedAlignmentGroup(afterBlocks, afterCursor, afterChangedIndexes);
-        var change = new PreviewDiffChange(
-            beforeChangedIndexes,
-            afterChangedIndexes,
-            FindAlignmentAnchorIndex(
-                beforeBlocks,
-                beforeCursor,
-                beforeChangedIndexes,
-                advancePastCurrentAlignmentGroup),
-            FindAlignmentAnchorIndex(
-                afterBlocks,
-                afterCursor,
-                afterChangedIndexes,
-                advancePastCurrentAlignmentGroup));
-        return new PreviewDiffPlan(beforeChangedIndexes, afterChangedIndexes, [change]);
+        var anchors = new List<BlockAnchor>(length);
+        var current = tails[length - 1];
+        while (current >= 0)
+        {
+            anchors.Add(candidates[current]);
+            current = predecessors[current];
+        }
+        anchors.Reverse();
+        return anchors;
+    }
+
+    private static Dictionary<string, (int Count, int Index)> BuildTextOccurrences(
+        string[] texts,
+        int start,
+        int end)
+    {
+        var occurrences = new Dictionary<string, (int Count, int Index)>(StringComparer.Ordinal);
+        for (var index = start; index < end; index++)
+        {
+            var text = texts[index];
+            occurrences[text] = occurrences.TryGetValue(text, out var occurrence)
+                ? (occurrence.Count + 1, occurrence.Index)
+                : (1, index);
+        }
+        return occurrences;
+    }
+
+    private static PreviewDiffPlan BuildPlanFromChangedPositions(
+        IReadOnlyList<PreviewDiffBlock> beforeBlocks,
+        IReadOnlyList<PreviewDiffBlock> afterBlocks,
+        string[] beforeTexts,
+        string[] afterTexts,
+        bool[] beforeChangedPositions,
+        bool[] afterChangedPositions)
+    {
+        var beforeChanged = new List<int>();
+        var afterChanged = new List<int>();
+        var changes = new List<PreviewDiffChange>();
+        var currentBeforeIndexes = new List<int>();
+        var currentAfterIndexes = new List<int>();
+        var beforeCursor = 0;
+        var afterCursor = 0;
+        var beforeAlignmentGroups = BuildAlignmentGroupsByIndex(beforeBlocks);
+        var afterAlignmentGroups = BuildAlignmentGroupsByIndex(afterBlocks);
+        void FlushChange()
+        {
+            if (currentBeforeIndexes.Count == 0 && currentAfterIndexes.Count == 0)
+            {
+                return;
+            }
+
+            var advancePastCurrentAlignmentGroup =
+                IsAnchorInChangedAlignmentGroup(
+                    beforeBlocks,
+                    beforeAlignmentGroups,
+                    beforeCursor,
+                    currentBeforeIndexes)
+                || IsAnchorInChangedAlignmentGroup(
+                    afterBlocks,
+                    afterAlignmentGroups,
+                    afterCursor,
+                    currentAfterIndexes);
+            changes.Add(new PreviewDiffChange(
+                currentBeforeIndexes.ToArray(),
+                currentAfterIndexes.ToArray(),
+                FindAlignmentAnchorIndex(
+                    beforeBlocks,
+                    beforeAlignmentGroups,
+                    beforeCursor,
+                    currentBeforeIndexes,
+                    advancePastCurrentAlignmentGroup),
+                FindAlignmentAnchorIndex(
+                    afterBlocks,
+                    afterAlignmentGroups,
+                    afterCursor,
+                    currentAfterIndexes,
+                    advancePastCurrentAlignmentGroup)));
+            currentBeforeIndexes.Clear();
+            currentAfterIndexes.Clear();
+        }
+
+        while (beforeCursor < beforeBlocks.Count || afterCursor < afterBlocks.Count)
+        {
+            if (beforeCursor < beforeBlocks.Count
+                && afterCursor < afterBlocks.Count
+                && !beforeChangedPositions[beforeCursor]
+                && !afterChangedPositions[afterCursor]
+                && string.Equals(beforeTexts[beforeCursor], afterTexts[afterCursor], StringComparison.Ordinal))
+            {
+                FlushChange();
+                beforeCursor++;
+                afterCursor++;
+            }
+            else if (beforeCursor < beforeBlocks.Count && beforeChangedPositions[beforeCursor])
+            {
+                beforeChanged.Add(beforeBlocks[beforeCursor].Index);
+                currentBeforeIndexes.Add(beforeBlocks[beforeCursor].Index);
+                beforeCursor++;
+            }
+            else if (afterCursor < afterBlocks.Count && afterChangedPositions[afterCursor])
+            {
+                afterChanged.Add(afterBlocks[afterCursor].Index);
+                currentAfterIndexes.Add(afterBlocks[afterCursor].Index);
+                afterCursor++;
+            }
+            else
+            {
+                throw new InvalidOperationException("Bounded preview diff produced an unaligned unchanged block.");
+            }
+        }
+        FlushChange();
+        return new PreviewDiffPlan(beforeChanged, afterChanged, changes);
     }
 
     private static bool ExceedsPlanCellBudget(
         int beforeBlockCount,
         int afterBlockCount,
-        long maximumCellCount = _maxGranularPlanCells)
+        long maximumCellCount = _maxPlanCells)
         => ((long)beforeBlockCount + 1) * (afterBlockCount + 1) > maximumCellCount;
+
+    private static bool TryReserveComparisonWork(
+        ref long remainingComparisonWork,
+        int beforeBlockCount,
+        int afterBlockCount)
+    {
+        var requestedWork = (long)beforeBlockCount * afterBlockCount;
+        if (requestedWork > remainingComparisonWork)
+        {
+            return false;
+        }
+
+        remainingComparisonWork -= requestedWork;
+        return true;
+    }
+
+    private static bool TryReserveLinearWork(ref long remainingComparisonWork, long requestedWork)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(requestedWork);
+        if (requestedWork > remainingComparisonWork)
+        {
+            return false;
+        }
+
+        remainingComparisonWork -= requestedWork;
+        return true;
+    }
+
+    private static long EstimatePatienceAnchorWork(int beforeBlockCount, int afterBlockCount)
+    {
+        var maximumCandidateCount = Math.Min(beforeBlockCount, afterBlockCount);
+        var binarySearchSteps = 0;
+        for (var remainingCandidates = maximumCandidateCount; remainingCandidates > 0; remainingCandidates >>= 1)
+        {
+            binarySearchSteps++;
+        }
+
+        return (2L * (beforeBlockCount + (long)afterBlockCount))
+            + ((long)maximumCandidateCount * binarySearchSteps);
+    }
 
     private static int? FindAlignmentAnchorIndex(
         IReadOnlyList<PreviewDiffBlock> blocks,
+        IReadOnlyDictionary<int, string?> alignmentGroupsByIndex,
         int cursor,
         IReadOnlyCollection<int> changedIndexes,
         bool advancePastCurrentAlignmentGroup)
@@ -520,10 +1167,10 @@ internal static class PreviewDiffHighlighter
             return null;
         }
 
-        var changedIndexSet = changedIndexes.ToHashSet();
-        var changedGroups = blocks
-            .Where(block => changedIndexSet.Contains(block.Index) && block.AlignmentGroup is not null)
-            .Select(static block => block.AlignmentGroup!)
+        var changedGroups = changedIndexes
+            .Select(index => alignmentGroupsByIndex.GetValueOrDefault(index))
+            .Where(static group => group is not null)
+            .Select(static group => group!)
             .ToHashSet(StringComparer.Ordinal);
         if (advancePastCurrentAlignmentGroup && blocks[cursor].AlignmentGroup is { } currentGroup)
         {
@@ -541,6 +1188,7 @@ internal static class PreviewDiffHighlighter
 
     private static bool IsAnchorInChangedAlignmentGroup(
         IReadOnlyList<PreviewDiffBlock> blocks,
+        IReadOnlyDictionary<int, string?> alignmentGroupsByIndex,
         int cursor,
         IReadOnlyCollection<int> changedIndexes)
     {
@@ -549,11 +1197,16 @@ internal static class PreviewDiffHighlighter
             return false;
         }
 
-        var changedIndexSet = changedIndexes.ToHashSet();
-        return blocks.Any(
-            block => changedIndexSet.Contains(block.Index)
-                && string.Equals(block.AlignmentGroup, anchorGroup, StringComparison.Ordinal));
+        return changedIndexes.Any(index =>
+            string.Equals(
+                alignmentGroupsByIndex.GetValueOrDefault(index),
+                anchorGroup,
+                StringComparison.Ordinal));
     }
+
+    private static Dictionary<int, string?> BuildAlignmentGroupsByIndex(
+        IReadOnlyList<PreviewDiffBlock> blocks)
+        => blocks.ToDictionary(static block => block.Index, static block => block.AlignmentGroup);
 
     internal static async Task ApplyAlignmentGapsAsync(
         WebView2CompositionControl beforeView,
@@ -568,18 +1221,19 @@ internal static class PreviewDiffHighlighter
         {
             return;
         }
+        var alignmentChanges = CoalesceChangesForAlignment(changes);
 
         var beforeAnchorsJson = JsonSerializer.Serialize(
-            changes.Select(static change => change.BeforeAnchorIndex),
+            alignmentChanges.Select(static change => change.BeforeAnchorIndex),
             _jsonOptions);
         var afterAnchorsJson = JsonSerializer.Serialize(
-            changes.Select(static change => change.AfterAnchorIndex),
+            alignmentChanges.Select(static change => change.AfterAnchorIndex),
             _jsonOptions);
         var beforeCodeWrappingIndexesJson = JsonSerializer.Serialize(
-            GetCodeWrappingCandidateIndexes(changes, PreviewDiffPane.Before),
+            GetCodeWrappingCandidateIndexes(alignmentChanges, PreviewDiffPane.Before),
             _jsonOptions);
         var afterCodeWrappingIndexesJson = JsonSerializer.Serialize(
-            GetCodeWrappingCandidateIndexes(changes, PreviewDiffPane.After),
+            GetCodeWrappingCandidateIndexes(alignmentChanges, PreviewDiffPane.After),
             _jsonOptions);
         var measurements = await Task.WhenAll(
             beforeView.ExecuteScriptAsync(BuildMeasureAlignmentAnchorsScript(
@@ -595,8 +1249,8 @@ internal static class PreviewDiffHighlighter
             return;
         }
 
-        if (beforeMeasurement.Offsets.Length != changes.Count
-            || afterMeasurement.Offsets.Length != changes.Count
+        if (beforeMeasurement.Offsets.Length != alignmentChanges.Count
+            || afterMeasurement.Offsets.Length != alignmentChanges.Count
             || beforeMeasurement.Offsets.Any(static offset => offset is null)
             || afterMeasurement.Offsets.Any(static offset => offset is null))
         {
@@ -604,9 +1258,10 @@ internal static class PreviewDiffHighlighter
         }
 
         var gapPlan = BuildAlignmentGapPlan(
-            changes,
+            alignmentChanges,
             beforeMeasurement.Offsets.Select(static offset => offset!.Value).ToArray(),
             afterMeasurement.Offsets.Select(static offset => offset!.Value).ToArray());
+        gapPlan = AddAlignmentNavigationPlaceholders(gapPlan, changes);
         var synchronizedScrollTop = ResolveSynchronizedScrollTop(
             beforeMeasurement.ScrollTop,
             afterMeasurement.ScrollTop);
@@ -640,6 +1295,36 @@ internal static class PreviewDiffHighlighter
             afterView.ExecuteScriptAsync(finalScrollScript));
     }
 
+    internal static IReadOnlyList<PreviewDiffChange> CoalesceChangesForAlignment(
+        IReadOnlyList<PreviewDiffChange> changes)
+    {
+        ArgumentNullException.ThrowIfNull(changes);
+        if (changes.Count <= MaximumAlignedChangeCount)
+        {
+            return changes;
+        }
+
+        var batchSize = (int)Math.Ceiling(changes.Count / (double)MaximumAlignedChangeCount);
+        var coalesced = new List<PreviewDiffChange>(
+            (changes.Count + batchSize - 1) / batchSize);
+        for (var start = 0; start < changes.Count; start += batchSize)
+        {
+            var count = Math.Min(batchSize, changes.Count - start);
+            var batch = changes.Skip(start).Take(count);
+            var last = changes[start + count - 1];
+            var navigationIndexes = Enumerable.Range(start, count)
+                .SelectMany(index => changes[index].AlignmentNavigationIndexes ?? [index])
+                .ToArray();
+            coalesced.Add(new PreviewDiffChange(
+                batch.SelectMany(static change => change.BeforeIndexes).ToArray(),
+                batch.SelectMany(static change => change.AfterIndexes).ToArray(),
+                last.BeforeAnchorIndex,
+                last.AfterAnchorIndex,
+                navigationIndexes));
+        }
+        return coalesced;
+    }
+
     internal static double ResolveSynchronizedScrollTop(double beforeScrollTop, double afterScrollTop)
         => Math.Max(Math.Max(0, beforeScrollTop), afterScrollTop);
 
@@ -647,6 +1332,37 @@ internal static class PreviewDiffHighlighter
         double beforeScrollTop,
         double afterScrollTop)
         => Math.Min(Math.Max(0, beforeScrollTop), Math.Max(0, afterScrollTop));
+
+    internal static PreviewDiffAlignmentGapPlan AddAlignmentNavigationPlaceholders(
+        PreviewDiffAlignmentGapPlan gapPlan,
+        IReadOnlyList<PreviewDiffChange> changes)
+    {
+        ArgumentNullException.ThrowIfNull(gapPlan);
+        ArgumentNullException.ThrowIfNull(changes);
+        var before = gapPlan.Before.ToList();
+        var after = gapPlan.After.ToList();
+        for (var index = 0; index < changes.Count; index++)
+        {
+            var change = changes[index];
+            if (change.BeforeIndexes.Count == 0)
+            {
+                before.Add(new PreviewDiffAlignmentGap(
+                    change.BeforeAnchorIndex,
+                    0,
+                    index,
+                    NavigationOnly: true));
+            }
+            if (change.AfterIndexes.Count == 0)
+            {
+                after.Add(new PreviewDiffAlignmentGap(
+                    change.AfterAnchorIndex,
+                    0,
+                    index,
+                    NavigationOnly: true));
+            }
+        }
+        return new PreviewDiffAlignmentGapPlan(before, after);
+    }
 
     internal static IReadOnlyList<int> GetCodeWrappingCandidateIndexes(
         IReadOnlyList<PreviewDiffChange> changes,
@@ -719,15 +1435,23 @@ internal static class PreviewDiffHighlighter
             }
 
             var change = changes[index];
+            var navigationIndexes = change.AlignmentNavigationIndexes ?? [index];
+            var navigationIndex = navigationIndexes[^1];
             if (delta < 0)
             {
                 var height = -delta;
-                beforeGaps.Add(new PreviewDiffAlignmentGap(change.BeforeAnchorIndex, height, index));
+                beforeGaps.Add(new PreviewDiffAlignmentGap(
+                    change.BeforeAnchorIndex,
+                    height,
+                    navigationIndex));
                 cumulativeBeforeGap += height;
             }
             else
             {
-                afterGaps.Add(new PreviewDiffAlignmentGap(change.AfterAnchorIndex, delta, index));
+                afterGaps.Add(new PreviewDiffAlignmentGap(
+                    change.AfterAnchorIndex,
+                    delta,
+                    navigationIndex));
                 cumulativeAfterGap += delta;
             }
         }
@@ -752,7 +1476,10 @@ internal static class PreviewDiffHighlighter
   const scrollingRoot = document.scrollingElement || document.documentElement || document.body;
   const scrollTop = window.scrollY || scrollingRoot?.scrollTop || 0;
   const existingGapElements = Array.from(
-    document.querySelectorAll('.rsr-preview-diff-alignment-gap-row,.rsr-preview-diff-alignment-gap'));
+    document.querySelectorAll(
+      '.rsr-preview-diff-alignment-gap-row,' +
+      '.rsr-preview-diff-alignment-gap,' +
+      '.rsr-preview-diff-navigation-placeholder'));
   existingGapElements.forEach((element) => {
     element.style.setProperty('display', 'none', 'important');
   });
@@ -794,10 +1521,13 @@ pre.rsr-preview-diff-aligned-code code {
   root.querySelectorAll('pre.rsr-preview-diff-aligned-code').forEach((element) => {
     element.classList.remove('rsr-preview-diff-aligned-code');
   });
+  const diffElements = Array.from(root.querySelectorAll('[data-rsr-diff-index]'));
+  const diffElementsByIndex = new Map(
+    diffElements.map((element) => [Number(element.getAttribute('data-rsr-diff-index')), element]));
   {{codeWrappingIndexesJson}}.forEach((index) => {
     const target = index >= 0
-      ? document.querySelector(`[data-rsr-diff-index="${index}"]`)
-      : Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1);
+      ? diffElementsByIndex.get(index)
+      : diffElements.at(-1);
     const codeBlock = target?.matches('pre') ? target : target?.closest('pre');
     codeBlock?.classList.add('rsr-preview-diff-aligned-code');
   });
@@ -805,7 +1535,7 @@ pre.rsr-preview-diff-aligned-code code {
       if (anchorIndex === null) {
         return root.getBoundingClientRect().bottom + window.scrollY;
       }
-      const anchor = document.querySelector(`[data-rsr-diff-index="${anchorIndex}"]`);
+      const anchor = diffElementsByIndex.get(anchorIndex);
       return anchor
         ? anchor.getBoundingClientRect().top + window.scrollY
         : null;
@@ -869,6 +1599,21 @@ td.rsr-preview-diff-alignment-gap {
   display: table-cell !important;
   width: auto !important;
 }
+.rsr-preview-diff-navigation-placeholder {
+  background: none !important;
+  border: 0 !important;
+  box-sizing: border-box !important;
+  display: block !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  position: relative !important;
+  width: 100% !important;
+}
+td.rsr-preview-diff-navigation-placeholder {
+  display: table-cell !important;
+  width: auto !important;
+}
 `;
     document.head.appendChild(style);
   }
@@ -876,7 +1621,8 @@ td.rsr-preview-diff-alignment-gap {
   document.querySelectorAll(
     '.rsr-preview-diff-alignment-gap-section,' +
     '.rsr-preview-diff-alignment-gap-row,' +
-    '.rsr-preview-diff-alignment-gap').forEach((element) => {
+    '.rsr-preview-diff-alignment-gap,' +
+    '.rsr-preview-diff-navigation-placeholder').forEach((element) => {
     element.remove();
   });
   const root =
@@ -904,6 +1650,22 @@ td.rsr-preview-diff-alignment-gap {
     element.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
     setGapHeight(element, height);
     return element;
+  };
+  const createNavigationPlaceholder = (navigationIndex, tagName = 'div') => {
+    const container = document.createElement(tagName);
+    container.className = 'rsr-preview-diff-navigation-placeholder';
+    container.setAttribute('aria-hidden', 'true');
+    container.setAttribute('role', 'presentation');
+    container.style.height = '0';
+    container.style.position = 'relative';
+    const target = document.createElement('span');
+    target.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
+    target.style.display = 'block';
+    target.style.height = '1px';
+    target.style.inset = '0 0 auto';
+    target.style.position = 'absolute';
+    container.appendChild(target);
+    return container;
   };
   const insertGapBefore = (anchor, gap, desiredHeight) => {
     const anchorTopBefore = anchor.getBoundingClientRect().top;
@@ -1025,12 +1787,35 @@ td.rsr-preview-diff-alignment-gap {
     return widestColumnCount;
   };
   const gaps = {{gapsJson}};
+  const diffElements = Array.from(root.querySelectorAll('[data-rsr-diff-index]'));
+  const diffElementsByIndex = new Map(
+    diffElements.map((element) => [Number(element.getAttribute('data-rsr-diff-index')), element]));
   gaps.forEach((gap) => {
-    const height = Math.max(1, Number(gap.height) || 0);
+    const height = gap.navigationOnly ? 0 : Math.max(1, Number(gap.height) || 0);
     const anchor = gap.anchorIndex === null
       ? null
-      : document.querySelector(`[data-rsr-diff-index="${gap.anchorIndex}"]`);
+      : diffElementsByIndex.get(gap.anchorIndex);
     const row = anchor?.closest('tr');
+    if (gap.navigationOnly) {
+      if (row?.parentNode) {
+        const placeholderRow = document.createElement('tr');
+        placeholderRow.className = 'rsr-preview-diff-alignment-gap-row';
+        placeholderRow.setAttribute('aria-hidden', 'true');
+        placeholderRow.setAttribute('role', 'presentation');
+        const placeholderCell = createNavigationPlaceholder(gap.navigationIndex, 'td');
+        placeholderCell.colSpan = getTableColumnCount(row.closest('table'));
+        placeholderRow.appendChild(placeholderCell);
+        row.parentNode.insertBefore(placeholderRow, row);
+      } else {
+        const placeholder = createNavigationPlaceholder(gap.navigationIndex);
+        if (anchor?.parentNode) {
+          anchor.parentNode.insertBefore(placeholder, anchor);
+        } else {
+          root.appendChild(placeholder);
+        }
+      }
+      return;
+    }
     if (row?.parentNode) {
       const gapRow = document.createElement('tr');
       gapRow.className = 'rsr-preview-diff-alignment-gap-row';
@@ -1045,16 +1830,22 @@ td.rsr-preview-diff-alignment-gap {
     }
     if (anchor?.parentNode) {
       const tagName = anchor.matches('.rsr-code-line') ? 'span' : 'div';
-      insertGapBefore(anchor, createGap(height, gap.navigationIndex, tagName), height);
+      insertGapBefore(
+        anchor,
+        createGap(height, gap.navigationIndex, tagName),
+        height);
       return;
     }
     const terminalElement =
-      Array.from(root.querySelectorAll('[data-rsr-diff-index]')).at(-1);
+      diffElements.at(-1);
     const terminalRow = terminalElement?.closest('tr');
     if (terminalRow?.parentNode) {
       const table = terminalRow.closest('table');
       if (terminalRow.parentElement?.matches('tfoot')) {
-        insertGapAfter(table, createGap(height, gap.navigationIndex), height);
+        insertGapAfter(
+          table,
+          createGap(height, gap.navigationIndex),
+          height);
         return;
       }
       const gapSection = document.createElement('tbody');
@@ -1247,8 +2038,12 @@ td.rsr-preview-diff-alignment-gap {
     document.head.appendChild(style);
   }
 
-  document.querySelectorAll('.rsr-preview-diff-block,[data-rsr-diff-navigation-index]').forEach((element) => {
-    element.classList.remove('rsr-preview-diff-block', 'rsr-preview-diff-before', 'rsr-preview-diff-after');
+  document.querySelectorAll('.rsr-preview-diff-target,[data-rsr-diff-navigation-index]').forEach((element) => {
+    element.classList.remove(
+      'rsr-preview-diff-target',
+      'rsr-preview-diff-block',
+      'rsr-preview-diff-before',
+      'rsr-preview-diff-after');
     element.removeAttribute('data-rsr-diff-navigation-index');
   });
 
@@ -1256,14 +2051,21 @@ td.rsr-preview-diff-alignment-gap {
   const navigationIndexes = new Map(
     {{navigationTargetsJson}}.map((target) => [target.index, target.navigationIndex]));
   const pane = {{paneJson}};
+  const renderedDiffSelector = '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
+  const diffElementsByIndex = new Map(
+    Array.from(document.querySelectorAll('[data-rsr-diff-index]'))
+      .map((element) => [Number(element.getAttribute('data-rsr-diff-index')), element]));
   changedIndexes.forEach((index) => {
-    const element = document.querySelector(`[data-rsr-diff-index="${index}"]`);
+    const element = diffElementsByIndex.get(index);
     if (!element) {
       return;
     }
-    element.classList.add(
-      'rsr-preview-diff-block',
-      pane === 'before' ? 'rsr-preview-diff-before' : 'rsr-preview-diff-after');
+    element.classList.add('rsr-preview-diff-target');
+    if (!element.matches(renderedDiffSelector) && !element.querySelector(renderedDiffSelector)) {
+      element.classList.add(
+        'rsr-preview-diff-block',
+        pane === 'before' ? 'rsr-preview-diff-before' : 'rsr-preview-diff-after');
+    }
     if (navigationIndexes.has(index)) {
       element.setAttribute(
         'data-rsr-diff-navigation-index',
@@ -1275,7 +2077,7 @@ td.rsr-preview-diff-alignment-gap {
   const buildMarkers = () => {
     document.getElementById(markerRootId)?.remove();
     const markerElements = Array.from(
-      document.querySelectorAll('.rsr-preview-diff-block,[data-rsr-diff-navigation-index]'));
+      document.querySelectorAll('.rsr-preview-diff-target,[data-rsr-diff-navigation-index]'));
     if (markerElements.length === 0) {
       return;
     }
@@ -1321,14 +2123,43 @@ td.rsr-preview-diff-alignment-gap {
           const alignmentGapSelector =
             '.rsr-preview-diff-alignment-gap,' +
             '.rsr-preview-diff-alignment-gap-row,' +
-            '.rsr-preview-diff-alignment-gap-section';
-          const hasSubstantiveChange = segment.elements.some(
-            (element) => !element.matches(alignmentGapSelector));
-          const isRemoval = hasSubstantiveChange ? pane === 'before' : pane === 'after';
+            '.rsr-preview-diff-alignment-gap-section,' +
+            '.rsr-preview-diff-navigation-placeholder';
+          const isAlignmentGapTarget = (element) =>
+            element.matches(alignmentGapSelector)
+              || element.closest(alignmentGapSelector) !== null;
+          const substantiveTargets = segment.elements.filter(
+            (element) => !isAlignmentGapTarget(element));
+          const resolvedTargets = segment.elements.flatMap((element) => {
+            const inlineTargets = [
+              ...(element.matches(renderedDiffSelector) ? [element] : []),
+              ...element.querySelectorAll(renderedDiffSelector),
+            ];
+            if (inlineTargets.length > 0) {
+              return inlineTargets;
+            }
+            return isAlignmentGapTarget(element) ? [] : [element];
+          });
+          const markerTargets =
+            resolvedTargets.length > 0 ? resolvedTargets : segment.elements;
+          const rects = markerTargets
+            .map((element) => element.getBoundingClientRect())
+            .filter((rect) => rect.width > 0 && rect.height > 0);
+          if (rects.length === 0) {
+            return;
+          }
+          const hasSubstantiveChange = substantiveTargets.length > 0;
+          const hasRemovedMarker = markerTargets.some(
+            (element) => element.matches('.rsr-rendered-diff-removed'));
+          const hasAddedMarker = markerTargets.some(
+            (element) => element.matches('.rsr-rendered-diff-added'));
+          const isRemoval = hasRemovedMarker !== hasAddedMarker
+            ? hasRemovedMarker
+            : hasSubstantiveChange ? pane === 'before' : pane === 'after';
           const marker = document.createElement('div');
           marker.className = `rsr-preview-diff-scrollbar-marker ${isRemoval ? 'rsr-preview-diff-scrollbar-marker-before' : 'rsr-preview-diff-scrollbar-marker-after'}`;
-          const absoluteTop = Math.min(...segment.rects.map((rect) => rect.top)) + window.scrollY;
-          const absoluteBottom = Math.max(...segment.rects.map((rect) => rect.bottom)) + window.scrollY;
+          const absoluteTop = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
+          const absoluteBottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
           const top = Math.max(0, Math.min(1, absoluteTop / documentHeight));
           const height = Math.max(4, Math.min(window.innerHeight, ((absoluteBottom - absoluteTop) / documentHeight) * window.innerHeight));
           const markerTop = Math.max(0, Math.min(window.innerHeight - height, top * window.innerHeight));
@@ -1448,26 +2279,38 @@ td.rsr-preview-diff-alignment-gap {
   const renderedDiffSelector =
     '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
   const resolveOverlayTargets = () => {
+    const alignmentGapSelector =
+      '.rsr-preview-diff-alignment-gap,' +
+      '.rsr-preview-diff-alignment-gap-row,' +
+      '.rsr-preview-diff-alignment-gap-section,' +
+      '.rsr-preview-diff-navigation-placeholder';
+    const isAlignmentGapTarget = (target) =>
+      target.matches(alignmentGapSelector)
+        || target.closest(alignmentGapSelector) !== null;
     const contentTargets = targets.filter(
-      (target) => !target.classList.contains('rsr-preview-diff-alignment-gap'));
-    const renderedDiffTargets = contentTargets.flatMap((target) => [
-      ...(target.matches(renderedDiffSelector) ? [target] : []),
-      ...target.querySelectorAll(renderedDiffSelector),
-    ]);
-    if (renderedDiffTargets.length > 0) {
-      return Array.from(new Set(renderedDiffTargets));
-    }
-    const highlightedContentTargets = contentTargets.filter(
-      (target) => target.classList.contains('rsr-preview-diff-block'));
-    if (highlightedContentTargets.length > 0) {
-      return highlightedContentTargets;
+      (target) => !isAlignmentGapTarget(target));
+    const substantiveContentTargets = contentTargets.filter(
+      (target) =>
+        target.classList.contains('rsr-preview-diff-block')
+          || target.classList.contains('rsr-preview-diff-target')
+          || target.matches(renderedDiffSelector)
+          || target.querySelector(renderedDiffSelector));
+    const resolvedContentTargets = substantiveContentTargets.flatMap((target) => {
+      const renderedDiffTargets = [
+        ...(target.matches(renderedDiffSelector) ? [target] : []),
+        ...target.querySelectorAll(renderedDiffSelector),
+      ];
+      return renderedDiffTargets.length > 0 ? renderedDiffTargets : [target];
+    });
+    if (resolvedContentTargets.length > 0) {
+      return Array.from(new Set(resolvedContentTargets));
     }
     const alignmentGapTargets = targets.filter(
-      (target) => target.classList.contains('rsr-preview-diff-alignment-gap'));
+      (target) => isAlignmentGapTarget(target));
     if (alignmentGapTargets.length > 0) {
       return alignmentGapTargets;
     }
-    return contentTargets.length > 0 ? contentTargets : targets;
+    return targets;
   };
   let overlayTargets = resolveOverlayTargets();
   const root = document.scrollingElement || document.documentElement || document.body;
