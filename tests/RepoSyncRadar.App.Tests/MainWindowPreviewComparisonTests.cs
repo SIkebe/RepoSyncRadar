@@ -805,6 +805,9 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(
             plan.Changes.Sum(static change => change.AfterIndexes.Count),
             alignmentChanges.Sum(static change => change.AfterIndexes.Count));
+        Assert.Equal(
+            Enumerable.Range(0, plan.Changes.Count),
+            alignmentChanges.SelectMany(static change => change.AlignmentNavigationIndexes!));
     }
 
     [Fact]
@@ -962,6 +965,7 @@ public sealed class MainWindowPreviewComparisonTests
 
         var beforeGap = Assert.Single(gaps.Before);
         Assert.Equal(0, beforeGap.NavigationIndex);
+        Assert.Equal([0], beforeGap.NavigationIndexes);
         Assert.Equal(1, beforeGap.AnchorIndex);
         Assert.Equal(80, beforeGap.Height, precision: 3);
         Assert.Empty(gaps.After);
@@ -1090,7 +1094,11 @@ public sealed class MainWindowPreviewComparisonTests
             "terminalRow.parentElement?.matches('tfoot')",
             applyScript,
             StringComparison.Ordinal);
-        Assert.Contains("insertGapAfter(table", applyScript, StringComparison.Ordinal);
+        Assert.Contains(
+            "insertGapAfter(\n          table,",
+            applyScript,
+            StringComparison.Ordinal);
+        Assert.Contains("gap.navigationIndexes", applyScript, StringComparison.Ordinal);
         Assert.Contains(
             ".rsr-preview-diff-alignment-gap-section",
             applyScript,

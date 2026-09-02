@@ -25,12 +25,14 @@ internal sealed record PreviewDiffChange(
     IReadOnlyList<int> BeforeIndexes,
     IReadOnlyList<int> AfterIndexes,
     int? BeforeAnchorIndex,
-    int? AfterAnchorIndex);
+    int? AfterAnchorIndex,
+    IReadOnlyList<int>? AlignmentNavigationIndexes = null);
 
 internal sealed record PreviewDiffAlignmentGap(
     [property: JsonPropertyName("anchorIndex")] int? AnchorIndex,
     [property: JsonPropertyName("height")] double Height,
-    [property: JsonPropertyName("navigationIndex")] int NavigationIndex);
+    [property: JsonPropertyName("navigationIndex")] int NavigationIndex,
+    [property: JsonPropertyName("navigationIndexes")] IReadOnlyList<int>? NavigationIndexes = null);
 
 internal sealed record PreviewDiffAlignmentGapPlan(
     IReadOnlyList<PreviewDiffAlignmentGap> Before,
@@ -1309,11 +1311,15 @@ internal static class PreviewDiffHighlighter
             var count = Math.Min(batchSize, changes.Count - start);
             var batch = changes.Skip(start).Take(count);
             var last = changes[start + count - 1];
+            var navigationIndexes = Enumerable.Range(start, count)
+                .SelectMany(index => changes[index].AlignmentNavigationIndexes ?? [index])
+                .ToArray();
             coalesced.Add(new PreviewDiffChange(
                 batch.SelectMany(static change => change.BeforeIndexes).ToArray(),
                 batch.SelectMany(static change => change.AfterIndexes).ToArray(),
                 last.BeforeAnchorIndex,
-                last.AfterAnchorIndex));
+                last.AfterAnchorIndex,
+                navigationIndexes));
         }
         return coalesced;
     }
@@ -1397,15 +1403,25 @@ internal static class PreviewDiffHighlighter
             }
 
             var change = changes[index];
+            var navigationIndexes = change.AlignmentNavigationIndexes ?? [index];
+            var navigationIndex = navigationIndexes[^1];
             if (delta < 0)
             {
                 var height = -delta;
-                beforeGaps.Add(new PreviewDiffAlignmentGap(change.BeforeAnchorIndex, height, index));
+                beforeGaps.Add(new PreviewDiffAlignmentGap(
+                    change.BeforeAnchorIndex,
+                    height,
+                    navigationIndex,
+                    navigationIndexes));
                 cumulativeBeforeGap += height;
             }
             else
             {
-                afterGaps.Add(new PreviewDiffAlignmentGap(change.AfterAnchorIndex, delta, index));
+                afterGaps.Add(new PreviewDiffAlignmentGap(
+                    change.AfterAnchorIndex,
+                    delta,
+                    navigationIndex,
+                    navigationIndexes));
                 cumulativeAfterGap += delta;
             }
         }
@@ -1577,12 +1593,23 @@ td.rsr-preview-diff-alignment-gap {
       `${separatorHeight.toFixed(2)}px`);
     element.style.height = `${height.toFixed(2)}px`;
   };
-  const createGap = (height, navigationIndex, tagName = 'div') => {
+  const createGap = (height, navigationIndex, tagName = 'div', navigationIndexes = null) => {
     const element = document.createElement(tagName);
     element.className = 'rsr-preview-diff-alignment-gap';
     element.setAttribute('aria-hidden', 'true');
     element.setAttribute('role', 'presentation');
     element.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
+    (navigationIndexes || []).forEach((index) => {
+      if (index === navigationIndex) {
+        return;
+      }
+      const placeholder = document.createElement('span');
+      placeholder.setAttribute('aria-hidden', 'true');
+      placeholder.setAttribute('data-rsr-diff-navigation-index', String(index));
+      placeholder.style.display = 'block';
+      placeholder.style.height = '0';
+      element.appendChild(placeholder);
+    });
     setGapHeight(element, height);
     return element;
   };
@@ -1720,7 +1747,7 @@ td.rsr-preview-diff-alignment-gap {
       gapRow.className = 'rsr-preview-diff-alignment-gap-row';
       gapRow.setAttribute('aria-hidden', 'true');
       gapRow.setAttribute('role', 'presentation');
-      const gapCell = createGap(height, gap.navigationIndex, 'td');
+      const gapCell = createGap(height, gap.navigationIndex, 'td', gap.navigationIndexes);
       const table = row.closest('table');
       gapCell.colSpan = getTableColumnCount(table);
       gapRow.appendChild(gapCell);
@@ -1729,7 +1756,10 @@ td.rsr-preview-diff-alignment-gap {
     }
     if (anchor?.parentNode) {
       const tagName = anchor.matches('.rsr-code-line') ? 'span' : 'div';
-      insertGapBefore(anchor, createGap(height, gap.navigationIndex, tagName), height);
+      insertGapBefore(
+        anchor,
+        createGap(height, gap.navigationIndex, tagName, gap.navigationIndexes),
+        height);
       return;
     }
     const terminalElement =
@@ -1738,7 +1768,10 @@ td.rsr-preview-diff-alignment-gap {
     if (terminalRow?.parentNode) {
       const table = terminalRow.closest('table');
       if (terminalRow.parentElement?.matches('tfoot')) {
-        insertGapAfter(table, createGap(height, gap.navigationIndex), height);
+        insertGapAfter(
+          table,
+          createGap(height, gap.navigationIndex, 'div', gap.navigationIndexes),
+          height);
         return;
       }
       const gapSection = document.createElement('tbody');
@@ -1749,7 +1782,7 @@ td.rsr-preview-diff-alignment-gap {
       gapRow.className = 'rsr-preview-diff-alignment-gap-row';
       gapRow.setAttribute('aria-hidden', 'true');
       gapRow.setAttribute('role', 'presentation');
-      const gapCell = createGap(height, gap.navigationIndex, 'td');
+      const gapCell = createGap(height, gap.navigationIndex, 'td', gap.navigationIndexes);
       gapCell.colSpan = getTableColumnCount(table);
       gapRow.appendChild(gapCell);
       gapSection.appendChild(gapRow);
@@ -1769,11 +1802,15 @@ td.rsr-preview-diff-alignment-gap {
         : terminalContext.matches('li') ? 'li' : 'div';
       insertGapAfter(
         terminalContext,
-        createGap(height, gap.navigationIndex, tagName),
+        createGap(height, gap.navigationIndex, tagName, gap.navigationIndexes),
         height);
       return;
     }
-    root.appendChild(createGap(height, gap.navigationIndex));
+    root.appendChild(createGap(
+      height,
+      gap.navigationIndex,
+      'div',
+      gap.navigationIndexes));
   });
   window.__repoSyncRadarDiffNavigation?.refresh?.();
   window.__repoSyncRadarDiffScrollbar?.scheduleBuild?.();
