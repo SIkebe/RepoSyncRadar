@@ -68,30 +68,31 @@
   </ItemGroup>
 
   <!--
-    GitHub.Copilot.SDK の targets は build 時に $(OutDir)runtimes\<rid>\native\copilot.exe を
-    配置するが、PublishSingleFile=true で publish するとこのネイティブ実行ファイルが
-    publish 出力 ($(PublishDir)) に伝播せず、Velopack で pack されたインストール版で
-    "Copilot runtime not found" になる。Build 出力に存在する copilot.exe を publish 後に
-    明示的にコピーしてこれを回避する。CopilotSkipCliDownload=true や RuntimeIdentifier 未指定の
-    クロスビルドでは copilot.exe が無いので Condition で no-op にする。
+    GitHub.Copilot.SDK の targets は build 時に $(OutDir)runtimes\<rid>\native 配下へ
+    CLI と managed runtime assets を配置するが、PublishSingleFile=true では publish 出力
+    ($(PublishDir)) に伝播しない。Build 出力の native directory を publish 後にコピーし、
+    installed app が SDK の runtime wrapper または explicit CLI marker を解決できるようにする。
+    CopilotSkipCliDownload=true や RuntimeIdentifier 未指定のクロスビルドでは source directory
+    が無いので Condition で no-op にする。
   -->
   <Target Name="CopyCopilotRuntimeAfterPublish"
           AfterTargets="Publish"
           Condition="'$(RuntimeIdentifier)' != '' And '$(CopilotSkipCliDownload)' != 'true'">
     <PropertyGroup>
-      <_CopilotPublishBinaryName Condition="$(RuntimeIdentifier.StartsWith('win-'))">copilot.exe</_CopilotPublishBinaryName>
-      <_CopilotPublishBinaryName Condition="'$(_CopilotPublishBinaryName)' == ''">copilot</_CopilotPublishBinaryName>
-      <_CopilotPublishSource>$(OutDir)runtimes\$(RuntimeIdentifier)\native\$(_CopilotPublishBinaryName)</_CopilotPublishSource>
+      <_CopilotPublishSourceDir>$(OutDir)runtimes\$(RuntimeIdentifier)\native\</_CopilotPublishSourceDir>
       <_CopilotPublishDestDir>$(PublishDir)runtimes\$(RuntimeIdentifier)\native\</_CopilotPublishDestDir>
     </PropertyGroup>
-    <Warning Text="GitHub.Copilot.SDK runtime '$(_CopilotPublishSource)' not found during publish; the published app will fail with 'Copilot runtime not found'."
-             Condition="!Exists('$(_CopilotPublishSource)')" />
+    <ItemGroup>
+      <_CopilotPublishRuntimeAsset Include="$(_CopilotPublishSourceDir)**\*" />
+    </ItemGroup>
+    <Warning Text="GitHub.Copilot.SDK runtime assets were not found under '$(_CopilotPublishSourceDir)'; the published app will fail with 'Copilot runtime not found'."
+             Condition="'@(_CopilotPublishRuntimeAsset)' == ''" />
     <MakeDir Directories="$(_CopilotPublishDestDir)"
-             Condition="Exists('$(_CopilotPublishSource)')" />
-    <Copy SourceFiles="$(_CopilotPublishSource)"
-          DestinationFolder="$(_CopilotPublishDestDir)"
+             Condition="'@(_CopilotPublishRuntimeAsset)' != ''" />
+    <Copy SourceFiles="@(_CopilotPublishRuntimeAsset)"
+          DestinationFiles="@(_CopilotPublishRuntimeAsset->'$(_CopilotPublishDestDir)%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true"
-          Condition="Exists('$(_CopilotPublishSource)')" />
+          Condition="'@(_CopilotPublishRuntimeAsset)' != ''" />
   </Target>
 
 </Project>
