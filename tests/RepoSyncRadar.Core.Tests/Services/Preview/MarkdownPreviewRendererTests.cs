@@ -3489,6 +3489,46 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Omits_Gaps_Inside_Merged_Changed_Ranges()
+    {
+        const string beforeMarkdown =
+            "prefix oldvalueaaaaaaaa01 oldvalueaaaaaaaa02 oldvalueaaaaaaaa03 oldvalueaaaaaaaa04 "
+            + "oldvalueaaaaaaaa05 oldvalueaaaaaaaa06 oldvalueaaaaaaaa07 oldvalueaaaaaaaa08 a b "
+            + "oldvalueaaaaaaaa09 oldvalueaaaaaaaa10 oldvalueaaaaaaaa11 oldvalueaaaaaaaa12 suffix";
+        const string afterMarkdown =
+            "prefix newvaluezzzzzzzz01 newvaluezzzzzzzz02 newvaluezzzzzzzz03 newvaluezzzzzzzz04 "
+            + "newvaluezzzzzzzz05 newvaluezzzzzzzz06 newvaluezzzzzzzz07 newvaluezzzzzzzz08 a inserted b "
+            + "newvaluezzzzzzzz09 newvaluezzzzzzzz10 newvaluezzzzzzzz11 newvaluezzzzzzzz12 suffix";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "parentsha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var body = beforeHtml[beforeHtml.IndexOf("<body", StringComparison.Ordinal)..];
+
+        Assert.DoesNotContain("rsr-rendered-diff-gap", body, StringComparison.Ordinal);
+        Assert.Contains("rsr-rendered-diff-removed", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;span", body, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(11, true)]
+    [InlineData(10, false)]
+    [InlineData(20, false)]
+    [InlineData(21, false)]
+    public void Gap_Filter_Excludes_Only_Indexes_Strictly_Inside_Changed_Range(
+        int gapIndex,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            MarkdownPreviewRenderer.IsGapStrictlyInsideChangedRange(gapIndex, rangeStart: 10, rangeEnd: 20));
+    }
+
+    [Fact]
     public void RenderDocument_Marks_Formatting_Only_Emphasis_Changes_Without_Breaking_Markdown()
     {
         const string beforeMarkdown = "**important**";

@@ -4096,9 +4096,13 @@ internal static partial class MarkdownPreviewRenderer
             mergedRanges[^1] = new InlineChangedRange(previous.Start, end - previous.Start);
         }
 
+        var gapIndexes = granularDiff.GapIndexes
+            .Where(index => !mergedRanges.Any(
+                range => IsGapStrictlyInsideChangedRange(index, range.Start, range.End)))
+            .ToArray();
         var operations = mergedRanges
             .Select(static range => (Position: range.Start, Range: (InlineChangedRange?)range))
-            .Concat(granularDiff.GapIndexes.Select(static index => (Position: index, Range: (InlineChangedRange?)null)))
+            .Concat(gapIndexes.Select(static index => (Position: index, Range: (InlineChangedRange?)null)))
             .OrderByDescending(static operation => operation.Position);
         var markedContent = content;
         foreach (var operation in operations)
@@ -4111,6 +4115,9 @@ internal static partial class MarkdownPreviewRenderer
         }
         return markedContent;
     }
+
+    internal static bool IsGapStrictlyInsideChangedRange(int gapIndex, int rangeStart, int rangeEnd)
+        => gapIndex > rangeStart && gapIndex < rangeEnd;
 
     private static InlineChangedRange ExpandRangeAcrossMarkdownFormattingDelimiters(
         string content,
