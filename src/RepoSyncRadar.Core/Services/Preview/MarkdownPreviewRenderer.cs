@@ -3041,9 +3041,12 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var changedTokens = new bool[contentTokens.Count];
+        var comparisonChangedTokens = new bool[comparisonTokens.Count];
         var gapTokenBoundaries = new List<InlineGapBoundary>();
         var current = 0;
         var comparison = 0;
+        var advanceCurrentOnTie =
+            string.CompareOrdinal(content, comparisonContent) <= 0;
         while (current < contentTokens.Count && comparison < comparisonTokens.Count)
         {
             if (string.Equals(
@@ -3056,14 +3059,13 @@ internal static partial class MarkdownPreviewRenderer
             }
             else if (lengths[current + 1, comparison] > lengths[current, comparison + 1]
                 || (lengths[current + 1, comparison] == lengths[current, comparison + 1]
-                    && string.CompareOrdinal(
-                        contentTokens[current].Value,
-                        comparisonTokens[comparison].Value) < 0))
+                    && advanceCurrentOnTie))
             {
                 changedTokens[current++] = true;
             }
             else
             {
+                comparisonChangedTokens[comparison] = true;
                 var containsMarkdownFormatting = IsMarkdownFormattingToken(
                     comparisonTokens[comparison].Value);
                 var containsInlineHtml = IsPositionInsideInlineHtmlTag(
@@ -3094,6 +3096,7 @@ internal static partial class MarkdownPreviewRenderer
         Array.Fill(changedTokens, true, current, changedTokens.Length - current);
         while (comparison < comparisonTokens.Count)
         {
+            comparisonChangedTokens[comparison] = true;
             var containsMarkdownFormatting = IsMarkdownFormattingToken(
                 comparisonTokens[comparison].Value);
             var containsInlineHtml = IsPositionInsideInlineHtmlTag(
@@ -3145,6 +3148,24 @@ internal static partial class MarkdownPreviewRenderer
         }
 
         var granularLength = ranges.Sum(static range => range.Length);
+        var comparisonGranularLength = CalculateGranularChangedLength(
+            comparisonContent,
+            comparisonTokens,
+            comparisonChangedTokens);
+        var comparisonFallbackLength =
+            FindInlineChangedRange(comparisonContent, content).Length;
+        var useGranularRanges = granularLength > 0
+            && comparisonGranularLength > 0
+            && (granularLength * 5 < fallbackRange.Length * 4
+                || comparisonGranularLength * 5 < comparisonFallbackLength * 4);
+        var isFormattingOnlyChange = contentTokens
+            .Where(static token => !IsMarkdownFormattingToken(token.Value))
+            .Select(static token => token.Value)
+            .SequenceEqual(
+                comparisonTokens
+                    .Where(static token => !IsMarkdownFormattingToken(token.Value))
+                    .Select(static token => token.Value),
+                StringComparer.Ordinal);
         var gaps = gapTokenBoundaries
             .Where(gap =>
                 (gap.Boundary == 0 || !changedTokens[gap.Boundary - 1])
@@ -3181,9 +3202,6 @@ internal static partial class MarkdownPreviewRenderer
                     externalHtmlGaps[0].Index,
                     externalHtmlGaps[1].Index - externalHtmlGaps[0].Index)
                 : null;
-        var hasFormattingGap = gaps.Any(static gap => gap.ContainsMarkdownFormatting)
-            || currentTagHtmlGaps.Length > 0
-            || pairedExternalHtmlRange is not null;
         var htmlGapRanges = currentTagHtmlGaps
             .Select(gap => new InlineChangedRange(
                 Math.Min(gap.Index, content.Length - 1),
@@ -3191,13 +3209,21 @@ internal static partial class MarkdownPreviewRenderer
             .Concat(pairedExternalHtmlRange is { } pairedRange
                 ? [pairedRange]
                 : []);
-        var changedRanges = granularLength > 0 && granularLength * 5 < fallbackRange.Length * 4
-            ? ranges
-            : gaps.Length > 0
-                && granularLength == 0
-                && !hasFormattingGap
-                ? []
-                : [fallbackRange];
+        var currentFormattingTokens = contentTokens
+            .Where(static token => IsMarkdownFormattingToken(token.Value))
+            .ToArray();
+        var formattingOnlyRange = currentFormattingTokens.Length > 0
+            ? new InlineChangedRange(
+                currentFormattingTokens[0].Start,
+                currentFormattingTokens[^1].End - currentFormattingTokens[0].Start)
+            : fallbackRange;
+        var changedRanges = isFormattingOnlyChange
+            ? [formattingOnlyRange]
+            : useGranularRanges
+                ? ranges
+                : gaps.Length > 0 && granularLength == 0
+                    ? []
+                    : [fallbackRange];
         return new GranularInlineDiff(
             changedRanges.Concat(htmlGapRanges).ToArray(),
             gaps
@@ -3205,6 +3231,7 @@ internal static partial class MarkdownPreviewRenderer
                     (!gap.ContainsInlineHtml
                         || (!IsPositionInsideInlineHtmlTag(content, gap.Index)
                             && pairedExternalHtmlRange is null))
+                    && (!isFormattingOnlyChange || !gap.ContainsMarkdownFormatting)
                     && (granularLength > 0 || !gap.ContainsMarkdownFormatting))
                 .Select(static gap => gap.Index)
                 .ToArray());
@@ -3213,8 +3240,41 @@ internal static partial class MarkdownPreviewRenderer
     private static bool IsMarkdownFormattingToken(string value)
         => value is "*" or "_" or "~" or "`";
 
+    private static int CalculateGranularChangedLength(
+        string content,
+        IReadOnlyList<InlineDiffToken> tokens,
+        bool[] changedTokens)
+    {
+        var length = 0;
+        for (var index = 0; index < changedTokens.Length;)
+        {
+            if (!changedTokens[index])
+            {
+                index++;
+                continue;
+            }
+
+            var start = tokens[index].Start;
+            var end = tokens[index].End;
+            index++;
+            while (index < changedTokens.Length
+                && changedTokens[index]
+                && string.IsNullOrWhiteSpace(content[end..tokens[index].Start]))
+            {
+                end = tokens[index].End;
+                index++;
+            }
+            length += end - start;
+        }
+        return length;
+    }
+
     private static bool IsPositionInsideInlineHtmlTag(string content, int position)
     {
+        if (position < 0 || position >= content.Length)
+        {
+            return false;
+        }
         var openingIndex = content.LastIndexOf('<', position);
         return openingIndex >= 0 && position < FindHtmlTagEnd(content, openingIndex);
     }
@@ -3473,12 +3533,15 @@ internal static partial class MarkdownPreviewRenderer
 
         for (var index = startIndex + 1; index < endIndex; index++)
         {
+            if (index - startIndex > maximumBridgeLineCount)
+            {
+                return false;
+            }
             depth += CountCodeStructuralBracketDelta(lines[index]);
             if (depth <= 0)
             {
                 blockEndIndex = index;
-                if (blockEndIndex - startIndex > maximumBridgeLineCount
-                    || HasMatchingCodeStructuralBlockBody(lines, startIndex, blockEndIndex, comparisonLines))
+                if (HasMatchingCodeStructuralBlockBody(lines, startIndex, blockEndIndex, comparisonLines))
                 {
                     return false;
                 }
@@ -4713,6 +4776,7 @@ internal static partial class MarkdownPreviewRenderer
         var prefixOrSuffixScore = 0;
         string? bestContent = null;
         var bestScore = 0;
+        var bestComparisonLength = 0;
         foreach (var comparisonLine in comparisonLines)
         {
             if (!TryGetMarkableRenderedDiffParts(comparisonLine, out var comparisonParts)
@@ -4740,6 +4804,7 @@ internal static partial class MarkdownPreviewRenderer
             {
                 bestScore = score;
                 bestContent = comparisonParts.Content;
+                bestComparisonLength = comparisonParts.Content.Length;
             }
         }
 
@@ -4754,8 +4819,8 @@ internal static partial class MarkdownPreviewRenderer
         // unrelated sentences that both start with "If the app"). Require both
         // a small absolute overlap and a meaningful ratio so short real updates
         // like "Old entry" -> "New entry" still get inline marking.
-        var minimumScore = Math.Max(4, currentParts.Content.Length / 3);
-        if (bestScore >= minimumScore && bestScore * 5 >= currentParts.Content.Length * 3)
+        var maximumLength = Math.Max(currentParts.Content.Length, bestComparisonLength);
+        if (bestScore >= 4 && bestScore * 2 >= maximumLength)
         {
             return bestContent;
         }

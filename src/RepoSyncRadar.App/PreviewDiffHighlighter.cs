@@ -31,7 +31,8 @@ internal sealed record PreviewDiffChange(
 internal sealed record PreviewDiffAlignmentGap(
     [property: JsonPropertyName("anchorIndex")] int? AnchorIndex,
     [property: JsonPropertyName("height")] double Height,
-    [property: JsonPropertyName("navigationIndex")] int NavigationIndex);
+    [property: JsonPropertyName("navigationIndex")] int NavigationIndex,
+    [property: JsonPropertyName("navigationOnly")] bool NavigationOnly = false);
 
 internal sealed record PreviewDiffAlignmentGapPlan(
     IReadOnlyList<PreviewDiffAlignmentGap> Before,
@@ -1260,6 +1261,7 @@ internal static class PreviewDiffHighlighter
             alignmentChanges,
             beforeMeasurement.Offsets.Select(static offset => offset!.Value).ToArray(),
             afterMeasurement.Offsets.Select(static offset => offset!.Value).ToArray());
+        gapPlan = AddAlignmentNavigationPlaceholders(gapPlan, changes);
         var synchronizedScrollTop = ResolveSynchronizedScrollTop(
             beforeMeasurement.ScrollTop,
             afterMeasurement.ScrollTop);
@@ -1330,6 +1332,37 @@ internal static class PreviewDiffHighlighter
         double beforeScrollTop,
         double afterScrollTop)
         => Math.Min(Math.Max(0, beforeScrollTop), Math.Max(0, afterScrollTop));
+
+    internal static PreviewDiffAlignmentGapPlan AddAlignmentNavigationPlaceholders(
+        PreviewDiffAlignmentGapPlan gapPlan,
+        IReadOnlyList<PreviewDiffChange> changes)
+    {
+        ArgumentNullException.ThrowIfNull(gapPlan);
+        ArgumentNullException.ThrowIfNull(changes);
+        var before = gapPlan.Before.ToList();
+        var after = gapPlan.After.ToList();
+        for (var index = 0; index < changes.Count; index++)
+        {
+            var change = changes[index];
+            if (change.BeforeIndexes.Count == 0)
+            {
+                before.Add(new PreviewDiffAlignmentGap(
+                    change.BeforeAnchorIndex,
+                    0,
+                    index,
+                    NavigationOnly: true));
+            }
+            if (change.AfterIndexes.Count == 0)
+            {
+                after.Add(new PreviewDiffAlignmentGap(
+                    change.AfterAnchorIndex,
+                    0,
+                    index,
+                    NavigationOnly: true));
+            }
+        }
+        return new PreviewDiffAlignmentGapPlan(before, after);
+    }
 
     internal static IReadOnlyList<int> GetCodeWrappingCandidateIndexes(
         IReadOnlyList<PreviewDiffChange> changes,
@@ -1599,6 +1632,22 @@ td.rsr-preview-diff-alignment-gap {
     setGapHeight(element, height);
     return element;
   };
+  const createNavigationPlaceholder = (navigationIndex, tagName = 'div') => {
+    const container = document.createElement(tagName);
+    container.className = 'rsr-preview-diff-alignment-gap';
+    container.setAttribute('aria-hidden', 'true');
+    container.setAttribute('role', 'presentation');
+    container.style.height = '0';
+    container.style.position = 'relative';
+    const target = document.createElement('span');
+    target.setAttribute('data-rsr-diff-navigation-index', String(navigationIndex));
+    target.style.display = 'block';
+    target.style.height = '1px';
+    target.style.inset = '0 0 auto';
+    target.style.position = 'absolute';
+    container.appendChild(target);
+    return container;
+  };
   const insertGapBefore = (anchor, gap, desiredHeight) => {
     const anchorTopBefore = anchor.getBoundingClientRect().top;
     anchor.parentNode.insertBefore(gap, anchor);
@@ -1723,11 +1772,31 @@ td.rsr-preview-diff-alignment-gap {
   const diffElementsByIndex = new Map(
     diffElements.map((element) => [Number(element.getAttribute('data-rsr-diff-index')), element]));
   gaps.forEach((gap) => {
-    const height = Math.max(1, Number(gap.height) || 0);
+    const height = gap.navigationOnly ? 0 : Math.max(1, Number(gap.height) || 0);
     const anchor = gap.anchorIndex === null
       ? null
       : diffElementsByIndex.get(gap.anchorIndex);
     const row = anchor?.closest('tr');
+    if (gap.navigationOnly) {
+      if (row?.parentNode) {
+        const placeholderRow = document.createElement('tr');
+        placeholderRow.className = 'rsr-preview-diff-alignment-gap-row';
+        placeholderRow.setAttribute('aria-hidden', 'true');
+        placeholderRow.setAttribute('role', 'presentation');
+        const placeholderCell = createNavigationPlaceholder(gap.navigationIndex, 'td');
+        placeholderCell.colSpan = getTableColumnCount(row.closest('table'));
+        placeholderRow.appendChild(placeholderCell);
+        row.parentNode.insertBefore(placeholderRow, row);
+      } else {
+        const placeholder = createNavigationPlaceholder(gap.navigationIndex);
+        if (anchor?.parentNode) {
+          anchor.parentNode.insertBefore(placeholder, anchor);
+        } else {
+          root.appendChild(placeholder);
+        }
+      }
+      return;
+    }
     if (row?.parentNode) {
       const gapRow = document.createElement('tr');
       gapRow.className = 'rsr-preview-diff-alignment-gap-row';

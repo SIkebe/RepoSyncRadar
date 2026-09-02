@@ -3586,7 +3586,7 @@ var value = 1;
             beforeHtml,
             StringComparison.Ordinal);
         Assert.Contains(
-            "<em><span class=\"rsr-rendered-diff-added\">alpha bravo charlie delta</span></em>",
+            "<span class=\"rsr-rendered-diff-added\"><em>alpha bravo charlie delta</em></span>",
             afterHtml,
             StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-removed\">*", beforeHtml, StringComparison.Ordinal);
@@ -3731,6 +3731,62 @@ var value = 1;
             "<span class=\"rsr-rendered-diff-removed\">o</span>ld",
             beforeHtml,
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Handles_Trailing_Html_Gap_At_Content_End()
+    {
+        const string beforeMarkdown = "a shared";
+        const string afterMarkdown = "z shared <kbd>Enter</kbd>";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("rsr-rendered-diff-gap", beforeHtml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RenderDocument_Uses_Symmetric_Granularity_For_Unequal_Token_Lengths()
+    {
+        const string beforeMarkdown = "a x b common one two three four";
+        const string afterMarkdown = "aaaaaaaaaa x bbbbbbbbbb common one two three four";
+
+        var beforeHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            beforeMarkdown,
+            "basesha",
+            "Parent",
+            diffAgainstMarkdown: afterMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+        var afterHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "headsha",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Equal(NormalizeDiffShape(beforeHtml), NormalizeDiffShape(afterHtml));
+
+        static string NormalizeDiffShape(string html)
+        {
+            var start = html.IndexOf("<p>", StringComparison.Ordinal);
+            var end = html.IndexOf("</p>", start, StringComparison.Ordinal) + 4;
+            return html[start..end]
+                .Replace("rsr-rendered-diff-removed", "rsr-rendered-diff", StringComparison.Ordinal)
+                .Replace("rsr-rendered-diff-added", "rsr-rendered-diff", StringComparison.Ordinal)
+                .Replace(">aaaaaaaaaa<", ">TOKEN_A<", StringComparison.Ordinal)
+                .Replace(">bbbbbbbbbb<", ">TOKEN_B<", StringComparison.Ordinal)
+                .Replace(">a<", ">TOKEN_A<", StringComparison.Ordinal)
+                .Replace(">b<", ">TOKEN_B<", StringComparison.Ordinal)
+                .Replace("aaaaaaaaaa x bbbbbbbbbb", "TOKEN_A x TOKEN_B", StringComparison.Ordinal)
+                .Replace("a x b", "TOKEN_A x TOKEN_B", StringComparison.Ordinal);
+        }
     }
 
     [Fact]

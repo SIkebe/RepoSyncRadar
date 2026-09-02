@@ -970,6 +970,30 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Empty(gaps.After);
     }
 
+    [Fact]
+    public void PreviewDiffHighlighter_AddAlignmentNavigationPlaceholders_Preserves_OneSided_Hunks()
+    {
+        var changes = new[]
+        {
+            new PreviewDiffChange([], [1], 1, 2),
+            new PreviewDiffChange([2], [], 3, 4),
+            new PreviewDiffChange([5], [6], 7, 8),
+        };
+
+        var plan = PreviewDiffHighlighter.AddAlignmentNavigationPlaceholders(
+            new PreviewDiffAlignmentGapPlan([], []),
+            changes);
+
+        var before = Assert.Single(plan.Before);
+        Assert.True(before.NavigationOnly);
+        Assert.Equal(0, before.NavigationIndex);
+        Assert.Equal(1, before.AnchorIndex);
+        var after = Assert.Single(plan.After);
+        Assert.True(after.NavigationOnly);
+        Assert.Equal(1, after.NavigationIndex);
+        Assert.Equal(4, after.AnchorIndex);
+    }
+
     [Theory]
     [InlineData(720, 1180, 1180)]
     [InlineData(1180, 720, 1180)]
@@ -1122,6 +1146,8 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("anchor.matches('.rsr-code-line') ? 'span' : 'div'", applyScript, StringComparison.Ordinal);
         Assert.DoesNotContain("anchor?.closest('.ghd-", applyScript, StringComparison.Ordinal);
         Assert.Contains("diffElements.at(-1)", applyScript, StringComparison.Ordinal);
+        Assert.Contains("gap.navigationOnly ? 0", applyScript, StringComparison.Ordinal);
+        Assert.Contains("target.style.height = '1px'", applyScript, StringComparison.Ordinal);
         Assert.Contains(
             "terminalElement.closest('li') ||",
             applyScript,
