@@ -1300,6 +1300,11 @@ public sealed class MainWindowPreviewComparisonTests
             StringComparison.Ordinal);
         Assert.Contains("...target.querySelectorAll(renderedDiffSelector)", script, StringComparison.Ordinal);
         Assert.Contains("return Array.from(new Set(renderedDiffTargets))", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "target.classList.contains('rsr-preview-diff-block')",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("return highlightedContentTargets", script, StringComparison.Ordinal);
         Assert.Contains("if (alignmentGapTargets.length > 0)", script, StringComparison.Ordinal);
         Assert.Contains("return alignmentGapTargets", script, StringComparison.Ordinal);
         Assert.Contains(

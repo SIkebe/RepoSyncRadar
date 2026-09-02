@@ -1457,6 +1457,11 @@ td.rsr-preview-diff-alignment-gap {
     if (renderedDiffTargets.length > 0) {
       return Array.from(new Set(renderedDiffTargets));
     }
+    const highlightedContentTargets = contentTargets.filter(
+      (target) => target.classList.contains('rsr-preview-diff-block'));
+    if (highlightedContentTargets.length > 0) {
+      return highlightedContentTargets;
+    }
     const alignmentGapTargets = targets.filter(
       (target) => target.classList.contains('rsr-preview-diff-alignment-gap'));
     if (alignmentGapTargets.length > 0) {

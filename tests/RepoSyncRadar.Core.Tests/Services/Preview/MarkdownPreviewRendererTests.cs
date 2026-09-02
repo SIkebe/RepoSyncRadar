@@ -3193,7 +3193,14 @@ var value = 1;
         Assert.Contains("...element.querySelectorAll(selector)", html, StringComparison.Ordinal);
         Assert.Contains("if (diffElements.length === 0)", html, StringComparison.Ordinal);
         Assert.Contains("point: true", html, StringComparison.Ordinal);
-        Assert.Contains("element.closest(structuralBlockSelector)", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "`${structuralBlockSelector},${textBlockSelector}`",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "nearestBlock === element || element.contains(nearestBlock)",
+            html,
+            StringComparison.Ordinal);
         Assert.Contains("let disabled = false", html, StringComparison.Ordinal);
         Assert.Contains("if (disabled) { pairs = []; return; }", html, StringComparison.Ordinal);
         Assert.Contains("const disable = () =>", html, StringComparison.Ordinal);

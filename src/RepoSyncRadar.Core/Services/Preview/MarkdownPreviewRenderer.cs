@@ -461,10 +461,12 @@ internal static partial class MarkdownPreviewRenderer
                     return;
                 }
                 diffElements.forEach(diffElement => {
-                    const target =
-                        diffElement.closest(structuralBlockSelector) ||
-                        diffElement.closest(textBlockSelector) ||
-                        diffElement;
+                    const nearestBlock = diffElement.closest(
+                        `${structuralBlockSelector},${textBlockSelector}`);
+                    const target = nearestBlock &&
+                        (nearestBlock === element || element.contains(nearestBlock))
+                            ? nearestBlock
+                            : element;
                     if (seen.has(target)) return;
                     seen.add(target);
                     targets.push({
