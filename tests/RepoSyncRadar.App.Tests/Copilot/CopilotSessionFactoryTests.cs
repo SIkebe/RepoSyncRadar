@@ -110,11 +110,16 @@ public sealed class CopilotSessionFactoryTests
         };
 
         var logger = NullLogger<CopilotSessionFactory>.Instance;
-        var options = CopilotSessionFactory.BuildClientOptions(copilot, logger, "token-123");
+        var options = CopilotSessionFactory.BuildClientOptions(copilot, logger, "token-123", "0.1.30");
 
         Assert.False(options.UseLoggedInUser);
         Assert.Same(logger, options.Logger);
         Assert.Equal("token-123", options.GitHubToken);
+        Assert.NotNull(options.ClientInfo);
+        Assert.Equal("RepoSyncRadar", options.ClientInfo!.ApplicationName);
+        Assert.Equal("0.1.30", options.ClientInfo.ApplicationVersion);
+        Assert.Null(options.ClientInfo.IntegrationName);
+        Assert.Null(options.ClientInfo.IntegrationVersion);
         Assert.Equal("debug", options.LogLevel?.Value);
         Assert.True(options.EnableRemoteSessions);
         var stdio = Assert.IsType<StdioRuntimeConnection>(options.Connection);
@@ -135,7 +140,8 @@ public sealed class CopilotSessionFactoryTests
         var options = CopilotSessionFactory.BuildClientOptions(
             new CopilotOptions { CaptureContent = true },
             NullLogger<CopilotSessionFactory>.Instance,
-            "token-123");
+            "token-123",
+            "0.1.30");
 
         Assert.Null(options.Telemetry);
         Assert.Null(options.SessionIdleTimeoutSeconds);
@@ -147,7 +153,8 @@ public sealed class CopilotSessionFactoryTests
         var options = CopilotSessionFactory.BuildClientOptions(
             new CopilotOptions(),
             NullLogger<CopilotSessionFactory>.Instance,
-            "token-123");
+            "token-123",
+            "0.1.30");
 
         var stdio = Assert.IsType<StdioRuntimeConnection>(options.Connection);
         Assert.Null(stdio.Path);
