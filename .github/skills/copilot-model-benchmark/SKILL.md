@@ -27,7 +27,7 @@ RepoSyncRadar が GitHub Copilot SDK セッションで使うモデルまたは 
    - modelへ公開するtoolは`view`、`glob`、`grep`、`lsp`だけに限定し、`skill`、subagent、web、shell、write toolを公開しない。
    - `--deny-tool=write --deny-tool='shell(*)' --disable-builtin-mcps` を指定する。
    - `copilot mcp list --json`でuser、workspace、plugin由来の全MCP server名を取得し、それぞれを`--disable-mcp-server`で無効化する。列挙に失敗した場合はベンチマークを実行しない。
-   - raw prompt、model出力、timing、session artifactはリポジトリへ保存しない。機密情報を含まない成功率、中央値、範囲、provenanceのaggregate baselineは、このSkillの比較基準として保存してよい。
+   - raw prompt、model出力、timing、session artifactはリポジトリへ保存しない。aggregate結果の既定の記録先はGitHub Issueとし、このSkillへ個別の実行結果を追記しない。ユーザーがこのSkillの固定基準値更新を明示的に依頼した場合に限り、機密情報を含まない成功率、中央値、範囲、provenanceを比較基準として保存してよい。
 
 3. **実際のコード理解を測る。**
    - 単純な知識問題ではなく、複数ファイルにまたがる呼び出し経路、状態遷移、例外処理、テスト範囲を調べさせる。
@@ -200,7 +200,7 @@ source/testを読み、モデルの自己評価に依存せず100点で採点す
 
 ## Issueへの記録
 
-ベンチマーク結果をIssueへ保存する場合は、次の順序を必ず守る。
+ベンチマーク終了後は、ユーザーがIssue記録を明示的に不要とした場合を除き、次の順序でIssue案を作る。承認前にIssueを作成しない。
 
 1. `.github/ISSUE_TEMPLATE/model-benchmark.yml` の項目に沿って、aggregate結果だけを含むIssueタイトルと本文案を作る。
 2. タイトルには比較した全modelまたはeffortを明記する。
@@ -209,7 +209,9 @@ source/testを読み、モデルの自己評価に依存せず100点で採点す
 5. Issueを作成する前に、タイトル、本文、ラベルの下書きをユーザーへ提示し、`ask_user` で承認を得る。承認前にIssueを作成しない。
 6. 承認後にIssueを作成する。修正を求められた場合は下書きを直し、再度承認を得る。
 
-## 今回の静的コード理解ベンチマーク基準
+## 固定の静的コード理解ベンチマーク基準
+
+以下は新しいmodelを同じ手法で比較するための固定基準であり、通常のベンチマーク結果を追記する履歴欄ではない。更新するのは、ユーザーがこのSkillの固定基準値更新を明示的に依頼した場合に限る。
 
 2026-08-10、RepoSyncRadarのMorning Triageを各3run、`high` / default contextで比較した基準値。実行時HEADは`2720f8b0ebc36f67836790abe3cb1ef97b1ea0c7`、Copilot CLIは`1.0.79-9`。worktreeにはこのPRのmodel・設定・Skill変更が未コミットで存在した。数値は中央値、括弧内はmin-max:
 
