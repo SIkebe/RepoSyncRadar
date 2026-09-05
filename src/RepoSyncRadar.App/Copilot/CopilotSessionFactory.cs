@@ -47,6 +47,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     private readonly RadarTools _radarTools;
     private readonly RadarWriteTools _radarWriteTools;
     private readonly ICopilotUsageTracker? _usageTracker;
+    private readonly IAppVersionProvider _appVersionProvider;
     private readonly ILogger<CopilotSessionFactory> _logger;
     private readonly SemaphoreSlim _clientGate = new(1, 1);
     private CopilotClient? _client;
@@ -60,6 +61,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         ILogger<CopilotSessionFactory> logger,
         RadarTools radarTools,
         RadarWriteTools radarWriteTools,
+        IAppVersionProvider appVersionProvider,
         ICopilotUsageTracker? usageTracker = null,
         ToolAuditHook? auditHook = null)
     {
@@ -69,6 +71,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(radarTools);
         ArgumentNullException.ThrowIfNull(radarWriteTools);
+        ArgumentNullException.ThrowIfNull(appVersionProvider);
 
         _options = options;
         _permissionPolicy = permissionPolicy;
@@ -76,6 +79,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         _logger = logger;
         _radarTools = radarTools;
         _radarWriteTools = radarWriteTools;
+        _appVersionProvider = appVersionProvider;
         _usageTracker = usageTracker;
         _auditHook = auditHook;
     }
@@ -265,7 +269,11 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 
             var copilot = _options.Value;
             var token = await _tokenProvider.GetAccessTokenAsync(cancellationToken).ConfigureAwait(false);
-            var clientOptions = BuildClientOptions(copilot, _logger, token);
+            var clientOptions = BuildClientOptions(
+                copilot,
+                _logger,
+                token,
+                _appVersionProvider.DisplayVersion);
             LogForwardingToken(_logger);
 
             _client = new CopilotClient(clientOptions);
@@ -280,10 +288,12 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     internal static CopilotClientOptions BuildClientOptions(
         CopilotOptions copilot,
         ILogger logger,
-        string token)
+        string token,
+        string applicationVersion)
     {
         ArgumentNullException.ThrowIfNull(copilot);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentException.ThrowIfNullOrWhiteSpace(applicationVersion);
 
         var clientOptions = new CopilotClientOptions
         {
@@ -294,6 +304,11 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
                 ? CopilotLogLevel.Info
                 : new CopilotLogLevel(copilot.LogLevel.Trim()),
             GitHubToken = token,
+            ClientInfo = new CopilotClientInfo
+            {
+                ApplicationName = "RepoSyncRadar",
+                ApplicationVersion = applicationVersion,
+            },
             // Force the SDK to use the token we hand it instead of falling back to
             // whatever the bundled CLI / gh CLI happens to be signed in as.
             UseLoggedInUser = false,
