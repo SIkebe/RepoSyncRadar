@@ -258,6 +258,76 @@ public sealed class DocsViewE2ETests
     }
 
     [Fact]
+    public async Task Preview_Diff_Overlay_Uses_Block_For_Horizontal_And_Inline_Diff_For_Vertical_Bounds()
+    {
+        var script = GetHighlighterScript("BuildNavigateToDiffScript", 0);
+        var page = await CreateDocsPageAsync();
+        try
+        {
+            await page.SetViewportSizeAsync(800, 600);
+            await page.SetContentAsync(
+                """
+                <main>
+                  <p id="block"
+                     class="rsr-preview-diff-target"
+                     data-rsr-diff-navigation-index="0"
+                     style="height: 100px; margin: 20px 0 0 100px; position: relative; width: 300px">
+                    Unchanged prefix
+                    <span id="change"
+                          class="rsr-rendered-diff-added"
+                          style="display: block; height: 30px; margin-left: 40px; width: 160px">
+                      Changed content
+                    </span>
+                  </p>
+                </main>
+                """);
+
+            var navigationResult = await page.EvaluateAsync<JsonElement>(script);
+            var geometry = await page.EvaluateAsync<JsonElement>(
+                """
+                () => {
+                    const overlay = document.getElementById(
+                        'rsr-preview-diff-active-overlay').getBoundingClientRect();
+                    const block = document.getElementById('block').getBoundingClientRect();
+                    const change = document.getElementById('change').getBoundingClientRect();
+                    return {
+                        actualLeft: overlay.left,
+                        actualRight: overlay.right,
+                        actualTop: overlay.top,
+                        actualBottom: overlay.bottom,
+                        expectedLeft: block.left - 6,
+                        expectedRight: block.right + 6,
+                        expectedTop: change.top,
+                        expectedBottom: change.bottom,
+                    };
+                }
+                """);
+
+            Assert.True(navigationResult.GetProperty("found").GetBoolean());
+            Assert.Equal(
+                geometry.GetProperty("expectedLeft").GetDouble(),
+                geometry.GetProperty("actualLeft").GetDouble(),
+                precision: 1);
+            Assert.Equal(
+                geometry.GetProperty("expectedRight").GetDouble(),
+                geometry.GetProperty("actualRight").GetDouble(),
+                precision: 1);
+            Assert.Equal(
+                geometry.GetProperty("expectedTop").GetDouble(),
+                geometry.GetProperty("actualTop").GetDouble(),
+                precision: 1);
+            Assert.Equal(
+                geometry.GetProperty("expectedBottom").GetDouble(),
+                geometry.GetProperty("actualBottom").GetDouble(),
+                precision: 1);
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
+    }
+
+    [Fact]
     public async Task Preview_Diff_Scrollbar_Splits_Separated_Targets_In_One_Hunk()
     {
         var script = GetHighlighterScript(
