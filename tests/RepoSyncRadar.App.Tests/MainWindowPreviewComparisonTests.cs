@@ -1541,9 +1541,10 @@ public sealed class MainWindowPreviewComparisonTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "const substantiveContentTargets = contentTargets.filter(",
+            "const resolveContentTargets = () =>",
             script,
             StringComparison.Ordinal);
+        Assert.Contains("return contentTargets.filter(", script, StringComparison.Ordinal);
         Assert.Contains(
             "target.classList.contains('rsr-preview-diff-target')",
             script,
@@ -1558,8 +1559,20 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("return alignmentGapTargets", script, StringComparison.Ordinal);
         Assert.Contains("return targets", script, StringComparison.Ordinal);
         Assert.Contains("overlayTargets = resolveOverlayTargets()", script, StringComparison.Ordinal);
-        Assert.Contains("Math.min(...rects.map((rect) => rect.left))", script, StringComparison.Ordinal);
-        Assert.Contains("Math.max(...rects.map((rect) => rect.bottom))", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "overlayHorizontalTargets = resolveContentTargets()",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "const horizontalRects = overlayHorizontalTargets",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "const verticalRects = overlayTargets",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("Math.min(...horizontalRects.map((rect) => rect.left))", script, StringComparison.Ordinal);
+        Assert.Contains("Math.max(...horizontalRects.map((rect) => rect.right))", script, StringComparison.Ordinal);
         Assert.Contains("const inlinePadding = 6", script, StringComparison.Ordinal);
         Assert.Contains(
             "getHorizontallyVisibleRect(target, inlinePadding)",
@@ -1592,16 +1605,20 @@ public sealed class MainWindowPreviewComparisonTests
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;",
+            "const top = Math.min(...verticalRects.map((rect) => rect.top)) + window.scrollY;",
             script,
             StringComparison.Ordinal);
         Assert.Contains(
-            "const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;",
+            "const bottom = Math.max(...verticalRects.map((rect) => rect.bottom)) + window.scrollY;",
             script,
             StringComparison.Ordinal);
         Assert.DoesNotContain("rect.top)) + window.scrollY - padding", script, StringComparison.Ordinal);
         Assert.DoesNotContain("rect.bottom)) + window.scrollY + padding", script, StringComparison.Ordinal);
         Assert.Contains("new ResizeObserver(positionOverlay)", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "overlayHorizontalTargets.forEach((target) => resizeObserver.observe(target))",
+            script,
+            StringComparison.Ordinal);
         Assert.Contains("const refreshTargets = () =>", script, StringComparison.Ordinal);
         Assert.Contains("window.__repoSyncRadarDiffNavigation = {", script, StringComparison.Ordinal);
         Assert.Contains("refresh: refreshTargets", script, StringComparison.Ordinal);

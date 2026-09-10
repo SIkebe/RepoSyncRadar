@@ -2278,23 +2278,26 @@ td.rsr-preview-diff-navigation-placeholder {
   }
   const renderedDiffSelector =
     '.rsr-rendered-diff-added,.rsr-rendered-diff-removed';
-  const resolveOverlayTargets = () => {
-    const alignmentGapSelector =
-      '.rsr-preview-diff-alignment-gap,' +
-      '.rsr-preview-diff-alignment-gap-row,' +
-      '.rsr-preview-diff-alignment-gap-section,' +
-      '.rsr-preview-diff-navigation-placeholder';
-    const isAlignmentGapTarget = (target) =>
-      target.matches(alignmentGapSelector)
-        || target.closest(alignmentGapSelector) !== null;
+  const alignmentGapSelector =
+    '.rsr-preview-diff-alignment-gap,' +
+    '.rsr-preview-diff-alignment-gap-row,' +
+    '.rsr-preview-diff-alignment-gap-section,' +
+    '.rsr-preview-diff-navigation-placeholder';
+  const isAlignmentGapTarget = (target) =>
+    target.matches(alignmentGapSelector)
+      || target.closest(alignmentGapSelector) !== null;
+  const resolveContentTargets = () => {
     const contentTargets = targets.filter(
       (target) => !isAlignmentGapTarget(target));
-    const substantiveContentTargets = contentTargets.filter(
+    return contentTargets.filter(
       (target) =>
         target.classList.contains('rsr-preview-diff-block')
           || target.classList.contains('rsr-preview-diff-target')
           || target.matches(renderedDiffSelector)
           || target.querySelector(renderedDiffSelector));
+  };
+  const resolveOverlayTargets = () => {
+    const substantiveContentTargets = resolveContentTargets();
     const resolvedContentTargets = substantiveContentTargets.flatMap((target) => {
       const renderedDiffTargets = [
         ...(target.matches(renderedDiffSelector) ? [target] : []),
@@ -2313,6 +2316,10 @@ td.rsr-preview-diff-navigation-placeholder {
     return targets;
   };
   let overlayTargets = resolveOverlayTargets();
+  let overlayHorizontalTargets = resolveContentTargets();
+  if (overlayHorizontalTargets.length === 0) {
+    overlayHorizontalTargets = overlayTargets;
+  }
   const root = document.scrollingElement || document.documentElement || document.body;
   const maxScrollTop = Math.max(1, (root?.scrollHeight || 0) - window.innerHeight);
   const targetRects = overlayTargets
@@ -2367,18 +2374,21 @@ td.rsr-preview-diff-navigation-placeholder {
   };
   const positionOverlay = () => {
     const inlinePadding = 6;
-    const rects = overlayTargets
+    const horizontalRects = overlayHorizontalTargets
       .map((target) => getHorizontallyVisibleRect(target, inlinePadding))
       .filter((rect) => rect && rect.right > rect.left && rect.bottom > rect.top);
-    if (rects.length === 0) {
+    const verticalRects = overlayTargets
+      .map((target) => target.getBoundingClientRect())
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+    if (horizontalRects.length === 0 || verticalRects.length === 0) {
       overlay.hidden = true;
       return;
     }
     overlay.hidden = false;
-    const left = Math.min(...rects.map((rect) => rect.left)) + window.scrollX;
-    const top = Math.min(...rects.map((rect) => rect.top)) + window.scrollY;
-    const right = Math.max(...rects.map((rect) => rect.right)) + window.scrollX;
-    const bottom = Math.max(...rects.map((rect) => rect.bottom)) + window.scrollY;
+    const left = Math.min(...horizontalRects.map((rect) => rect.left)) + window.scrollX;
+    const top = Math.min(...verticalRects.map((rect) => rect.top)) + window.scrollY;
+    const right = Math.max(...horizontalRects.map((rect) => rect.right)) + window.scrollX;
+    const bottom = Math.max(...verticalRects.map((rect) => rect.bottom)) + window.scrollY;
     overlay.style.left = `${left.toFixed(1)}px`;
     overlay.style.top = `${top.toFixed(1)}px`;
     overlay.style.width = `${Math.max(0, right - left).toFixed(1)}px`;
@@ -2391,6 +2401,10 @@ td.rsr-preview-diff-navigation-placeholder {
     targets = Array.from(
       document.querySelectorAll('[data-rsr-diff-navigation-index="{{navigationIndex}}"]'));
     overlayTargets = resolveOverlayTargets();
+    overlayHorizontalTargets = resolveContentTargets();
+    if (overlayHorizontalTargets.length === 0) {
+      overlayHorizontalTargets = overlayTargets;
+    }
     scrollTargets.forEach((scrollTarget) => {
       scrollTarget.removeEventListener('scroll', positionOverlay);
     });
@@ -2404,6 +2418,7 @@ td.rsr-preview-diff-navigation-placeholder {
     if (typeof ResizeObserver === 'function') {
       const resizeObserver = new ResizeObserver(positionOverlay);
       overlayTargets.forEach((target) => resizeObserver.observe(target));
+      overlayHorizontalTargets.forEach((target) => resizeObserver.observe(target));
       resizeObserver.observe(document.body);
       overlay.__resizeObserver = resizeObserver;
     }
