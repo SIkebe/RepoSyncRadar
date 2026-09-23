@@ -61,6 +61,8 @@ Installed builds can check Velopack update feeds and apply newer releases withou
 
 Local preview is opt-in. By default, startup does not clone or fetch `github/docs`; preview work begins only when a preview action needs it, unless `DocsRepository:PrewarmOnStartup` is set to `true`.
 
+If **Triage** finds no new candidates, check `GitHub:PullRequestCreatedAtOrAfter`: when set, it excludes older Repo sync PRs. Local preview is separate from triage and requires Git and `DocsRepository` configuration; see the [preview setup guide](docs/PREVIEW.md).
+
 ## Configuration
 
 Installed builds read per-user overrides from `%LocalAppData%\RepoSyncRadar\appsettings.local.json`. Source builds can also use `src\RepoSyncRadar.App\appsettings.local.json`. The committed defaults live in [`src\RepoSyncRadar.App\appsettings.json`](src/RepoSyncRadar.App/appsettings.json).
