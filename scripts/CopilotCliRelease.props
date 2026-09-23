@@ -1,10 +1,10 @@
 <Project>
 
-  <!-- SHA-256 values published with the official v1.0.87-0 GitHub Release assets. -->
+  <!-- SHA-256 values published with the official v1.0.89-0 GitHub Release assets. -->
   <PropertyGroup>
-    <CopilotCliReleaseVersion>1.0.87-0</CopilotCliReleaseVersion>
-    <CopilotCliWin32X64Sha256>9732324f24927bb9691713339be306b993b811df46b762e3571b849ce99a482e</CopilotCliWin32X64Sha256>
-    <CopilotCliWin32Arm64Sha256>535eb47c9e2e95aa9e20091894c053a9a305bb66b3f0e7d52c0a62dc29537d56</CopilotCliWin32Arm64Sha256>
+    <CopilotCliReleaseVersion>1.0.89-0</CopilotCliReleaseVersion>
+    <CopilotCliWin32X64Sha256>516ec467dcb906651b6e80795c1cdc2e20868d3d50b7121fb917c81a4f719c09</CopilotCliWin32X64Sha256>
+    <CopilotCliWin32Arm64Sha256>b0c7b5766266f7fc3fc6d1934abdb2ea069d18db0ece58477b73fec2da4462c2</CopilotCliWin32Arm64Sha256>
   </PropertyGroup>
 
 </Project>
