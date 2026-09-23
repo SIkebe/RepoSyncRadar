@@ -1,5 +1,7 @@
+using System.Text.Json.Serialization;
 using GitHub.Copilot;
 using Microsoft.Extensions.Logging;
+using RepoSyncRadar.Core.Services;
 
 namespace RepoSyncRadar.App.Copilot;
 
@@ -7,7 +9,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// Production <see cref="ICopilotSession"/> that adapts the real Copilot SDK session.
 /// Owns the underlying <see cref="CopilotSession"/> handle and forwards lifecycle calls.
 /// </summary>
-internal sealed partial class SdkCopilotSession : ICopilotSession
+internal sealed partial class SdkCopilotSession : ICopilotSession, IStructuredDraftCopilotSession
 {
     private readonly CopilotSession _session;
     private readonly SessionPurpose _purpose;
@@ -15,11 +17,14 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
     private readonly ICopilotUsageTracker? _usageTracker;
     private readonly IDisposable? _usageSubscription;
 
+    public bool SupportsStructuredDrafts { get; }
+
     public SdkCopilotSession(
         CopilotSession session,
         SessionPurpose purpose,
         ILogger logger,
-        ICopilotUsageTracker? usageTracker)
+        ICopilotUsageTracker? usageTracker,
+        bool supportsStructuredDrafts)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(logger);
@@ -27,6 +32,7 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
         _purpose = purpose;
         _logger = logger;
         _usageTracker = usageTracker;
+        SupportsStructuredDrafts = supportsStructuredDrafts;
         if (usageTracker is not null)
         {
             _usageSubscription = session.On<AssistantUsageEvent>(usage =>
@@ -51,6 +57,32 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
         await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
         return assistant?.Data?.Content ?? string.Empty;
     }
+
+#pragma warning disable GHCP001 // Typed structured output is experimental; only the verified model uses it.
+    public async Task<DraftBundle> SendStructuredDraftAsync(
+        string prompt,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        if (!SupportsStructuredDrafts)
+        {
+            throw new InvalidOperationException("Structured drafts are not enabled for this model.");
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
+        var draft = await _session.SendAndWaitAsync<StructuredDraft>(
+            prompt,
+            timeout: timeout,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
+        if (draft.Explanation is null || draft.Twitter is null || draft.Customer is null)
+        {
+            throw new InvalidOperationException("Copilot returned incomplete structured drafts.");
+        }
+
+        return new DraftBundle(draft.Twitter, string.Empty, draft.Customer, draft.Explanation);
+    }
+#pragma warning restore GHCP001
 
     private async Task RefreshUsageMetricsAsync(CancellationToken cancellationToken)
     {
@@ -82,4 +114,9 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
         Message = "Could not refresh Copilot SDK usage metrics for session {SessionId}.")]
     private static partial void LogUsageMetricsRefreshFailed(ILogger logger, Exception ex, string sessionId);
+
+    private sealed record StructuredDraft(
+        [property: JsonPropertyName("explanation")] string Explanation,
+        [property: JsonPropertyName("twitter")] string Twitter,
+        [property: JsonPropertyName("customer")] string Customer);
 }

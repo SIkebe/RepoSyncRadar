@@ -90,6 +90,7 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 - `SendAndWaitAsync` は `AssistantMessageEvent?` を返す。最終テキストは `Data.Content`。
 - timeout は idle 待ちの上限で、in-flight agent work の中止ではない。
 - `MessageOptions` に JSON schema / response format が無い場合、JSON-only prompt だけを強保証として扱わない。
+- Typed structured output が public API にある版では、実際の bundled CLI と対象モデルで synthetic な schema 送信を検証する。SDK の JSON deserialization は完全な schema validation ではないため、必須フィールドを保存前に確認し、未検証モデルの既存経路を残す。送信後の失敗を安易に無形式で再送しない。
 - beta.9 以降の tool filter は source-qualified (`custom:*`, `builtin:*`, `mcp:*`) を優先する。
 
 ### 5. アプリ側の SDK 利用を棚卸しする

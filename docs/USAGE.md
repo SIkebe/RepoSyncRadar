@@ -187,6 +187,7 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
 
 - 既に文案があれば即表示。なければ **Regenerate** ボタンで生成。
 - [`AdoptionSession`](../src/RepoSyncRadar.App/Copilot/AdoptionSession.cs) が、差分(50KB 超は安全に切り詰め) + 過去 5 件の注目例(few-shot)を Copilot に渡し、Twitter / 顧客向けの 2 媒体を JSON で返させて `Drafts` テーブルに保存。
+- 既定の `gpt-5.6-luna` では SDK の型付き構造化出力を使用。別モデルやモデル障害時のフォールバックでは、JSON 応答の修復・プレーンテキスト救済を引き続き使用します。構造化出力が失敗した場合は文案を保存せず、エラーを表示します。
 - 各媒体には **コピーボタン**(WPF Dispatcher 経由で Clipboard へ)。
 - 注目キューで複数コミットをチェックすると、複数の差分を横断した **まとめて解説生成** が使えます。結果は選択セット向けの一時テキストとして Workbench に表示し、必要に応じてコピーできます。
 

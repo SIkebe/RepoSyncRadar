@@ -9,6 +9,20 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 
 public sealed class CopilotSessionFactoryTests
 {
+    [Theory]
+    [InlineData(SessionPurpose.Adoption, "gpt-5.6-luna", true)]
+    [InlineData(SessionPurpose.Adoption, "GPT-5.6-LUNA", true)]
+    [InlineData(SessionPurpose.Adoption, "gpt-5-mini", false)]
+    [InlineData(SessionPurpose.Adoption, "claude-sonnet-5", false)]
+    [InlineData(SessionPurpose.Triage, "gpt-5.6-luna", false)]
+    public void SupportsStructuredDrafts_Only_For_Verified_Adoption_Model(
+        SessionPurpose purpose,
+        string model,
+        bool expected)
+    {
+        Assert.Equal(expected, CopilotSessionFactory.SupportsStructuredDrafts(purpose, model));
+    }
+
     [Fact]
     public void ResolveFallbackModel_When_Configured_Model_Fails_Prefers_Current_Base_Model()
     {

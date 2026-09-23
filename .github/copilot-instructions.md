@@ -86,6 +86,7 @@ Use these repository instructions as the starting point. When code or validated 
 - `radar_score_commit` auto-marks still-unreviewed commits with score `0.44` or lower as `ReviewStatus.Rejected` with reason `auto-low-score`. Do not overwrite user-owned review states such as `Adopted`, `Later`, `Archived`, or existing `Rejected` rows.
 - Triage sends need the longer `MorningTriageSession.TriageSendTimeout` through `ICopilotSession.SendAsync(prompt, timeout, ct)`; the SDK default one-minute wait is too short.
 - Adoption draft/explanation generation and JSON repair sends need `AdoptionSession.DraftSendTimeout`; docs diffs plus URL fetches can exceed the SDK default one-minute wait and leave regenerated drafts empty.
+- Adoption drafts use experimental SDK typed structured output only for the live-verified `gpt-5.6-luna` model. Keep legacy JSON repair for other configured/fallback models; validate returned fields before persisting, and do not silently resend failed structured turns.
 
 ## UI And Product Behavior
 

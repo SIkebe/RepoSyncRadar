@@ -18,6 +18,77 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class AdoptionSessionTests
 {
     [Fact]
+    public async Task Generate_Uses_Typed_Drafts_For_Verified_Model()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("structured", ReviewStatus.Adopted, cancellationToken: ct);
+        await using (var seedDb = harness.CreateDb())
+        {
+            seedDb.CommitFiles.Add(new CommitFile
+            {
+                Sha = "structured",
+                Path = "content/actions/learn-github-actions.md",
+                Status = "modified",
+                Additions = 1,
+                Deletions = 0,
+            });
+            await seedDb.SaveChangesAsync(ct);
+        }
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync("structured", Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff --git a/content/test.md b/content/test.md\n+hello\n"));
+
+        var session = new StructuredDraftSessionStub
+        {
+            Result = new DraftBundle("tw", string.Empty, "cu", "ex"),
+        };
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ICopilotSession>(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        var bundle = await sut.GenerateDraftsAsync("structured", ct);
+
+        Assert.Equal(AdoptionSession.DraftSendTimeout, session.CapturedTimeout);
+        Assert.Equal("ex", bundle.ExplanationJa);
+        Assert.Contains("https://docs.github.com/en/actions/learn-github-actions", bundle.TwitterJa, StringComparison.Ordinal);
+        Assert.Contains("https://docs.github.com/en/actions/learn-github-actions", bundle.CustomerJa, StringComparison.Ordinal);
+        await using var db = harness.CreateDb();
+        Assert.Equal(3, await db.Drafts.CountAsync(d => d.Sha == "structured", ct));
+        Assert.Contains(await db.Drafts.Where(d => d.Sha == "structured").ToListAsync(ct),
+            d => d.Channel == "twitter" && d.Body == bundle.TwitterJa);
+    }
+
+    [Fact]
+    public async Task Generate_Does_Not_Resend_Or_Save_When_Structured_Output_Fails()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var harness = await WriteHarness.CreateAsync(ct);
+        await harness.InsertReviewedCommitAsync("structured-error", ReviewStatus.Adopted, cancellationToken: ct);
+
+        var github = Substitute.For<IDocsGitHubClient>();
+        github.GetUnifiedDiffAsync("structured-error", Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult("diff"));
+        var session = new StructuredDraftSessionStub
+        {
+            Failure = new InvalidOperationException("Schema rejected by provider."),
+        };
+        var factory = Substitute.For<ICopilotSessionFactory>();
+        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<ICopilotSession>(session));
+
+        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.GenerateDraftsAsync("structured-error", ct));
+
+        Assert.Contains("Schema rejected", error.Message, StringComparison.Ordinal);
+        await using var db = harness.CreateDb();
+        Assert.Equal(0, await db.Drafts.CountAsync(d => d.Sha == "structured-error", ct));
+    }
+
+    [Fact]
     public async Task Generate_Returns_Two_Drafts()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -617,5 +688,37 @@ public sealed class AdoptionSessionTests
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sut.GenerateBatchExplanationAsync(["batch-adopted", "batch-later"], ct));
         await session.DidNotReceive().SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>());
+    }
+
+    private sealed class StructuredDraftSessionStub : ICopilotSession, IStructuredDraftCopilotSession
+    {
+        public string SessionId => "structured-test";
+        public bool SupportsStructuredDrafts => true;
+        public DraftBundle? Result { get; init; }
+        public Exception? Failure { get; init; }
+        public TimeSpan? CapturedTimeout { get; private set; }
+
+        public Task<DraftBundle> SendStructuredDraftAsync(
+            string prompt,
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            CapturedTimeout = timeout;
+            if (Failure is { } failure)
+            {
+                return Task.FromException<DraftBundle>(failure);
+            }
+
+            return Task.FromResult(Result ?? throw new InvalidOperationException("Missing structured test response."));
+        }
+
+        public Task<string> SendAsync(string prompt, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("Legacy send was not expected.");
+
+        public Task<string> SendAsync(string prompt, TimeSpan? timeout, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("Legacy send was not expected.");
+
+        public Task AbortAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

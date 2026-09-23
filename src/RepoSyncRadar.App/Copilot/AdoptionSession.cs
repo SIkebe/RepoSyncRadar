@@ -107,8 +107,16 @@ public sealed partial class AdoptionSession
         DraftBundle bundle;
         await using (session.ConfigureAwait(false))
         {
-            var raw = await session.SendAsync(prompt, DraftSendTimeout, cancellationToken).ConfigureAwait(false);
-            bundle = await ParseOrRepairBundleAsync(session, raw, cancellationToken).ConfigureAwait(false);
+            if (session is IStructuredDraftCopilotSession { SupportsStructuredDrafts: true } structured)
+            {
+                bundle = await structured.SendStructuredDraftAsync(prompt, DraftSendTimeout, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                var raw = await session.SendAsync(prompt, DraftSendTimeout, cancellationToken).ConfigureAwait(false);
+                bundle = await ParseOrRepairBundleAsync(session, raw, cancellationToken).ConfigureAwait(false);
+            }
         }
         bundle = EnsureOfficialDocUrls(bundle, officialDocUrls);
 
