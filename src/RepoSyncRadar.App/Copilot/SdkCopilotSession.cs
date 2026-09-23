@@ -66,14 +66,27 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
             timeout: timeout,
             cancellationToken: cancellationToken).ConfigureAwait(false);
         await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
-        if (draft.Explanation is null || draft.Twitter is null || draft.Customer is null)
-        {
-            throw new InvalidOperationException("Copilot returned incomplete structured drafts.");
-        }
-
-        return new DraftBundle(draft.Twitter, string.Empty, draft.Customer, draft.Explanation);
+        return CreateDraftBundle(draft.Explanation, draft.Twitter, draft.Customer);
     }
 #pragma warning restore GHCP001
+
+    internal static DraftBundle CreateDraftBundle(string? explanation, string? twitter, string? customer)
+    {
+        if (explanation is null)
+        {
+            throw new InvalidOperationException("Copilot returned a structured draft without explanation.");
+        }
+        if (twitter is null)
+        {
+            throw new InvalidOperationException("Copilot returned a structured draft without twitter.");
+        }
+        if (customer is null)
+        {
+            throw new InvalidOperationException("Copilot returned a structured draft without customer.");
+        }
+
+        return new DraftBundle(twitter, string.Empty, customer, explanation);
+    }
 
     private async Task RefreshUsageMetricsAsync(CancellationToken cancellationToken)
     {
@@ -106,6 +119,7 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
         Message = "Could not refresh Copilot SDK usage metrics for session {SessionId}.")]
     private static partial void LogUsageMetricsRefreshFailed(ILogger logger, Exception ex, string sessionId);
 
+    // Non-nullable fields keep the inferred schema strict; the mapper rejects malformed provider output.
     private sealed record StructuredDraft(
         [property: JsonPropertyName("explanation")] string Explanation,
         [property: JsonPropertyName("twitter")] string Twitter,

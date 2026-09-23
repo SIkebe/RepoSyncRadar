@@ -60,8 +60,10 @@ public sealed class AdoptionSessionTests
             d => d.Channel == "twitter" && d.Body == bundle.TwitterJa);
     }
 
-    [Fact]
-    public async Task Generate_Does_Not_Resend_Or_Save_When_Structured_Output_Fails()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Generate_Does_Not_Resend_Or_Save_When_Structured_Output_Fails(bool missingField)
     {
         var ct = TestContext.Current.CancellationToken;
         await using var harness = await WriteHarness.CreateAsync(ct);
@@ -72,7 +74,10 @@ public sealed class AdoptionSessionTests
             .Returns(Task.FromResult("diff"));
         var session = new StructuredDraftSessionStub
         {
-            Failure = new InvalidOperationException("Schema rejected by provider."),
+            Failure = missingField
+                ? Assert.Throws<InvalidOperationException>(
+                    () => SdkCopilotSession.CreateDraftBundle(null, "tw", "cu"))
+                : new InvalidOperationException("Schema rejected by provider."),
         };
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -82,7 +87,7 @@ public sealed class AdoptionSessionTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sut.GenerateDraftsAsync("structured-error", ct));
 
-        Assert.Contains("Schema rejected", error.Message, StringComparison.Ordinal);
+        Assert.Contains(missingField ? "explanation" : "Schema rejected", error.Message, StringComparison.Ordinal);
         await using var db = harness.CreateDb();
         Assert.Equal(0, await db.Drafts.CountAsync(d => d.Sha == "structured-error", ct));
     }

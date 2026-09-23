@@ -27,7 +27,7 @@ public interface ICopilotSession : IAsyncDisposable
         TimeSpan? timeout,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Sends a draft prompt with a JSON Schema and returns its typed response.</summary>
+    /// <summary>Sends a draft prompt with a JSON Schema and an explicit timeout for long docs diffs.</summary>
     Task<DraftBundle> SendStructuredDraftAsync(
         string prompt,
         TimeSpan timeout,
