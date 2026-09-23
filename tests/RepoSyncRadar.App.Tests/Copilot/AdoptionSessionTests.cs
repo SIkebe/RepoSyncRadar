@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
-using NSubstitute.ExceptionExtensions;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Tests.Copilot.Tools;
 using RepoSyncRadar.Core.Models;
@@ -18,7 +17,7 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class AdoptionSessionTests
 {
     [Fact]
-    public async Task Generate_Uses_Typed_Drafts_For_Verified_Model()
+    public async Task Generate_Uses_Typed_Drafts()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var harness = await WriteHarness.CreateAsync(ct);
@@ -101,8 +100,8 @@ public sealed class AdoptionSessionTests
 
         var session = Substitute.For<ICopilotSession>();
         session.SessionId.Returns("s1");
-        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
+        session.SendStructuredDraftAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new DraftBundle("tw", string.Empty, "cu", "ex")));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -129,11 +128,11 @@ public sealed class AdoptionSessionTests
 
         TimeSpan? capturedTimeout = null;
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
+        session.SendStructuredDraftAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                capturedTimeout = call.ArgAt<TimeSpan?>(1);
-                return Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}");
+                capturedTimeout = call.ArgAt<TimeSpan>(1);
+                return Task.FromResult(new DraftBundle("tw", string.Empty, "cu", "ex"));
             });
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
@@ -158,8 +157,8 @@ public sealed class AdoptionSessionTests
             .Returns(Task.FromResult("diff"));
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"diff explanation\",\"twitter\":\"a\",\"customer\":\"c\"}"));
+        session.SendStructuredDraftAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new DraftBundle("a", string.Empty, "c", "diff explanation")));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -174,127 +173,6 @@ public sealed class AdoptionSessionTests
         Assert.Contains(drafts, d => d.Channel == "twitter" && d.Body == "a");
         Assert.Contains(drafts, d => d.Channel == "customer" && d.Body == "c");
         Assert.DoesNotContain(drafts, d => d.Channel == "teams");
-    }
-
-    [Fact]
-    public void ParseBundle_Accepts_Json_Wrapped_In_Assistant_Text()
-    {
-        var bundle = AdoptionSession.ParseBundle(
-            "以下の内容で生成しました。\n```json\n" +
-            "{\"explanation\":\"ex {braced}\",\"twitter\":\"tw\",\"teams\":\"tm\",\"customer\":\"cu\"}" +
-            "\n```\n必要に応じて調整してください。");
-
-        Assert.Equal("tw", bundle.TwitterJa);
-        Assert.Empty(bundle.TeamsJa);
-        Assert.Equal("cu", bundle.CustomerJa);
-        Assert.Equal("ex {braced}", bundle.ExplanationJa);
-    }
-
-    [Fact]
-    public async Task Generate_Persists_Drafts_When_Copilot_Wraps_Json()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var harness = await WriteHarness.CreateAsync(ct);
-        await harness.InsertReviewedCommitAsync("wrapped", ReviewStatus.Adopted, cancellationToken: ct);
-
-        var github = Substitute.For<IDocsGitHubClient>();
-        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("diff"));
-
-        var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("Here is the JSON:\n{\"explanation\":\"wrapped-ex\",\"twitter\":\"wrapped-tw\",\"customer\":\"wrapped-cu\"}"));
-        var factory = Substitute.For<ICopilotSessionFactory>();
-        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(session));
-
-        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
-        await sut.GenerateDraftsAsync("wrapped", ct);
-
-        await using var db = harness.CreateDb();
-        var drafts = await db.Drafts.AsNoTracking().Where(d => d.Sha == "wrapped").ToListAsync(ct);
-        Assert.Contains(drafts, d => d.Channel == "explanation" && d.Body == "wrapped-ex");
-        Assert.Contains(drafts, d => d.Channel == "twitter" && d.Body == "wrapped-tw");
-    }
-
-    [Fact]
-    public async Task Generate_Retries_Once_When_Response_Is_Not_Json()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var harness = await WriteHarness.CreateAsync(ct);
-        await harness.InsertReviewedCommitAsync("repair", ReviewStatus.Adopted, cancellationToken: ct);
-
-        var github = Substitute.For<IDocsGitHubClient>();
-        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("diff"));
-
-        var calls = new List<string>();
-        var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(calls.Add), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(
-                Task.FromResult("差分解説: repair-ex\nTwitter: repair-tw\n顧客向け: repair-cu"),
-                Task.FromResult("{\"explanation\":\"repair-ex\",\"twitter\":\"repair-tw\",\"customer\":\"repair-cu\"}"));
-        var factory = Substitute.For<ICopilotSessionFactory>();
-        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(session));
-
-        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
-        var bundle = await sut.GenerateDraftsAsync("repair", ct);
-
-        Assert.Equal("repair-tw", bundle.TwitterJa);
-        Assert.Equal("repair-ex", bundle.ExplanationJa);
-        Assert.Equal(2, calls.Count);
-        Assert.Contains("前回の応答はアプリで処理できる JSON ではありませんでした", calls[1], StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task Generate_Parses_Labeled_Text_When_Repair_Is_Not_Json()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        await using var harness = await WriteHarness.CreateAsync(ct);
-        await harness.InsertReviewedCommitAsync("labeled", ReviewStatus.Adopted, cancellationToken: ct);
-
-        var github = Substitute.For<IDocsGitHubClient>();
-        github.GetUnifiedDiffAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("diff"));
-
-        var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(
-                Task.FromResult("JSON ではなく通常文で返します。"),
-                Task.FromResult("""
-                ## 差分解説
-                labeled-ex
-
-                ## Twitter
-                labeled-tw
-
-                ## 顧客向け
-                labeled-cu
-                """));
-        var factory = Substitute.For<ICopilotSessionFactory>();
-        factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult(session));
-
-        var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
-        var bundle = await sut.GenerateDraftsAsync("labeled", ct);
-
-        Assert.Equal("labeled-ex", bundle.ExplanationJa);
-        Assert.Equal("labeled-tw", bundle.TwitterJa);
-        Assert.Empty(bundle.TeamsJa);
-        Assert.Equal("labeled-cu", bundle.CustomerJa);
-    }
-
-    [Fact]
-    public void ParsePlainTextBundle_Uses_Response_As_Explanation_When_No_Labels_Exist()
-    {
-        var parsed = AdoptionSession.TryParsePlainTextBundle("文案として読める本文です。", out var bundle);
-
-        Assert.True(parsed);
-        Assert.Equal("文案として読める本文です。", bundle.ExplanationJa);
-        Assert.Empty(bundle.TwitterJa);
-        Assert.Empty(bundle.TeamsJa);
-        Assert.Empty(bundle.CustomerJa);
     }
 
     [Fact]
@@ -320,8 +198,8 @@ public sealed class AdoptionSessionTests
 
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"\",\"customer\":\"\"}"));
+        session.SendStructuredDraftAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new DraftBundle(string.Empty, string.Empty, string.Empty, string.Empty)));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -343,15 +221,6 @@ public sealed class AdoptionSessionTests
         Assert.Contains("重要なポイント", capturedPrompt);
         Assert.Contains("細部を読まなくても変更点を理解", capturedPrompt);
         AssertContainsGitHubScopeTerminologyRule(capturedPrompt);
-    }
-
-    [Fact]
-    public void BuildRepairPrompt_Includes_GitHub_Scope_Terminology_Rule()
-    {
-        var prompt = AdoptionSession.BuildRepairPrompt(
-            "{\"explanation\":\"GitHub Organization settings changed\",\"twitter\":\"\",\"customer\":\"\"}");
-
-        AssertContainsGitHubScopeTerminologyRule(prompt);
     }
 
     [Fact]
@@ -387,8 +256,12 @@ public sealed class AdoptionSessionTests
 
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"\",\"twitter\":\"https://docs.github.com/en/copilot/about-copilot\",\"customer\":\"https://docs.github.com/en/copilot/about-copilot\"}"));
+        session.SendStructuredDraftAsync(Arg.Do<string>(p => capturedPrompt = p), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new DraftBundle(
+                "https://docs.github.com/en/copilot/about-copilot",
+                string.Empty,
+                "https://docs.github.com/en/copilot/about-copilot",
+                string.Empty)));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -476,8 +349,8 @@ public sealed class AdoptionSessionTests
             .Returns(Task.FromResult("diff"));
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
+        session.SendStructuredDraftAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new DraftBundle("tw", string.Empty, "cu", "ex")));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -521,8 +394,8 @@ public sealed class AdoptionSessionTests
             .Returns(Task.FromResult("diff"));
 
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
+        session.SendStructuredDraftAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new DraftBundle("tw", string.Empty, "cu", "ex")));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -571,8 +444,8 @@ public sealed class AdoptionSessionTests
 
         string? capturedPrompt = null;
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
+        session.SendStructuredDraftAsync(Arg.Do<string>(prompt => capturedPrompt = prompt), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new DraftBundle("tw", string.Empty, "cu", "ex")));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -602,7 +475,7 @@ public sealed class AdoptionSessionTests
 
         var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.GenerateDraftsAsync("not-yet", ct));
-        await session.DidNotReceive().SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>());
+        await session.DidNotReceive().SendStructuredDraftAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -641,8 +514,8 @@ public sealed class AdoptionSessionTests
 
         var capturedPrompts = new List<string>();
         var session = Substitute.For<ICopilotSession>();
-        session.SendAsync(Arg.Do<string>(capturedPrompts.Add), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult("{\"explanation\":\"ex\",\"twitter\":\"tw\",\"customer\":\"cu\"}"));
+        session.SendStructuredDraftAsync(Arg.Do<string>(capturedPrompts.Add), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new DraftBundle("tw", string.Empty, "cu", "ex")));
         var factory = Substitute.For<ICopilotSessionFactory>();
         factory.CreateSessionAsync(SessionPurpose.Adoption, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(session));
@@ -687,13 +560,12 @@ public sealed class AdoptionSessionTests
         var sut = new AdoptionSession(harness.DbFactory, github, factory, NullLogger<AdoptionSession>.Instance);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sut.GenerateBatchExplanationAsync(["batch-adopted", "batch-later"], ct));
-        await session.DidNotReceive().SendAsync(Arg.Any<string>(), Arg.Any<TimeSpan?>(), Arg.Any<CancellationToken>());
+        await session.DidNotReceive().SendStructuredDraftAsync(Arg.Any<string>(), Arg.Any<TimeSpan>(), Arg.Any<CancellationToken>());
     }
 
-    private sealed class StructuredDraftSessionStub : ICopilotSession, IStructuredDraftCopilotSession
+    private sealed class StructuredDraftSessionStub : ICopilotSession
     {
         public string SessionId => "structured-test";
-        public bool SupportsStructuredDrafts => true;
         public DraftBundle? Result { get; init; }
         public Exception? Failure { get; init; }
         public TimeSpan? CapturedTimeout { get; private set; }

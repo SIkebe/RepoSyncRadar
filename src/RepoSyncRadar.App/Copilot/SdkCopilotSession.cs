@@ -9,7 +9,7 @@ namespace RepoSyncRadar.App.Copilot;
 /// Production <see cref="ICopilotSession"/> that adapts the real Copilot SDK session.
 /// Owns the underlying <see cref="CopilotSession"/> handle and forwards lifecycle calls.
 /// </summary>
-internal sealed partial class SdkCopilotSession : ICopilotSession, IStructuredDraftCopilotSession
+internal sealed partial class SdkCopilotSession : ICopilotSession
 {
     private readonly CopilotSession _session;
     private readonly SessionPurpose _purpose;
@@ -17,14 +17,11 @@ internal sealed partial class SdkCopilotSession : ICopilotSession, IStructuredDr
     private readonly ICopilotUsageTracker? _usageTracker;
     private readonly IDisposable? _usageSubscription;
 
-    public bool SupportsStructuredDrafts { get; }
-
     public SdkCopilotSession(
         CopilotSession session,
         SessionPurpose purpose,
         ILogger logger,
-        ICopilotUsageTracker? usageTracker,
-        bool supportsStructuredDrafts)
+        ICopilotUsageTracker? usageTracker)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(logger);
@@ -32,7 +29,6 @@ internal sealed partial class SdkCopilotSession : ICopilotSession, IStructuredDr
         _purpose = purpose;
         _logger = logger;
         _usageTracker = usageTracker;
-        SupportsStructuredDrafts = supportsStructuredDrafts;
         if (usageTracker is not null)
         {
             _usageSubscription = session.On<AssistantUsageEvent>(usage =>
@@ -58,17 +54,12 @@ internal sealed partial class SdkCopilotSession : ICopilotSession, IStructuredDr
         return assistant?.Data?.Content ?? string.Empty;
     }
 
-#pragma warning disable GHCP001 // Typed structured output is experimental; only the verified model uses it.
+#pragma warning disable GHCP001 // Typed structured output is experimental in the installed SDK.
     public async Task<DraftBundle> SendStructuredDraftAsync(
         string prompt,
         TimeSpan timeout,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
-        if (!SupportsStructuredDrafts)
-        {
-            throw new InvalidOperationException("Structured drafts are not enabled for this model.");
-        }
-
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
         var draft = await _session.SendAndWaitAsync<StructuredDraft>(
             prompt,

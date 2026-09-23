@@ -127,17 +127,8 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             session = await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
         }
 
-        return new SdkCopilotSession(
-            session,
-            purpose,
-            _logger,
-            _usageTracker,
-            SupportsStructuredDrafts(purpose, config.Model));
+        return new SdkCopilotSession(session, purpose, _logger, _usageTracker);
     }
-
-    internal static bool SupportsStructuredDrafts(SessionPurpose purpose, string? model)
-        => purpose is SessionPurpose.Adoption
-            && string.Equals(model, "gpt-5.6-luna", StringComparison.OrdinalIgnoreCase);
 
     internal static void ConfigureFallbackModel(SessionConfig config, string fallbackModel)
     {
