@@ -1,5 +1,7 @@
+using System.Text.Json.Serialization;
 using GitHub.Copilot;
 using Microsoft.Extensions.Logging;
+using RepoSyncRadar.Core.Services;
 
 namespace RepoSyncRadar.App.Copilot;
 
@@ -52,6 +54,40 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
         return assistant?.Data?.Content ?? string.Empty;
     }
 
+#pragma warning disable GHCP001 // Typed structured output is experimental in the installed SDK.
+    public async Task<DraftBundle> SendStructuredDraftAsync(
+        string prompt,
+        TimeSpan timeout,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
+        var draft = await _session.SendAndWaitAsync<StructuredDraft>(
+            prompt,
+            timeout: timeout,
+            cancellationToken: cancellationToken).ConfigureAwait(false);
+        await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
+        return CreateDraftBundle(draft.Explanation, draft.Twitter, draft.Customer);
+    }
+#pragma warning restore GHCP001
+
+    internal static DraftBundle CreateDraftBundle(string? explanation, string? twitter, string? customer)
+    {
+        if (explanation is null)
+        {
+            throw new InvalidOperationException("Copilot returned a structured draft without explanation.");
+        }
+        if (twitter is null)
+        {
+            throw new InvalidOperationException("Copilot returned a structured draft without twitter.");
+        }
+        if (customer is null)
+        {
+            throw new InvalidOperationException("Copilot returned a structured draft without customer.");
+        }
+
+        return new DraftBundle(twitter, string.Empty, customer, explanation);
+    }
+
     private async Task RefreshUsageMetricsAsync(CancellationToken cancellationToken)
     {
         if (_usageTracker is null)
@@ -82,4 +118,10 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
         Message = "Could not refresh Copilot SDK usage metrics for session {SessionId}.")]
     private static partial void LogUsageMetricsRefreshFailed(ILogger logger, Exception ex, string sessionId);
+
+    // Non-nullable fields keep the inferred schema strict; the mapper rejects malformed provider output.
+    private sealed record StructuredDraft(
+        [property: JsonPropertyName("explanation")] string Explanation,
+        [property: JsonPropertyName("twitter")] string Twitter,
+        [property: JsonPropertyName("customer")] string Customer);
 }

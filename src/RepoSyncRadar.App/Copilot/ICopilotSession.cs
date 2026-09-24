@@ -1,3 +1,5 @@
+using RepoSyncRadar.Core.Services;
+
 namespace RepoSyncRadar.App.Copilot;
 
 /// <summary>
@@ -23,6 +25,12 @@ public interface ICopilotSession : IAsyncDisposable
     Task<string> SendAsync(
         string prompt,
         TimeSpan? timeout,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Sends a draft prompt with a JSON Schema and an explicit timeout for long docs diffs.</summary>
+    Task<DraftBundle> SendStructuredDraftAsync(
+        string prompt,
+        TimeSpan timeout,
         CancellationToken cancellationToken = default);
 
     /// <summary>Aborts the current turn. Safe to call after the session has already ended.</summary>

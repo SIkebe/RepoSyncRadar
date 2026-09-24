@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Localization;
@@ -27,16 +25,8 @@ public sealed partial class AdoptionSession
     internal const int MaxDiffBytes = 50 * 1024;
     internal const int MaxBatchCommits = 10;
     internal const int FewShotLimit = 5;
-    internal const int MaxRepairSourceChars = 20 * 1024;
     internal const string TruncatedMarker = "\n…[truncated by RepoSyncRadar — original diff exceeded 50KB]\n";
     internal static readonly TimeSpan DraftSendTimeout = TimeSpan.FromMinutes(10);
-
-    private static readonly JsonSerializerOptions _draftJsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 
     private readonly IDbContextFactory<RadarDbContext> _dbFactory;
     private readonly IDocsGitHubClient _github;
@@ -107,8 +97,8 @@ public sealed partial class AdoptionSession
         DraftBundle bundle;
         await using (session.ConfigureAwait(false))
         {
-            var raw = await session.SendAsync(prompt, DraftSendTimeout, cancellationToken).ConfigureAwait(false);
-            bundle = await ParseOrRepairBundleAsync(session, raw, cancellationToken).ConfigureAwait(false);
+            bundle = await session.SendStructuredDraftAsync(prompt, DraftSendTimeout, cancellationToken)
+                .ConfigureAwait(false);
         }
         bundle = EnsureOfficialDocUrls(bundle, officialDocUrls);
 
@@ -328,304 +318,6 @@ public sealed partial class AdoptionSession
         return draft.TrimEnd() + Environment.NewLine + url;
     }
 
-    private static async Task<DraftBundle> ParseOrRepairBundleAsync(
-        ICopilotSession session,
-        string raw,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return ParseBundle(raw);
-        }
-        catch (InvalidOperationException ex) when (IsJsonParseFailure(ex))
-        {
-            var repaired = await session.SendAsync(BuildRepairPrompt(raw), DraftSendTimeout, cancellationToken).ConfigureAwait(false);
-            try
-            {
-                return ParseBundle(repaired);
-            }
-            catch (InvalidOperationException repairEx) when (IsJsonParseFailure(repairEx))
-            {
-                if (TryParsePlainTextBundle(repaired, out var repairedBundle))
-                {
-                    return repairedBundle;
-                }
-                if (TryParsePlainTextBundle(raw, out var rawBundle))
-                {
-                    return rawBundle;
-                }
-                throw new InvalidOperationException(
-                    "Copilot の応答を文案として読み取れませんでした。もう一度再生成してください。",
-                    repairEx);
-            }
-        }
-    }
-
-    private static bool IsJsonParseFailure(InvalidOperationException ex)
-        => ex.Message.Contains("non-JSON", StringComparison.Ordinal)
-            || ex.Message.Contains("null JSON", StringComparison.Ordinal);
-
-    internal static string BuildRepairPrompt(string raw)
-    {
-        var source = raw.Length > MaxRepairSourceChars
-            ? raw[..MaxRepairSourceChars] + "\n...[truncated by RepoSyncRadar for JSON repair]"
-            : raw;
-
-        var sb = new StringBuilder();
-        sb.AppendLine("前回の応答はアプリで処理できる JSON ではありませんでした。");
-        sb.AppendLine("前回の内容から、次のスキーマに合う JSON object だけを返してください。");
-        sb.AppendLine("説明文、Markdown、コードブロック、前置き、後置きは禁止です。");
-        sb.AppendLine("スキーマ: { \"explanation\": string, \"twitter\": string, \"customer\": string }");
-        sb.AppendLine("GitHub の product scope としての `Organization` / `Enterprise` は英語のまま残し、どちらも `組織` と訳さないでください。");
-        sb.AppendLine();
-        sb.AppendLine("前回の応答:");
-        sb.AppendLine("```text");
-        sb.AppendLine(source);
-        sb.AppendLine("```");
-        return sb.ToString();
-    }
-
-    internal static bool TryParsePlainTextBundle(string response, out DraftBundle bundle)
-    {
-        var sections = ExtractPlainTextSections(response);
-        if (sections.Count == 0)
-        {
-            var fallback = StripOuterCodeFence(response.Trim());
-            if (string.IsNullOrWhiteSpace(fallback))
-            {
-                bundle = new DraftBundle(string.Empty, string.Empty, string.Empty, string.Empty);
-                return false;
-            }
-
-            bundle = new DraftBundle(
-                TwitterJa: string.Empty,
-                TeamsJa: string.Empty,
-                CustomerJa: string.Empty,
-                ExplanationJa: fallback.Trim());
-            return true;
-        }
-
-        bundle = new DraftBundle(
-            TwitterJa: ValueFor(sections, "twitter"),
-            TeamsJa: string.Empty,
-            CustomerJa: ValueFor(sections, "customer"),
-            ExplanationJa: ValueFor(sections, "explanation"));
-        return !string.IsNullOrWhiteSpace(bundle.TwitterJa)
-            || !string.IsNullOrWhiteSpace(bundle.CustomerJa)
-            || !string.IsNullOrWhiteSpace(bundle.ExplanationJa);
-    }
-
-    private static Dictionary<string, string> ExtractPlainTextSections(string response)
-    {
-        var sections = new Dictionary<string, string>(StringComparer.Ordinal);
-        var currentKey = string.Empty;
-        var current = new StringBuilder();
-
-        foreach (var rawLine in StripOuterCodeFence(response.Trim()).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
-        {
-            var line = rawLine.TrimEnd();
-            if (TryReadPlainTextSectionHeader(line, out var key, out var inlineValue))
-            {
-                StoreCurrentSection(sections, currentKey, current);
-                currentKey = key;
-                current.Clear();
-                if (!string.IsNullOrWhiteSpace(inlineValue))
-                {
-                    current.AppendLine(inlineValue.Trim());
-                }
-                continue;
-            }
-
-            if (!string.IsNullOrEmpty(currentKey))
-            {
-                current.AppendLine(line);
-            }
-        }
-
-        StoreCurrentSection(sections, currentKey, current);
-        return sections;
-    }
-
-    private static bool TryReadPlainTextSectionHeader(string line, out string key, out string inlineValue)
-    {
-        var normalized = line.Trim().TrimStart('-', '*', ' ', '#').Trim();
-        if (normalized.StartsWith("**", StringComparison.Ordinal) && normalized.Contains("**", StringComparison.Ordinal))
-        {
-            normalized = normalized.Trim('*').Trim();
-        }
-
-        var separator = normalized.IndexOfAny([':', '：']);
-        var label = separator >= 0 ? normalized[..separator].Trim() : normalized.Trim();
-        inlineValue = separator >= 0 ? normalized[(separator + 1)..].Trim() : string.Empty;
-
-        key = NormalizeSectionLabel(label);
-        return key.Length > 0;
-    }
-
-    private static string NormalizeSectionLabel(string label)
-    {
-        var normalized = label.Trim().Trim('`', '*', ' ', '　').ToLowerInvariant();
-        return normalized switch
-        {
-            "差分解説" or "解説" or "explanation" or "diff explanation" => "explanation",
-            "twitter" or "x" or "tweet" or "twitter向け" or "twitter 用" or "twitter用" => "twitter",
-            "顧客向け" or "顧客" or "customer" or "customer-facing" or "customer facing" => "customer",
-            _ => string.Empty,
-        };
-    }
-
-    private static void StoreCurrentSection(Dictionary<string, string> sections, string key, StringBuilder value)
-    {
-        if (string.IsNullOrEmpty(key))
-        {
-            return;
-        }
-
-        var text = value.ToString().Trim();
-        if (text.Length > 0)
-        {
-            sections[key] = text;
-        }
-    }
-
-    private static string ValueFor(Dictionary<string, string> sections, string key)
-        => sections.TryGetValue(key, out var value) ? value : string.Empty;
-
-    internal static DraftBundle ParseBundle(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            throw new InvalidOperationException("Adoption session returned an empty response.");
-        }
-        var payload = ExtractJsonPayload(json);
-
-        DraftJson? parsed;
-        try
-        {
-            parsed = JsonSerializer.Deserialize<DraftJson>(payload, _draftJsonOptions);
-        }
-        catch (JsonException ex)
-        {
-            throw new InvalidOperationException("Adoption session returned non-JSON output.", ex);
-        }
-        if (parsed is null)
-        {
-            throw new InvalidOperationException("Adoption session returned a null JSON document.");
-        }
-
-        return new DraftBundle(
-            parsed.Twitter ?? string.Empty,
-            string.Empty,
-            parsed.Customer ?? string.Empty,
-            parsed.Explanation ?? string.Empty);
-    }
-
-    private static string ExtractJsonPayload(string response)
-    {
-        var trimmed = StripOuterCodeFence(response.Trim());
-        return TryExtractFirstJsonObject(trimmed, out var payload)
-            ? payload
-            : trimmed;
-    }
-
-    private static string StripOuterCodeFence(string value)
-    {
-        if (!value.StartsWith("```", StringComparison.Ordinal))
-        {
-            return value;
-        }
-
-        var firstNewline = value.IndexOf('\n');
-        if (firstNewline < 0)
-        {
-            return value.Trim('`').Trim();
-        }
-
-        var fenced = value[(firstNewline + 1)..];
-        if (fenced.EndsWith("```", StringComparison.Ordinal))
-        {
-            fenced = fenced[..^3];
-        }
-        return fenced.Trim();
-    }
-
-    private static bool TryExtractFirstJsonObject(string value, out string payload)
-    {
-        for (var start = value.IndexOf('{'); start >= 0; start = value.IndexOf('{', start + 1))
-        {
-            if (TryFindJsonObjectEnd(value, start, out var end))
-            {
-                var candidate = value[start..(end + 1)];
-                try
-                {
-                    using var document = JsonDocument.Parse(candidate);
-                    if (document.RootElement.ValueKind == JsonValueKind.Object)
-                    {
-                        payload = candidate;
-                        return true;
-                    }
-                }
-                catch (JsonException)
-                {
-                }
-            }
-        }
-
-        payload = string.Empty;
-        return false;
-    }
-
-    private static bool TryFindJsonObjectEnd(string value, int start, out int end)
-    {
-        var depth = 0;
-        var inString = false;
-        var escaped = false;
-
-        for (var i = start; i < value.Length; i++)
-        {
-            var c = value[i];
-            if (inString)
-            {
-                if (escaped)
-                {
-                    escaped = false;
-                }
-                else if (c == '\\')
-                {
-                    escaped = true;
-                }
-                else if (c == '"')
-                {
-                    inString = false;
-                }
-                continue;
-            }
-
-            if (c == '"')
-            {
-                inString = true;
-                continue;
-            }
-            if (c == '{')
-            {
-                depth++;
-                continue;
-            }
-            if (c == '}')
-            {
-                depth--;
-                if (depth == 0)
-                {
-                    end = i;
-                    return true;
-                }
-            }
-        }
-
-        end = -1;
-        return false;
-    }
-
     private static async Task PersistDraftsAsync(
         RadarDbContext db,
         string sha,
@@ -648,13 +340,6 @@ public sealed partial class AdoptionSession
         };
         db.Drafts.AddRange(entries);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private sealed class DraftJson
-    {
-        public string? Twitter { get; set; }
-        public string? Customer { get; set; }
-        public string? Explanation { get; set; }
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Information,
