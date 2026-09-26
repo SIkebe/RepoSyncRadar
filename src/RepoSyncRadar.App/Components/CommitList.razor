@@ -57,7 +57,15 @@
                             @onclick:stopPropagation="true"
                             @onclick="() => OnSelectAsync(commit)">
                         <span class="sha">@ShortSha(commit.Sha)</span>
-                        <span class="message" title="@commit.Message">@FirstLine(commit.Message)</span>
+                        <span class="message-cell">
+                            <span class="message" title="@commit.Message">@FirstLine(commit.Message)</span>
+                            @if (commit.HasExplanation)
+                            {
+                                <span class="explanation-badge"
+                                      data-testid="commit-row-explanation"
+                                      title="@L["CommitList.ExplanationTitle"]">@L["CommitList.ExplanationBadge"]</span>
+                            }
+                        </span>
                         <span class="@BuildScoreClass(commit)"
                               data-testid="commit-row-score"
                               title="@BuildScoreTitle(commit)">@FormatScore(commit)</span>

@@ -745,9 +745,29 @@ html, body {
     color: #555;
 }
 
+.commit-row .message-cell {
+    align-items: baseline;
+    display: flex;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
 .commit-row .message {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.commit-row .explanation-badge {
+    border: 1px solid var(--radar-chip-fg, #0550ae);
+    border-radius: 3px;
+    color: var(--radar-chip-fg, #0550ae);
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.4;
+    padding: 0 0.3rem;
+    flex: none;
     white-space: nowrap;
 }
 

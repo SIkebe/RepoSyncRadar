@@ -371,6 +371,22 @@ public sealed class RadarRepository : IRadarRepository
         }
 
         var commits = await query.ToListAsync(cancellationToken).ConfigureAwait(false);
+        if (commits.Count > 0)
+        {
+            var shas = commits.Select(static commit => commit.Sha).ToArray();
+            var explainedShas = (await db.Drafts
+                    .AsNoTracking()
+                    .Where(draft => shas.Contains(draft.Sha) && draft.Channel == "explanation")
+                    .Select(static draft => draft.Sha)
+                    .Distinct()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false))
+                .ToHashSet(StringComparer.Ordinal);
+            foreach (var commit in commits)
+            {
+                commit.HasExplanation = explainedShas.Contains(commit.Sha);
+            }
+        }
         return commits;
     }
 
