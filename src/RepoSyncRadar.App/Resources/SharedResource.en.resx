@@ -94,6 +94,8 @@
   <data name="CommitList.Empty.WatchTitle" xml:space="preserve"><value>The watch queue is empty.</value></data>
   <data name="CommitList.ChangeStatsTitle" xml:space="preserve"><value>Changed lines: {0} added, {1} deleted, {2} total</value></data>
   <data name="CommitList.ScoreTitle" xml:space="preserve"><value>Score {0}</value></data>
+  <data name="CommitList.ExplanationBadge" xml:space="preserve"><value>Explained</value></data>
+  <data name="CommitList.ExplanationTitle" xml:space="preserve"><value>Diff explanation generated</value></data>
   <data name="CommitList.SelectCommitAriaLabel" xml:space="preserve"><value>Select {0}</value></data>
   <data name="CommitList.Sort.Label" xml:space="preserve"><value>Sort</value></data>
   <data name="CommitList.Sort.Newest" xml:space="preserve"><value>Newest</value></data>

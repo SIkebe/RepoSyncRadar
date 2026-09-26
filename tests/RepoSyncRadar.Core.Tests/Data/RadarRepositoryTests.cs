@@ -657,6 +657,30 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
+    public async Task QueryCommitsAsync_Reports_Only_Saved_Explanations_Without_Loading_Draft_Bodies()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+        await repository.UpsertCommitsAsync(
+            [MakeCommit("sha-explained", prNumber: 1), MakeCommit("sha-other", prNumber: 1)],
+            ct);
+
+        using (var seed = fixture.CreateContext())
+        {
+            seed.Drafts.AddRange(
+                new Draft { Sha = "sha-explained", Channel = "explanation", Body = "generated", GeneratedAt = DateTime.UtcNow },
+                new Draft { Sha = "sha-other", Channel = "twitter", Body = "posted", GeneratedAt = DateTime.UtcNow });
+            await seed.SaveChangesAsync(ct);
+        }
+
+        var commits = await repository.QueryCommitsAsync(new CommitQueryFilter(), ct);
+        Assert.True(commits.Single(c => c.Sha == "sha-explained").HasExplanation);
+        Assert.False(commits.Single(c => c.Sha == "sha-other").HasExplanation);
+        Assert.All(commits, commit => Assert.Empty(commit.Drafts));
+    }
+
+    [Fact]
     public async Task QueryCommitsAsync_Oldest_Sort_Applies_Before_Limit()
     {
         using var fixture = new SqliteFixture();

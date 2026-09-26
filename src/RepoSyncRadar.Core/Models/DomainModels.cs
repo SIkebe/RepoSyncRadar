@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace RepoSyncRadar.Core.Models;
 
 /// <summary>
@@ -24,6 +26,9 @@ public sealed class Commit
     public Review? Review { get; set; }
 
     public List<Draft> Drafts { get; set; } = new();
+
+    [NotMapped]
+    public bool HasExplanation { get; set; }
 
     public List<ReviewHistory> ReviewHistory { get; set; } = new();
 }

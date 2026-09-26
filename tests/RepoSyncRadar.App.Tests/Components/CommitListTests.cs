@@ -91,6 +91,47 @@ public class CommitListTests
     }
 
     [Fact]
+    public void CommitList_Shows_Explanation_Only_For_Generated_Commit()
+    {
+        var explained = MakeCommit("aaaaaaa1", "first");
+        explained.HasExplanation = true;
+        var pending = MakeCommit("bbbbbbb2", "second");
+
+        using var cut = RenderListWith([explained, pending]);
+
+        var badge = cut.Find("[data-sha=\"aaaaaaa1\"] [data-testid=\"commit-row-explanation\"]");
+        Assert.Equal("解説済み", badge.TextContent);
+        Assert.Equal("差分解説を生成済み", badge.GetAttribute("title"));
+        Assert.Empty(cut.FindAll("[data-sha=\"bbbbbbb2\"] [data-testid=\"commit-row-explanation\"]"));
+    }
+
+    [Fact]
+    public void CommitList_Updates_Explanation_When_Refreshed()
+    {
+        var repo = Substitute.For<IRadarRepository>();
+        var initial = MakeCommit("aaaaaaa1", "first");
+        var generated = MakeCommit("aaaaaaa1", "first");
+        generated.HasExplanation = true;
+        var responses = new Queue<IReadOnlyList<Commit>>([[initial], [generated]]);
+        repo.QueryCommitsAsync(Arg.Any<CommitQueryFilter>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(responses.Dequeue()));
+        var sp = new ServiceCollection()
+            .AddLogging()
+            .AddLocalization(options => options.ResourcesPath = "Resources")
+            .AddSingleton(repo)
+            .BuildServiceProvider();
+
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<CommitList>(parameters => parameters
+            .AddCascadingValue<IServiceProvider>(sp)
+            .Add(c => c.RefreshToken, 0));
+        Assert.Empty(cut.FindAll("[data-testid=\"commit-row-explanation\"]"));
+
+        cut.Render(parameters => parameters.Add(c => c.RefreshToken, 1));
+        Assert.Single(cut.FindAll("[data-testid=\"commit-row-explanation\"]"));
+    }
+
+    [Fact]
     public void CommitList_Renders_Aggregated_Line_Changes()
     {
         var commit = MakeCommit("aaaaaaa1", "first");
