@@ -38,7 +38,7 @@ It combines deterministic ingestion of Repo sync PRs with GitHub Copilot SDK tri
 | GitHub account | The signed-in account must have an active GitHub Copilot subscription. |
 | Git | Optional for basic triage, but required for local docs preview because the app reads `github/docs` content by commit SHA from a bare clone. |
 
-The installed app is self-contained and does not require a separate .NET Desktop Runtime. The Copilot CLI used by the SDK is supplied by the `GitHub.Copilot.SDK` package and is prepared automatically at runtime.
+The installed app is self-contained and does not require a separate .NET Desktop Runtime. The `GitHub.Copilot.SDK` package supplies the native Copilot runtime, which runs inside the app process.
 
 ## Install and run
 
@@ -71,7 +71,7 @@ Key settings:
 |---|---|
 | `GitHub` | Source repo, Repo sync title filter, maximum PR count, and optional PR-created cutoff. |
 | `DocsApi` | `docs.github.com` API base address and page-list cache settings. |
-| `Copilot` | Default Copilot model, SDK telemetry, remote-session toggle, OAuth Client ID, and OAuth scopes. |
+| `Copilot` | Default Copilot model, session telemetry, remote-session toggle, OAuth Client ID, and OAuth scopes. |
 | `WebView` | Host allow-list for docs, GitHub, assets, and GitHub Copilot Chat traffic inside WebView2. |
 | `DocsRepository` | `github/docs` clone URL, preview prewarm toggle, preview base port, and preview timeout. |
 | `Updates` | Velopack update-feed behavior for installed builds. |

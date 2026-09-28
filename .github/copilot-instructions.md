@@ -64,13 +64,14 @@ Use these repository instructions as the starting point. When code or validated 
 - For Copilot tool metadata such as `skip_permission` and `defer`, prefer `CopilotTool.DefineTool(..., new CopilotToolOptions { ... }, ...)` over magic-string `AdditionalProperties`. Keep RepoSyncRadar's small radar tool set pre-loaded with `CopilotToolDefer.Never`.
 - Restrict sessions to the registered radar tools and explicitly disable runtime-bundled skills, tool search, ambient custom instructions, org-level custom agents, coauthor trailers, scheduler integration, experimental mode, session memory, and the cross-session store unless a feature deliberately needs them. Inject managed permission settings that disable bypass-permissions mode and deny shell access as defense in depth.
 - Keep experimental API warning suppressions local to the integration that requires them.
+- RepoSyncRadar uses `RuntimeConnection.ForInProcess()` exclusively; it does not support per-client SDK `Telemetry`, `Environment`, or `WorkingDirectory`. Verify native runtime startup, a model turn, and shutdown in installed-package smoke before a release.
 - Keep session file-change tracking disabled until RepoSyncRadar has a user-visible rewind flow; current radar tools do not edit workspace files.
 - Treat SDK capabilities as unavailable until confirmed in the installed package's public API. Do not rely on runtime internals or prompt-only structured-output guarantees.
-- Keep `scripts/CopilotCliRelease.props` synchronized with the SDK package's `CopilotCliVersion`. If the package download target cannot resolve that CLI, use official GitHub Release assets with published SHA-256 verification. Published builds must preserve every SDK-generated native runtime asset, including hidden marker files and nested runtime dependencies, rather than copying only `copilot.exe`.
+- The SDK downloads a SHA-256-verified GitHub Release native runtime bundle. Published builds must preserve every SDK-generated runtime asset, including `copilot_runtime.dll`, `runtime.node`, hidden marker files, and nested runtime dependencies; a standalone `copilot.exe` is not a substitute.
 
 ### Client And Telemetry
 
-- Wire configured diagnostics and telemetry through SDK options. Keep content capture off by default and never log tokens, prompts, or responses.
+- Wire configured diagnostics through SDK options, and report session usage from SDK events/metrics. The in-process transport rejects client-level `Telemetry`; never log tokens, prompts, or responses.
 - Report AI Credits only from SDK usage events or session metrics; do not estimate them from model pricing.
 
 ### Auth Resolution

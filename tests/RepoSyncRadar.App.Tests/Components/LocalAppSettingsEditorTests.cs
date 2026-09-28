@@ -36,6 +36,10 @@ public sealed class LocalAppSettingsEditorTests
         {
             Assert.Equal("github-local", cut.Find("[data-testid=\"settings-github-owner\"]").GetAttribute("value"));
             Assert.Equal("gpt-5.5", cut.Find("[data-testid=\"settings-copilot-model\"]").GetAttribute("value"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-copilot-runtime-transport\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-copilot-cli-path\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-copilot-telemetry-file\"]"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-copilot-capture-content\"]"));
             var reasoningEffort = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-reasoning-effort\"]"));
             Assert.Equal("max", reasoningEffort.Value);
             var contextTier = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-context-tier\"]"));

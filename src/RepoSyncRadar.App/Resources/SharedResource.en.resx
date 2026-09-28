@@ -296,8 +296,6 @@
   <data name="LocalSettings.Label.LogLevel" xml:space="preserve"><value>LogLevel</value></data>
   <data name="LocalSettings.Label.SessionIdleTimeoutSeconds" xml:space="preserve"><value>SessionIdleTimeoutSeconds</value></data>
   <data name="LocalSettings.Label.CopilotHome" xml:space="preserve"><value>CopilotHome</value></data>
-  <data name="LocalSettings.Label.TelemetryFilePath" xml:space="preserve"><value>TelemetryFilePath</value></data>
-  <data name="LocalSettings.Label.CaptureContent" xml:space="preserve"><value>CaptureContent</value></data>
   <data name="LocalSettings.Label.EnableRemoteSessions" xml:space="preserve"><value>EnableRemoteSessions</value></data>
   <data name="LocalSettings.Label.EnableWebSocketResponses" xml:space="preserve"><value>EnableWebSocketResponses</value></data>
   <data name="LocalSettings.Label.EnableSessionTelemetry" xml:space="preserve"><value>EnableSessionTelemetry</value></data>

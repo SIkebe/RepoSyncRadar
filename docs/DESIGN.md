@@ -112,7 +112,7 @@
 │                                                                      │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │ .NET Core Services (in-process)                              │   │
-│  │  - CopilotAgentService  (GitHub.Copilot.SDK)                 │   │
+│  │  - CopilotAgentService (SDK + native runtime, in-process)   │   │
 │  │  - GitHubClient          (Octokit.NET)                       │   │
 │  │  - DocsApiClient         (HttpClient → docs.github.com)      │   │
 │  │  - PathToUrlResolver     (frontmatter + pagelist)            │   │
@@ -121,18 +121,18 @@
 │  │  - SecretStore           (DPAPI / Windows Credential Manager)│   │
 │  └──────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────┘
-        │ HTTPS                          │ JSON-RPC (stdio)
+        │ HTTPS                          │ HTTPS
         ▼                                ▼
 ┌─────────────────────┐           ┌────────────────────────┐
-│ GitHub API          │           │ copilot CLI (bundled)  │
-│ docs.github.com APIs│           │  ↳ Agent + Tools + MCP │
+│ GitHub API          │           │ GitHub Copilot service │
+│ docs.github.com APIs│           │                        │
 └─────────────────────┘           └────────────────────────┘
 ```
 
 ポイント:
 
 - UI (Razor) とコアサービスは **同一プロセス**。Electron/Node のような IPC を作り込む必要がない。
-- Copilot CLI は SDK にバンドルされ、**stdio 経由で 1 プロセス起動**。`await using var client = new CopilotClient()` で完結。
+- Copilot SDK は実験的な **in-process ネイティブランタイム**を WPF プロセスにロードし、C ABI 上の JSON-RPC で通信する。CLI 子プロセスは起動しない。
 - 公式 docs の見た目は **2 つの WebView 経路**(BlazorWebView 内の iframe / 別 WebView2 ペイン)で実現する。
 
 ---
@@ -175,7 +175,7 @@
 | データ | SQLite + EF Core | ローカル単独 / 軽量 / クエリ容易 / バックアップが 1 ファイル |
 | GitHub API | Octokit.NET | .NET の事実上標準 |
 | 公式 docs データ取得 | HttpClient → `docs.github.com/api/*` | 自前パースが不要、redirect 解決も API 側でしてくれる |
-| エージェント | `GitHub.Copilot.SDK` | 後述。Copilot CLI 全機能を JSON-RPC で駆動 |
+| エージェント | `GitHub.Copilot.SDK` | 後述。Copilot ランタイムをプロセス内の JSON-RPC で駆動 |
 | Razor UI | MudBlazor | Fluent UI Blazor でも可。差分表示は `BlazorMonaco` を併用 |
 | Git 操作 (Phase 6) | `git` CLI | bare クローンから SHA 指定で必要ファイルを読む |
 | 自動更新 | Velopack | Squirrel.Windows の後継 |
@@ -189,7 +189,7 @@
 
 | 旧認識 | 正解 |
 |---|---|
-| OpenAI / GitHub Models API への薄いラッパ | **Copilot CLI(エージェント本体)を JSON-RPC で駆動する SDK** |
+| OpenAI / GitHub Models API への薄いラッパ | **Copilot CLI と同じエージェントランタイムをプロセス内の JSON-RPC で駆動する SDK** |
 | 単発の Chat Completion を呼ぶ | **セッション**を作り、エージェントが**自律的に計画・ツール呼び出し・ファイル編集**を行う |
 | プロンプトとレスポンスのみ | `SessionEvent` ストリーム(User / Assistant / ToolStart / ToolComplete / Idle / Error / Delta…)+ Streaming + Hooks + 権限承認 |
 | LLM 呼び出しは自前で組む | **オーケストレーションは Copilot 側、自分は「ツール」と「権限ハンドラ」を実装** |
@@ -198,7 +198,7 @@
 
 ### 5.2 SDK の構造
 
-- **`CopilotClient`** — Copilot CLI プロセスのライフサイクル管理。`StartAsync` / `StopAsync` / `CreateSessionAsync` / `ResumeSessionAsync` / `ListSessionsAsync` / `DeleteSessionAsync` / `PingAsync`。
+- **`CopilotClient`** — in-process Copilot ランタイムのライフサイクル管理。`StartAsync` / `StopAsync` / `CreateSessionAsync` / `ResumeSessionAsync` / `ListSessionsAsync` / `DeleteSessionAsync` / `PingAsync`。
 - **`CopilotSession`** — 単一会話セッション。`SendAsync` / `AbortAsync` / `On(handler)` / `GetMessagesAsync` / `DisposeAsync`。
 - **イベント** — `UserMessageEvent`, `AssistantMessageEvent`, `AssistantMessageDeltaEvent`, `AssistantReasoningEvent`, `ToolExecutionStartEvent`, `ToolExecutionCompleteEvent`, `SessionStartEvent`, `SessionIdleEvent`, `SessionErrorEvent`, `SessionCompactionStartEvent`, `SessionCompactionCompleteEvent`。
 - **必須ハンドラ** — `OnPermissionRequest`(全セッションで必須)。

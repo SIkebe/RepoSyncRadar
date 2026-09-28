@@ -235,9 +235,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 LogLevel = GetString(configuration, "Copilot:LogLevel", defaults.Copilot.LogLevel),
                 SessionIdleTimeoutSeconds = GetNullableInt(configuration, "Copilot:SessionIdleTimeoutSeconds"),
                 CopilotHome = GetNullableString(configuration, "Copilot:CopilotHome"),
-                TelemetryFilePath = GetNullableString(configuration, "Copilot:TelemetryFilePath"),
-                TelemetryOtlpProtocol = GetNullableString(configuration, "Copilot:TelemetryOtlpProtocol")?.ToLowerInvariant(),
-                CaptureContent = GetBool(configuration, "Copilot:CaptureContent", defaults.Copilot.CaptureContent),
                 EnableRemoteSessions = GetBool(configuration, "Copilot:EnableRemoteSessions", defaults.Copilot.EnableRemoteSessions),
                 EnableWebSocketResponses = GetNullableBool(configuration, "Copilot:EnableWebSocketResponses"),
                 EnableSessionTelemetry = GetBool(configuration, "Copilot:EnableSessionTelemetry", defaults.Copilot.EnableSessionTelemetry),
@@ -300,9 +297,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                 LogLevel = GetString(root, "Copilot", "LogLevel", fallback.Copilot.LogLevel),
                 SessionIdleTimeoutSeconds = GetNullableInt(root, "Copilot", "SessionIdleTimeoutSeconds", fallback.Copilot.SessionIdleTimeoutSeconds),
                 CopilotHome = GetNullableString(root, "Copilot", "CopilotHome", fallback.Copilot.CopilotHome),
-                TelemetryFilePath = GetNullableString(root, "Copilot", "TelemetryFilePath", fallback.Copilot.TelemetryFilePath),
-                TelemetryOtlpProtocol = GetNullableString(root, "Copilot", "TelemetryOtlpProtocol", fallback.Copilot.TelemetryOtlpProtocol),
-                CaptureContent = GetBool(root, "Copilot", "CaptureContent", fallback.Copilot.CaptureContent),
                 EnableRemoteSessions = GetBool(root, "Copilot", "EnableRemoteSessions", fallback.Copilot.EnableRemoteSessions),
                 EnableWebSocketResponses = GetNullableBool(root, "Copilot", "EnableWebSocketResponses", fallback.Copilot.EnableWebSocketResponses),
                 EnableSessionTelemetry = GetBool(root, "Copilot", "EnableSessionTelemetry", fallback.Copilot.EnableSessionTelemetry),
@@ -355,6 +349,11 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         docsApi["PageListCacheSeconds"] = settings.DocsApi.PageListCacheSeconds;
 
         var copilot = GetOrReplaceObject(root, "Copilot");
+        copilot.Remove("RuntimeTransport");
+        copilot.Remove("CliPath");
+        copilot.Remove("TelemetryFilePath");
+        copilot.Remove("TelemetryOtlpProtocol");
+        copilot.Remove("CaptureContent");
         copilot["DefaultModel"] = settings.Copilot.DefaultModel;
         copilot["ReasoningEffort"] = string.IsNullOrWhiteSpace(settings.Copilot.ReasoningEffort)
             ? null
@@ -368,13 +367,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
         copilot["CopilotHome"] = string.IsNullOrWhiteSpace(settings.Copilot.CopilotHome)
             ? null
             : settings.Copilot.CopilotHome;
-        copilot["TelemetryFilePath"] = string.IsNullOrWhiteSpace(settings.Copilot.TelemetryFilePath)
-            ? null
-            : settings.Copilot.TelemetryFilePath;
-        copilot["TelemetryOtlpProtocol"] = string.IsNullOrWhiteSpace(settings.Copilot.TelemetryOtlpProtocol)
-            ? null
-            : settings.Copilot.TelemetryOtlpProtocol;
-        copilot["CaptureContent"] = settings.Copilot.CaptureContent;
         copilot["EnableRemoteSessions"] = settings.Copilot.EnableRemoteSessions;
         copilot["EnableWebSocketResponses"] = settings.Copilot.EnableWebSocketResponses;
         copilot["EnableSessionTelemetry"] = settings.Copilot.EnableSessionTelemetry;
@@ -450,9 +442,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
                     : settings.Copilot.LogLevel.Trim().ToLowerInvariant(),
                 SessionIdleTimeoutSeconds = settings.Copilot.SessionIdleTimeoutSeconds,
                 CopilotHome = NormalizeNullable(settings.Copilot.CopilotHome),
-                TelemetryFilePath = NormalizeNullable(settings.Copilot.TelemetryFilePath),
-                TelemetryOtlpProtocol = NormalizeNullable(settings.Copilot.TelemetryOtlpProtocol)?.ToLowerInvariant(),
-                CaptureContent = settings.Copilot.CaptureContent,
                 EnableRemoteSessions = settings.Copilot.EnableRemoteSessions,
                 EnableWebSocketResponses = settings.Copilot.EnableWebSocketResponses,
                 EnableSessionTelemetry = settings.Copilot.EnableSessionTelemetry,
@@ -523,12 +512,6 @@ public sealed class FileLocalAppSettingsStore : ILocalAppSettingsStore, IDisposa
             errors.Add("Copilot.ContextTier は default または long_context にしてください。");
         }
         Require(settings.Copilot.LogLevel, "Copilot.LogLevel", errors);
-        if (settings.Copilot.TelemetryOtlpProtocol is { } otlpProtocol
-            && !string.Equals(otlpProtocol, "http/json", StringComparison.Ordinal)
-            && !string.Equals(otlpProtocol, "http/protobuf", StringComparison.Ordinal))
-        {
-            errors.Add("Copilot.TelemetryOtlpProtocol は http/json または http/protobuf にしてください。");
-        }
         if (settings.Copilot.SessionIdleTimeoutSeconds is { } idleTimeout)
         {
             ValidateRange(idleTimeout, 0, int.MaxValue, "Copilot.SessionIdleTimeoutSeconds", errors);

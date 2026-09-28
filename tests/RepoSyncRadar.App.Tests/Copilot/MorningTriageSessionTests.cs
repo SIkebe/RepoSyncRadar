@@ -14,7 +14,7 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 /// Verifies the orchestration contract for <see cref="MorningTriageSession"/>:
 /// ingestion → session create → prompt → wait-for-idle → optional abort on cancel.
 /// The Copilot SDK is replaced by an <see cref="ICopilotSessionFactory"/> fake so the
-/// embedded CLI is never spawned. Manual end-to-end smoke is covered by the §15.4 step
+/// embedded runtime is never started. Manual end-to-end smoke is covered by the §15.4 step
 /// of <c>docs/IMPLEMENTATION_PLAN.md</c>.
 /// </summary>
 public sealed class MorningTriageSessionTests

@@ -25,7 +25,6 @@ public class HostStartupValidationTests
       "Copilot": {
         "DefaultModel": "gpt-5",
         "Streaming": true,
-        "CaptureContent": false,
         "AllowedUrlHosts": [ "docs.github.com" ]
       }
     }

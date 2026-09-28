@@ -80,6 +80,14 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
                 "Owner": "old",
                 "Unknown": "keep"
                             },
+                            "Copilot": {
+                                "RuntimeTransport": "stdio",
+                                "CliPath": "C:/tools/copilot.exe",
+                                "TelemetryFilePath": "C:/logs/copilot.jsonl",
+                                "TelemetryOtlpProtocol": "http/json",
+                                "CaptureContent": true,
+                                "Unknown": "keep-copilot"
+                            },
                             "DocsRepository": {
                                 "MaxWorktrees": 5,
                                 "PreviewCommand": "npm",
@@ -105,9 +113,6 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.Copilot.LogLevel = " Debug ";
         settings.Copilot.SessionIdleTimeoutSeconds = 120;
         settings.Copilot.CopilotHome = " C:\\Users\\me\\.reposyncradar-copilot ";
-        settings.Copilot.TelemetryFilePath = " C:\\logs\\copilot.jsonl ";
-        settings.Copilot.TelemetryOtlpProtocol = " HTTP/JSON ";
-        settings.Copilot.CaptureContent = true;
         settings.Copilot.EnableRemoteSessions = true;
         settings.Copilot.EnableWebSocketResponses = false;
         settings.Copilot.EnableSessionTelemetry = false;
@@ -139,9 +144,13 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.Equal("debug", root.GetProperty("Copilot").GetProperty("LogLevel").GetString());
         Assert.Equal(120, root.GetProperty("Copilot").GetProperty("SessionIdleTimeoutSeconds").GetInt32());
         Assert.Equal("C:\\Users\\me\\.reposyncradar-copilot", root.GetProperty("Copilot").GetProperty("CopilotHome").GetString());
-        Assert.Equal("C:\\logs\\copilot.jsonl", root.GetProperty("Copilot").GetProperty("TelemetryFilePath").GetString());
-        Assert.Equal("http/json", root.GetProperty("Copilot").GetProperty("TelemetryOtlpProtocol").GetString());
-        Assert.True(root.GetProperty("Copilot").GetProperty("CaptureContent").GetBoolean());
+        var copilot = root.GetProperty("Copilot");
+        Assert.Equal("keep-copilot", copilot.GetProperty("Unknown").GetString());
+        Assert.False(copilot.TryGetProperty("RuntimeTransport", out _));
+        Assert.False(copilot.TryGetProperty("CliPath", out _));
+        Assert.False(copilot.TryGetProperty("TelemetryFilePath", out _));
+        Assert.False(copilot.TryGetProperty("TelemetryOtlpProtocol", out _));
+        Assert.False(copilot.TryGetProperty("CaptureContent", out _));
         Assert.True(root.GetProperty("Copilot").GetProperty("EnableRemoteSessions").GetBoolean());
         Assert.False(root.GetProperty("Copilot").GetProperty("EnableWebSocketResponses").GetBoolean());
         Assert.False(root.GetProperty("Copilot").GetProperty("EnableSessionTelemetry").GetBoolean());
