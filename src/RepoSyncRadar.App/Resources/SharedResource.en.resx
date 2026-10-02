@@ -97,6 +97,8 @@
   <data name="CommitList.ExplanationBadge" xml:space="preserve"><value>Explained</value></data>
   <data name="CommitList.ExplanationTitle" xml:space="preserve"><value>Diff explanation generated</value></data>
   <data name="CommitList.SelectCommitAriaLabel" xml:space="preserve"><value>Select {0}</value></data>
+  <data name="CommitList.Sort.DiffSizeAscending" xml:space="preserve"><value>Smallest diff</value></data>
+  <data name="CommitList.Sort.DiffSizeDescending" xml:space="preserve"><value>Largest diff</value></data>
   <data name="CommitList.Sort.Label" xml:space="preserve"><value>Sort</value></data>
   <data name="CommitList.Sort.Newest" xml:space="preserve"><value>Newest</value></data>
   <data name="CommitList.Sort.Oldest" xml:space="preserve"><value>Oldest</value></data>

@@ -71,6 +71,8 @@
                         <option value="@CommitSortOrder.Oldest">@L["CommitList.Sort.Oldest"]</option>
                         <option value="@CommitSortOrder.ScoreDescending">@L["CommitList.Sort.ScoreDescending"]</option>
                         <option value="@CommitSortOrder.ScoreAscending">@L["CommitList.Sort.ScoreAscending"]</option>
+                        <option value="@CommitSortOrder.DiffSizeDescending">@L["CommitList.Sort.DiffSizeDescending"]</option>
+                        <option value="@CommitSortOrder.DiffSizeAscending">@L["CommitList.Sort.DiffSizeAscending"]</option>
                     </select>
                 </div>
                 @if (_selectedCommitShas.Count > 0 || !string.IsNullOrWhiteSpace(_bulkReviewStatus))

@@ -56,7 +56,6 @@
                             aria-current="@BuildRowAriaCurrent(commit)"
                             @onclick:stopPropagation="true"
                             @onclick="() => OnSelectAsync(commit)">
-                        <span class="sha">@ShortSha(commit.Sha)</span>
                         <span class="message-cell">
                             <span class="message" title="@commit.Message">@FirstLine(commit.Message)</span>
                             @if (commit.HasExplanation)
@@ -232,9 +231,6 @@
             _ => L["CommitList.Empty.DefaultHint"],
         };
     }
-
-    private static string ShortSha(string sha)
-        => string.IsNullOrEmpty(sha) ? string.Empty : sha[..Math.Min(7, sha.Length)];
 
     private static string FirstLine(string? message)
     {

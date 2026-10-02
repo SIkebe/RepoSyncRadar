@@ -360,6 +360,14 @@ public sealed class RadarRepository : IRadarRepository
                 .ThenBy(c => c.Scoring!.Score)
                 .ThenByDescending(c => c.AuthoredAt)
                 .ThenBy(c => c.Sha),
+            CommitSortOrder.DiffSizeDescending => query
+                .OrderByDescending(c => c.Files.Sum(f => f.Additions + f.Deletions))
+                .ThenByDescending(c => c.AuthoredAt)
+                .ThenBy(c => c.Sha),
+            CommitSortOrder.DiffSizeAscending => query
+                .OrderBy(c => c.Files.Sum(f => f.Additions + f.Deletions))
+                .ThenByDescending(c => c.AuthoredAt)
+                .ThenBy(c => c.Sha),
             _ => query
                 .OrderByDescending(c => c.AuthoredAt)
                 .ThenBy(c => c.Sha),
