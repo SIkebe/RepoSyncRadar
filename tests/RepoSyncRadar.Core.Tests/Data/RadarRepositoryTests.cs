@@ -711,6 +711,38 @@ public sealed class RadarRepositoryTests
     }
 
     [Fact]
+    public async Task QueryCommitsAsync_Sorts_By_Total_Diff_Size_Before_Limit()
+    {
+        using var fixture = new SqliteFixture();
+        var repository = fixture.CreateRepository();
+        var ct = TestContext.Current.CancellationToken;
+        var baseTime = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        var small = MakeCommit("sha-small", prNumber: 1, authoredAt: baseTime.AddDays(2), includeDefaultFile: false);
+        small.Files.Add(new CommitFile { Sha = small.Sha, Path = "content/a.md", Status = "modified", Additions = 3, Deletions = 2 });
+        var large = MakeCommit("sha-large", prNumber: 2, authoredAt: baseTime, includeDefaultFile: false);
+        large.Files.Add(new CommitFile { Sha = large.Sha, Path = "content/b.md", Status = "modified", Additions = 10, Deletions = 0 });
+        large.Files.Add(new CommitFile { Sha = large.Sha, Path = "content/c.md", Status = "modified", Additions = 5, Deletions = 40 });
+        var medium = MakeCommit("sha-medium", prNumber: 3, authoredAt: baseTime.AddDays(1), includeDefaultFile: false);
+        medium.Files.Add(new CommitFile { Sha = medium.Sha, Path = "content/d.md", Status = "modified", Additions = 1, Deletions = 29 });
+        await repository.UpsertCommitsAsync([small, large, medium], ct);
+
+        var largest = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.DiffSizeDescending },
+            ct);
+        var smallest = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.DiffSizeAscending },
+            ct);
+        var largestLimited = await repository.QueryCommitsAsync(
+            new CommitQueryFilter { SortOrder = CommitSortOrder.DiffSizeDescending, Limit = 1 },
+            ct);
+
+        Assert.Equal(["sha-large", "sha-medium", "sha-small"], largest.Select(static commit => commit.Sha));
+        Assert.Equal(["sha-small", "sha-medium", "sha-large"], smallest.Select(static commit => commit.Sha));
+        Assert.Equal("sha-large", Assert.Single(largestLimited).Sha);
+    }
+
+    [Fact]
     public async Task GetReviewCountsAsync_Counts_All_Buckets()
     {
         using var fixture = new SqliteFixture();

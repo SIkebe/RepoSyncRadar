@@ -9,6 +9,8 @@ public enum CommitSortOrder
     Oldest,
     ScoreDescending,
     ScoreAscending,
+    DiffSizeDescending,
+    DiffSizeAscending,
 }
 
 /// <summary>
@@ -43,7 +45,8 @@ public sealed record CommitQueryFilter
     public bool UnscoredOnly { get; init; }
 
     /// <summary>
-    /// Controls the result order. Score ordering places unscored commits last.
+    /// Controls the result order. Score ordering places unscored commits last. Diff size
+    /// ordering uses the total added plus deleted lines across the commit's files.
     /// </summary>
     public CommitSortOrder SortOrder { get; init; } = CommitSortOrder.Newest;
 }

@@ -550,6 +550,8 @@ public sealed class WorkbenchTests
                 CommitSortOrder.Oldest.ToString(),
                 CommitSortOrder.ScoreDescending.ToString(),
                 CommitSortOrder.ScoreAscending.ToString(),
+                CommitSortOrder.DiffSizeDescending.ToString(),
+                CommitSortOrder.DiffSizeAscending.ToString(),
             ],
             cut.FindAll("[data-testid=\"commit-sort-order\"] option")
                 .Select(static option => option.GetAttribute("value")));
