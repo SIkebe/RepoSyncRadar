@@ -727,7 +727,7 @@ html, body {
     display: grid;
     font: inherit;
     gap: 0.5rem;
-    grid-template-columns: 8ch minmax(0, 1fr) auto minmax(7ch, auto) auto;
+    grid-template-columns: minmax(0, 1fr) auto minmax(7ch, auto) auto;
     min-width: 0;
     padding: 0;
     text-align: left;
@@ -737,12 +737,6 @@ html, body {
     border-radius: 3px;
     outline: 2px solid #0969da;
     outline-offset: 2px;
-}
-
-.commit-row .sha {
-    font-family: "Cascadia Mono", "Consolas", monospace;
-    font-size: 0.85rem;
-    color: #555;
 }
 
 .commit-row .message-cell {
@@ -2945,7 +2939,6 @@ html, body {
 
 .radar-theme-dark .sidebar-item .description,
 .radar-theme-dark .sidebar-item .count,
-.radar-theme-dark .commit-row .sha,
 .radar-theme-dark .commit-row .authored,
 .radar-theme-dark .commit-row .score.unscored,
 .radar-theme-dark .radar-placeholder,
