@@ -22,9 +22,6 @@ internal sealed class CopilotOptionsPostConfigurer : IPostConfigureOptions<Copil
         options.ReasoningEffort = NormalizeNullable(options.ReasoningEffort)?.ToLowerInvariant();
         options.ContextTier = NormalizeNullable(options.ContextTier)?.ToLowerInvariant();
         options.CopilotHome = NormalizeNullable(options.CopilotHome);
-        options.TelemetryFilePath = NormalizeNullable(options.TelemetryFilePath);
-        options.TelemetryOtlpProtocol = NormalizeNullable(options.TelemetryOtlpProtocol)?.ToLowerInvariant();
-
         if (!string.IsNullOrWhiteSpace(options.OAuthClientId))
         {
             options.OAuthClientId = options.OAuthClientId.Trim();

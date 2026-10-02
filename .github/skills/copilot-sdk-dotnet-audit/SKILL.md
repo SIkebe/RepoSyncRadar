@@ -1,6 +1,6 @@
 ---
 name: copilot-sdk-dotnet-audit
-description: 'Upgrade RepoSyncRadar to a newer GitHub.Copilot.SDK version or audit a related .NET preview update in the same PR. USE FOR: Copilot SDK update/upgrade, beta upgrade, GitHub.Copilot.SDK beta.N に更新, bundled Copilot CLI refresh, .NET preview release-note audit, SDK source/package diff review, API breaking-change対応, beta/.NET preview変更点をアプリに活かす, PR作成まで. Reads user-provided official URLs plus linked area release notes, updates package/version notices, reads NuGet metadata plus SDK source/tests, applies safe app improvements, validates build/tests, and opens or updates a PR.'
+description: 'Upgrade RepoSyncRadar to a newer GitHub.Copilot.SDK version or audit a related .NET preview update in the same PR. USE FOR: Copilot SDK update/upgrade, beta upgrade, GitHub.Copilot.SDK beta.N に更新, bundled Copilot runtime refresh, .NET preview release-note audit, SDK source/package diff review, API breaking-change対応, beta/.NET preview変更点をアプリに活かす, PR作成まで. Reads user-provided official URLs plus linked area release notes, updates package/version notices, reads NuGet metadata plus SDK source/tests, applies safe app improvements, validates build/tests, and opens or updates a PR.'
 argument-hint: 'target SDK/.NET version or official URL, e.g. 1.0.0-beta.9 / .NET 11 Preview 5 blog; optional: PR作成 / 調査のみ / 特定領域 usage/auth/telemetry/tools'
 ---
 
@@ -13,7 +13,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 ## いつ使うか
 
 - 「`GitHub.Copilot.SDK` を `1.0.0-beta.N` にアップデートして」と言われたとき
-- 「Copilot SDK beta upgrade」「SDK update」「bundled Copilot CLI を更新」などの依頼
+- 「Copilot SDK beta upgrade」「SDK update」「bundled Copilot runtime を更新」などの依頼
 - SDK upgrade 後に app integration、usage billing、auth、telemetry、lifecycle、tools/permissions、structured output を見直すとき
 - Copilot SDK audit の追加 context として .NET preview ブログや release notes が渡され、SDK / ASP.NET Core / EF Core / WPF / libraries / runtime / C# の変更を RepoSyncRadar に反映できるか確認するとき
 - beta 間の変更点を RepoSyncRadar に活かせるか調査し、良い小修正を入れるとき
@@ -25,7 +25,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 2. **target version を明確にする**。ユーザー指定があればそれを使う。未指定なら NuGet prerelease を含めて候補を確認し、最新へ進めてよいか判断する。
 3. **app code と突き合わせる**。SDK の changelog 感想で終えず、`src/RepoSyncRadar.App/Copilot/`、`RepoSyncRadar.Core/Options/`、settings、UI/tests を見る。
 4. **public surface 優先**。内部実装だけにあるものは使える API として扱わない。experimental API は `GHCP001` 等の警告と変更リスクを明示する。
-5. **機密情報を出さない**。トークン、prompt/response content、telemetry content は既定で記録・表示しない。`CaptureContent` を有効化する提案は必ずリスク付きで扱う。
+5. **機密情報を出さない**。トークン、prompt/response content、telemetry content は記録・表示しない。in-process ランタイムで使えないクライアント別 `Telemetry` / `CaptureContent` を追加しない。
 6. **既存の未コミット変更を壊さない**。dirty worktree を前提に、関係ない変更は戻さない。
 7. **実装は小さく根本に当てる**。package bump、version notice、SDK 契約との不一致、設定の未配線、安全な beta 新機能活用に絞る。
 8. **見送りも根拠を残す**。公式 release notes の項目を採用しない場合は、該当コード検索結果と「なぜこのアプリでは不要か」を PR 本文または完了報告に書く。
@@ -52,7 +52,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 8. 変更前後の package metadata を読む。
    - `.nuspec`: version、repository URL/commit、dependencies
    - `build/GitHub.Copilot.SDK.props`: bundled `CopilotCliVersion`
-   - `build/GitHub.Copilot.SDK.targets`: CLI download/copy/publish behavior
+   - `build/GitHub.Copilot.SDK.targets`: native runtime download/copy/publish behavior
    - README / XML docs: public API surface
 9. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。
 
@@ -64,9 +64,9 @@ PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-S
 
 - `Directory.Packages.props`: `GitHub.Copilot.SDK` version
 - `src/RepoSyncRadar.App/Settings/ThirdPartyNotices.cs`: SDK version
-- `.github/copilot-instructions.md`: 常時必要な repo-wide SDK 契約が変わる場合だけ更新する。package / bundled CLI version や release 固有 API は毎回の context を膨らませるため記録しない。
+- `.github/copilot-instructions.md`: 常時必要な repo-wide SDK 契約が変わる場合だけ更新する。package / bundled runtime version や release 固有 API は毎回の context を膨らませるため記録しない。
 - `GHCP001` suppression コメントなど、古い beta 番号を含む説明
-- `scripts/CopilotCliRelease.props`: SDK の `CopilotCliVersion` と一致する GitHub Release の `copilot-win32-x64.zip` / `copilot-win32-arm64.zip` SHA-256。npm download の `copilot-win32-x64-<version>.tgz` / `copilot-win32-arm64-<version>.tgz` の hash と取り違えない。
+- SDK 同梱の `build/GitHub.Copilot.SDK.targets` が公式 GitHub Release に公開された SHA-256 を検証して native runtime bundle を取得する。`copilot_runtime.dll` と参照アセットがビルド/配布物に含まれることを確認する。旧スタンドアロン CLI zip の取得処理は追加しない。
 
 更新後に `dotnet restore RepoSyncRadar.sln` を実行し、target package を NuGet cache に落とす。
 
@@ -90,7 +90,7 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 - `SendAndWaitAsync` は `AssistantMessageEvent?` を返す。最終テキストは `Data.Content`。
 - timeout は idle 待ちの上限で、in-flight agent work の中止ではない。
 - `MessageOptions` に JSON schema / response format が無い場合、JSON-only prompt だけを強保証として扱わない。
-- Typed structured output が public API にある版では、実際の bundled CLI と対象モデルで synthetic な schema 送信を検証する。SDK の JSON deserialization は完全な schema validation ではないため、必須フィールドを保存前に確認する。構造化出力を必須とする機能では、未対応モデルのエラーを明示し、送信後の失敗を安易に無形式で再送しない。
+- Typed structured output が public API にある版では、実際の bundled native runtime と対象モデルで synthetic な schema 送信を検証する。SDK の JSON deserialization は完全な schema validation ではないため、必須フィールドを保存前に確認する。構造化出力を必須とする機能では、未対応モデルのエラーを明示し、送信後の失敗を安易に無形式で再送しない。
 - beta.9 以降の tool filter は source-qualified (`custom:*`, `builtin:*`, `mcp:*`) を優先する。
 
 ### 5. アプリ側の SDK 利用を棚卸しする
@@ -124,7 +124,7 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 
 1. **Correctness / user-visible failure**: breaking change、response parsing、timeout/cancel 誤解、tool filter 破綻
 2. **Security / privacy**: token fallback、ambient custom instructions、org-level custom agents、prompt/response logging、telemetry content capture
-3. **Observability**: SDK logger、CLI log level、OTel file exporter、request/session IDs、usage metrics、safe lifecycle/error hooks
+3. **Observability**: SDK logger、runtime log level、request/session IDs、usage metrics、safe lifecycle/error hooks (クライアント別 OTel exporter は in-process 非対応)
 4. **Lifecycle / reliability**: stop/force stop、idle cleanup、abort on cancel、session persistence/migration
 5. **Performance / UX**: streaming/subagent streaming、permission round-trip、model fallback
 6. **Preview / experimental opportunity**: structured output、remote sessions、canvas、quota/account APIs、Preview language/runtime/tooling
@@ -189,7 +189,7 @@ dotnet ef migrations has-pending-model-changes --project src\RepoSyncRadar.Core\
 4. PR description は英語で書く。
 5. Summary には以下を含める。
    - SDK version update
-   - bundled Copilot CLI version
+   - bundled Copilot runtime version
    - 読んだ SDK 根拠 (package metadata / source commit / major source/tests)
    - 採用した app improvement
    - source change なしで自動的に享受する runtime、compiler、SDK、test tooling の改善と、この repository で効果がある箇所
@@ -199,7 +199,7 @@ dotnet ef migrations has-pending-model-changes --project src\RepoSyncRadar.Core\
 
 最後に日本語で短くまとめる。
 
-- 更新した SDK version と bundled Copilot CLI version
+- 更新した SDK version と bundled Copilot runtime version
 - 読んだ SDK 根拠: package version、repo commit、主要 source/tests、公式 URL evidence matrix
 - 見つけた重要 finding 上位 3 件
 - 実装した改善と変更ファイル

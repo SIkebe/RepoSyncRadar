@@ -25,8 +25,8 @@ GitHub Enterprise Cloud 管理者が `github/docs` の Repo sync PR を確認し
 | 項目 | バージョン / 条件 |
 |---|---|
 | OS | Windows 11(WebView2 ランタイム必須、通常はプリインストール済) |
-| .NET SDK | .NET 10 SDK 以降([global.json](../global.json) で固定) |
-| GitHub Copilot | アクティブな Copilot サブスクリプション(初回起動時に Copilot CLI が自動取得される) |
+| .NET SDK | ソースからビルドする場合は [global.json](../global.json) で固定された .NET 11 SDK |
+| GitHub Copilot | アクティブな Copilot サブスクリプション(ネイティブランタイムはビルド時に取得・同梱される) |
 | GitHub アカウント | Copilot を有効化したアカウント(初回起動時にデバイスフローでサインイン) |
 | GitHub OAuth App | 通常は配布版に同梱された RepoSyncRadar 公式 OAuth App を使用。組織管理や fork では任意で上書き可能 |
 
@@ -73,8 +73,6 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
       "ReasoningEffort": "high",
       "LogLevel": "info",
       "SessionIdleTimeoutSeconds": 0,
-      "TelemetryFilePath": "",
-      "CaptureContent": false,
       "AllowedUrlHosts": [ "docs.github.com", "api.github.com" ],
       // 任意: 公式配布 Client ID を使う場合は省略。独自 OAuth App の場合だけ指定。
       "OAuthClientId": "Iv23liXXXXXXXXXXXXXX",
@@ -95,7 +93,9 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 >
 > `OAuthScopes` には `public_repo` を指定してください — Copilot SDK の認証(ユーザー識別)と Octokit の `github/docs` 読み取りの両方を 1 つのトークンでまかなえます。
 >
-> **Copilot SDK 診断**: `LogLevel` は SDK が起動する Copilot CLI のログレベルです。`TelemetryFilePath` を指定すると SDK の OpenTelemetry file exporter を有効化します。通常は `CaptureContent: false` のままにしてください。`SessionIdleTimeoutSeconds` は `0` / 未指定なら SDK 既定(無効)です。
+> **Copilot SDK 診断**: `LogLevel` は SDK ランタイムのログレベルです。`SessionIdleTimeoutSeconds` は `0` / 未指定なら SDK 既定(無効)です。AI Credits は SDK の usage event / session metrics から取得します。in-process ランタイムでは SDK のクライアント別ファイルテレメトリは使用できず、プロンプトや応答内容のキャプチャも設定しません。
+>
+> **ランタイム**: RepoSyncRadar は常に SDK の実験的な in-process ランタイムを使用し、Copilot CLI の子プロセスは起動しません。SDK のビルドターゲットが公式リリースから SHA-256 検証済みのネイティブランタイム一式を取得します。配布物にその DLL が無い場合は公開ビルドを失敗させます。SDK は互換性のため CLI 名の実行ファイルも同梱しますが、アプリは使用しません。ランタイムの環境とネイティブライブラリは WPF アプリのプロセスと共有されます。旧 `RuntimeTransport` / `CliPath` / ファイルテレメトリ設定は使用せず、設定画面から次に保存するとローカル設定ファイルから削除されます。
 >
 > **トークンの保管場所**: OAuth で取得したアクセストークンは DPAPI(`CurrentUser` スコープ)で暗号化し `%LocalAppData%\RepoSyncRadar\github-token.bin` に保存されます。ヘッダーの **Sign out** で保存済みトークンを削除できます。手動でこのファイルを削除しても、次回起動時に再サインインを求められます。
 >
@@ -119,7 +119,7 @@ dotnet run --project src/RepoSyncRadar.App
    - 既定ブラウザが `https://github.com/login/device` を自動で開く
    - 開いたページでコードを貼り付けて GitHub にサインイン → 「Authorize」をクリック
    - アプリ側はポーリングで完了を検知し、トークンを DPAPI で保存してダイアログを閉じる
-3. Copilot CLI がバンドルから展開・常駐(子プロセス)
+3. SDK がアプリ内で Copilot ネイティブランタイムをロードする
 4. WPF + BlazorWebView の本体ウィンドウが開く
 
 > 2 回目以降は保存済みトークンを使うのでサインイン UI は出ません。GitHub 側でセッションを取り消した場合のみ再サインインを求められます。

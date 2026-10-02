@@ -36,9 +36,8 @@ This checklist captures the current public-release blockers and must-fix follow-
    - Why: administrators need to know how to report vulnerabilities, get support, understand data handling, and verify releases.
 
 2. **Finalize privacy and telemetry consent**
-   - Current state: telemetry is off unless `TelemetryFilePath` is configured; `CaptureContent` defaults to false but can be enabled from settings.
-   - Required: document what can be written when telemetry is enabled, where it is stored, how to delete it, and whether Copilot prompt/response content may be captured.
-   - Recommended: add an explicit warning near `CaptureContent` in settings before broad release.
+   - Current state: SDK session telemetry is enabled by default for usage reporting; the in-process connection does not support per-client file telemetry and RepoSyncRadar does not enable prompt/response content capture.
+   - Required: document what session usage data is collected, where it is stored, how to delete it, and confirm that Copilot prompt/response content is not captured by the app's telemetry configuration.
 
 3. **Re-evaluate default OAuth scopes**
    - Current state: default `OAuthScopes` is `[ "public_repo" ]`.

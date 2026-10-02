@@ -13,10 +13,10 @@ namespace RepoSyncRadar.App.Copilot;
 /// <summary>
 /// Production <see cref="ICopilotSessionFactory"/> backed by <see cref="CopilotClient"/>.
 /// The client is created lazily on first use so that tests / DI graph validation never
-/// trigger the embedded CLI process. The GitHub user token comes from
+/// initialize the Copilot runtime. The GitHub user token comes from
 /// <see cref="IGitHubAccessTokenProvider"/> (env override → cached → DPAPI store →
-/// OAuth Device Flow) and we set <c>UseLoggedInUser = false</c> so the Copilot CLI
-/// never falls back to whatever <c>gh</c> happens to be signed in as on the machine.
+/// OAuth Device Flow) and we set <c>UseLoggedInUser = false</c> so the runtime
+/// never falls back to a different account signed in on the machine.
 /// </summary>
 public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 {
@@ -239,10 +239,8 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     }
 
     /// <summary>
-    /// Lightweight liveness probe against the underlying Copilot CLI. Lets the UI layer
-    /// fail fast on first launch when no <c>COPILOT_GITHUB_TOKEN</c> / signed-in CLI is
-    /// available, instead of waiting for the first <see cref="CreateSessionAsync"/> to
-    /// blow up.
+    /// Lightweight liveness probe against the Copilot runtime, allowing startup
+    /// to report a missing runtime before the first session is created.
     /// </summary>
     public async Task EnsureReadyAsync(CancellationToken cancellationToken = default)
     {
@@ -295,10 +293,10 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentException.ThrowIfNullOrWhiteSpace(applicationVersion);
 
+#pragma warning disable GHCP001 // The in-process runtime is an experimental SDK transport.
         var clientOptions = new CopilotClientOptions
         {
-            Connection = RuntimeConnection.ForStdio(
-                path: string.IsNullOrWhiteSpace(copilot.CliPath) ? null : copilot.CliPath.Trim()),
+            Connection = RuntimeConnection.ForInProcess(),
             Logger = logger,
             LogLevel = string.IsNullOrWhiteSpace(copilot.LogLevel)
                 ? CopilotLogLevel.Info
@@ -310,10 +308,11 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
                 ApplicationVersion = applicationVersion,
             },
             // Force the SDK to use the token we hand it instead of falling back to
-            // whatever the bundled CLI / gh CLI happens to be signed in as.
+            // the account already signed in on the machine.
             UseLoggedInUser = false,
             EnableRemoteSessions = copilot.EnableRemoteSessions,
         };
+#pragma warning restore GHCP001
 
         if (!string.IsNullOrWhiteSpace(copilot.CopilotHome))
         {
@@ -323,18 +322,6 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         if (copilot.SessionIdleTimeoutSeconds is > 0)
         {
             clientOptions.SessionIdleTimeoutSeconds = copilot.SessionIdleTimeoutSeconds;
-        }
-
-        if (!string.IsNullOrWhiteSpace(copilot.TelemetryFilePath))
-        {
-            clientOptions.Telemetry = new TelemetryConfig
-            {
-                ExporterType = "file",
-                FilePath = copilot.TelemetryFilePath.Trim(),
-                OtlpProtocol = copilot.TelemetryOtlpProtocol,
-                SourceName = "RepoSyncRadar",
-                CaptureContent = copilot.CaptureContent,
-            };
         }
 
         return clientOptions;
@@ -358,7 +345,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     }
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug,
-        Message = "Forwarding GitHub user token to Copilot CLI.")]
+        Message = "Forwarding GitHub user token to Copilot runtime.")]
     private static partial void LogForwardingToken(ILogger logger);
 
     [LoggerMessage(EventId = 3, Level = LogLevel.Warning,

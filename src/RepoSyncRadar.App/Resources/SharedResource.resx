@@ -298,8 +298,6 @@
   <data name="LocalSettings.Label.LogLevel" xml:space="preserve"><value>ログレベル</value></data>
   <data name="LocalSettings.Label.SessionIdleTimeoutSeconds" xml:space="preserve"><value>セッション待機タイムアウト秒</value></data>
   <data name="LocalSettings.Label.CopilotHome" xml:space="preserve"><value>Copilot Home</value></data>
-  <data name="LocalSettings.Label.TelemetryFilePath" xml:space="preserve"><value>テレメトリファイル</value></data>
-  <data name="LocalSettings.Label.CaptureContent" xml:space="preserve"><value>内容をキャプチャ</value></data>
   <data name="LocalSettings.Label.EnableRemoteSessions" xml:space="preserve"><value>リモートセッションを有効化</value></data>
   <data name="LocalSettings.Label.EnableWebSocketResponses" xml:space="preserve"><value>WebSocket Responses を有効化</value></data>
   <data name="LocalSettings.Label.EnableSessionTelemetry" xml:space="preserve"><value>セッションテレメトリを有効化</value></data>

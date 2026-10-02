@@ -69,9 +69,9 @@
 
   <!--
     GitHub.Copilot.SDK の targets は build 時に $(OutDir)runtimes\<rid>\native 配下へ
-    CLI と managed runtime assets を配置するが、PublishSingleFile=true では publish 出力
+    in-process runtime の native assets を配置するが、PublishSingleFile=true では publish 出力
     ($(PublishDir)) に伝播しない。Build 出力の native directory を publish 後にコピーし、
-    installed app が SDK の runtime wrapper または explicit CLI marker を解決できるようにする。
+    installed app が SDK の native library と依存アセットを解決できるようにする。
     CopilotSkipCliDownload=true や RuntimeIdentifier 未指定のクロスビルドでは source directory
     が無いので Condition で no-op にする。
   -->
@@ -82,11 +82,11 @@
       <_CopilotPublishSourceDir>$(OutDir)runtimes\$(RuntimeIdentifier)\native\</_CopilotPublishSourceDir>
       <_CopilotPublishDestDir>$(PublishDir)runtimes\$(RuntimeIdentifier)\native\</_CopilotPublishDestDir>
     </PropertyGroup>
+    <Error Text="In-process Copilot runtime is missing from '$(_CopilotPublishSourceDir)'."
+           Condition="!Exists('$(_CopilotPublishSourceDir)copilot_runtime.dll')" />
     <ItemGroup>
       <_CopilotPublishRuntimeAsset Include="$(_CopilotPublishSourceDir)**\*" />
     </ItemGroup>
-    <Warning Text="GitHub.Copilot.SDK runtime assets were not found under '$(_CopilotPublishSourceDir)'; the published app will fail with 'Copilot runtime not found'."
-             Condition="'@(_CopilotPublishRuntimeAsset)' == ''" />
     <MakeDir Directories="$(_CopilotPublishDestDir)"
              Condition="'@(_CopilotPublishRuntimeAsset)' != ''" />
     <Copy SourceFiles="@(_CopilotPublishRuntimeAsset)"

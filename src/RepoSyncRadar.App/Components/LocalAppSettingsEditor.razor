@@ -132,14 +132,6 @@
                     <span>@L["LocalSettings.Label.CopilotHome"]</span>
                     <input data-testid="settings-copilot-home" value="@settings.Copilot.CopilotHome" disabled="@_saving" @oninput="e => settings.Copilot.CopilotHome = NullableStringValue(e)" />
                 </label>
-                <label class="local-settings-field wide">
-                    <span>@L["LocalSettings.Label.TelemetryFilePath"]</span>
-                    <input data-testid="settings-copilot-telemetry-file" value="@settings.Copilot.TelemetryFilePath" disabled="@_saving" @oninput="e => settings.Copilot.TelemetryFilePath = NullableStringValue(e)" />
-                </label>
-                <label class="local-settings-check">
-                    <input type="checkbox" data-testid="settings-copilot-capture-content" checked="@settings.Copilot.CaptureContent" disabled="@_saving" @onchange="e => settings.Copilot.CaptureContent = BoolValue(e)" />
-                    <span>@L["LocalSettings.Label.CaptureContent"]</span>
-                </label>
                 <label class="local-settings-check">
                     <input type="checkbox" data-testid="settings-copilot-enable-remote-sessions" checked="@settings.Copilot.EnableRemoteSessions" disabled="@_saving" @onchange="e => settings.Copilot.EnableRemoteSessions = BoolValue(e)" />
                     <span>@L["LocalSettings.Label.EnableRemoteSessions"]</span>

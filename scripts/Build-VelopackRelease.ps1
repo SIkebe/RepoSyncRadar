@@ -54,216 +54,6 @@ function Invoke-NativeCommand {
     }
 }
 
-function Get-CopilotCliPackageInfo {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RepoRoot,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Runtime
-    )
-
-    [xml]$packageProps = Get-Content (Join-Path $RepoRoot 'Directory.Packages.props')
-    $sdkVersion = $packageProps.Project.ItemGroup.PackageVersion |
-        Where-Object { $_.Include -eq 'GitHub.Copilot.SDK' } |
-        ForEach-Object { $_.Version } |
-        Select-Object -First 1
-
-    if ([string]::IsNullOrWhiteSpace($sdkVersion)) {
-        throw 'Directory.Packages.props must define the GitHub.Copilot.SDK package version.'
-    }
-
-    $nugetPackagesRoot = if ([string]::IsNullOrWhiteSpace($env:NUGET_PACKAGES)) {
-        Join-Path $HOME '.nuget/packages'
-    }
-    else {
-        $env:NUGET_PACKAGES
-    }
-
-    $sdkPropsPath = Join-Path $nugetPackagesRoot "github.copilot.sdk/$sdkVersion/build/GitHub.Copilot.SDK.props"
-    if (-not (Test-Path $sdkPropsPath)) {
-        throw "GitHub.Copilot.SDK props file not found at '$sdkPropsPath'. Run dotnet restore before resolving Copilot CLI metadata."
-    }
-
-    [xml]$sdkProps = Get-Content $sdkPropsPath
-    $cliVersion = $sdkProps.Project.PropertyGroup.CopilotCliVersion
-    if ([string]::IsNullOrWhiteSpace($cliVersion)) {
-        throw "CopilotCliVersion was not found in '$sdkPropsPath'."
-    }
-
-    $platform = switch ($Runtime) {
-        'win-x64' { 'win32-x64' }
-        'win-arm64' { 'win32-arm64' }
-    }
-
-    $releasePropsPath = Join-Path $RepoRoot 'scripts/CopilotCliRelease.props'
-    [xml]$releaseProps = Get-Content $releasePropsPath
-    $releaseVersion = [string]$releaseProps.Project.PropertyGroup.CopilotCliReleaseVersion
-    if (-not [string]::Equals($cliVersion, $releaseVersion, [System.StringComparison]::Ordinal)) {
-        throw "Copilot CLI release metadata version '$releaseVersion' does not match the SDK-requested version '$cliVersion'."
-    }
-
-    $expectedSha256 = switch ($platform) {
-        'win32-x64' { [string]$releaseProps.Project.PropertyGroup.CopilotCliWin32X64Sha256 }
-        'win32-arm64' { [string]$releaseProps.Project.PropertyGroup.CopilotCliWin32Arm64Sha256 }
-    }
-    if ($expectedSha256 -notmatch '^[0-9a-fA-F]{64}$') {
-        throw "Copilot CLI release metadata does not define a valid SHA-256 hash for '$platform'."
-    }
-
-    [pscustomobject]@{
-        Version = $cliVersion
-        Platform = $platform
-        BinaryName = 'copilot.exe'
-        ExpectedSha256 = $expectedSha256
-    }
-}
-
-function Test-CopilotCliBinary {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$BinaryPath,
-
-        [Parameter(Mandatory = $true)]
-        [string]$ExpectedVersion,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Platform
-    )
-
-    if (-not (Test-Path $BinaryPath)) {
-        return $false
-    }
-
-    $fileInfo = Get-Item $BinaryPath
-    if ($fileInfo.Length -lt 1MB) {
-        return $false
-    }
-
-    $expectedMachine = switch ($Platform) {
-        'win32-x64' { 0x8664 }
-        'win32-arm64' { 0xAA64 }
-        default { throw "Unsupported Copilot CLI platform '$Platform'." }
-    }
-
-    $stream = [System.IO.File]::OpenRead($BinaryPath)
-    try {
-        if ($stream.Length -lt 0x40) {
-            return $false
-        }
-
-        $reader = [System.IO.BinaryReader]::new($stream)
-        try {
-            $stream.Position = 0x3C
-            $peHeaderOffset = $reader.ReadInt32()
-            if ($peHeaderOffset -lt 0 -or $stream.Length -lt ($peHeaderOffset + 6)) {
-                return $false
-            }
-
-            $stream.Position = $peHeaderOffset
-            $signature = $reader.ReadUInt32()
-            if ($signature -ne 0x00004550) {
-                return $false
-            }
-
-            $machine = $reader.ReadUInt16()
-            if ($machine -ne $expectedMachine) {
-                return $false
-            }
-        }
-        finally {
-            $reader.Dispose()
-        }
-    }
-    finally {
-        $stream.Dispose()
-    }
-
-    $hostPlatform = switch ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture) {
-        'X64' { 'win32-x64' }
-        'Arm64' { 'win32-arm64' }
-        default { '' }
-    }
-
-    if ($hostPlatform -ne $Platform) {
-        return $true
-    }
-
-    $expectedVersionPrefix = $ExpectedVersion.Split('-')[0]
-    try {
-        $versionOutput = & $BinaryPath --version 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            return $false
-        }
-    }
-    catch {
-        return $false
-    }
-
-    $versionText = $versionOutput -join [System.Environment]::NewLine
-    return $versionText.Contains("GitHub Copilot CLI $expectedVersionPrefix", [System.StringComparison]::Ordinal)
-}
-
-function Resolve-CopilotCliBinary {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$RepoRoot,
-
-        [Parameter(Mandatory = $true)]
-        [string]$OutputRoot,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Runtime
-    )
-
-    $packageInfo = Get-CopilotCliPackageInfo -RepoRoot $RepoRoot -Runtime $Runtime
-    $cacheDir = [System.IO.Path]::Combine($RepoRoot, $OutputRoot, 'copilot-cli', $packageInfo.Version, $packageInfo.Platform)
-    $archivePath = Join-Path $cacheDir 'copilot.zip'
-    $binaryPath = Join-Path $cacheDir $packageInfo.BinaryName
-
-    if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version -Platform $packageInfo.Platform) {
-        return $binaryPath
-    }
-
-    if (Test-Path $cacheDir) {
-        Write-Warning "Discarding invalid cached Copilot CLI at '$cacheDir'."
-        Remove-Item $cacheDir -Recurse -Force
-    }
-
-    $downloadUrl = "https://github.com/github/copilot-cli/releases/download/v$($packageInfo.Version)/copilot-$($packageInfo.Platform).zip"
-    for ($attempt = 1; $attempt -le 3; $attempt++) {
-        Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
-        New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
-
-        try {
-            Write-Host "Downloading Copilot CLI $($packageInfo.Version) for $($packageInfo.Platform) (attempt $attempt of 3)."
-            Invoke-WebRequest -Uri $downloadUrl -OutFile $archivePath -TimeoutSec 600
-            $actualSha256 = (Get-FileHash -Path $archivePath -Algorithm SHA256).Hash
-            if (-not [string]::Equals($actualSha256, $packageInfo.ExpectedSha256, [System.StringComparison]::OrdinalIgnoreCase)) {
-                throw "Copilot CLI archive SHA-256 mismatch for '$archivePath'. Expected '$($packageInfo.ExpectedSha256)', actual '$actualSha256'."
-            }
-
-            Invoke-NativeCommand -FilePath 'tar' -ArgumentList @('-xf', $archivePath, '-C', $cacheDir)
-
-            if (Test-CopilotCliBinary -BinaryPath $binaryPath -ExpectedVersion $packageInfo.Version -Platform $packageInfo.Platform) {
-                return $binaryPath
-            }
-
-            throw "Copilot CLI binary was not extracted or failed validation at '$binaryPath'."
-        }
-        catch {
-            Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
-            if ($attempt -eq 3) {
-                throw
-            }
-
-            Write-Warning "Copilot CLI download failed on attempt $attempt of 3: $($_.Exception.Message)"
-        }
-    }
-
-    throw "Copilot CLI binary was not found at '$binaryPath'."
-}
-
 function Get-NuGetPackagesRoot {
     if ([string]::IsNullOrWhiteSpace($env:NUGET_PACKAGES)) {
         return (Join-Path $HOME '.nuget/packages')
@@ -394,7 +184,6 @@ try {
     Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList @('tool', 'restore')
     Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList @('restore', 'src/RepoSyncRadar.App/RepoSyncRadar.App.csproj', '-r', $Runtime)
 
-    $copilotCliBinaryPath = Resolve-CopilotCliBinary -RepoRoot $repoRoot -OutputRoot $OutputRoot -Runtime $Runtime
     if (-not (Test-Path $iconPath)) {
         throw "Application icon was not found at '$iconPath'."
     }
@@ -407,7 +196,6 @@ try {
         '-r', $Runtime,
         '--self-contained', $isSelfContainedPartialTrim.ToString().ToLowerInvariant(),
         '-p:DebugType=embedded',
-        "-p:CopilotCliBinaryPath=$copilotCliBinaryPath",
         "-p:RepoSyncRadarVersion=$Version",
         '-o', $publishDir
     )
@@ -422,6 +210,11 @@ try {
         )
     }
     Invoke-NativeCommand -FilePath 'dotnet' -ArgumentList $publishArgs
+
+    $nativeRuntime = Join-Path $publishDir "runtimes\$Runtime\native\copilot_runtime.dll"
+    if (-not (Test-Path $nativeRuntime)) {
+        throw "The in-process Copilot runtime was not published at '$nativeRuntime'."
+    }
 
     if ($isSelfContainedPartialTrim) {
         $ijwHostPath = Resolve-IjwHostBinary -RepoRoot $repoRoot -Runtime $Runtime

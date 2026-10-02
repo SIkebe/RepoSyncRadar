@@ -3,14 +3,11 @@ using System.ComponentModel.DataAnnotations;
 namespace RepoSyncRadar.Core.Options;
 
 /// <summary>
-/// Settings for the embedded Copilot CLI agent runtime.
+/// Settings for the Copilot SDK agent runtime.
 /// </summary>
 public sealed class CopilotOptions
 {
     public const string SectionName = "Copilot";
-
-    /// <summary>Override the bundled Copilot CLI binary. Null means use the SDK default.</summary>
-    public string? CliPath { get; set; }
 
     /// <summary>Default model id (e.g. <c>gpt-5.6-luna</c>, <c>claude-sonnet-5</c>).</summary>
     [Required(AllowEmptyStrings = false)]
@@ -27,27 +24,17 @@ public sealed class CopilotOptions
     [RegularExpression("^(default|long_context)$")]
     public string? ContextTier { get; set; }
 
-    /// <summary>Log level passed to the embedded Copilot CLI server.</summary>
+    /// <summary>Log level passed to the embedded Copilot runtime.</summary>
     public string LogLevel { get; set; } = "info";
 
     /// <summary>
-    /// Server-wide idle timeout for SDK sessions in seconds. Null or 0 leaves the SDK default.
+    /// Idle timeout for SDK sessions in seconds. Null or 0 leaves the SDK default.
     /// </summary>
     [Range(0, int.MaxValue)]
     public int? SessionIdleTimeoutSeconds { get; set; }
 
-    /// <summary>Optional base directory for Copilot CLI session state. Null uses the SDK default.</summary>
+    /// <summary>Optional base directory for Copilot session state. Null uses the SDK default.</summary>
     public string? CopilotHome { get; set; }
-
-    /// <summary>Where to write OpenTelemetry trace lines. Null disables file telemetry.</summary>
-    public string? TelemetryFilePath { get; set; }
-
-    /// <summary>Optional OTLP HTTP protocol override: <c>http/json</c> or <c>http/protobuf</c>.</summary>
-    [RegularExpression("^http/(json|protobuf)$")]
-    public string? TelemetryOtlpProtocol { get; set; }
-
-    /// <summary>Whether telemetry should include message content. Default off for privacy.</summary>
-    public bool CaptureContent { get; set; }
 
     /// <summary>Enable SDK remote session URL support. Default off because installed builds may not run from a GitHub repository.</summary>
     public bool EnableRemoteSessions { get; set; }

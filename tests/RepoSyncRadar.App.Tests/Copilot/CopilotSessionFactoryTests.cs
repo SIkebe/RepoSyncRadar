@@ -95,17 +95,13 @@ public sealed class CopilotSessionFactoryTests
     }
 
     [Fact]
-    public void BuildClientOptions_Wires_Sdk_Diagnostics_And_Telemetry()
+    public void BuildClientOptions_Wires_InProcess_Runtime_Diagnostics_And_Auth()
     {
         var copilot = new CopilotOptions
         {
-            CliPath = " C:/tools/copilot.exe ",
             CopilotHome = " C:/data/copilot ",
             LogLevel = " debug ",
             SessionIdleTimeoutSeconds = 120,
-            TelemetryFilePath = " C:/logs/copilot-otel.jsonl ",
-            TelemetryOtlpProtocol = "http/json",
-            CaptureContent = true,
             EnableRemoteSessions = true,
         };
 
@@ -122,33 +118,16 @@ public sealed class CopilotSessionFactoryTests
         Assert.Null(options.ClientInfo.IntegrationVersion);
         Assert.Equal("debug", options.LogLevel?.Value);
         Assert.True(options.EnableRemoteSessions);
-        var stdio = Assert.IsType<StdioRuntimeConnection>(options.Connection);
-        Assert.Equal("C:/tools/copilot.exe", stdio.Path);
+#pragma warning disable GHCP001 // Verifies the experimental SDK transport.
+        Assert.IsType<InProcessRuntimeConnection>(options.Connection);
+#pragma warning restore GHCP001
         Assert.Equal("C:/data/copilot", options.BaseDirectory);
         Assert.Equal(120, options.SessionIdleTimeoutSeconds);
-        Assert.NotNull(options.Telemetry);
-        Assert.Equal("file", options.Telemetry!.ExporterType);
-        Assert.Equal("C:/logs/copilot-otel.jsonl", options.Telemetry.FilePath);
-        Assert.Equal("http/json", options.Telemetry.OtlpProtocol);
-        Assert.Equal("RepoSyncRadar", options.Telemetry.SourceName);
-        Assert.True(options.Telemetry.CaptureContent);
-    }
-
-    [Fact]
-    public void BuildClientOptions_Disables_File_Telemetry_When_Path_Is_Missing()
-    {
-        var options = CopilotSessionFactory.BuildClientOptions(
-            new CopilotOptions { CaptureContent = true },
-            NullLogger<CopilotSessionFactory>.Instance,
-            "token-123",
-            "0.1.30");
-
         Assert.Null(options.Telemetry);
-        Assert.Null(options.SessionIdleTimeoutSeconds);
     }
 
     [Fact]
-    public void BuildClientOptions_Uses_Bundled_Stdio_When_CliPath_Is_Missing()
+    public void BuildClientOptions_Leaves_IdleTimeout_Unset_When_Not_Configured()
     {
         var options = CopilotSessionFactory.BuildClientOptions(
             new CopilotOptions(),
@@ -156,8 +135,8 @@ public sealed class CopilotSessionFactoryTests
             "token-123",
             "0.1.30");
 
-        var stdio = Assert.IsType<StdioRuntimeConnection>(options.Connection);
-        Assert.Null(stdio.Path);
+        Assert.Null(options.Telemetry);
+        Assert.Null(options.SessionIdleTimeoutSeconds);
     }
 
     private static AIFunction CreateTool(string name)
