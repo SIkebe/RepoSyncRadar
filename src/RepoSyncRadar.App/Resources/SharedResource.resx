@@ -1,5 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
+  <data name="Copilot.Policy.Title" xml:space="preserve"><value>Copilot 管理ポリシー診断</value></data>
+  <data name="Copilot.Policy.Scope" xml:space="preserve"><value>必要時にアカウント・端末のポリシーを確認します。GitHub への通信またはキャッシュを使用します。このスナップショットにはアプリがセッションに注入する権限制限は含まれず、実セッションでの適用状態を証明するものではありません。</value></data>
+  <data name="Copilot.Policy.Check" xml:space="preserve"><value>ポリシーを確認</value></data>
+  <data name="Copilot.Policy.Checking" xml:space="preserve"><value>Copilot の管理ポリシーを確認中…</value></data>
+  <data name="Copilot.Policy.SignIn" xml:space="preserve"><value>ポリシーの確認にはサインインが必要です。</value></data>
+  <data name="Copilot.Policy.Resolved" xml:space="preserve"><value>ポリシーのスナップショットを取得しました。最新の通信結果ではなくキャッシュの場合があります。</value></data>
+  <data name="Copilot.Policy.FailClosed" xml:space="preserve"><value>ポリシーを確定できず、ランタイムが安全側の制限（fail-closed）を報告しています。通信を確認し、ポリシーを再確認してください。</value></data>
+  <data name="Copilot.Policy.Sources" xml:space="preserve"><value>端末ポリシー: {0} / アカウント・組織ポリシー: {1}</value></data>
+  <data name="Copilot.Policy.Model" xml:space="preserve"><value>ポリシーのモデル: {0}（{1}）。このアカウントで利用できないモデルの場合もあります。</value></data>
+  <data name="Copilot.Policy.Locked" xml:space="preserve"><value>ポリシーで固定</value></data>
+  <data name="Copilot.Policy.Overridable" xml:space="preserve"><value>変更可能</value></data>
+  <data name="Copilot.Policy.LockUnknown" xml:space="preserve"><value>固定状態は未報告</value></data>
+  <data name="Copilot.Policy.NoModel" xml:space="preserve"><value>表示可能なポリシーモデルは報告されていません。モデルの利用可否を保証するものではありません。</value></data>
+  <data name="Copilot.Policy.Warning" xml:space="preserve"><value>ランタイムがポリシー取得元の警告を報告しています。キャッシュを使用した可能性があり、最新の通信成功を示すものではありません。</value></data>
+  <data name="Copilot.Policy.Failed" xml:space="preserve"><value>Copilot のポリシーを確認できませんでした。通信とサインイン状態を確認して再試行してください。アカウントやポリシーの生データは表示しません。</value></data>
+  <data name="Copilot.Policy.TimedOut" xml:space="preserve"><value>ポリシー確認がタイムアウトしました。通信を確認して再試行してください。</value></data>
+  <data name="Copilot.Failure.InvalidRequest" xml:space="preserve"><value>モデルがリクエストを拒否しました（HTTP 400）。モデルとリクエスト設定を確認してから再生成してください。</value></data>
+  <data name="Copilot.Failure.InputTooLarge" xml:space="preserve"><value>モデルへの入力が大きすぎます（HTTP 413）。選択コミット数や入力サイズを減らしてから再生成してください。</value></data>
+  <data name="Copilot.Failure.RateLimited" xml:space="preserve"><value>モデルのレート制限に達しました（HTTP 429）。時間を置いてから再生成してください。</value></data>
+  <data name="Copilot.Failure.RequestRejected" xml:space="preserve"><value>モデルがリクエストを拒否しました（HTTP 4xx）。サインイン、モデルの利用権限、ポリシーを確認してから再生成してください。</value></data>
+  <data name="Copilot.Failure.ServerError" xml:space="preserve"><value>モデルのサービス側で障害が発生しました（HTTP 5xx）。時間を置いてから再生成してください。</value></data>
+  <data name="Copilot.Failure.TransportError" xml:space="preserve"><value>モデルとの通信に失敗しました。ネットワークを確認してから再生成してください。</value></data>
+  <data name="Common.Yes" xml:space="preserve"><value>あり</value></data>
+  <data name="Common.No" xml:space="preserve"><value>なし</value></data>
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>

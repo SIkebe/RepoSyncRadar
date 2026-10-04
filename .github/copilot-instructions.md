@@ -49,6 +49,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Automated WPF/WebView2 tests should use `Category=E2E` only; reserve `Category=Manual` for human-operated smoke tests, not automated E2E gates.
 - PR CI and release packaging should smoke-test the installed win-x64 Velopack package by setting `REPOSYNCRADAR_E2E_APP_EXE_PATH` to the installed `current\RepoSyncRadar.exe` before running the WebView E2E tests.
 - App internals are already visible to `RepoSyncRadar.App.Tests` through `InternalsVisibleTo` in the App project.
+- Projects hosting the native Copilot runtime must reference `GitHub.Copilot.SDK` directly so its asset-copy targets run. A transitive App reference can leave an older runtime in test output after an SDK upgrade even when the managed SDK is current.
 - `Microsoft.NET.Sdk.Razor` does not implicitly include `System.IO` or `System.Net.Http`; add explicit `using` directives when using `File`, `Path`, `Directory`, `IOException`, `HttpClient`, or `HttpResponseMessage`.
 - Do not add `System.Security.Cryptography.ProtectedData` as a package; it is already available in the target framework. Use `[SupportedOSPlatform("windows")]` where DPAPI requires it.
 - Avoid `using var _ = ...`; `_` is a real variable in that context and can conflict with later discard assignments.

@@ -16,6 +16,8 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
     private readonly ILogger _logger;
     private readonly ICopilotUsageTracker? _usageTracker;
     private readonly IDisposable? _usageSubscription;
+    private readonly SemaphoreSlim _sendGate = new(1, 1);
+    private bool _modelDiagnosticsReliable = true;
 
     public SdkCopilotSession(
         CopilotSession session,
@@ -49,7 +51,9 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-        var assistant = await _session.SendAndWaitAsync(prompt, timeout, cancellationToken).ConfigureAwait(false);
+        var assistant = await SendWithDiagnosticsAsync(
+            () => _session.SendAndWaitAsync(prompt, timeout, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
         await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
         return assistant?.Data?.Content ?? string.Empty;
     }
@@ -61,14 +65,44 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
-        var draft = await _session.SendAndWaitAsync<StructuredDraft>(
-            prompt,
-            timeout: timeout,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        var draft = await SendWithDiagnosticsAsync(
+            () => _session.SendAndWaitAsync<StructuredDraft>(
+                prompt, timeout: timeout, cancellationToken: cancellationToken),
+            cancellationToken).ConfigureAwait(false);
         await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
         return CreateDraftBundle(draft.Explanation, draft.Twitter, draft.Customer);
     }
 #pragma warning restore GHCP001
+
+    private async Task<T> SendWithDiagnosticsAsync<T>(Func<Task<T>> send, CancellationToken cancellationToken)
+    {
+        await _sendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var collector = new CopilotModelFailureCollector();
+            using var subscription = _session.On<SessionEvent>(collector.Observe);
+            try
+            {
+                return await send().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                var reliable = _modelDiagnosticsReliable;
+                // A failed wait may leave runtime work in flight; its late events cannot identify a subsequent send.
+                _modelDiagnosticsReliable = false;
+                if (reliable && !cancellationToken.IsCancellationRequested
+                    && collector.Classify(ex) is { } classified)
+                {
+                    throw classified;
+                }
+                throw;
+            }
+        }
+        finally
+        {
+            _sendGate.Release();
+        }
+    }
 
     internal static DraftBundle CreateDraftBundle(string? explanation, string? twitter, string? customer)
     {

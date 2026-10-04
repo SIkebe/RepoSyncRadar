@@ -1,5 +1,9 @@
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
+using System.Net;
+using System.Net.Http;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.Core.Options;
 using Xunit;
@@ -22,4 +26,92 @@ public sealed class CopilotInProcessRuntimeTests
 
         Assert.Equal("pong: in-process", response.Message);
     }
+
+#pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
+    [Fact]
+    public async Task ManagedSettings_Compose_Returns_Model_And_Override_State_Without_Applying_Policy()
+    {
+        await using var client = new CopilotClient(CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(), NullLogger.Instance, "offline-policy-test", "0.1.30"));
+        var ct = TestContext.Current.CancellationToken;
+        await client.StartAsync(ct);
+        var schema = await client.Rpc.ManagedSettings.SchemaAsync(ct);
+        Assert.NotEmpty(schema.RuntimeVersion);
+        var validation = await client.Rpc.ManagedSettings.ValidateAsync(
+            """{"model":"gpt-5.5"}""", layer: "server", cancellationToken: ct);
+        Assert.True(validation.Valid, string.Join("; ", validation.Diagnostics.Select(d => $"{d.Path}: {d.Message}")));
+        var composed = await client.Rpc.ManagedSettings.ComposeAsync(
+            [new ManagedSettingsComposeLayer { Source = ManagedSettingsChannel.Server, Settings = validation.Settings }],
+            ct);
+        Assert.Equal("gpt-5.5", composed.Values?.Model);
+        Assert.True(composed.Meta?.Model?.Overridable);
+        Assert.False(composed.Resolved.FailClosed);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Final_Model_Error_From_Native_Runtime_Is_Classified_Without_Real_Inference(bool structured)
+    {
+        var handler = new RejectedModelRequestHandler();
+        var options = CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(), NullLogger.Instance, "offline-model-test", "0.1.30");
+        options.RequestHandler = handler;
+        await using var client = new CopilotClient(options);
+        var config = SessionConfigBuilder.Build(SessionPurpose.Adoption,
+            Options.Create(new CopilotOptions()),
+            static (_, _) => Task.FromResult(PermissionDecision.Reject("Offline test denies all tools.")));
+        config.Model = "gpt-5.5";
+        config.AvailableTools = new ToolSet();
+        config.DisabledMcpServers = ["github"];
+        config.Provider = new GitHub.Copilot.ProviderConfig
+        {
+            Type = "openai",
+            WireApi = "chat-completions",
+            BaseUrl = "https://offline-model.invalid/v1",
+            ApiKey = "synthetic-key",
+        };
+        var ct = TestContext.Current.CancellationToken;
+        var sdkSession = await client.CreateSessionAsync(config, ct);
+        var events = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        using var subscription = sdkSession.On<SessionEvent>(evt =>
+            events.Enqueue(evt is ModelCallFinalResultEvent final ? $"{evt.Type}:{final.Data.Result.Value}" : evt.Type));
+        await using var session = new SdkCopilotSession(sdkSession, SessionPurpose.Adoption, NullLogger.Instance, null);
+
+        var failure = await Record.ExceptionAsync(async () =>
+        {
+            if (structured)
+            {
+                await session.SendStructuredDraftAsync("Offline failure probe.", TimeSpan.FromSeconds(45), ct);
+            }
+            else
+            {
+                await session.SendAsync("Offline failure probe.", TimeSpan.FromSeconds(45), ct);
+            }
+        });
+        Assert.True(events.Contains("model.call_final_result:http_400"), string.Join(", ", events));
+        Assert.True(failure is CopilotModelFailureException, string.Join(", ", events));
+        var error = Assert.IsType<CopilotModelFailureException>(failure);
+
+        Assert.Equal(CopilotModelFailureKind.InvalidRequest, error.Kind);
+        Assert.IsType<InvalidOperationException>(error.InnerException);
+        Assert.True(handler.RequestCount > 0);
+    }
+
+    private sealed class RejectedModelRequestHandler : CopilotRequestHandler
+    {
+        private int _requestCount;
+        internal int RequestCount => Volatile.Read(ref _requestCount);
+
+        protected override Task<HttpResponseMessage> SendRequestAsync(HttpRequestMessage request, CopilotRequestContext ctx)
+        {
+            Interlocked.Increment(ref _requestCount);
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("""{"error":{"message":"Synthetic invalid request","type":"invalid_request_error"}}""",
+                    System.Text.Encoding.UTF8, "application/json"),
+            });
+        }
+    }
+#pragma warning restore GHCP001
 }

@@ -354,6 +354,8 @@
                         }
                     </section>
 
+                    <CopilotPolicyDiagnosticsPanel SignedIn="@(_state == GitHubAuthState.SignedIn)" AuthStateVersion="@AuthStateVersion" />
+
                     <section class="settings-section" data-testid="settings-copilot-usage">
                         <h3>@L["Settings.CopilotUsage"]</h3>
                         @if (!HasCopilotUsage(_copilotUsage))
@@ -778,7 +780,7 @@
         }
         catch (Exception ex)
         {
-            _lastError = $"{L["AppHeader.TriageFailed"]}: {ex.Message}";
+            _lastError = $"{L["AppHeader.TriageFailed"]}: {CopilotFailureMessage.TryFormat(ex, L) ?? ex.Message}";
             _triageStatus = L["AppHeader.TriageFailedStatus"];
         }
         finally

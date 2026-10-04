@@ -20,6 +20,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="RichardSzalay.MockHttp" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <PackageReference Include="GitHub.Copilot.SDK" />
   </ItemGroup>
 
   <ItemGroup>

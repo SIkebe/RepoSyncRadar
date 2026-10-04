@@ -52,6 +52,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<IGitHubAuthSession, GitHubAuthSession>();
 
         services.TryAddSingleton<ICopilotSessionFactory, CopilotSessionFactory>();
+        services.TryAddSingleton<ICopilotPolicyDiagnostics, CopilotPolicyDiagnostics>();
         services.TryAddSingleton<MorningTriageSession>();
         services.TryAddSingleton<AdoptionSession>();
         services.TryAddSingleton<ICopilotAgent, CopilotAgent>();

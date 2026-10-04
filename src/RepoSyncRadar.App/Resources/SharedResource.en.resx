@@ -1,5 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
+  <data name="Copilot.Policy.Title" xml:space="preserve"><value>Copilot policy diagnostics</value></data>
+  <data name="Copilot.Policy.Scope" xml:space="preserve"><value>Check account and device policy on demand. This may contact GitHub or use cached policy. This snapshot excludes the app's session-local permission restrictions and does not prove live session enforcement.</value></data>
+  <data name="Copilot.Policy.Check" xml:space="preserve"><value>Check policy</value></data>
+  <data name="Copilot.Policy.Checking" xml:space="preserve"><value>Checking Copilot policy...</value></data>
+  <data name="Copilot.Policy.SignIn" xml:space="preserve"><value>Sign in to check policy.</value></data>
+  <data name="Copilot.Policy.Resolved" xml:space="preserve"><value>Policy snapshot retrieved. It may be cached rather than freshly fetched.</value></data>
+  <data name="Copilot.Policy.FailClosed" xml:space="preserve"><value>Policy could not be determined. The runtime reports fail-closed restrictions. Check your connection and retry the policy check.</value></data>
+  <data name="Copilot.Policy.Sources" xml:space="preserve"><value>Device policy: {0} / account or organization policy: {1}</value></data>
+  <data name="Copilot.Policy.Model" xml:space="preserve"><value>Policy model: {0} ({1}). The model may not be available to this account.</value></data>
+  <data name="Copilot.Policy.Locked" xml:space="preserve"><value>locked by policy</value></data>
+  <data name="Copilot.Policy.Overridable" xml:space="preserve"><value>can be overridden</value></data>
+  <data name="Copilot.Policy.LockUnknown" xml:space="preserve"><value>lock state unreported</value></data>
+  <data name="Copilot.Policy.NoModel" xml:space="preserve"><value>No displayable policy model was reported. This is not a guarantee of model availability.</value></data>
+  <data name="Copilot.Policy.Warning" xml:space="preserve"><value>The runtime reported policy-source warnings. A cached policy may have been used; this is not proof of a successful live fetch.</value></data>
+  <data name="Copilot.Policy.Failed" xml:space="preserve"><value>Could not check Copilot policy. Check your connection and sign-in, then retry. Account and raw policy details are not displayed.</value></data>
+  <data name="Copilot.Policy.TimedOut" xml:space="preserve"><value>The policy check timed out. Check your connection and retry.</value></data>
+  <data name="Copilot.Failure.InvalidRequest" xml:space="preserve"><value>The model rejected the request (HTTP 400). Check the model and request settings before generating again.</value></data>
+  <data name="Copilot.Failure.InputTooLarge" xml:space="preserve"><value>The model input was too large (HTTP 413). Reduce the number of selected commits or the input size before generating again.</value></data>
+  <data name="Copilot.Failure.RateLimited" xml:space="preserve"><value>The model reached a rate limit (HTTP 429). Wait before generating again.</value></data>
+  <data name="Copilot.Failure.RequestRejected" xml:space="preserve"><value>The model rejected the request (HTTP 4xx). Check sign-in, model access, and policy before generating again.</value></data>
+  <data name="Copilot.Failure.ServerError" xml:space="preserve"><value>The model service failed (HTTP 5xx). Wait before generating again.</value></data>
+  <data name="Copilot.Failure.TransportError" xml:space="preserve"><value>The model connection failed. Check your network before generating again.</value></data>
+  <data name="Common.Yes" xml:space="preserve"><value>Yes</value></data>
+  <data name="Common.No" xml:space="preserve"><value>No</value></data>
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>

@@ -569,8 +569,10 @@ public sealed class DraftsPanelTests
         });
     }
 
-    [Fact]
-    public async Task Regenerate_Shows_Friendly_Message_For_Json_Parse_Failures()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Regenerate_Shows_Friendly_Message_For_Json_Or_Model_Failures(bool classified)
     {
         var ct = Xunit.TestContext.Current.CancellationToken;
         await using var harness = await WriteHarness.CreateAsync(ct);
@@ -580,7 +582,9 @@ public sealed class DraftsPanelTests
         var clipboard = Substitute.For<IClipboard>();
         var agent = Substitute.For<ICopilotAgent>();
         agent.GenerateDraftsAsync("sha1", Arg.Any<CancellationToken>())
-            .Returns(Task.FromException<DraftBundle>(new InvalidOperationException("Adoption session returned non-JSON output.")));
+            .Returns(Task.FromException<DraftBundle>(classified
+                ? new CopilotModelFailureException(CopilotModelFailureKind.InputTooLarge, new InvalidOperationException("private-JSON-error"))
+                : new InvalidOperationException("Adoption session returned non-JSON output.")));
 
         ctx.Services
             .AddSingleton(harness.DbFactory)
@@ -600,8 +604,9 @@ public sealed class DraftsPanelTests
         cut.WaitForAssertion(() =>
         {
             var status = cut.Find("[data-testid=\"drafts-status\"]").TextContent;
-            Assert.Contains("Copilot の応答を文案として読み取れませんでした", status, StringComparison.Ordinal);
+            Assert.Contains(classified ? "入力が大きすぎます" : "Copilot の応答を文案として読み取れませんでした", status, StringComparison.Ordinal);
             Assert.DoesNotContain("non-JSON", status, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("private-JSON-error", status, StringComparison.Ordinal);
         });
     }
 

@@ -1,0 +1,122 @@
+@using Microsoft.Extensions.DependencyInjection
+@using RepoSyncRadar.App.Copilot
+@inherits LocalizedComponentBase
+@implements IDisposable
+
+<section class="settings-section" data-testid="settings-copilot-policy">
+    <header class="settings-subheader">
+        <div>
+            <h3>@L["Copilot.Policy.Title"]</h3>
+            <p class="settings-muted">@L["Copilot.Policy.Scope"]</p>
+        </div>
+        <button type="button" class="toolbar-button compact secondary"
+                data-testid="settings-copilot-policy-check"
+                disabled="@(_busy || !SignedIn)"
+                @onclick="CheckAsync">@L["Copilot.Policy.Check"]</button>
+    </header>
+    <div role="status" aria-live="polite" aria-atomic="true" data-testid="settings-copilot-policy-status">
+        @if (_busy)
+        {
+            <p class="settings-muted">@L["Copilot.Policy.Checking"]</p>
+        }
+        else if (!SignedIn)
+        {
+            <p class="settings-muted">@L["Copilot.Policy.SignIn"]</p>
+        }
+        else if (_snapshot is { } snapshot)
+        {
+            <p class="settings-muted">@L[snapshot.FailClosed ? "Copilot.Policy.FailClosed" : "Copilot.Policy.Resolved"]</p>
+            <p class="settings-muted">@L["Copilot.Policy.Sources", L[snapshot.DeviceManaged ? "Common.Yes" : "Common.No"], L[snapshot.ServerManaged ? "Common.Yes" : "Common.No"]]</p>
+            @if (snapshot.Model is { } model)
+            {
+                <p class="settings-muted">@L["Copilot.Policy.Model", model, L[snapshot.ModelLocked switch { true => "Copilot.Policy.Locked", false => "Copilot.Policy.Overridable", null => "Copilot.Policy.LockUnknown" }]]</p>
+            }
+            else
+            {
+                <p class="settings-muted">@L["Copilot.Policy.NoModel"]</p>
+            }
+            @if (snapshot.HasDiagnostics)
+            {
+                <p class="settings-muted">@L["Copilot.Policy.Warning"]</p>
+            }
+        }
+    </div>
+    @if (_error is not null)
+    {
+        <p class="settings-error" role="alert" data-testid="settings-copilot-policy-error">@_error</p>
+    }
+</section>
+
+@code {
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+    [Parameter] public bool SignedIn { get; set; }
+    [Parameter] public int AuthStateVersion { get; set; }
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
+    private CancellationTokenSource? _check;
+    private CopilotPolicySnapshot? _snapshot;
+    private string? _error;
+    private bool _busy;
+    private int _observedAuthStateVersion;
+    private bool _disposed;
+
+    protected override void OnParametersSet()
+    {
+        if (!SignedIn || _observedAuthStateVersion != AuthStateVersion)
+        {
+            _check?.Cancel();
+            _snapshot = null;
+            _error = null;
+        }
+        _observedAuthStateVersion = AuthStateVersion;
+    }
+
+    private async Task CheckAsync()
+    {
+        if (_busy || !SignedIn)
+        {
+            return;
+        }
+
+        using var check = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+        _check = check;
+        _busy = true;
+        _snapshot = null;
+        _error = null;
+        var authVersion = AuthStateVersion;
+        try
+        {
+            var snapshot = await Services.GetRequiredService<ICopilotPolicyDiagnostics>().ResolveAsync(check.Token);
+            if (!_disposed && !check.IsCancellationRequested && SignedIn && AuthStateVersion == authVersion)
+            {
+                _snapshot = snapshot;
+            }
+        }
+        catch (OperationCanceledException) when (check.IsCancellationRequested)
+        {
+            if (!_disposed && SignedIn && AuthStateVersion == authVersion)
+            {
+                _error = L["Copilot.Policy.TimedOut"];
+            }
+        }
+        catch (Exception)
+        {
+            if (!_disposed && SignedIn && AuthStateVersion == authVersion)
+            {
+                // SDK policy errors may contain account or policy details; keep them off the UI.
+                _error = L["Copilot.Policy.Failed"];
+            }
+        }
+        finally
+        {
+            _check = null;
+            _busy = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _check?.Cancel();
+    }
+}
