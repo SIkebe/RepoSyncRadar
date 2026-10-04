@@ -54,7 +54,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
    - `build/GitHub.Copilot.SDK.props`: bundled `CopilotCliVersion`
    - `build/GitHub.Copilot.SDK.targets`: native runtime download/copy/publish behavior
    - README / XML docs: public API surface
-9. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。
+9. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。`.nuspec` の repository が SDK repo ではなく runtime repo を指すことがあるため、commit を SDK release tag と同一視しない。公開 tag がない package は exact package の XML docs / public API と props/targets を前後版で比較し、公開 source で確認できない範囲を明記する。
 
 PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-String` を使う。
 
