@@ -110,12 +110,12 @@ internal static class CopilotPolicyInventory
                     {
                         if (lists.Count >= _maxItems)
                         {
-                            lists.Add(State("Truncated"));
+                            MarkTruncated(lists);
                             break;
                         }
                         if (Find(layer.Settings, key) is { } list)
                         {
-                            lists.Add(new(ResourceKey: "Copilot.Policy.Source." + Source(layer.Source)));
+                            AppendValue(lists, new(ResourceKey: "Copilot.Policy.Source." + Source(layer.Source)));
                             Format(key, list, lists);
                         }
                     }
@@ -147,13 +147,13 @@ internal static class CopilotPolicyInventory
             _rootKeys.Contains(key) ? new CopilotPolicyValue(Text: key) : State("Hidden")).ToList();
         if (result.Resolved.ManagedKeys.Count > _maxItems)
         {
-            keys.Add(State("Truncated"));
+            MarkTruncated(keys);
         }
         var layers = result.Layers.Take(_maxItems).Select(layer => new CopilotPolicyValue(
             ResourceKey: "Copilot.Policy.Source." + Source(layer.Source))).ToList();
         if (result.Layers.Count > _maxItems)
         {
-            layers.Add(State("Truncated"));
+            MarkTruncated(layers);
         }
         groups.Add(new("Sources",
         [
@@ -200,16 +200,13 @@ internal static class CopilotPolicyInventory
     {
         if (output.Count >= _maxItems)
         {
-            if (output[^1].ResourceKey != _valuePrefix + "Truncated")
-            {
-                output.Add(State("Truncated"));
-            }
+            MarkTruncated(output);
             return;
         }
         var startingCount = output.Count;
         if (value is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined })
         {
-            output.Add(State("Unreported", label));
+            AppendValue(output, State("Unreported", label));
             return;
         }
         var element = value.Value;
@@ -218,20 +215,20 @@ internal static class CopilotPolicyInventory
             var properties = element.EnumerateObject().ToArray();
             if (properties.Length == 0)
             {
-                output.Add(State("None", label));
+                AppendValue(output, State("None", label));
                 return;
             }
-            output.Add(new(properties.Count(p => p.Value.ValueKind == JsonValueKind.True).ToString(CultureInfo.InvariantCulture),
+            AppendValue(output, new(properties.Count(p => p.Value.ValueKind == JsonValueKind.True).ToString(CultureInfo.InvariantCulture),
                 _valuePrefix + "TrueCount"));
-            output.Add(new(properties.Count(p => p.Value.ValueKind == JsonValueKind.False).ToString(CultureInfo.InvariantCulture),
+            AppendValue(output, new(properties.Count(p => p.Value.ValueKind == JsonValueKind.False).ToString(CultureInfo.InvariantCulture),
                 _valuePrefix + "FalseCount"));
-            output.Add(State("IdentifiersHidden"));
+            AppendValue(output, State("IdentifiersHidden"));
             return;
         }
         if (key is "extraKnownMarketplaces" && element.ValueKind == JsonValueKind.Object)
         {
             var count = element.EnumerateObject().Count();
-            output.Add(new(count.ToString(CultureInfo.InvariantCulture), _valuePrefix + "EntriesHidden"));
+            AppendValue(output, new(count.ToString(CultureInfo.InvariantCulture), _valuePrefix + "EntriesHidden"));
             foreach (var marketplace in element.EnumerateObject().Take(_maxItems))
             {
                 if (Find(marketplace.Value, "source.source") is { } source)
@@ -245,7 +242,7 @@ internal static class CopilotPolicyInventory
             }
             if (count > _maxItems)
             {
-                output.Add(State("Truncated"));
+                MarkTruncated(output);
             }
             return;
         }
@@ -256,12 +253,12 @@ internal static class CopilotPolicyInventory
             var empty = element.ValueKind == JsonValueKind.Array && element.GetArrayLength() == 0
                 || element.ValueKind == JsonValueKind.Object && !element.EnumerateObject().Any()
                 || element.ValueKind == JsonValueKind.String && element.GetString() == string.Empty;
-            output.Add(State(empty ? "None" : "Hidden", label));
+            AppendValue(output, State(empty ? "None" : "Hidden", label));
             return;
         }
         if (element.ValueKind is JsonValueKind.True or JsonValueKind.False)
         {
-            output.Add(State(element.GetBoolean() ? "Yes" : "No", label));
+            AppendValue(output, State(element.GetBoolean() ? "Yes" : "No", label));
         }
         else if (element.ValueKind == JsonValueKind.String)
         {
@@ -271,28 +268,28 @@ internal static class CopilotPolicyInventory
                 var kind = _permissionKinds.FirstOrDefault(k => text == k
                     || text.StartsWith(k + ":", StringComparison.Ordinal)
                     || text.StartsWith(k + "(", StringComparison.Ordinal));
-                output.Add(kind is null ? State("Hidden", label)
+                AppendValue(output, kind is null ? State("Hidden", label)
                     : new(kind, text == kind ? null : _valuePrefix + "ScopeHidden", label));
             }
             else if (key == "model" ? CopilotPolicyDiagnostics.IsDisplayableModel(text) : _safeStrings.Contains(text))
             {
-                output.Add(new(Text: text, LabelKey: label));
+                AppendValue(output, new(Text: text, LabelKey: label));
             }
             else
             {
-                output.Add(State("Hidden", label));
+                AppendValue(output, State("Hidden", label));
             }
         }
         else if (element.ValueKind == JsonValueKind.Number && key == "policyHelper.timeoutMs"
             && element.TryGetInt32(out var timeout) && timeout >= 0)
         {
-            output.Add(new(timeout.ToString(CultureInfo.InvariantCulture), LabelKey: label));
+            AppendValue(output, new(timeout.ToString(CultureInfo.InvariantCulture), LabelKey: label));
         }
         else if (element.ValueKind == JsonValueKind.Array)
         {
             if (element.GetArrayLength() == 0)
             {
-                output.Add(State(key is "permissions.allow" or "allowedMcpServers" ? "EmptyAllow" : "None", label));
+                AppendValue(output, State(key is "permissions.allow" or "allowedMcpServers" ? "EmptyAllow" : "None", label));
             }
             else
             {
@@ -303,7 +300,7 @@ internal static class CopilotPolicyInventory
                         var matcher = item.ValueKind == JsonValueKind.Object
                             ? _mcpMatcherKeys.FirstOrDefault(name => item.TryGetProperty(name, out _))
                             : null;
-                        output.Add(State("Hidden", matcher is null ? label : _itemPrefix + "mcp." + matcher));
+                        AppendValue(output, State("Hidden", matcher is null ? label : _itemPrefix + "mcp." + matcher));
                     }
                     else
                     {
@@ -312,7 +309,7 @@ internal static class CopilotPolicyInventory
                 }
                 if (element.GetArrayLength() > _maxItems)
                 {
-                    output.Add(State("Truncated"));
+                    MarkTruncated(output);
                 }
             }
         }
@@ -338,16 +335,36 @@ internal static class CopilotPolicyInventory
             }
             if (unknown)
             {
-                output.Add(State("Hidden"));
+                AppendValue(output, State("Hidden"));
             }
             if (output.Count == startingCount)
             {
-                output.Add(State("None", label));
+                AppendValue(output, State("None", label));
             }
         }
         else
         {
-            output.Add(State("Hidden", label));
+            AppendValue(output, State("Hidden", label));
+        }
+    }
+
+    private static void AppendValue(List<CopilotPolicyValue> output, CopilotPolicyValue value)
+    {
+        if (output.Count < _maxItems)
+        {
+            output.Add(value);
+        }
+        else
+        {
+            MarkTruncated(output);
+        }
+    }
+
+    private static void MarkTruncated(List<CopilotPolicyValue> output)
+    {
+        if (output.Count == 0 || output[^1].ResourceKey != _valuePrefix + "Truncated")
+        {
+            output.Add(State("Truncated"));
         }
     }
 

@@ -142,6 +142,172 @@ public sealed class CopilotPolicyDiagnosticsTests
         Assert.True(snapshot.DiagnosticsTruncated);
     }
 
+    [Theory]
+    [InlineData(29)]
+    [InlineData(30)]
+    [InlineData(31)]
+    [InlineData(32)]
+    [InlineData(100)]
+    public void Inventory_Bounds_Intersected_Allowlists_Across_Layers(int count)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(JsonSerializer.Serialize(new
+        {
+            resolved = new { permissionsAllowIntersected = true },
+            layers = new[]
+            {
+                new { source = "server", settings = new { permissions = new { allow = Enumerable.Repeat("read", count).ToArray() } } },
+                new { source = "device", settings = new { permissions = new { allow = Enumerable.Repeat("write", 1).ToArray() } } },
+            },
+        }))!;
+
+        var values = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .Single(row => row.Key == "permissions.allow").Values;
+
+        Assert.Equal(33, values.Count);
+        Assert.Equal("Copilot.Policy.Value.Intersected", values[0].ResourceKey);
+        Assert.Equal("Copilot.Policy.Source.Server", values[1].ResourceKey);
+        Assert.Equal("read", values[2].Text);
+        Assert.Equal("Copilot.Policy.Value.Truncated", values[^1].ResourceKey);
+        Assert.Single(values, value => value.ResourceKey == "Copilot.Policy.Value.Truncated");
+    }
+
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    [InlineData(33)]
+    [InlineData(100)]
+    public void Inventory_Bounds_Marketplace_Details_With_One_Omission_Marker(int count)
+    {
+        var result = new ManagedSettingsResolveResult
+        {
+            Resolved = new()
+            {
+                Settings = JsonSerializer.SerializeToElement(new
+                {
+                    extraKnownMarketplaces = Enumerable.Range(0, count).ToDictionary(index => $"market-{index}",
+                        _ => new { source = new { source = "git" }, autoUpdate = true }),
+                }),
+            },
+        };
+
+        var values = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .Single(row => row.Key == "extraKnownMarketplaces").Values;
+
+        Assert.Equal(33, values.Count);
+        Assert.Equal(count.ToString(System.Globalization.CultureInfo.InvariantCulture), values[0].Text);
+        Assert.Equal("git", values[1].Text);
+        Assert.Equal("Copilot.Policy.Value.Truncated", values[^1].ResourceKey);
+        Assert.Single(values, value => value.ResourceKey == "Copilot.Policy.Value.Truncated");
+    }
+
+    [Fact]
+    public void Inventory_Bounds_Nested_Arrays_With_One_Omission_Marker()
+    {
+        var result = new ManagedSettingsResolveResult
+        {
+            Resolved = new()
+            {
+                Settings = JsonSerializer.SerializeToElement(new
+                {
+                    permissions = new { deny = Enumerable.Repeat(Enumerable.Repeat("shell", 100).ToArray(), 100).ToArray() },
+                }),
+            },
+        };
+
+        var values = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .Single(row => row.Key == "permissions.deny").Values;
+
+        Assert.Equal(33, values.Count);
+        Assert.All(values.Take(32), value => Assert.Equal("shell", value.Text));
+        Assert.Equal("Copilot.Policy.Value.Truncated", values[^1].ResourceKey);
+        Assert.Single(values, value => value.ResourceKey == "Copilot.Policy.Value.Truncated");
+    }
+
+    [Theory]
+    [InlineData(31)]
+    [InlineData(32)]
+    [InlineData(33)]
+    public void Inventory_Preserves_Exact_List_Boundaries(int count)
+    {
+        var matchers = Enumerable.Range(0, count).Select(_ => new { serverName = "private" }).ToArray();
+        var result = new ManagedSettingsResolveResult
+        {
+            Resolved = new()
+            {
+                Settings = JsonSerializer.SerializeToElement(new
+                {
+                    permissions = new { deny = Enumerable.Repeat("shell", count).ToArray() },
+                    allowedMcpServers = matchers,
+                    deniedMcpServers = matchers,
+                    strictKnownMarketplaces = matchers,
+                }),
+            },
+        };
+
+        var rows = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .Where(row => row.Key is "permissions.deny" or "allowedMcpServers" or "deniedMcpServers" or "strictKnownMarketplaces");
+
+        Assert.All(rows, row =>
+        {
+            Assert.Equal(count, row.Values.Count);
+            Assert.Equal(count > 32 ? 1 : 0, row.Values.Count(value => value.ResourceKey == "Copilot.Policy.Value.Truncated"));
+            if (count > 32)
+            {
+                Assert.Equal("Copilot.Policy.Value.Truncated", row.Values[^1].ResourceKey);
+            }
+        });
+    }
+
+    [Theory]
+    [InlineData(30)]
+    [InlineData(31)]
+    [InlineData(32)]
+    public void Inventory_Bounds_Multi_Value_Summaries_Near_The_Limit(int count)
+    {
+        var result = new ManagedSettingsResolveResult
+        {
+            Resolved = new()
+            {
+                Settings = JsonSerializer.SerializeToElement(new
+                {
+                    features = Enumerable.Repeat<object>(true, count).Append(new { privateFeature = true }).ToArray(),
+                }),
+            },
+        };
+
+        var values = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .Single(row => row.Key == "features").Values;
+
+        Assert.Equal(33, values.Count);
+        Assert.Equal("Copilot.Policy.Value.Truncated", values[^1].ResourceKey);
+        Assert.Single(values, value => value.ResourceKey == "Copilot.Policy.Value.Truncated");
+    }
+
+    [Theory]
+    [InlineData(32)]
+    [InlineData(100)]
+    public void Inventory_Does_Not_Append_Unknown_Object_Values_After_The_Limit(int count)
+    {
+        var result = new ManagedSettingsResolveResult
+        {
+            Resolved = new()
+            {
+                Settings = JsonSerializer.SerializeToElement(new
+                {
+                    sandbox = new { enabled = Enumerable.Repeat(true, count).ToArray(), privateSetting = "private" },
+                }),
+            },
+        };
+
+        var values = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .Single(row => row.Key == "sandbox").Values;
+
+        Assert.Equal(33, values.Count);
+        Assert.All(values.Take(32), value => Assert.Equal("Copilot.Policy.Value.Yes", value.ResourceKey));
+        Assert.Equal("Copilot.Policy.Value.Truncated", values[^1].ResourceKey);
+        Assert.Single(values, value => value.ResourceKey == "Copilot.Policy.Value.Truncated");
+    }
+
     [Fact]
     public void Maps_Model_Lock_And_Failure_Without_Raw_Policy_Or_Account()
     {

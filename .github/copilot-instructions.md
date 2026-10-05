@@ -69,7 +69,7 @@ Use these repository instructions as the starting point. When code or validated 
 - RepoSyncRadar uses `RuntimeConnection.ForInProcess()` exclusively; it does not support per-client SDK `Telemetry`, `Environment`, or `WorkingDirectory`. Verify native runtime startup, a model turn, and shutdown in installed-package smoke before a release.
 - Keep session file-change tracking disabled until RepoSyncRadar has a user-visible rewind flow; current radar tools do not edit workspace files.
 - Treat SDK capabilities as unavailable until confirmed in the installed package's public API. Do not rely on runtime internals or prompt-only structured-output guarantees.
-- Managed-policy UI must use safe display DTOs, distinguish missing from empty/false, preserve per-source allowlist intersection, and cover the bundled runtime schema. Show app-injected restrictions separately using the shared session configuration, not a duplicated policy definition.
+- Managed-policy UI must use safe display DTOs, distinguish missing from empty/false, preserve per-source allowlist intersection, and cover the bundled runtime schema. Bound each entry to 32 values plus one trailing omission marker across nested values and sources. Show app-injected restrictions separately using the shared session configuration, not a duplicated policy definition.
 - The SDK downloads a SHA-256-verified GitHub Release native runtime bundle. Published builds must preserve every SDK-generated runtime asset, including `copilot_runtime.dll`, `runtime.node`, hidden marker files, and nested runtime dependencies; a standalone `copilot.exe` is not a substitute.
 
 ### Client And Telemetry
