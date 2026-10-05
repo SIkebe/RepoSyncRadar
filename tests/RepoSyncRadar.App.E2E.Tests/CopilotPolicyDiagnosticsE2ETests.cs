@@ -8,7 +8,7 @@ namespace RepoSyncRadar.App.E2E.Tests;
 public sealed class CopilotPolicyDiagnosticsE2ETests(SeededAppHostFixture fixture)
 {
     [Fact]
-    public async Task Settings_Policy_Check_Is_Visible_And_Does_Not_Expose_Raw_Account_Details()
+    public async Task Settings_Policy_Check_Is_Visible_Without_Starting_A_Policy_Request()
     {
         var page = await E2EPageHelpers.GetBlazorPageAsync(fixture.BlazorBrowser);
         await page.Locator("[data-testid='sidebar-settings']").ClickAsync();
@@ -23,26 +23,16 @@ public sealed class CopilotPolicyDiagnosticsE2ETests(SeededAppHostFixture fixtur
             var scope = await panel.InnerTextAsync();
             Assert.Contains("スナップショット", scope, StringComparison.Ordinal);
             Assert.Contains("権限制限は含まれず", scope, StringComparison.Ordinal);
+            Assert.DoesNotContain("ghu_e2e_startup_auth_placeholder", scope, StringComparison.Ordinal);
             Assert.Empty(await panel.Locator("[role='alert']").AllAsync());
+            Assert.True(string.IsNullOrWhiteSpace(await panel.Locator("[role='status']").InnerTextAsync()));
+            Assert.Single(await panel.Locator("[data-testid='settings-policy-app-restrictions']").AllAsync());
+            Assert.Empty(await panel.Locator(".settings-policy-group:not([data-testid='settings-policy-app-restrictions'])").AllAsync());
             await check.FocusAsync();
             Assert.True(await check.EvaluateAsync<bool>("el => el === document.activeElement"));
             Assert.True(await panel.EvaluateAsync<bool>("el => el.scrollWidth <= el.clientWidth + 1"));
 
-            await check.ClickAsync();
-            await page.WaitForFunctionAsync(
-                """
-                () => {
-                    const panel = document.querySelector('[data-testid="settings-copilot-policy"]');
-                    const button = panel?.querySelector('button');
-                    return button && !button.disabled
-                        && (panel.querySelector('[role="alert"]')
-                            || panel.querySelector('[role="status"]')?.textContent.trim());
-                }
-                """, null, new() { Timeout = 60000 });
-            var text = await panel.InnerTextAsync();
-            Assert.DoesNotContain("ghu_e2e_startup_auth_placeholder", text, StringComparison.Ordinal);
-            Assert.DoesNotContain("Unhandled method", text, StringComparison.Ordinal);
-            Assert.True(await panel.EvaluateAsync<bool>("el => el.scrollWidth <= el.clientWidth + 1"));
+            // Synthetic success/failure responses are covered by component tests without calling account endpoints.
             var artifactDirectory = Path.Combine(FindRepositoryRoot(), "artifacts", "copilot-policy");
             Directory.CreateDirectory(artifactDirectory);
             await panel.ScreenshotAsync(new() { Path = Path.Combine(artifactDirectory, "settings-policy.png") });
