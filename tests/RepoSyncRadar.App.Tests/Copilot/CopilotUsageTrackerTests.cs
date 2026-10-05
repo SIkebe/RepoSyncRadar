@@ -288,6 +288,31 @@ public sealed class CopilotUsageTrackerTests
     }
 
     [Fact]
+    public void RecordSessionMetrics_Preserves_Watermark_When_Recent_Records_Are_Trimmed()
+    {
+        var tracker = new CopilotUsageTracker();
+        var record = new CopilotUsageRecord(
+            DateTimeOffset.UnixEpoch, "session-1", "Triage", "gpt-test", null,
+            1, 0, 0, 0, 0, 0.25, 1_000_000);
+        for (var i = 0; i < 60; i++)
+        {
+            tracker.Record(record);
+        }
+        var watermark = tracker.CaptureMetricsWatermark();
+        tracker.Record(record);
+        tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+            DateTimeOffset.UnixEpoch, "session-1", "Triage", "gpt-test",
+            60, 0, 0, 0, 0, 60_000_000, 15, 1, 1, 0, []), watermark);
+
+        var snapshot = tracker.GetSnapshot();
+        Assert.Equal(50, snapshot.RecentTurns.Count);
+        Assert.Equal(50, snapshot.TurnCount);
+        Assert.Equal(61, snapshot.InputTokens);
+        Assert.Equal(61_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(15.25, snapshot.Cost);
+    }
+
+    [Fact]
     public void Record_Treats_Cost_Only_Usage_As_Sdk_Reported()
     {
         var tracker = new CopilotUsageTracker();

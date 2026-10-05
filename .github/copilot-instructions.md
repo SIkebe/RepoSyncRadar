@@ -73,7 +73,7 @@ Use these repository instructions as the starting point. When code or validated 
 ### Client And Telemetry
 
 - Wire configured diagnostics through SDK options, and report session usage from SDK events/metrics. The in-process transport rejects client-level `Telemetry`; never log tokens, prompts, or responses.
-- Report AI Credits only from SDK usage events (`CopilotUsage.TotalNanoAiu`) or session metrics; prefer metrics per session while retaining event totals for sessions without metrics, never double-count a session, and do not estimate from model pricing.
+- Report AI Credits only from SDK usage events (`CopilotUsage.TotalNanoAiu`) or session metrics; capture event coverage before requesting metrics, prefer successful metrics only through that watermark, retain later events after refresh failures, and do not estimate from model pricing. Ignore stale out-of-order or pre-reset metrics responses.
 
 ### Auth Resolution
 

@@ -11,7 +11,9 @@ public interface ICopilotUsageTracker
 
     void Record(CopilotUsageRecord record);
 
-    void RecordSessionMetrics(CopilotSessionUsageMetrics metrics);
+    long CaptureMetricsWatermark();
+
+    void RecordSessionMetrics(CopilotSessionUsageMetrics metrics, long? watermark = null);
 
     void Reset();
 }
@@ -22,8 +24,11 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
 
     private const int _maxRecentRecords = 50;
     private readonly object _gate = new();
-    private readonly List<CopilotUsageRecord> _records = [];
+    private readonly List<(long Sequence, CopilotUsageRecord Record)> _records = [];
     private readonly Dictionary<string, CopilotSessionUsageMetrics> _sessionMetrics = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _metricsWatermarks = new(StringComparer.Ordinal);
+    private long _sequence;
+    private long _resetWatermark;
 
     public event Action? Changed;
 
@@ -31,7 +36,10 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
     {
         lock (_gate)
         {
-            var uncoveredRecords = _records.Where(record => !_sessionMetrics.ContainsKey(record.SessionId)).ToArray();
+            var uncoveredRecords = _records
+                .Where(entry => !_metricsWatermarks.TryGetValue(entry.Record.SessionId, out var watermark)
+                    || entry.Sequence > watermark)
+                .Select(static entry => entry.Record).ToArray();
             var inputTokens = _sessionMetrics.Values.Sum(static metrics => metrics.InputTokens)
                 + uncoveredRecords.Sum(static record => record.InputTokens);
             var outputTokens = _sessionMetrics.Values.Sum(static metrics => metrics.OutputTokens)
@@ -60,8 +68,8 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
                 inputTokens + outputTokens + reasoningTokens,
                 totalNanoAiu > 0 ? totalNanoAiu : null,
                 cost > 0 ? cost : null,
-                _records.LastOrDefault(),
-                _records.ToArray(),
+                _records.LastOrDefault().Record,
+                _records.Select(static entry => entry.Record).ToArray(),
                 _sessionMetrics.Values.OrderByDescending(static metrics => metrics.UpdatedAt).ToArray(),
                 billingSource);
         }
@@ -71,7 +79,7 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
     {
         lock (_gate)
         {
-            _records.Add(record);
+            _records.Add((++_sequence, record));
             if (_records.Count > _maxRecentRecords)
             {
                 _records.RemoveRange(0, _records.Count - _maxRecentRecords);
@@ -110,11 +118,28 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
         };
     }
 
-    public void RecordSessionMetrics(CopilotSessionUsageMetrics metrics)
+    public long CaptureMetricsWatermark()
     {
         lock (_gate)
         {
+            return ++_sequence;
+        }
+    }
+
+    public void RecordSessionMetrics(CopilotSessionUsageMetrics metrics, long? watermark = null)
+    {
+        lock (_gate)
+        {
+            var coveredSequence = watermark ?? ++_sequence;
+            if (coveredSequence < _resetWatermark
+                || (_metricsWatermarks.TryGetValue(metrics.SessionId, out var previousWatermark)
+                    && coveredSequence <= previousWatermark))
+            {
+                return;
+            }
+
             _sessionMetrics[metrics.SessionId] = metrics;
+            _metricsWatermarks[metrics.SessionId] = coveredSequence;
         }
 
         Changed?.Invoke();
@@ -126,6 +151,8 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
         {
             _records.Clear();
             _sessionMetrics.Clear();
+            _metricsWatermarks.Clear();
+            _resetWatermark = ++_sequence;
         }
 
         Changed?.Invoke();

@@ -103,7 +103,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 
 起動後はヘッダー右側の **設定** から、ローカル `appsettings.local.json` の `GitHub` / `DocsApi` / `Copilot` / `DocsRepository` / `Logging` / `Updates` の値を表示・変更できます。保存した内容はローカル設定ファイルに書き戻され、次回起動時に確実に反映されます。インストール版の保存先はアプリ更新で差し替わらない `%LocalAppData%\RepoSyncRadar\appsettings.local.json` です。同じ設定パネルで、直接参照している NuGet パッケージのサードパーティ ライセンスも確認できます。
 
-設定パネルの **Copilot 使用量** では、SDK の usage event / session metrics が返す AI Credits と Premium Request cost を表示します。SDK が AI Credits を返さない場合、アプリ側でモデル別価格から推定せず `credits 未報告` のままにします。usage event の `CopilotUsage.TotalNanoAiu` を記録し、session metrics が取得できるセッションでは `Usage.GetMetricsAsync()` の `TotalNanoAiu` とモデル別 `TotalNanoAiu` を優先します。metrics が未取得のセッションは event の使用量を集計に残し、後から metrics を取得した時点でそのセッション分だけ置き換えます。同じ使用量を event と metrics から二重加算しません。
+設定パネルの **Copilot 使用量** では、SDK の usage event / session metrics が返す AI Credits と Premium Request cost を表示します。SDK が AI Credits を返さない場合、アプリ側でモデル別価格から推定せず `credits 未報告` のままにします。usage event の `CopilotUsage.TotalNanoAiu` を記録し、session metrics が取得できるセッションでは `Usage.GetMetricsAsync()` の `TotalNanoAiu` とモデル別 `TotalNanoAiu` を優先します。metrics が未取得のセッションや、最後に成功した metrics の取得開始後に届いた event の使用量は集計に残します。更新に失敗しても新しい event は失われず、次の成功時に取得開始までの event 分を metrics で置き換えます。古い更新の遅延応答やリセット前の取得応答は無視します。
 
 ### 2.4 起動
 
