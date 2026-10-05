@@ -103,7 +103,9 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 
 起動後はヘッダー右側の **設定** から、ローカル `appsettings.local.json` の `GitHub` / `DocsApi` / `Copilot` / `DocsRepository` / `Logging` / `Updates` の値を表示・変更できます。保存した内容はローカル設定ファイルに書き戻され、次回起動時に確実に反映されます。インストール版の保存先はアプリ更新で差し替わらない `%LocalAppData%\RepoSyncRadar\appsettings.local.json` です。同じ設定パネルで、直接参照している NuGet パッケージのサードパーティ ライセンスも確認できます。
 
-設定パネルの **Copilot 使用量** では、SDK の usage event / session metrics が返す AI Credits と Premium Request cost を表示します。SDK が AI Credits を返さない場合、アプリ側でモデル別価格から推定せず `credits 未報告` のままにします。SDK の `Usage.GetMetricsAsync()` から `TotalNanoAiu` とモデル別 `TotalNanoAiu` を取得します。
+設定パネルの **Copilot 使用量** では、SDK の usage event / session metrics が返す AI Credits と Premium Request cost を表示します。SDK が AI Credits を返さない場合、アプリ側でモデル別価格から推定せず `credits 未報告` のままにします。usage event の `CopilotUsage.TotalNanoAiu` と `Usage.GetMetricsAsync()` の session / model metrics を取得します。SDK は metrics に含まれる event / API call の境界を返さず、完了通知の後にも usage event が届くため、両方の値を加算しません。セッションごとに event の累積値と最後に成功した metrics の各項目の大きい方を採用する、保守的な観測値です。
+
+更新に失敗しても event は累積集計に残り、event の累積値が metrics を上回れば新しい使用量が表示されます。ただし event の履歴が欠けていると、新しい使用量の一部は次の metrics 更新成功まで過少表示されることがあります。最近の表示履歴は 50 件ですが累積値と同一セッション内の API call ID による重複排除は保持します（call ID がなければ event ID を使用し、両方ない event は別件として扱います）。リセットは表示値を消し、処理中の古い metrics 応答を無視しますが、SDK 自体の累積値はリセットしないため次の更新でセッション全体の値が戻ります。既に観測した call / event の再配信はリセット後も重複集計しません。
 
 ### 2.4 起動
 
