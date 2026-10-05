@@ -26,6 +26,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- DPAPI seeds the isolated token store using the same framework API as App. -->
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.Testing.Platform" />
