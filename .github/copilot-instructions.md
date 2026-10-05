@@ -50,7 +50,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Automated WPF/WebView2 tests should use `Category=E2E` only; reserve `Category=Manual` for human-operated smoke tests, not automated E2E gates.
 - PR CI and release packaging should smoke-test the installed win-x64 Velopack package by setting `REPOSYNCRADAR_E2E_APP_EXE_PATH` to the installed `current\RepoSyncRadar.exe` before running the WebView E2E tests.
 - App internals are already visible to `RepoSyncRadar.App.Tests` through `InternalsVisibleTo` in the App project.
-- Projects hosting the native Copilot runtime must reference `GitHub.Copilot.SDK` directly so its asset-copy targets run. A transitive App reference can leave an older runtime in test output after an SDK upgrade even when the managed SDK is current.
+- Projects hosting the native Copilot runtime must reference `GitHub.Copilot.SDK` directly so its asset-copy targets refresh their native payload. A transitive App reference can leave an older runtime in test output after an SDK upgrade; verify `GetStatusAsync().Version` as well as ping.
 - `Microsoft.NET.Sdk.Razor` does not implicitly include `System.IO` or `System.Net.Http`; add explicit `using` directives when using `File`, `Path`, `Directory`, `IOException`, `HttpClient`, or `HttpResponseMessage`.
 - Do not add `System.Security.Cryptography.ProtectedData` as a package; it is already available in the target framework. Use `[SupportedOSPlatform("windows")]` where DPAPI requires it.
 - Avoid `using var _ = ...`; `_` is a real variable in that context and can conflict with later discard assignments.
@@ -76,7 +76,7 @@ Use these repository instructions as the starting point. When code or validated 
 ### Client And Telemetry
 
 - Wire configured diagnostics through SDK options, and report session usage from SDK events/metrics. The in-process transport rejects client-level `Telemetry`; never log tokens, prompts, or responses.
-- Report AI Credits only from SDK usage events or session metrics; do not estimate them from model pricing.
+- Report AI Credits only from SDK usage events (`CopilotUsage.TotalNanoAiu`) or session metrics. The SDK has no metrics event/call coverage boundary, and usage may arrive after idle: never add events to cumulative metrics by arrival time. Retain cumulative event totals independently of the 50-record history, deduplicate by session/call ID (event ID fallback), and use per-session per-counter maxima as conservative observed totals. Incomplete event history can temporarily underreport later usage until metrics refresh succeeds. Request versions reject stale/pre-reset metrics responses only; they do not establish coverage. Never estimate from model pricing.
 
 ### Auth Resolution
 

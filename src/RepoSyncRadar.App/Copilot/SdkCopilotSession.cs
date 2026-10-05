@@ -129,14 +129,32 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
             return;
         }
 
+        await RefreshUsageMetricsAsync(
+            _usageTracker,
+            async ct => CopilotUsageTracker.FromSessionMetrics(
+                await _session.Rpc.Usage.GetMetricsAsync(ct).ConfigureAwait(false), _purpose, _session.SessionId),
+            _logger,
+            _session.SessionId,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async Task RefreshUsageMetricsAsync(
+        ICopilotUsageTracker usageTracker,
+        Func<CancellationToken, Task<CopilotSessionUsageMetrics>> getMetricsAsync,
+        ILogger logger,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        // This version rejects stale/reset responses; it does not imply event coverage.
+        var requestVersion = usageTracker.CaptureMetricsRequestVersion();
         try
         {
-            var metrics = await _session.Rpc.Usage.GetMetricsAsync(cancellationToken).ConfigureAwait(false);
-            _usageTracker.RecordSessionMetrics(CopilotUsageTracker.FromSessionMetrics(metrics, _purpose, _session.SessionId));
+            var metrics = await getMetricsAsync(cancellationToken).ConfigureAwait(false);
+            usageTracker.RecordSessionMetrics(metrics, requestVersion);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogUsageMetricsRefreshFailed(_logger, ex, _session.SessionId);
+            LogUsageMetricsRefreshFailed(logger, ex, sessionId);
         }
     }
 

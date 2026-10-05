@@ -23,8 +23,10 @@ public sealed class CopilotInProcessRuntimeTests
         await using var client = new CopilotClient(options);
 
         var response = await client.PingAsync("in-process", TestContext.Current.CancellationToken);
+        var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
+        Assert.Equal("1.0.92-4", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
