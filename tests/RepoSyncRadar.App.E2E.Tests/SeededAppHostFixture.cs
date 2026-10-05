@@ -67,7 +67,8 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
             """{"access_token":"ghu_e2e_startup_auth_placeholder","token_type":"bearer","scopes":[]}""");
         await File.WriteAllBytesAsync(
             tokenPath,
-            ProtectedData.Protect(token, optionalEntropy: null, DataProtectionScope.CurrentUser)).ConfigureAwait(false);
+            ProtectedData.Protect(token, optionalEntropy: null, DataProtectionScope.CurrentUser),
+            TestContext.Current.CancellationToken).ConfigureAwait(false);
         var environment = new Dictionary<string, string?>(AppHost.PreviewDisabledEnvironment, StringComparer.Ordinal)
         {
             ["REPOSYNCRADAR_GITHUB_TOKEN_PATH"] = tokenPath,
