@@ -1,3 +1,4 @@
+using GitHub.Copilot;
 using RepoSyncRadar.App.Copilot;
 using Xunit;
 
@@ -5,6 +6,70 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 
 public sealed class CopilotUsageTrackerTests
 {
+    [Fact]
+    public void FromAssistantUsage_Preserves_Wire_Reported_Credits_Without_Session_Metrics()
+    {
+        var usage = Assert.IsType<AssistantUsageEvent>(SessionEvent.FromJson(
+            """
+            {
+                "type": "assistant.usage",
+                "timestamp": "2026-10-05T00:00:00Z",
+                "data": {
+                    "model": "gpt-unknown",
+                    "apiCallId": "api-1",
+                    "inputTokens": 100,
+                    "outputTokens": 20,
+                    "reasoningTokens": 10,
+                    "copilotUsage": { "totalNanoAiu": 50000000 }
+                }
+            }
+            """));
+        var tracker = new CopilotUsageTracker();
+
+        tracker.Record(CopilotUsageTracker.FromAssistantUsage(usage, SessionPurpose.Adoption, "session-1"));
+
+        var snapshot = tracker.GetSnapshot();
+        Assert.Equal(50_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(0.05, snapshot.AiCredits());
+        Assert.Equal(130, snapshot.TotalTokens);
+        Assert.Null(snapshot.Cost);
+        Assert.Empty(snapshot.SessionMetrics);
+        Assert.Equal(CopilotUsageBillingSource.SdkReported, snapshot.BillingSource);
+        Assert.Equal("api-1", snapshot.LastTurn?.ApiCallId);
+        Assert.Equal("session-1", snapshot.LastTurn?.SessionId);
+        Assert.Equal("Adoption", snapshot.LastTurn?.Purpose);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0d)]
+    [InlineData(-1d)]
+    public void FromAssistantUsage_Does_Not_Invent_Credits_When_Usage_Is_Unreported(double? nanoAiu)
+    {
+        var usage = new AssistantUsageEvent
+        {
+            Data = new AssistantUsageData
+            {
+                Model = "gpt-unknown",
+                InputTokens = 100,
+                OutputTokens = 20,
+                CopilotUsage = nanoAiu is { } value
+                    ? new AssistantUsageCopilotUsage { TotalNanoAiu = value }
+                    : null,
+            },
+        };
+        var tracker = new CopilotUsageTracker();
+
+        tracker.Record(CopilotUsageTracker.FromAssistantUsage(usage, SessionPurpose.Triage, "session-1"));
+
+        var snapshot = tracker.GetSnapshot();
+        Assert.Null(snapshot.TotalNanoAiu);
+        Assert.Null(snapshot.AiCredits());
+        Assert.Null(snapshot.Cost);
+        Assert.Equal(120, snapshot.TotalTokens);
+        Assert.Equal(CopilotUsageBillingSource.None, snapshot.BillingSource);
+    }
+
     [Fact]
     public void Record_Aggregates_Token_Breakdown()
     {

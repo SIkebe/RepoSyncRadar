@@ -151,7 +151,7 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
             data?.CacheReadTokens ?? 0,
             data?.CacheWriteTokens ?? 0,
             data?.Cost,
-            TotalNanoAiu: null);
+            data?.CopilotUsage?.TotalNanoAiu is > 0 ? data.CopilotUsage.TotalNanoAiu : null);
     }
 
     internal static CopilotSessionUsageMetrics FromSessionMetrics(

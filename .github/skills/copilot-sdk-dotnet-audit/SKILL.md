@@ -76,6 +76,7 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 
 前後 version の repository commit がある場合は commit 間 diff を確認する。
 隣接 preview の release body が前版の項目を再掲する場合があるため、release note の列挙をそのまま差分とみなさず、前版 release body と tag 間 diff で実際の変更を確定する。
+NuGet の repository metadata が runtime repository の commit を指す場合は、公開 SDK release tag の snapshot commit と区別して記録する。取得できない runtime source を読んだ扱いにせず、package の public API / targets と公開 snapshot の source / tests を照合する。
 
 重点ファイル:
 
@@ -178,6 +179,7 @@ dotnet ef migrations has-pending-model-changes --project src\RepoSyncRadar.Core\
 ```
 
 必要に応じて先に focused test を実行する。失敗したら、今回の SDK update に関係する範囲だけ直す。
+ネイティブランタイムを起動する test host には `GitHub.Copilot.SDK` を直接参照させ、SDK targets をその host でも実行する。ping 成功だけで更新済みと判断せず、`GetStatusAsync().Version` が package props の bundled runtime version と一致することを確認する。
 
 ### 8. PR 作成・更新
 
