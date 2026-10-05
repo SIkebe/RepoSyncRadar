@@ -31,25 +31,24 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
     {
         lock (_gate)
         {
-            var inputTokens = _records.Sum(static record => record.InputTokens);
-            var outputTokens = _records.Sum(static record => record.OutputTokens);
-            var reasoningTokens = _records.Sum(static record => record.ReasoningTokens);
-            var cacheReadTokens = _records.Sum(static record => record.CacheReadTokens);
-            var cacheWriteTokens = _records.Sum(static record => record.CacheWriteTokens);
-            var totalNanoAiu = _records.Sum(static record => record.EffectiveTotalNanoAiu() ?? 0);
-            var cost = _records.Sum(static record => record.EffectiveCost() ?? 0);
-            var billingSource = ResolveBillingSource(_records.Select(static record => record.BillingSource()));
-            if (_sessionMetrics.Count > 0)
-            {
-                inputTokens = _sessionMetrics.Values.Sum(static metrics => metrics.InputTokens);
-                outputTokens = _sessionMetrics.Values.Sum(static metrics => metrics.OutputTokens);
-                reasoningTokens = _sessionMetrics.Values.Sum(static metrics => metrics.ReasoningTokens);
-                cacheReadTokens = _sessionMetrics.Values.Sum(static metrics => metrics.CacheReadTokens);
-                cacheWriteTokens = _sessionMetrics.Values.Sum(static metrics => metrics.CacheWriteTokens);
-                totalNanoAiu = _sessionMetrics.Values.Sum(static metrics => metrics.EffectiveTotalNanoAiu() ?? 0);
-                cost = _sessionMetrics.Values.Sum(static metrics => metrics.EffectiveCost() ?? 0);
-                billingSource = ResolveBillingSource(_sessionMetrics.Values.Select(static metrics => metrics.BillingSource()));
-            }
+            var uncoveredRecords = _records.Where(record => !_sessionMetrics.ContainsKey(record.SessionId)).ToArray();
+            var inputTokens = _sessionMetrics.Values.Sum(static metrics => metrics.InputTokens)
+                + uncoveredRecords.Sum(static record => record.InputTokens);
+            var outputTokens = _sessionMetrics.Values.Sum(static metrics => metrics.OutputTokens)
+                + uncoveredRecords.Sum(static record => record.OutputTokens);
+            var reasoningTokens = _sessionMetrics.Values.Sum(static metrics => metrics.ReasoningTokens)
+                + uncoveredRecords.Sum(static record => record.ReasoningTokens);
+            var cacheReadTokens = _sessionMetrics.Values.Sum(static metrics => metrics.CacheReadTokens)
+                + uncoveredRecords.Sum(static record => record.CacheReadTokens);
+            var cacheWriteTokens = _sessionMetrics.Values.Sum(static metrics => metrics.CacheWriteTokens)
+                + uncoveredRecords.Sum(static record => record.CacheWriteTokens);
+            var totalNanoAiu = _sessionMetrics.Values.Sum(static metrics => metrics.EffectiveTotalNanoAiu() ?? 0)
+                + uncoveredRecords.Sum(static record => record.EffectiveTotalNanoAiu() ?? 0);
+            var cost = _sessionMetrics.Values.Sum(static metrics => metrics.EffectiveCost() ?? 0)
+                + uncoveredRecords.Sum(static record => record.EffectiveCost() ?? 0);
+            var billingSource = ResolveBillingSource(
+                _sessionMetrics.Values.Select(static metrics => metrics.BillingSource())
+                    .Concat(uncoveredRecords.Select(static record => record.BillingSource())));
 
             return new CopilotUsageSnapshot(
                 _records.Count,

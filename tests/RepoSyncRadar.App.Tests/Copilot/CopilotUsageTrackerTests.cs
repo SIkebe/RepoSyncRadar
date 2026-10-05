@@ -224,6 +224,69 @@ public sealed class CopilotUsageTrackerTests
         Assert.Equal(CopilotUsageBillingSource.None, snapshot.BillingSource);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RecordSessionMetrics_Prefers_Metrics_Per_Session_And_Retains_Uncovered_Events(bool eventBillingReported)
+    {
+        var tracker = new CopilotUsageTracker();
+        var recordedAt = new DateTimeOffset(2026, 10, 5, 0, 0, 0, TimeSpan.Zero);
+        tracker.Record(new CopilotUsageRecord(
+            recordedAt, "session-1", "Triage", "gpt-test", "api-1",
+            90, 30, 8, 4, 2, 0.5, 10_000_000));
+        tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+            recordedAt, "session-1", "Triage", "gpt-test",
+            100, 40, 10, 5, 3, 100_000_000, 1.5, 1, 100, 40, []));
+        tracker.Record(new CopilotUsageRecord(
+            recordedAt, "session-2", "Adoption", "gpt-test", "api-2",
+            10, 4, 2, 3, 1,
+            eventBillingReported ? 0.25 : null,
+            eventBillingReported ? 20_000_000 : null));
+        tracker.Record(new CopilotUsageRecord(
+            recordedAt, "session-2", "Adoption", "gpt-test", "api-3",
+            20, 8, 4, 6, 2,
+            eventBillingReported ? 0.5 : null,
+            eventBillingReported ? 30_000_000 : null));
+
+        var snapshot = tracker.GetSnapshot();
+
+        Assert.Equal(130, snapshot.InputTokens);
+        Assert.Equal(52, snapshot.OutputTokens);
+        Assert.Equal(16, snapshot.ReasoningTokens);
+        Assert.Equal(14, snapshot.CacheReadTokens);
+        Assert.Equal(6, snapshot.CacheWriteTokens);
+        Assert.Equal(198, snapshot.TotalTokens);
+        Assert.Equal(eventBillingReported ? 150_000_000 : 100_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(eventBillingReported ? 0.15 : 0.1, snapshot.AiCredits());
+        Assert.Equal(eventBillingReported ? 2.25 : 1.5, snapshot.Cost);
+        Assert.Equal(eventBillingReported ? CopilotUsageBillingSource.SdkReported : CopilotUsageBillingSource.Mixed,
+            snapshot.BillingSource);
+        Assert.Equal(3, snapshot.TurnCount);
+        Assert.Equal(3, snapshot.RecentTurns.Count);
+        Assert.Equal("api-3", snapshot.LastTurn?.ApiCallId);
+        Assert.Single(snapshot.SessionMetrics);
+
+        tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
+            recordedAt.AddMinutes(1), "session-2", "Adoption", "gpt-test",
+            40, 15, 7, 12, 4, 80_000_000, 1, 2, 20, 8, []));
+
+        snapshot = tracker.GetSnapshot();
+
+        Assert.Equal(140, snapshot.InputTokens);
+        Assert.Equal(55, snapshot.OutputTokens);
+        Assert.Equal(17, snapshot.ReasoningTokens);
+        Assert.Equal(17, snapshot.CacheReadTokens);
+        Assert.Equal(7, snapshot.CacheWriteTokens);
+        Assert.Equal(212, snapshot.TotalTokens);
+        Assert.Equal(180_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(0.18, snapshot.AiCredits());
+        Assert.Equal(2.5, snapshot.Cost);
+        Assert.Equal(CopilotUsageBillingSource.SdkReported, snapshot.BillingSource);
+        Assert.Equal(3, snapshot.TurnCount);
+        Assert.Equal(3, snapshot.RecentTurns.Count);
+        Assert.Equal(2, snapshot.SessionMetrics.Count);
+    }
+
     [Fact]
     public void Record_Treats_Cost_Only_Usage_As_Sdk_Reported()
     {
