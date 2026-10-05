@@ -111,12 +111,12 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
         string sessionId,
         CancellationToken cancellationToken)
     {
-        // Capture before the RPC, not its completion, so later usage events remain uncovered.
-        var watermark = usageTracker.CaptureMetricsWatermark();
+        // This version rejects stale/reset responses; it does not imply event coverage.
+        var requestVersion = usageTracker.CaptureMetricsRequestVersion();
         try
         {
             var metrics = await getMetricsAsync(cancellationToken).ConfigureAwait(false);
-            usageTracker.RecordSessionMetrics(metrics, watermark);
+            usageTracker.RecordSessionMetrics(metrics, requestVersion);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

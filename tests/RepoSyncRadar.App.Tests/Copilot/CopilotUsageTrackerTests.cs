@@ -288,7 +288,7 @@ public sealed class CopilotUsageTrackerTests
     }
 
     [Fact]
-    public void RecordSessionMetrics_Preserves_Watermark_When_Recent_Records_Are_Trimmed()
+    public void RecordSessionMetrics_Preserves_Event_Totals_When_Recent_Records_Are_Trimmed()
     {
         var tracker = new CopilotUsageTracker();
         var record = new CopilotUsageRecord(
@@ -298,11 +298,11 @@ public sealed class CopilotUsageTrackerTests
         {
             tracker.Record(record);
         }
-        var watermark = tracker.CaptureMetricsWatermark();
+        var requestVersion = tracker.CaptureMetricsRequestVersion();
         tracker.Record(record);
         tracker.RecordSessionMetrics(new CopilotSessionUsageMetrics(
             DateTimeOffset.UnixEpoch, "session-1", "Triage", "gpt-test",
-            60, 0, 0, 0, 0, 60_000_000, 15, 1, 1, 0, []), watermark);
+            60, 0, 0, 0, 0, 60_000_000, 15, 1, 1, 0, []), requestVersion);
 
         var snapshot = tracker.GetSnapshot();
         Assert.Equal(50, snapshot.RecentTurns.Count);
@@ -310,6 +310,51 @@ public sealed class CopilotUsageTrackerTests
         Assert.Equal(61, snapshot.InputTokens);
         Assert.Equal(61_000_000, snapshot.TotalNanoAiu);
         Assert.Equal(15.25, snapshot.Cost);
+    }
+
+    [Fact]
+    public void Record_Deduplicates_Out_Of_Order_Calls_Even_After_History_Trimming()
+    {
+        var tracker = new CopilotUsageTracker();
+        var record = new CopilotUsageRecord(
+            DateTimeOffset.UnixEpoch, "session-1", "Triage", "model-a", "call-0",
+            1, 2, 3, 4, 5, 0.25, 1_000_000);
+        tracker.Record(record);
+        for (var i = 60; i > 0; i--)
+        {
+            tracker.Record(record with { ApiCallId = $"call-{i}", Model = i % 2 == 0 ? "model-a" : "model-b" });
+        }
+        tracker.Record(record);
+        tracker.Record(record with { SessionId = "session-2" });
+
+        var snapshot = tracker.GetSnapshot();
+        Assert.Equal(50, snapshot.RecentTurns.Count);
+        Assert.Equal(62, snapshot.InputTokens);
+        Assert.Equal(124, snapshot.OutputTokens);
+        Assert.Equal(186, snapshot.ReasoningTokens);
+        Assert.Equal(62_000_000, snapshot.TotalNanoAiu);
+        Assert.Equal(15.5, snapshot.Cost);
+    }
+
+    [Fact]
+    public void Record_Deduplicates_Event_Id_When_Provider_Call_Id_Is_Absent()
+    {
+        var tracker = new CopilotUsageTracker();
+        var record = new CopilotUsageRecord(
+            DateTimeOffset.UnixEpoch, "session-1", "Triage", "model-a", null,
+            1, 0, 0, 0, 0, null, null, Guid.NewGuid());
+        tracker.Record(record);
+        tracker.Record(record);
+        Assert.Equal(1, tracker.GetSnapshot().InputTokens);
+        Assert.Single(tracker.GetSnapshot().RecentTurns);
+
+        tracker.Reset();
+        tracker.Record(record);
+        Assert.Empty(tracker.GetSnapshot().RecentTurns);
+        Assert.Equal(0, tracker.GetSnapshot().InputTokens);
+
+        tracker.Record(record with { EventId = Guid.NewGuid() });
+        Assert.Equal(1, tracker.GetSnapshot().InputTokens);
     }
 
     [Fact]

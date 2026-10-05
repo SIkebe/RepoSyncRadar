@@ -111,7 +111,7 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 観点:
 
 - response extraction: `ToString()` ではなく `Data.Content` か
-- usage: `AssistantUsageEvent` と `Usage.GetMetricsAsync()` の両方を正しく扱っているか
+- usage: `AssistantUsageEvent` と `Usage.GetMetricsAsync()` の両方を正しく扱っているか。idle 後の metadata 配信と metrics の公開 coverage 契約を確認し、API call ID / event 境界のない累積値に到着時刻ベースで event を加算しない。完全な照合ができない場合は保守的な観測値と過少表示の限界を明記し、遅延 event・取得失敗・重複・50 件の履歴切り詰め・reset を回帰テストする。
 - telemetry/logging: option はあるのに SDK に渡していないものがないか
 - auth: 明示 token と `UseLoggedInUser = false` の意図が守られているか
 - lifecycle: dispose/abort/stop の意味を取り違えていないか

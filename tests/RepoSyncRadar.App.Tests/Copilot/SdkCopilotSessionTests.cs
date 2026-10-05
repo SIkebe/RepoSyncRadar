@@ -12,7 +12,7 @@ public sealed class SdkCopilotSessionTests
     public async Task RefreshUsageMetrics_Retains_Later_Events_After_Failure_Then_Replaces_Them(bool billingReported)
     {
         var tracker = new CopilotUsageTracker();
-        RecordUsage(tracker, billingReported: true);
+        RecordUsage(tracker, billingReported: true, inputTokens: 100);
         await RefreshAsync(tracker, _ => Task.FromResult(CreateMetrics(100)));
 
         RecordUsage(tracker, billingReported);
@@ -48,24 +48,57 @@ public sealed class SdkCopilotSessionTests
         Assert.Equal(2, snapshot.RecentTurns.Count);
     }
 
-    [Fact]
-    public async Task RefreshUsageMetrics_Captures_Watermark_Before_Request_Not_Response()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RefreshUsageMetrics_Does_Not_Add_Delayed_Completed_Call_Before_Or_After_Response(bool beforeResponse)
     {
         var tracker = new CopilotUsageTracker();
-        RecordUsage(tracker, billingReported: true);
+        RecordUsage(tracker, billingReported: true, inputTokens: 80, apiCallId: "earlier-call");
         var response = new TaskCompletionSource<CopilotSessionUsageMetrics>(TaskCreationOptions.RunContinuationsAsynchronously);
         var refresh = RefreshAsync(tracker, _ => response.Task);
 
-        RecordUsage(tracker, billingReported: true);
+        if (beforeResponse)
+        {
+            RecordUsage(tracker, billingReported: true, apiCallId: "completed-call");
+        }
         response.SetResult(CreateMetrics(100));
         await refresh;
+        if (!beforeResponse)
+        {
+            RecordUsage(tracker, billingReported: true, apiCallId: "completed-call");
+        }
 
+        Assert.Equal(100, tracker.GetSnapshot().InputTokens);
+        Assert.Equal(100_000_000, tracker.GetSnapshot().TotalNanoAiu);
+        Assert.Equal(1.25, tracker.GetSnapshot().Cost);
+
+        RecordUsage(tracker, billingReported: true, apiCallId: "later-call");
+        await RefreshAsync(tracker, _ => Task.FromException<CopilotSessionUsageMetrics>(
+            new InvalidOperationException("Metrics unavailable.")));
         Assert.Equal(120, tracker.GetSnapshot().InputTokens);
         Assert.Equal(120_000_000, tracker.GetSnapshot().TotalNanoAiu);
-        Assert.Equal(1.5, tracker.GetSnapshot().Cost);
 
         await RefreshAsync(tracker, _ => Task.FromResult(CreateMetrics(130)));
         Assert.Equal(130, tracker.GetSnapshot().InputTokens);
+    }
+
+    [Fact]
+    public async Task RefreshUsageMetrics_Incomplete_Event_History_Is_A_Lower_Bound_Not_An_Additive_Estimate()
+    {
+        var tracker = new CopilotUsageTracker();
+        await RefreshAsync(tracker, _ => Task.FromResult(CreateMetrics(100)));
+        RecordUsage(tracker, billingReported: true);
+        await RefreshAsync(tracker, _ => Task.FromException<CopilotSessionUsageMetrics>(
+            new InvalidOperationException("Metrics unavailable.")));
+
+        Assert.Equal(100, tracker.GetSnapshot().InputTokens);
+        Assert.Equal(100_000_000, tracker.GetSnapshot().TotalNanoAiu);
+        Assert.Single(tracker.GetSnapshot().RecentTurns);
+
+        await RefreshAsync(tracker, _ => Task.FromResult(CreateMetrics(120)));
+        Assert.Equal(120, tracker.GetSnapshot().InputTokens);
+        Assert.Equal(120_000_000, tracker.GetSnapshot().TotalNanoAiu);
     }
 
     [Fact]
@@ -80,6 +113,26 @@ public sealed class SdkCopilotSessionTests
         await olderRefresh;
 
         Assert.Equal(130, tracker.GetSnapshot().InputTokens);
+    }
+
+    [Fact]
+    public async Task RefreshUsageMetrics_Overlapping_Refreshes_Preserve_Later_Call_And_Ignore_Old_Response()
+    {
+        var tracker = new CopilotUsageTracker();
+        RecordUsage(tracker, billingReported: true, inputTokens: 100, apiCallId: "completed-call");
+        var olderResponse = new TaskCompletionSource<CopilotSessionUsageMetrics>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var olderRefresh = RefreshAsync(tracker, _ => olderResponse.Task);
+        RecordUsage(tracker, billingReported: true, apiCallId: "later-call");
+        await RefreshAsync(tracker, _ => Task.FromResult(CreateMetrics(120)));
+
+        olderResponse.SetResult(CreateMetrics(100));
+        await olderRefresh;
+        RecordUsage(tracker, billingReported: true, inputTokens: 100, apiCallId: "completed-call");
+
+        Assert.Equal(120, tracker.GetSnapshot().InputTokens);
+        Assert.Equal(120_000_000, tracker.GetSnapshot().TotalNanoAiu);
+        Assert.Equal(1.5, tracker.GetSnapshot().Cost);
+        Assert.Equal(2, tracker.GetSnapshot().RecentTurns.Count);
     }
 
     [Fact]
@@ -110,6 +163,7 @@ public sealed class SdkCopilotSessionTests
     public async Task RefreshUsageMetrics_Propagates_Cancellation_Without_Covering_New_Events()
     {
         var tracker = new CopilotUsageTracker();
+        RecordUsage(tracker, billingReported: true, inputTokens: 100);
         await RefreshAsync(tracker, _ => Task.FromResult(CreateMetrics(100)));
         RecordUsage(tracker, billingReported: true);
         await Assert.ThrowsAsync<OperationCanceledException>(() => RefreshAsync(tracker,
@@ -124,10 +178,12 @@ public sealed class SdkCopilotSessionTests
         => SdkCopilotSession.RefreshUsageMetricsAsync(
             tracker, getMetricsAsync, NullLogger.Instance, "session-1", TestContext.Current.CancellationToken);
 
-    private static void RecordUsage(CopilotUsageTracker tracker, bool billingReported)
+    private static void RecordUsage(
+        CopilotUsageTracker tracker, bool billingReported, double inputTokens = 20, string? apiCallId = null)
         => tracker.Record(new CopilotUsageRecord(
-            DateTimeOffset.UnixEpoch, "session-1", "Triage", "gpt-test", "api-1",
-            20, 8, 2, 3, 1, billingReported ? 0.25 : null, billingReported ? 20_000_000 : null));
+            DateTimeOffset.UnixEpoch, "session-1", "Triage", "gpt-test", apiCallId,
+            inputTokens, inputTokens * 0.4, inputTokens * 0.1, inputTokens * 0.15, inputTokens * 0.05,
+            billingReported ? inputTokens * 0.0125 : null, billingReported ? inputTokens * 1_000_000 : null));
 
     private static CopilotSessionUsageMetrics CreateMetrics(double inputTokens)
         => new(DateTimeOffset.UnixEpoch, "session-1", "Triage", "gpt-test",
