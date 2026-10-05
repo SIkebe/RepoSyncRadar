@@ -74,7 +74,7 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
             ["REPOSYNCRADAR_GITHUB_TOKEN_PATH"] = tokenPath,
             ["RADAR_Copilot__OAuthClientId"] = "e2e-placeholder-client",
         };
-        _host = await AppHost.StartAsync(_dbPath, environment).ConfigureAwait(false);
+        _host = await AppHost.StartAsync(_dbPath, environment, TestContext.Current.CancellationToken).ConfigureAwait(false);
         _playwright = await Playwright.CreateAsync().ConfigureAwait(false);
         _blazorBrowser = await _playwright.Chromium.ConnectOverCDPAsync(
             $"http://127.0.0.1:{_host.BlazorCdpPort}").ConfigureAwait(false);
