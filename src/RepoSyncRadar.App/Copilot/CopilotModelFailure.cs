@@ -47,9 +47,10 @@ internal sealed class CopilotModelFailureCollector
                     _ => null,
                 };
             }
-            else if (evt is SessionErrorEvent)
+            else if (evt is SessionErrorEvent error)
             {
-                _failed = _latest;
+                _failed = error.Data.ErrorType == "query" ? _latest : null;
+                _latest = null;
             }
             else if (evt is ModelCallStartEvent or AssistantTurnStartEvent or ToolExecutionStartEvent)
             {

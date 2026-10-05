@@ -114,7 +114,12 @@ public sealed class CopilotInProcessRuntimeTests
         var sdkSession = await client.CreateSessionAsync(config, ct);
         var events = new System.Collections.Concurrent.ConcurrentQueue<string>();
         using var subscription = sdkSession.On<SessionEvent>(evt =>
-            events.Enqueue(evt is ModelCallFinalResultEvent final ? $"{evt.Type}:{final.Data.Result.Value}" : evt.Type));
+            events.Enqueue(evt switch
+            {
+                ModelCallFinalResultEvent final => $"{evt.Type}:{final.Data.Result.Value}",
+                SessionErrorEvent error => $"{evt.Type}:{error.Data.ErrorType}",
+                _ => evt.Type,
+            }));
         await using var session = new SdkCopilotSession(sdkSession, SessionPurpose.Adoption, NullLogger.Instance, null);
 
         var failure = await Record.ExceptionAsync(async () =>
@@ -129,6 +134,7 @@ public sealed class CopilotInProcessRuntimeTests
             }
         });
         Assert.True(events.Contains("model.call_final_result:http_400"), string.Join(", ", events));
+        Assert.True(events.Contains("session.error:query"), string.Join(", ", events));
         Assert.True(failure is CopilotModelFailureException, string.Join(", ", events));
         var error = Assert.IsType<CopilotModelFailureException>(failure);
 

@@ -86,9 +86,49 @@ public sealed class CopilotModelFailureTests
         Assert.Null(collector.Classify(new InvalidOperationException("tool failed")));
     }
 
+    [Theory]
+    [InlineData("notification")]
+    [InlineData("authentication")]
+    [InlineData("authorization")]
+    [InlineData("quota")]
+    [InlineData("rate_limit")]
+    [InlineData("context_limit")]
+    [InlineData("model")]
+    [InlineData("future_unknown")]
+    public void NonQuery_Root_Error_Does_Not_Promote_Preceding_Model_Result(string errorType)
+    {
+        var collector = new CopilotModelFailureCollector();
+        collector.Observe(Final("http_429"));
+        collector.Observe(Error(errorType));
+
+        Assert.Null(collector.Classify(new InvalidOperationException("unrelated root error")));
+    }
+
+    [Fact]
+    public void NonQuery_Root_Error_Clears_Previously_Classified_Failure()
+    {
+        var collector = new CopilotModelFailureCollector();
+        collector.Observe(Final("http_429"));
+        collector.Observe(Error());
+        collector.Observe(Error("notification"));
+
+        Assert.Null(collector.Classify(new InvalidOperationException("notification failed")));
+    }
+
+    [Fact]
+    public void Root_Error_Consumes_Preceding_Model_Result()
+    {
+        var collector = new CopilotModelFailureCollector();
+        collector.Observe(Final("http_429"));
+        collector.Observe(Error("notification"));
+        collector.Observe(Error());
+
+        Assert.Null(collector.Classify(new InvalidOperationException("later query failed")));
+    }
+
     private static SessionEvent Final(string result)
         => SessionEvent.FromJson($$$"""{"type":"model.call_final_result","data":{"model":"offline-test","result":"{{{result}}}"}}""");
 
-    private static SessionEvent Error()
-        => SessionEvent.FromJson("""{"type":"session.error","data":{"errorType":"model","message":"synthetic"}}""");
+    private static SessionEvent Error(string errorType = "query")
+        => SessionEvent.FromJson($$$"""{"type":"session.error","data":{"errorType":"{{{errorType}}}","message":"synthetic"}}""");
 }
