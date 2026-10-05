@@ -81,6 +81,22 @@ public sealed class CopilotPolicyDiagnosticsTests
         Assert.Equal("Copilot.Policy.Value.None", Assert.Single(rows["telemetry"].Values).ResourceKey);
     }
 
+    [Theory]
+    [InlineData("{}", "Unreported")]
+    [InlineData("""{"strictKnownMarketplaces":[]}""", "EmptyAllow")]
+    [InlineData("""{"strictKnownMarketplaces":[{"source":"github","repo":"private/repo"}]}""", "Hidden")]
+    public void Inventory_Distinguishes_Unreported_Empty_And_Populated_Marketplace_Allowlist(
+        string settings, string state)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
+            $$$"""{"resolved":{"settings":{{{settings}}}}}""")!;
+        var entry = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .Single(row => row.Key == "strictKnownMarketplaces");
+
+        Assert.Equal($"Copilot.Policy.Value.{state}", Assert.Single(entry.Values).ResourceKey);
+        Assert.Null(entry.Values[0].Text);
+    }
+
     [Fact]
     public void Inventory_Does_Not_Expose_Credentials_Paths_Urls_Commands_Or_Unknown_Settings()
     {

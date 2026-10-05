@@ -289,7 +289,8 @@ internal static class CopilotPolicyInventory
         {
             if (element.GetArrayLength() == 0)
             {
-                AppendValue(output, State(key is "permissions.allow" or "allowedMcpServers" ? "EmptyAllow" : "None", label));
+                AppendValue(output, State(key is "permissions.allow" or "allowedMcpServers" or "strictKnownMarketplaces"
+                    ? "EmptyAllow" : "None", label));
             }
             else
             {
