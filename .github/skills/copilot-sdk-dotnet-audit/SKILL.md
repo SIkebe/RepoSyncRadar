@@ -127,6 +127,8 @@ EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、
 
 診断を採用する場合は同梱ランタイムで RPC 応答・event 発火を検証する。sessionless policy は SDK 注入の session-local 制限を含まない、キャッシュ応答は live fetch 成功を保証しない、model final-result は内部再試行後のモデル処理単位で課金件数やワークフロー結果ではない、という契約を UI/tests に反映する。explicit app auth を使い、raw account/policy/error 内容を出さず、未報告・未知・subagent・取消・timeout・再利用セッションの遅延イベントを安全に扱う。ネットワークを要する診断は起動時ではなく必要時に行い、検証済みの範囲を超えて成功を主張しない。
 
+管理ポリシーの棚卸しを既定モデルだけに限定しない。同梱ランタイムの schema と安全な表示 DTO の対応をテストし、権限・Auto・サンドボックス・MCP/プラグイン等を分類して表示する。未報告・空・false・対象外を区別し、変更可否や取得元を推測しない。交差適用された許可リストは合成結果から消えるため、元の層別リストと交差適用を明示する。機密値は非表示、未知キーは件数のみとし、アプリ注入設定はセッション構築コードと共有して別枠にする。
+
 結果は重要度順に評価する。
 
 1. **Correctness / user-visible failure**: breaking change、response parsing、timeout/cancel 誤解、tool filter 破綻

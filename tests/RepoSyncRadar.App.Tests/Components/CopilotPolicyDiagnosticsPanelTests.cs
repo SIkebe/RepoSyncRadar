@@ -3,12 +3,101 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
+using GitHub.Copilot.Rpc;
+using System.Text.Json;
 using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Components;
 
 public sealed class CopilotPolicyDiagnosticsPanelTests
 {
+    [Fact]
+    public void Inventory_Renders_Semantic_Localized_Tables_And_Separate_App_Restrictions()
+    {
+        var service = Substitute.For<ICopilotPolicyDiagnostics>();
+        service.ResolveAsync(Arg.Any<CancellationToken>()).Returns(CreateInventorySample());
+        using var provider = BuildServices(service);
+        using var ctx = new BunitContext();
+        var cut = ctx.Render<CopilotPolicyDiagnosticsPanel>(p => p
+            .AddCascadingValue<IServiceProvider>(provider).Add(x => x.SignedIn, true));
+
+        cut.Find("[data-testid=\"settings-copilot-policy-check\"]").Click();
+
+        cut.WaitForAssertion(() =>
+        {
+            Assert.Equal(7, cut.FindAll("table").Count);
+            Assert.All(cut.FindAll("table"), table =>
+            {
+                Assert.NotEmpty(table.QuerySelector("caption")!.TextContent);
+                Assert.Equal(4, table.QuerySelectorAll("thead th[scope='col']").Length);
+                Assert.NotEmpty(table.QuerySelectorAll("tbody th[scope='row']"));
+            });
+            Assert.Contains("intelligence", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("交差適用", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("ポリシー未確定による隔離", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("未報告", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("対象外", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("内容は非表示", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("実セッションでの適用確認ではありません", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("Copilot.Policy.", cut.Markup, StringComparison.Ordinal);
+            Assert.DoesNotContain("private", cut.Markup, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("<table", cut.Find("[role='status']").InnerHtml, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
+    public async Task App_Restrictions_Are_Visible_Without_Policy_Network_Or_SignIn()
+    {
+        var service = Substitute.For<ICopilotPolicyDiagnostics>();
+        using var provider = BuildServices(service);
+        using var ctx = new BunitContext();
+        var cut = ctx.Render<CopilotPolicyDiagnosticsPanel>(p => p.AddCascadingValue<IServiceProvider>(provider));
+        var app = cut.Find("[data-testid=\"settings-policy-app-restrictions\"]");
+        Assert.Contains("shell", app.TextContent, StringComparison.Ordinal);
+        Assert.Contains("権限確認の迂回禁止", app.TextContent, StringComparison.Ordinal);
+        await service.DidNotReceive().ResolveAsync(Arg.Any<CancellationToken>());
+    }
+
+#pragma warning disable GHCP001 // Synthetic SDK result exercises the real safe mapper, never an account policy.
+    public static CopilotPolicySnapshot CreateInventorySample()
+        => CopilotPolicyDiagnostics.FromResult(JsonSerializer.Deserialize<ManagedSettingsResolveResult>("""
+            {
+              "resolved":{
+                "deviceManaged":true,"serverManaged":true,"failClosed":false,"bypassPermissionsDisabled":true,
+                "permissionsAllowIntersected":true,"sandboxEnabledByUndeterminedPolicy":false,
+                "clientManaged":false,"policyHelperManaged":false,"source":"mixed",
+                "managedKeys":["model","autoTier","effortLevel","permissions","sandbox","allowedMcpServers","deniedMcpServers",
+                    "strictPluginOnlyCustomization","allowManagedMcpServersOnly","allowManagedHooksOnly","features","enabledPlugins",
+                    "extraKnownMarketplaces","strictKnownMarketplaces","remoteControl","forceLoginOrgs","forceRemoteSettingsRefresh",
+                    "policyHelper","policyHelperFailureMode","telemetry"],
+                "settings":{
+                  "model":"gpt-5.5","autoTier":"intelligence","effortLevel":"high",
+                  "permissions":{"deny":["shell","read:/private/file"],"ask":["write"],"disableBypassPermissionsMode":"disable"},
+                  "sandbox":{"enabled":true,"allowBypass":false,"auth":{"git":true,"gh":false},"userPolicy":{"filesystem":{"private":"private"}}},
+                  "allowedMcpServers":[{"serverUrl":"https://private.example"}],"deniedMcpServers":[],
+                  "strictPluginOnlyCustomization":["skills","hooks"],"allowManagedMcpServersOnly":true,
+                  "allowManagedHooksOnly":false,"features":{"private-feature":false},"enabledPlugins":{"private-plugin":true},
+                  "extraKnownMarketplaces":{"private-market":{"source":{"source":"git","url":"https://private.example"},"autoUpdate":true}},
+                  "strictKnownMarketplaces":[],
+                  "remoteControl":{"mode":"requireSSO","githubDotComOrganizations":["private-org"]},
+                  "forceLoginOrgs":["private-org"],"forceRemoteSettingsRefresh":true,
+                  "policyHelper":{"path":"C:\\private\\helper.exe","args":["private-token"],"timeoutMs":5000},
+                  "policyHelperFailureMode":"failClosed",
+                  "telemetry":{"enabled":false,"protocol":"grpc","headers":{"Authorization":"private-token"},
+                      "capture":{"identity":false,"prompts":false,"responses":false,"toolArguments":false,"toolOutput":false,"policyDetail":false}}
+                }
+              },
+              "values":{"model":"gpt-5.5","autoTier":"intelligence"},
+              "meta":{"model":{"overridable":true,"source":"server"},"autoTier":{"overridable":false,"source":"device"}},
+              "layers":[
+                  {"source":"server","settings":{"permissions":{"allow":["read","write"]}}},
+                  {"source":"device","settings":{"permissions":{"allow":["read"],"deny":["shell"]}}}
+              ],
+              "diagnostics":[{"message":"private refresh served from cache","path":"permissions.allow","severity":"warning"}]
+            }
+            """)!);
+#pragma warning restore GHCP001
+
     [Fact]
     public async Task Check_Is_OnDemand_And_Shows_Locked_Model_And_Snapshot_Scope()
     {

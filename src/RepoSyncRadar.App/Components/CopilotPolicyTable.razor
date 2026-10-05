@@ -1,0 +1,61 @@
+@using RepoSyncRadar.App.Copilot
+@using Microsoft.Extensions.DependencyInjection
+@inherits LocalizedComponentBase
+
+<table class="settings-policy-table" data-testid="@($"settings-policy-table-{Group.Key}")">
+    <caption>@L[$"Copilot.Policy.Group.{Group.Key}"]</caption>
+    <thead>
+        <tr>
+            <th scope="col">@L["Copilot.Policy.Column.Item"]</th>
+            <th scope="col">@L["Copilot.Policy.Column.Value"]</th>
+            <th scope="col">@L["Copilot.Policy.Column.Source"]</th>
+            <th scope="col">@L["Copilot.Policy.Column.Override"]</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var entry in Group.Entries)
+        {
+            <tr data-policy-key="@entry.Key">
+                <th scope="row">@L[entry.LabelKey]</th>
+                <td>
+                    <ul class="settings-policy-values">
+                        @foreach (var value in entry.Values)
+                        {
+                            <li>
+                                @if (value.LabelKey is { } label)
+                                {
+                                    <span>@L[label]: </span>
+                                }
+                                @if (value.Text is { } text)
+                                {
+                                    <span>@text</span>
+                                }
+                                @if (value.ResourceKey is { } resource)
+                                {
+                                    <span>@L[resource]</span>
+                                }
+                            </li>
+                        }
+                    </ul>
+                </td>
+                <td>@(entry.Sources.Count > 0
+                    ? string.Join(" / ", entry.Sources.Select(source => L["Copilot.Policy.Source." + source].Value))
+                    : L[entry.IsStatus ? "Copilot.Policy.Value.NotApplicable" : "Copilot.Policy.Value.Unreported"].Value)</td>
+                <td>@L[entry.IsStatus ? "Copilot.Policy.Value.NotApplicable"
+                    : entry.Overridable switch
+                    {
+                        true => "Copilot.Policy.Overridable",
+                        false => "Copilot.Policy.Locked",
+                        null => "Copilot.Policy.Value.Unreported",
+                    }]</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    [CascadingParameter] public IServiceProvider Services { get; set; } = default!;
+    [Parameter, EditorRequired] public CopilotPolicyGroup Group { get; set; } = default!;
+    private IStringLocalizer<SharedResource>? _localizer;
+    private IStringLocalizer<SharedResource> L => _localizer ??= Services.GetRequiredService<IStringLocalizer<SharedResource>>();
+}

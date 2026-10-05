@@ -48,6 +48,45 @@ public sealed class CopilotInProcessRuntimeTests
         Assert.False(composed.Resolved.FailClosed);
     }
 
+    [Fact]
+    public async Task Policy_Inventory_Covers_Native_Schema_And_Preserves_Allowlist_Intersection()
+    {
+        await using var client = new CopilotClient(CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(), NullLogger.Instance, "offline-policy-test", "0.1.30"));
+        var ct = TestContext.Current.CancellationToken;
+        await client.StartAsync(ct);
+        var schema = await client.Rpc.ManagedSettings.SchemaAsync(ct);
+        var server = await client.Rpc.ManagedSettings.ValidateAsync(
+            """{"model":"auto","autoTier":{"overridable":"intelligence"},"permissions":{"allow":["read","write"],"deny":["shell"]},"sandbox":{"enabled":true}}""",
+            layer: "server", cancellationToken: ct);
+        var device = await client.Rpc.ManagedSettings.ValidateAsync(
+            """{"permissions":{"allow":["read"]},"enabledPlugins":{"github":false}}""",
+            layer: "device", cancellationToken: ct);
+        Assert.True(server.Valid);
+        Assert.True(device.Valid);
+        var composed = await client.Rpc.ManagedSettings.ComposeAsync(
+            [
+                new() { Source = ManagedSettingsChannel.Server, Settings = server.Settings },
+                new() { Source = ManagedSettingsChannel.Device, Settings = device.Settings },
+            ], ct);
+        var snapshot = CopilotPolicyDiagnostics.FromResult(new ManagedSettingsResolveResult
+        {
+            Resolved = composed.Resolved, Values = composed.Values, Meta = composed.Meta,
+            Layers = composed.Layers, Diagnostics = composed.Diagnostics,
+        });
+        var rows = snapshot.Groups.SelectMany(group => group.Entries).ToDictionary(row => row.Key);
+        var schemaKeys = schema.Schema.GetProperty("properties").EnumerateObject().Select(property => property.Name);
+        var inventoryKeys = rows.Keys.Where(key => !key.StartsWith("status.", StringComparison.Ordinal))
+            .Select(key => key.Split('.')[0]).Distinct(StringComparer.Ordinal);
+        Assert.Equal(schemaKeys.Order(StringComparer.Ordinal), inventoryKeys.Order(StringComparer.Ordinal));
+        Assert.True(composed.Resolved.PermissionsAllowIntersected);
+        Assert.Equal("Copilot.Policy.Value.Intersected", rows["permissions.allow"].Values[0].ResourceKey);
+        Assert.Equal(["Device", "Server"], rows["permissions.allow"].Sources.Order(StringComparer.Ordinal));
+        Assert.Contains(rows["permissions.allow"].Values, value => value.Text == "write");
+        Assert.True(rows["autoTier"].Overridable);
+        Assert.Contains(rows["enabledPlugins"].Values, value => value.ResourceKey == "Copilot.Policy.Value.FalseCount");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

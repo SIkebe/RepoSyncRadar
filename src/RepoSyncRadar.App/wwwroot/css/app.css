@@ -1753,6 +1753,85 @@ html, body {
     overflow-wrap: anywhere;
 }
 
+.settings-policy-group {
+    border-bottom: 1px solid #d8dee4;
+    min-width: 0;
+    padding: 0.45rem 0;
+}
+
+.settings-policy-group > summary {
+    cursor: pointer;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.settings-policy-group > summary:focus-visible {
+    outline: 2px solid #0969da;
+    outline-offset: 3px;
+}
+
+.settings-policy-table {
+    border-collapse: collapse;
+    color: inherit;
+    font-size: 0.8rem;
+    table-layout: fixed;
+    width: 100%;
+}
+
+.settings-policy-table caption {
+    font-weight: 700;
+    padding: 0.5rem 0;
+    text-align: left;
+}
+
+.settings-policy-table th,
+.settings-policy-table td {
+    border-bottom: 1px solid #d8dee4;
+    overflow-wrap: anywhere;
+    padding: 0.45rem 0.35rem;
+    text-align: left;
+    vertical-align: top;
+}
+
+.settings-policy-table th:first-child {
+    width: 26%;
+}
+
+.settings-policy-table th:nth-child(2) {
+    width: 38%;
+}
+
+.settings-policy-table th:nth-child(3),
+.settings-policy-table th:nth-child(4) {
+    width: 18%;
+}
+
+.settings-policy-values {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.settings-policy-values li + li {
+    margin-top: 0.2rem;
+}
+
+.settings-policy-diagnostics {
+    font-size: 0.82rem;
+    margin: 0.5rem 0;
+    padding-inline-start: 1.2rem;
+}
+
+.radar-theme-dark .settings-policy-group,
+.radar-theme-dark .settings-policy-table th,
+.radar-theme-dark .settings-policy-table td {
+    border-color: var(--radar-border);
+}
+
+.radar-theme-dark .settings-policy-group > summary:focus-visible {
+    outline-color: var(--radar-accent-border);
+}
+
 .settings-usage-grid {
     display: grid;
     gap: 0.45rem;

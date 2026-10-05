@@ -41,10 +41,53 @@
             }
         }
     </div>
+    @if (!_busy && SignedIn && _snapshot is { } inventory)
+    {
+        <p class="settings-muted">@L["Copilot.Policy.InventoryScope"]</p>
+        @foreach (var group in inventory.Groups)
+        {
+            <details class="settings-policy-group" open="@(group.Key is "Model" or "Permissions" or "Sources")">
+                <summary>@L[$"Copilot.Policy.Group.{group.Key}"] <span class="settings-muted">(@group.Entries.Count)</span></summary>
+                <CopilotPolicyTable Group="@group" />
+            </details>
+        }
+        <details class="settings-policy-group" open="@inventory.HasDiagnostics" data-testid="settings-policy-diagnostics">
+            <summary>@L["Copilot.Policy.Group.Diagnostics"] <span class="settings-muted">(@inventory.Diagnostics.Count)</span></summary>
+            @if (inventory.Diagnostics.Count == 0)
+            {
+                <p class="settings-muted">@L["Copilot.Policy.NoDiagnostics"]</p>
+            }
+            else
+            {
+                <ul class="settings-policy-diagnostics">
+                    @foreach (var diagnostic in inventory.Diagnostics)
+                    {
+                        <li>
+                            <strong>@L["Copilot.Policy.Severity." + diagnostic.Severity]</strong>
+                            @if (diagnostic.SettingKey is { } setting)
+                            {
+                                <span> · @L["Copilot.Policy.Item." + setting]</span>
+                            }
+                            <span> — @L[diagnostic.SummaryKey]</span>
+                        </li>
+                    }
+                </ul>
+                @if (inventory.DiagnosticsTruncated)
+                {
+                    <p class="settings-muted">@L["Copilot.Policy.Value.Truncated"]</p>
+                }
+            }
+        </details>
+    }
     @if (_error is not null)
     {
         <p class="settings-error" role="alert" data-testid="settings-copilot-policy-error">@_error</p>
     }
+    <details class="settings-policy-group" data-testid="settings-policy-app-restrictions">
+        <summary>@L["Copilot.Policy.Group.AppRestrictions"]</summary>
+        <p class="settings-muted">@L["Copilot.Policy.AppRestrictionsScope"]</p>
+        <CopilotPolicyTable Group="@CopilotPolicyInventory.AppRestrictions" />
+    </details>
 </section>
 
 @code {

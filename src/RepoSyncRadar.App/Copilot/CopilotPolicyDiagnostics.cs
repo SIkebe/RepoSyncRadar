@@ -14,7 +14,12 @@ public sealed record CopilotPolicySnapshot(
     bool FailClosed,
     bool HasDiagnostics,
     string? Model,
-    bool? ModelLocked);
+    bool? ModelLocked)
+{
+    public IReadOnlyList<CopilotPolicyGroup> Groups { get; init; } = [];
+    public IReadOnlyList<CopilotPolicyDiagnostic> Diagnostics { get; init; } = [];
+    public bool DiagnosticsTruncated { get; init; }
+}
 
 public interface ICopilotPolicyDiagnostics
 {
@@ -51,16 +56,7 @@ internal sealed class CopilotPolicyDiagnostics(
     {
         var model = result.Values?.Model;
         // Unknown families and free-form policy content are not safe display identifiers.
-        if (string.IsNullOrWhiteSpace(model) || model.Length > 96
-            || !model.All(static c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
-            || !(model == "auto"
-                || model.StartsWith("gpt-", StringComparison.Ordinal)
-                || model.StartsWith("claude-", StringComparison.Ordinal)
-                || model.StartsWith("gemini-", StringComparison.Ordinal)
-                || model.StartsWith("grok-", StringComparison.Ordinal)
-                || model.StartsWith("o1", StringComparison.Ordinal)
-                || model.StartsWith("o3", StringComparison.Ordinal)
-                || model.StartsWith("o4", StringComparison.Ordinal)))
+        if (!IsDisplayableModel(model))
         {
             model = null;
         }
@@ -71,7 +67,24 @@ internal sealed class CopilotPolicyDiagnostics(
             result.Resolved.FailClosed,
             result.Diagnostics.Count != 0,
             model,
-            result.Meta?.Model is { } meta ? !meta.Overridable : null);
+            result.Meta?.Model is { } meta ? !meta.Overridable : null)
+        {
+            Groups = CopilotPolicyInventory.CreateGroups(result),
+            Diagnostics = CopilotPolicyInventory.CreateDiagnostics(result),
+            DiagnosticsTruncated = result.Diagnostics.Count > 32,
+        };
     }
 #pragma warning restore GHCP001
+
+    internal static bool IsDisplayableModel(string? model)
+        => !(string.IsNullOrWhiteSpace(model) || model.Length > 96
+            || !model.All(static c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.')
+            || !(model == "auto"
+                || model.StartsWith("gpt-", StringComparison.Ordinal)
+                || model.StartsWith("claude-", StringComparison.Ordinal)
+                || model.StartsWith("gemini-", StringComparison.Ordinal)
+                || model.StartsWith("grok-", StringComparison.Ordinal)
+                || model.StartsWith("o1", StringComparison.Ordinal)
+                || model.StartsWith("o3", StringComparison.Ordinal)
+                || model.StartsWith("o4", StringComparison.Ordinal)));
 }
