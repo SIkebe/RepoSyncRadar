@@ -5,6 +5,7 @@ using MudBlazor.Services;
 using NSubstitute;
 using RepoSyncRadar.App.Auth;
 using RepoSyncRadar.App.Components;
+using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Settings;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
@@ -805,8 +806,10 @@ public sealed class WorkbenchTests
             Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task Bulk_Explain_Selected_Adopted_Commits_Shows_Progress_And_Can_Cancel()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Bulk_Explain_Selected_Adopted_Commits_Shows_Progress_And_Can_Cancel_Or_Report_Failure(bool classified)
     {
         var commits = new List<Commit>
         {
@@ -828,12 +831,12 @@ public sealed class WorkbenchTests
                 return Task.FromResult(visible);
             });
         CancellationToken capturedToken = default;
+        var pending = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var agent = Substitute.For<ICopilotAgent>();
         agent.GenerateBatchExplanationAsync(Arg.Any<IReadOnlyList<string>>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 capturedToken = call.Arg<CancellationToken>();
-                var pending = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
                 capturedToken.Register(() => pending.TrySetCanceled(capturedToken));
                 return pending.Task;
             });
@@ -853,12 +856,25 @@ public sealed class WorkbenchTests
             Assert.False(cut.Find("[data-testid=\"batch-explanation-cancel\"]").HasAttribute("disabled"));
         });
 
-        cut.Find("[data-testid=\"batch-explanation-cancel\"]").Click();
+        if (classified)
+        {
+            pending.SetException(new CopilotModelFailureException(
+                CopilotModelFailureKind.ServerError, new InvalidOperationException("private-JSON-error")));
+        }
+        else
+        {
+            cut.Find("[data-testid=\"batch-explanation-cancel\"]").Click();
+        }
 
         cut.WaitForAssertion(() =>
         {
-            Assert.True(capturedToken.IsCancellationRequested);
-            Assert.Contains("個別解説の生成を中止しました", cut.Find("[data-testid=\"batch-explanation-status\"]").TextContent, StringComparison.Ordinal);
+            if (!classified)
+            {
+                Assert.True(capturedToken.IsCancellationRequested);
+            }
+            var status = cut.Find("[data-testid=\"batch-explanation-status\"]").TextContent;
+            Assert.Contains(classified ? "サービス側で障害" : "個別解説の生成を中止しました", status, StringComparison.Ordinal);
+            Assert.DoesNotContain("private-JSON-error", status, StringComparison.Ordinal);
         });
     }
 

@@ -563,10 +563,10 @@
             : $"{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
 
     private string BuildFriendlyErrorMessage(Exception ex)
-        => ex.Message.Contains("non-JSON", StringComparison.OrdinalIgnoreCase)
+        => CopilotFailureMessage.TryFormat(ex, L) ?? (ex.Message.Contains("non-JSON", StringComparison.OrdinalIgnoreCase)
             || ex.Message.Contains("JSON", StringComparison.OrdinalIgnoreCase)
             ? L["Drafts.NonJsonResponse"]
-            : ex.Message;
+            : ex.Message);
 
     public void Dispose()
     {

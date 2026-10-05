@@ -556,8 +556,10 @@ public sealed class AppHeaderTests
         gate.SetResult(new IngestionReport(Total: 0, Inserted: 0, Skipped: 0));
     }
 
-    [Fact]
-    public void Triage_Failure_Shows_Error_Without_Publishing_Broadcaster()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Triage_Failure_Shows_Error_Without_Publishing_Broadcaster(bool classified)
     {
         var session = Substitute.For<IGitHubAuthSession>();
         session
@@ -570,7 +572,9 @@ public sealed class AppHeaderTests
         var sp = BuildServices(session, out var agent, out var broadcaster);
         agent
             .RunMorningTriageAsync(Arg.Any<IProgress<string>?>(), Arg.Any<CancellationToken>())
-            .ThrowsAsync(new InvalidOperationException("network down"));
+            .ThrowsAsync(classified
+                ? new CopilotModelFailureException(CopilotModelFailureKind.RateLimited, new InvalidOperationException("private-model-details"))
+                : new InvalidOperationException("network down"));
 
         using var ctx = new Bunit.BunitContext();
         var cut = ctx.Render<AppHeader>(
@@ -580,7 +584,8 @@ public sealed class AppHeaderTests
 
         var err = cut.Find("[data-testid=\"app-header-error\"]");
         Assert.Contains("Triage 失敗", err.TextContent);
-        Assert.Contains("network down", err.TextContent);
+        Assert.Contains(classified ? "レート制限" : "network down", err.TextContent);
+        Assert.DoesNotContain("private-model-details", err.TextContent, StringComparison.Ordinal);
         broadcaster.DidNotReceive().Publish();
     }
 

@@ -15,6 +15,7 @@ namespace RepoSyncRadar.App.Auth;
 [SupportedOSPlatform("windows")]
 public sealed partial class DpapiGitHubTokenStore : IGitHubTokenStore
 {
+    internal const string TokenPathEnv = "REPOSYNCRADAR_GITHUB_TOKEN_PATH";
     private const string _defaultFileName = "github-token.bin";
     private static readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -22,7 +23,7 @@ public sealed partial class DpapiGitHubTokenStore : IGitHubTokenStore
     private readonly ILogger<DpapiGitHubTokenStore> _logger;
 
     public DpapiGitHubTokenStore(ILogger<DpapiGitHubTokenStore> logger)
-        : this(ResolveDefaultPath(), logger)
+        : this(ResolveDefaultPath(Environment.GetEnvironmentVariable(TokenPathEnv)), logger)
     {
     }
 
@@ -102,10 +103,13 @@ public sealed partial class DpapiGitHubTokenStore : IGitHubTokenStore
         return Task.CompletedTask;
     }
 
-    private static string ResolveDefaultPath() => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RepoSyncRadar",
-        _defaultFileName);
+    internal static string ResolveDefaultPath(string? configuredPath)
+        => !string.IsNullOrWhiteSpace(configuredPath)
+            ? Path.GetFullPath(configuredPath)
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "RepoSyncRadar",
+                _defaultFileName);
 
     [LoggerMessage(EventId = 1, Level = LogLevel.Warning,
         Message = "Failed to read GitHub token file {Path}; treating as signed out.")]

@@ -56,14 +56,7 @@ internal static class SessionConfigBuilder
             CustomAgentsLocalOnly = true,
             CoauthorEnabled = false,
             ManageScheduleEnabled = false,
-            ManagedSettings = new ManagedSettings
-            {
-                Permissions = new ManagedSettingsPermissions
-                {
-                    DisableBypassPermissionsMode = DisableBypassPermissionsModes.Disable,
-                    Deny = ["shell"],
-                },
-            },
+            ManagedSettings = CreateManagedSettings(),
             McpOAuthTokenStorage = McpOAuthTokenStorageMode.InMemory,
             // RepoSyncRadar does not broker third-party MCP OAuth tokens. Fail closed if
             // an OAuth-protected MCP server is introduced before a user-visible flow exists.
@@ -109,6 +102,16 @@ internal static class SessionConfigBuilder
 
         return config;
     }
+
+    internal static ManagedSettings CreateManagedSettings()
+        => new()
+        {
+            Permissions = new ManagedSettingsPermissions
+            {
+                DisableBypassPermissionsMode = DisableBypassPermissionsModes.Disable,
+                Deny = ["shell"],
+            },
+        };
 
     private static ContextTier? ParseContextTier(string? contextTier)
         => contextTier?.Trim().ToLowerInvariant() switch

@@ -7,6 +7,47 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class CopilotUsageTrackerTests
 {
     [Fact]
+    public void Assistant_Usage_Wire_Event_Preserves_Recorded_Metrics()
+    {
+        var json = """
+            {
+                "timestamp": "2026-10-03T00:00:00Z",
+                "data": {
+                    "model": "gpt-6.1-sol",
+                    "apiCallId": "api-1",
+                    "inputTokens": 100,
+                    "outputTokens": 40,
+                    "reasoningTokens": 10,
+                    "cacheReadTokens": 5,
+                    "cacheWriteTokens": 3,
+                    "cost": 0.5
+                },
+                "type": "assistant.usage"
+            }
+            """;
+        var usage = Assert.IsType<AssistantUsageEvent>(SessionEvent.FromJson(json));
+        var tracker = new CopilotUsageTracker();
+
+        tracker.Record(CopilotUsageTracker.FromAssistantUsage(usage, SessionPurpose.Adoption, "session-1"));
+
+        var snapshot = tracker.GetSnapshot();
+        var record = Assert.Single(snapshot.RecentTurns);
+        Assert.Equal("session-1", record.SessionId);
+        Assert.Equal("Adoption", record.Purpose);
+        Assert.Equal("gpt-6.1-sol", record.Model);
+        Assert.Equal("api-1", record.ApiCallId);
+        Assert.Equal(new DateTimeOffset(2026, 10, 3, 0, 0, 0, TimeSpan.Zero), record.RecordedAt);
+        Assert.Equal(100, snapshot.InputTokens);
+        Assert.Equal(40, snapshot.OutputTokens);
+        Assert.Equal(10, snapshot.ReasoningTokens);
+        Assert.Equal(5, snapshot.CacheReadTokens);
+        Assert.Equal(3, snapshot.CacheWriteTokens);
+        Assert.Equal(150, snapshot.TotalTokens);
+        Assert.Equal(0.5, snapshot.Cost);
+        Assert.Null(snapshot.AiCredits());
+    }
+
+    [Fact]
     public void FromAssistantUsage_Preserves_Wire_Reported_Credits_Without_Session_Metrics()
     {
         var usage = Assert.IsType<AssistantUsageEvent>(SessionEvent.FromJson(

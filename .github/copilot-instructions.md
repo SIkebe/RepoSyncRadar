@@ -43,13 +43,15 @@ Use these repository instructions as the starting point. When code or validated 
 - Logging must use source-generated `[LoggerMessage]`. Do not call `_logger.LogDebug/LogInformation/LogWarning(...)` extension methods directly. Use `partial sealed class` methods such as `private static partial void LogXxx(ILogger logger, ...)`.
 - In xUnit tests, pass `TestContext.Current.CancellationToken` when calling cancellable APIs. For NSubstitute `Received`/`DidNotReceive`, use `Arg.Any<CancellationToken>()` or the real token.
 - WPF E2E fixtures should pass a dummy `COPILOT_GITHUB_TOKEN` into the App child process so eager startup sign-in does not enter GitHub OAuth Device Flow on CI.
+- E2E hosts must isolate the DPAPI store with `REPOSYNCRADAR_GITHUB_TOKEN_PATH`. Signed-in UI tests also need a dummy stored token and configured OAuth client ID; `COPILOT_GITHUB_TOKEN` alone does not set the UI auth state.
+- Automated policy UI tests must not send fixture tokens to live `managedSettings.resolve` endpoints. Keep WebView availability checks offline; verify policy success, failure, and redaction with injected component-test responses.
 - Keep every WPF/WebView2 E2E class in the shared `E2ETests` collection backed by `SeededAppHostFixture`. Starting separate app hosts in one test run can leave WebView2 process state behind and make a later CDP endpoint time out.
 - A WebView2 CDP endpoint answering `/json/version` does not mean Blazor has rendered. `SeededAppHostFixture` waits for the shell once via `E2EPageHelpers.GetBlazorPageAsync`, which rescans contexts/pages and allows a multi-minute cold-start budget; do not shrink that budget to a few tens of seconds or CI runners will fail intermittently with "Blazor page not found over CDP".
 - Keep the WPF Dispatcher running while asynchronously stopping and disposing the generic host. Cancel the first `MainWindow.Closing`, finish host cleanup, then close again; awaiting host disposal from `Application.OnExit` can deadlock WebView/DI cleanup and leave `dotnet run` running after the window disappears.
 - Automated WPF/WebView2 tests should use `Category=E2E` only; reserve `Category=Manual` for human-operated smoke tests, not automated E2E gates.
 - PR CI and release packaging should smoke-test the installed win-x64 Velopack package by setting `REPOSYNCRADAR_E2E_APP_EXE_PATH` to the installed `current\RepoSyncRadar.exe` before running the WebView E2E tests.
 - App internals are already visible to `RepoSyncRadar.App.Tests` through `InternalsVisibleTo` in the App project.
-- Native Copilot runtime test hosts must reference `GitHub.Copilot.SDK` directly so its build targets refresh their native payload; verify `GetStatusAsync().Version` as well as ping after SDK upgrades.
+- Projects hosting the native Copilot runtime must reference `GitHub.Copilot.SDK` directly so its asset-copy targets refresh their native payload. A transitive App reference can leave an older runtime in test output after an SDK upgrade; verify `GetStatusAsync().Version` as well as ping.
 - `Microsoft.NET.Sdk.Razor` does not implicitly include `System.IO` or `System.Net.Http`; add explicit `using` directives when using `File`, `Path`, `Directory`, `IOException`, `HttpClient`, or `HttpResponseMessage`.
 - Do not add `System.Security.Cryptography.ProtectedData` as a package; it is already available in the target framework. Use `[SupportedOSPlatform("windows")]` where DPAPI requires it.
 - Avoid `using var _ = ...`; `_` is a real variable in that context and can conflict with later discard assignments.
@@ -68,6 +70,8 @@ Use these repository instructions as the starting point. When code or validated 
 - RepoSyncRadar uses `RuntimeConnection.ForInProcess()` exclusively; it does not support per-client SDK `Telemetry`, `Environment`, or `WorkingDirectory`. Verify native runtime startup, a model turn, and shutdown in installed-package smoke before a release.
 - Keep session file-change tracking disabled until RepoSyncRadar has a user-visible rewind flow; current radar tools do not edit workspace files.
 - Treat SDK capabilities as unavailable until confirmed in the installed package's public API. Do not rely on runtime internals or prompt-only structured-output guarantees.
+- Promote `model.call_final_result` failure codes only for root `session.error` events with `errorType: "query"`; consume the pending result so unrelated errors cannot reuse it.
+- Managed-policy UI must use safe display DTOs, distinguish missing from empty/false, preserve per-source allowlist intersection, and cover the bundled runtime schema. Bound each entry to 32 values plus one trailing omission marker across nested values and sources. Show app-injected restrictions separately using the shared session configuration, not a duplicated policy definition.
 - The SDK downloads a SHA-256-verified GitHub Release native runtime bundle. Published builds must preserve every SDK-generated runtime asset, including `copilot_runtime.dll`, `runtime.node`, hidden marker files, and nested runtime dependencies; a standalone `copilot.exe` is not a substitute.
 
 ### Client And Telemetry

@@ -116,6 +116,7 @@ public sealed class AppHost : IAsyncDisposable
         psi.EnvironmentVariables["REPOSYNCRADAR_DOCS_CDP_PORT"] = docsPort.ToString(System.Globalization.CultureInfo.InvariantCulture);
         psi.EnvironmentVariables["REPOSYNCRADAR_WEBVIEW_USER_DATA_ROOT"] = webViewUserDataRoot;
         psi.EnvironmentVariables["REPOSYNCRADAR_USER_SETTINGS_PATH"] = Path.Combine(webViewUserDataRoot, "settings.json");
+        psi.EnvironmentVariables["REPOSYNCRADAR_GITHUB_TOKEN_PATH"] = Path.Combine(webViewUserDataRoot, "github-token.bin");
         if (!string.IsNullOrWhiteSpace(dbPath))
         {
             psi.EnvironmentVariables["REPOSYNCRADAR_DB_PATH"] = dbPath;

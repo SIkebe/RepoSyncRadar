@@ -1,5 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root>
+  <data name="Copilot.Policy.Title" xml:space="preserve"><value>Copilot policy diagnostics</value></data>
+  <data name="Copilot.Policy.Scope" xml:space="preserve"><value>Check account and device policy on demand. This may contact GitHub or use cached policy. This snapshot excludes the app's session-local permission restrictions and does not prove live session enforcement.</value></data>
+  <data name="Copilot.Policy.Check" xml:space="preserve"><value>Check policy</value></data>
+  <data name="Copilot.Policy.Checking" xml:space="preserve"><value>Checking Copilot policy...</value></data>
+  <data name="Copilot.Policy.SignIn" xml:space="preserve"><value>Sign in to check policy.</value></data>
+  <data name="Copilot.Policy.Resolved" xml:space="preserve"><value>Policy snapshot retrieved. It may be cached rather than freshly fetched.</value></data>
+  <data name="Copilot.Policy.FailClosed" xml:space="preserve"><value>Policy could not be determined. The runtime reports fail-closed restrictions. Check your connection and retry the policy check.</value></data>
+  <data name="Copilot.Policy.Sources" xml:space="preserve"><value>Device policy: {0} / account or organization policy: {1}</value></data>
+  <data name="Copilot.Policy.Model" xml:space="preserve"><value>Policy model: {0} ({1}). The model may not be available to this account.</value></data>
+  <data name="Copilot.Policy.Locked" xml:space="preserve"><value>locked by policy</value></data>
+  <data name="Copilot.Policy.Overridable" xml:space="preserve"><value>can be overridden</value></data>
+  <data name="Copilot.Policy.LockUnknown" xml:space="preserve"><value>lock state unreported</value></data>
+  <data name="Copilot.Policy.NoModel" xml:space="preserve"><value>No displayable policy model was reported. This is not a guarantee of model availability.</value></data>
+  <data name="Copilot.Policy.Warning" xml:space="preserve"><value>The runtime reported policy-source warnings. A cached policy may have been used; this is not proof of a successful live fetch.</value></data>
+  <data name="Copilot.Policy.Failed" xml:space="preserve"><value>Could not check Copilot policy. Check your connection and sign-in, then retry. Account and raw policy details are not displayed.</value></data>
+  <data name="Copilot.Policy.TimedOut" xml:space="preserve"><value>The policy check timed out. Check your connection and retry.</value></data>
+  <data name="Copilot.Failure.InvalidRequest" xml:space="preserve"><value>The model rejected the request (HTTP 400). Check the model and request settings before generating again.</value></data>
+  <data name="Copilot.Failure.InputTooLarge" xml:space="preserve"><value>The model input was too large (HTTP 413). Reduce the number of selected commits or the input size before generating again.</value></data>
+  <data name="Copilot.Failure.RateLimited" xml:space="preserve"><value>The model reached a rate limit (HTTP 429). Wait before generating again.</value></data>
+  <data name="Copilot.Failure.RequestRejected" xml:space="preserve"><value>The model rejected the request (HTTP 4xx). Check sign-in, model access, and policy before generating again.</value></data>
+  <data name="Copilot.Failure.ServerError" xml:space="preserve"><value>The model service failed (HTTP 5xx). Wait before generating again.</value></data>
+  <data name="Copilot.Failure.TransportError" xml:space="preserve"><value>The model connection failed. Check your network before generating again.</value></data>
+  <data name="Common.Yes" xml:space="preserve"><value>Yes</value></data>
+  <data name="Common.No" xml:space="preserve"><value>No</value></data>
   <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
@@ -457,4 +481,121 @@
   <data name="Workbench.MoveToWatch" xml:space="preserve"><value>Move to Watch</value></data>
   <data name="Workbench.Queues" xml:space="preserve"><value>Queues</value></data>
   <data name="Workbench.SidebarResizeLabel" xml:space="preserve"><value>Resize the sidebar and work pane</value></data>
+  <data name="Copilot.Policy.InventoryScope" xml:space="preserve"><value>Read-only managed settings. Unreported does not mean unrestricted. Sources identify layers that reported a setting; override state is shown only when supplied by the SDK. Identifiers, paths, URLs, command details, and raw diagnostics are hidden.</value></data>
+  <data name="Copilot.Policy.AppRestrictionsScope" xml:space="preserve"><value>RepoSyncRadar injects these permission restrictions when creating sessions. They are separate from the managed policy above and do not prove enforcement in a live session. Additional per-tool approval decisions are not included.</value></data>
+  <data name="Copilot.Policy.Group.Model" xml:space="preserve"><value>Model and Auto routing</value></data>
+  <data name="Copilot.Policy.Group.Permissions" xml:space="preserve"><value>Tool permissions</value></data>
+  <data name="Copilot.Policy.Group.Runtime" xml:space="preserve"><value>Execution environment and sandbox</value></data>
+  <data name="Copilot.Policy.Group.Customization" xml:space="preserve"><value>MCP, plugins, and customization</value></data>
+  <data name="Copilot.Policy.Group.RemoteTelemetry" xml:space="preserve"><value>Connections, authentication, and diagnostics settings</value></data>
+  <data name="Copilot.Policy.Group.Sources" xml:space="preserve"><value>Managed scope and sources</value></data>
+  <data name="Copilot.Policy.Group.Diagnostics" xml:space="preserve"><value>Fetch and validation diagnostics</value></data>
+  <data name="Copilot.Policy.Group.AppRestrictions" xml:space="preserve"><value>App-injected permission restrictions (separate)</value></data>
+  <data name="Copilot.Policy.Column.Item" xml:space="preserve"><value>Setting</value></data>
+  <data name="Copilot.Policy.Column.Value" xml:space="preserve"><value>Value or reporting state</value></data>
+  <data name="Copilot.Policy.Column.Source" xml:space="preserve"><value>Reported by</value></data>
+  <data name="Copilot.Policy.Column.Override" xml:space="preserve"><value>Override state</value></data>
+  <data name="Copilot.Policy.Value.Yes" xml:space="preserve"><value>Yes / true</value></data>
+  <data name="Copilot.Policy.Value.No" xml:space="preserve"><value>No / false</value></data>
+  <data name="Copilot.Policy.Value.None" xml:space="preserve"><value>None (reported empty)</value></data>
+  <data name="Copilot.Policy.Value.Unreported" xml:space="preserve"><value>Unreported</value></data>
+  <data name="Copilot.Policy.Value.NotApplicable" xml:space="preserve"><value>Not applicable</value></data>
+  <data name="Copilot.Policy.Value.Hidden" xml:space="preserve"><value>Contents hidden</value></data>
+  <data name="Copilot.Policy.Value.ScopeHidden" xml:space="preserve"><value> — scope details hidden</value></data>
+  <data name="Copilot.Policy.Value.EmptyAllow" xml:space="preserve"><value>Empty allowlist (admits no matching targets)</value></data>
+  <data name="Copilot.Policy.Value.Intersected" xml:space="preserve"><value>Allowlists intersect across sources. The following are per-source values, not a union.</value></data>
+  <data name="Copilot.Policy.Value.TrueCount" xml:space="preserve"><value> entries are true (does not guarantee availability or activation)</value></data>
+  <data name="Copilot.Policy.Value.FalseCount" xml:space="preserve"><value> entries are false</value></data>
+  <data name="Copilot.Policy.Value.IdentifiersHidden" xml:space="preserve"><value>Individual identifiers hidden</value></data>
+  <data name="Copilot.Policy.Value.EntriesHidden" xml:space="preserve"><value> entries (names and locations hidden)</value></data>
+  <data name="Copilot.Policy.Value.Truncated" xml:space="preserve"><value>Items beyond the display limit are omitted.</value></data>
+  <data name="Copilot.Policy.Source.Device" xml:space="preserve"><value>Device</value></data>
+  <data name="Copilot.Policy.Source.Server" xml:space="preserve"><value>Account / organization</value></data>
+  <data name="Copilot.Policy.Source.Client" xml:space="preserve"><value>SDK host / app</value></data>
+  <data name="Copilot.Policy.Source.PolicyHelper" xml:space="preserve"><value>Policy helper</value></data>
+  <data name="Copilot.Policy.Source.Mixed" xml:space="preserve"><value>Multiple sources</value></data>
+  <data name="Copilot.Policy.Source.None" xml:space="preserve"><value>None</value></data>
+  <data name="Copilot.Policy.Source.Unknown" xml:space="preserve"><value>Unreported / unsupported source</value></data>
+  <data name="Copilot.Policy.Severity.Warning" xml:space="preserve"><value>Warning</value></data>
+  <data name="Copilot.Policy.Severity.Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Copilot.Policy.Severity.Unknown" xml:space="preserve"><value>Severity unreported</value></data>
+  <data name="Copilot.Policy.NoDiagnostics" xml:space="preserve"><value>No diagnostics reported. This does not guarantee a successful live fetch.</value></data>
+  <data name="Copilot.Policy.Diagnostic.Cache" xml:space="preserve"><value>The diagnostic mentions caching. Details are hidden.</value></data>
+  <data name="Copilot.Policy.Diagnostic.Timeout" xml:space="preserve"><value>The diagnostic mentions a timeout. Details are hidden.</value></data>
+  <data name="Copilot.Policy.Diagnostic.Fetch" xml:space="preserve"><value>The diagnostic mentions fetching or networking. Details are hidden.</value></data>
+  <data name="Copilot.Policy.Diagnostic.Validation" xml:space="preserve"><value>The diagnostic mentions validation. Details are hidden.</value></data>
+  <data name="Copilot.Policy.Diagnostic.Hidden" xml:space="preserve"><value>The runtime reported a diagnostic. Details are hidden to avoid exposing sensitive data.</value></data>
+  <data name="Copilot.Policy.Item.model" xml:space="preserve"><value>Default model</value></data>
+  <data name="Copilot.Policy.Item.autoTier" xml:space="preserve"><value>Auto routing</value></data>
+  <data name="Copilot.Policy.Item.effortLevel" xml:space="preserve"><value>Reasoning effort</value></data>
+  <data name="Copilot.Policy.Item.contextTier" xml:space="preserve"><value>Context tier</value></data>
+  <data name="Copilot.Policy.Item.permissions.allow" xml:space="preserve"><value>Allow rules</value></data>
+  <data name="Copilot.Policy.Item.permissions.ask" xml:space="preserve"><value>Ask rules</value></data>
+  <data name="Copilot.Policy.Item.permissions.deny" xml:space="preserve"><value>Deny rules</value></data>
+  <data name="Copilot.Policy.Item.permissions.disableBypassPermissionsMode" xml:space="preserve"><value>Disable permission bypass</value></data>
+  <data name="Copilot.Policy.Item.sandbox" xml:space="preserve"><value>Sandbox settings</value></data>
+  <data name="Copilot.Policy.Item.sandbox.enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="Copilot.Policy.Item.sandbox.failIfUnavailable" xml:space="preserve"><value>Fail if unavailable</value></data>
+  <data name="Copilot.Policy.Item.sandbox.allowBypass" xml:space="preserve"><value>Allow bypass</value></data>
+  <data name="Copilot.Policy.Item.sandbox.addCurrentWorkingDirectory" xml:space="preserve"><value>Add working directory</value></data>
+  <data name="Copilot.Policy.Item.sandbox.sandboxMcpServers" xml:space="preserve"><value>Sandbox MCP servers</value></data>
+  <data name="Copilot.Policy.Item.sandbox.sandboxLspServers" xml:space="preserve"><value>Sandbox LSP servers</value></data>
+  <data name="Copilot.Policy.Item.sandbox.auth" xml:space="preserve"><value>Authentication passthrough</value></data>
+  <data name="Copilot.Policy.Item.sandbox.auth.git" xml:space="preserve"><value>Git authentication</value></data>
+  <data name="Copilot.Policy.Item.sandbox.auth.gh" xml:space="preserve"><value>GitHub CLI authentication</value></data>
+  <data name="Copilot.Policy.Item.sandbox.allowDevToolAccess" xml:space="preserve"><value>Developer tool access</value></data>
+  <data name="Copilot.Policy.Item.sandbox.learningMode" xml:space="preserve"><value>Learning mode</value></data>
+  <data name="Copilot.Policy.Item.sandbox.userPolicy" xml:space="preserve"><value>Filesystem, network, and related rules</value></data>
+  <data name="Copilot.Policy.Item.allowedMcpServers" xml:space="preserve"><value>MCP server allowlist</value></data>
+  <data name="Copilot.Policy.Item.deniedMcpServers" xml:space="preserve"><value>MCP server denylist</value></data>
+  <data name="Copilot.Policy.Item.mcp.serverUrl" xml:space="preserve"><value>URL pattern</value></data>
+  <data name="Copilot.Policy.Item.mcp.serverCommand" xml:space="preserve"><value>Command matcher</value></data>
+  <data name="Copilot.Policy.Item.mcp.serverName" xml:space="preserve"><value>Server name matcher</value></data>
+  <data name="Copilot.Policy.Item.strictPluginOnlyCustomization" xml:space="preserve"><value>Plugin-only customization surfaces</value></data>
+  <data name="Copilot.Policy.Item.allowManagedMcpServersOnly" xml:space="preserve"><value>Managed MCP servers only</value></data>
+  <data name="Copilot.Policy.Item.allowManagedHooksOnly" xml:space="preserve"><value>Managed hooks only</value></data>
+  <data name="Copilot.Policy.Item.features" xml:space="preserve"><value>Feature availability settings</value></data>
+  <data name="Copilot.Policy.Item.enabledPlugins" xml:space="preserve"><value>Plugin activation settings</value></data>
+  <data name="Copilot.Policy.Item.extraKnownMarketplaces" xml:space="preserve"><value>Additional marketplaces</value></data>
+  <data name="Copilot.Policy.Item.strictKnownMarketplaces" xml:space="preserve"><value>Allowed marketplaces</value></data>
+  <data name="Copilot.Policy.Item.marketplace.source" xml:space="preserve"><value>Source type</value></data>
+  <data name="Copilot.Policy.Item.marketplace.autoUpdate" xml:space="preserve"><value>Auto-update setting</value></data>
+  <data name="Copilot.Policy.Item.remoteControl" xml:space="preserve"><value>Remote control</value></data>
+  <data name="Copilot.Policy.Item.remoteControl.mode" xml:space="preserve"><value>Control mode</value></data>
+  <data name="Copilot.Policy.Item.remoteControl.githubDotComOrganizations" xml:space="preserve"><value>SSO organizations</value></data>
+  <data name="Copilot.Policy.Item.remoteControl.githubEnterpriseCloudDomains" xml:space="preserve"><value>SSO domains</value></data>
+  <data name="Copilot.Policy.Item.forceLoginOrgs" xml:space="preserve"><value>Sign-in organization restrictions</value></data>
+  <data name="Copilot.Policy.Item.forceRemoteSettingsRefresh" xml:space="preserve"><value>Force remote settings refresh</value></data>
+  <data name="Copilot.Policy.Item.policyHelper" xml:space="preserve"><value>Policy helper settings</value></data>
+  <data name="Copilot.Policy.Item.policyHelper.path" xml:space="preserve"><value>Executable</value></data>
+  <data name="Copilot.Policy.Item.policyHelper.args" xml:space="preserve"><value>Arguments</value></data>
+  <data name="Copilot.Policy.Item.policyHelper.timeoutMs" xml:space="preserve"><value>Timeout (ms)</value></data>
+  <data name="Copilot.Policy.Item.policyHelperFailureMode" xml:space="preserve"><value>Helper failure handling</value></data>
+  <data name="Copilot.Policy.Item.telemetry" xml:space="preserve"><value>Telemetry settings</value></data>
+  <data name="Copilot.Policy.Item.telemetry.enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="Copilot.Policy.Item.telemetry.endpoint" xml:space="preserve"><value>Endpoint</value></data>
+  <data name="Copilot.Policy.Item.telemetry.protocol" xml:space="preserve"><value>Protocol</value></data>
+  <data name="Copilot.Policy.Item.telemetry.headers" xml:space="preserve"><value>HTTP headers</value></data>
+  <data name="Copilot.Policy.Item.telemetry.resourceAttributes" xml:space="preserve"><value>Resource attributes</value></data>
+  <data name="Copilot.Policy.Item.telemetry.capture" xml:space="preserve"><value>Capture settings</value></data>
+  <data name="Copilot.Policy.Item.telemetry.capture.identity" xml:space="preserve"><value>Identity</value></data>
+  <data name="Copilot.Policy.Item.telemetry.capture.prompts" xml:space="preserve"><value>Prompts</value></data>
+  <data name="Copilot.Policy.Item.telemetry.capture.responses" xml:space="preserve"><value>Responses</value></data>
+  <data name="Copilot.Policy.Item.telemetry.capture.toolArguments" xml:space="preserve"><value>Tool arguments</value></data>
+  <data name="Copilot.Policy.Item.telemetry.capture.toolOutput" xml:space="preserve"><value>Tool output</value></data>
+  <data name="Copilot.Policy.Item.telemetry.capture.policyDetail" xml:space="preserve"><value>Policy details</value></data>
+  <data name="Copilot.Policy.Item.telemetry.captureContent" xml:space="preserve"><value>Capture content</value></data>
+  <data name="Copilot.Policy.Item.telemetry.lockCaptureContent" xml:space="preserve"><value>Lock content capture</value></data>
+  <data name="Copilot.Policy.Item.telemetry.serviceName" xml:space="preserve"><value>Service name</value></data>
+  <data name="Copilot.Policy.Item.status.bypass" xml:space="preserve"><value>Runtime reports permission bypass disabled</value></data>
+  <data name="Copilot.Policy.Item.status.intersection" xml:space="preserve"><value>Allowlist intersection</value></data>
+  <data name="Copilot.Policy.Item.status.sandboxFallback" xml:space="preserve"><value>Sandbox forced by undetermined policy</value></data>
+  <data name="Copilot.Policy.Item.status.source" xml:space="preserve"><value>Source summary</value></data>
+  <data name="Copilot.Policy.Item.status.device" xml:space="preserve"><value>Device policy</value></data>
+  <data name="Copilot.Policy.Item.status.server" xml:space="preserve"><value>Account / organization policy</value></data>
+  <data name="Copilot.Policy.Item.status.client" xml:space="preserve"><value>SDK host layer</value></data>
+  <data name="Copilot.Policy.Item.status.helper" xml:space="preserve"><value>Policy helper layer</value></data>
+  <data name="Copilot.Policy.Item.status.keys" xml:space="preserve"><value>Managed setting keys</value></data>
+  <data name="Copilot.Policy.Item.status.layers" xml:space="preserve"><value>Reported policy layers</value></data>
+  <data name="Copilot.Policy.Item.UnknownSettings" xml:space="preserve"><value>Unsupported managed settings</value></data>
 </root>

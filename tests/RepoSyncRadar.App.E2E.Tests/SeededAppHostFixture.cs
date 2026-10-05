@@ -2,6 +2,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Playwright;
 using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Models;
+using System.Security.Cryptography;
+using System.Text;
 using Xunit;
 
 namespace RepoSyncRadar.App.E2E.Tests;
@@ -60,7 +62,19 @@ public sealed class SeededAppHostFixture : IAsyncLifetime
 
         await SeedAsync(_dbPath).ConfigureAwait(false);
 
-        _host = await AppHost.StartAsync(_dbPath, AppHost.PreviewDisabledEnvironment).ConfigureAwait(false);
+        var tokenPath = Path.Combine(_dbDir, "github-token.bin");
+        var token = Encoding.UTF8.GetBytes(
+            """{"access_token":"ghu_e2e_startup_auth_placeholder","token_type":"bearer","scopes":[]}""");
+        await File.WriteAllBytesAsync(
+            tokenPath,
+            ProtectedData.Protect(token, optionalEntropy: null, DataProtectionScope.CurrentUser),
+            TestContext.Current.CancellationToken).ConfigureAwait(false);
+        var environment = new Dictionary<string, string?>(AppHost.PreviewDisabledEnvironment, StringComparer.Ordinal)
+        {
+            ["REPOSYNCRADAR_GITHUB_TOKEN_PATH"] = tokenPath,
+            ["RADAR_Copilot__OAuthClientId"] = "e2e-placeholder-client",
+        };
+        _host = await AppHost.StartAsync(_dbPath, environment, TestContext.Current.CancellationToken).ConfigureAwait(false);
         _playwright = await Playwright.CreateAsync().ConfigureAwait(false);
         _blazorBrowser = await _playwright.Chromium.ConnectOverCDPAsync(
             $"http://127.0.0.1:{_host.BlazorCdpPort}").ConfigureAwait(false);

@@ -10,6 +10,7 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.JSInterop
 @using RepoSyncRadar.App.Settings
+@using RepoSyncRadar.App.Copilot
 
 @{ ApplyDisplayCultureForRender(); }
 
@@ -703,10 +704,10 @@
             ? $"{(int)elapsed.TotalHours}:{elapsed.Minutes:D2}:{elapsed.Seconds:D2}"
             : $"{elapsed.Minutes:D2}:{elapsed.Seconds:D2}";
 
-    private static string BuildFriendlyBatchErrorMessage(Exception ex)
-        => ex.Message.Contains("JSON", StringComparison.OrdinalIgnoreCase)
+    private string BuildFriendlyBatchErrorMessage(Exception ex)
+        => CopilotFailureMessage.TryFormat(ex, L) ?? (ex.Message.Contains("JSON", StringComparison.OrdinalIgnoreCase)
             ? "Copilot の応答を解説として読み取れませんでした。もう一度生成してください。"
-            : ex.Message;
+            : ex.Message);
 
     private Task HandleReviewCompleted(ReviewStatus status)
     {

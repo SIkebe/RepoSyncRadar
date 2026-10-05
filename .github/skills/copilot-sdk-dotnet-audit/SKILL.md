@@ -54,7 +54,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
    - `build/GitHub.Copilot.SDK.props`: bundled `CopilotCliVersion`
    - `build/GitHub.Copilot.SDK.targets`: native runtime download/copy/publish behavior
    - README / XML docs: public API surface
-9. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。
+9. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。`.nuspec` の repository が SDK repo ではなく runtime repo を指すことがあるため、commit を SDK release tag と同一視しない。公開 tag がない package は exact package の XML docs / public API と props/targets を前後版で比較し、公開 source で確認できない範囲を明記する。
 
 PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-String` を使う。
 
@@ -84,9 +84,12 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 - `dotnet/src/Client.cs`: `CopilotClientOptions`、create/resume session、model listing、stop/force stop、auth status、mode defaults
 - `dotnet/src/Types.cs`: `SessionConfig`、`MessageOptions`、`TelemetryConfig`、`SessionHooks`、`InfiniteSessionConfig`、tool/session options
 - `dotnet/src/Generated/Rpc.cs` と DTOs: usage/account/quota/auth/model APIs
+- `dotnet/src/Generated/SessionEvents.cs` と serializer context: 新規 lifecycle/result/policy events、payload、未知の値と subagent attribution
 - E2E/unit tests: session fidelity、streaming、tools、permissions、error resilience、compaction、telemetry、per-session auth、new feature tests
 
 確認した SDK 契約は短くメモする。例:
+
+**生成 API の差分を省略しない**。Client/Session/Types と release note だけで棚卸しを完了しない。前後版の Generated/Rpc、SessionEvents、exact package の XML public surface を比較し、追加 method/DTO/event を採用候補へ入れる。移行が不要でも、新しい管理ポリシー診断や最終モデル結果イベントにはユーザー価値があり得る。公開 source がない版は exact package の public API 比較で補い、未確認部分を明記する。
 
 - `SendAndWaitAsync` は `AssistantMessageEvent?` を返す。最終テキストは `Data.Content`。
 - timeout は idle 待ちの上限で、in-flight agent work の中止ではない。
@@ -120,6 +123,12 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 - structured output: SDK に schema support が無いなら防御 parser/tool strategy があるか
 
 ### 6. beta 新機能の採用可否を判断する
+
+追加 public API/event ごとに `必須移行 / 自動的な恩恵 / 具体的なアプリ導線・ユーザー価値 / 採用・見送り / 検証方法・撤回条件` の adoption matrix を作る。「必須の API 移行がない」と「新機能に採用価値がない」は別判断にする。現在の固定ツールセットや新規セッション中心の設計だけで価値なしと断定せず、段階的なツール制限、診断、再開導線に活かせるか検討し、必要な設計追加も記録する。
+
+診断を採用する場合は同梱ランタイムで RPC 応答・event 発火を検証する。sessionless policy は SDK 注入の session-local 制限を含まない、キャッシュ応答は live fetch 成功を保証しない、model final-result は内部再試行後のモデル処理単位で課金件数やワークフロー結果ではない、という契約を UI/tests に反映する。explicit app auth を使い、raw account/policy/error 内容を出さず、未報告・未知・subagent・取消・timeout・再利用セッションの遅延イベントを安全に扱う。ネットワークを要する診断は起動時ではなく必要時に行い、検証済みの範囲を超えて成功を主張しない。
+
+管理ポリシーの棚卸しを既定モデルだけに限定しない。同梱ランタイムの schema と安全な表示 DTO の対応をテストし、権限・Auto・サンドボックス・MCP/プラグイン等を分類して表示する。未報告・空・false・対象外を区別し、変更可否や取得元を推測しない。交差適用された許可リストは合成結果から消えるため、元の層別リストと交差適用を明示する。機密値は非表示、未知キーは件数のみとし、アプリ注入設定はセッション構築コードと共有して別枠にする。
 
 結果は重要度順に評価する。
 
@@ -155,6 +164,7 @@ Preview / experimental 機能を採用するときは、利用理由、public AP
 変更した範囲に応じてテストを追加・更新する。
 
 - SDK option wiring: `CopilotSessionFactoryTests`
+- Native runtime probes: SDK を直接参照する test host で実行し、現在版の asset-copy targets が動くことを確認する。transitive App reference だけでは旧 native payload がテスト出力に残る場合があるため、managed SDK の版や ping 成功だけを新 RPC/event の対応証明にしない。
 - config binding/post-configure: `OptionsValidationTests`
 - local settings round-trip: `FileLocalAppSettingsStoreTests`
 - session config/tool filters: `SessionConfigBuilderTests`
