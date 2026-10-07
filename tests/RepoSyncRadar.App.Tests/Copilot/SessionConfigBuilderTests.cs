@@ -41,6 +41,7 @@ public class SessionConfigBuilderTests
         Assert.False(config.EnableFileChangeTracking);
         Assert.False(config.EnableSessionStore);
         Assert.False(config.EnableExperimentalMode);
+        Assert.False(config.EnableSkills);
         Assert.NotNull(config.IncludedBuiltinSkills);
         Assert.Empty(config.IncludedBuiltinSkills);
         Assert.NotNull(config.Memory);
@@ -100,6 +101,23 @@ public class SessionConfigBuilderTests
         Assert.Single(config.Tools);
         Assert.Equal("radar_test", config.Tools.Single().Name);
         Assert.Equal(["custom:radar_test"], config.AvailableTools);
+    }
+
+    [Theory]
+    [InlineData(SessionPurpose.Triage)]
+    [InlineData(SessionPurpose.Adoption)]
+    [InlineData(SessionPurpose.Maintenance)]
+    public void Build_Disables_All_Skills_For_Every_Purpose(SessionPurpose purpose)
+    {
+        var config = SessionConfigBuilder.Build(
+            purpose,
+            Options.Create(new CopilotOptions()),
+            static (_, _) => Task.FromResult(PermissionDecision.Reject("No tools needed.")));
+
+        Assert.False(config.EnableSkills);
+        Assert.Empty(config.IncludedBuiltinSkills!);
+        Assert.Null(config.SkillProvider);
+        Assert.False(config.Clone().EnableSkills);
     }
 
     [Fact]

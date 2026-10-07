@@ -49,6 +49,8 @@ internal static class SessionConfigBuilder
             EnableFileChangeTracking = false,
             EnableSessionStore = false,
             EnableExperimentalMode = false,
+            // Excluding built-ins alone does not disable ambient or provider-backed skills.
+            EnableSkills = false,
             IncludedBuiltinSkills = [],
             Memory = new MemoryConfiguration { Enabled = false },
             ToolSearch = new ToolSearchConfig { Enabled = false },

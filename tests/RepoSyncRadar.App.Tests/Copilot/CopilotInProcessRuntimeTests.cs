@@ -26,10 +26,37 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.92-4", status.Version);
+        Assert.Equal("1.0.93-3", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
+    [Fact]
+    public async Task ManagedSettings_Host_Boundary_RoundTrips_Empty_And_Populated_Lists()
+    {
+        await using var client = new CopilotClient(CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(), NullLogger.Instance, "offline-policy-test", "0.1.30"));
+        var ct = TestContext.Current.CancellationToken;
+        await client.StartAsync(ct);
+
+        var validation = await client.Rpc.ManagedSettings.ValidateAsync(
+            """{"permissions":{"limitTo":[]}}""", layer: "server", cancellationToken: ct);
+        Assert.True(validation.Valid);
+        var composed = await client.Rpc.ManagedSettings.ComposeAsync(
+            [new() { Source = ManagedSettingsChannel.Server, Settings = validation.Settings }], ct);
+        Assert.NotNull(composed.Resolved.Settings);
+        Assert.Equal(0, composed.Resolved.Settings.Value.GetProperty("permissions").GetProperty("limitTo").GetArrayLength());
+
+        var populated = await client.Rpc.ManagedSettings.ValidateAsync(
+            """{"permissions":{"limitTo":["Domain(github.com)"]}}""",
+            layer: "server", cancellationToken: ct);
+        Assert.True(populated.Valid);
+        var populatedResult = await client.Rpc.ManagedSettings.ComposeAsync(
+            [new() { Source = ManagedSettingsChannel.Server, Settings = populated.Settings }], ct);
+        Assert.NotNull(populatedResult.Resolved.Settings);
+        Assert.Equal("Domain(github.com)", Assert.Single(
+            populatedResult.Resolved.Settings.Value.GetProperty("permissions").GetProperty("limitTo").EnumerateArray()).GetString());
+    }
+
     [Fact]
     public async Task ManagedSettings_Compose_Returns_Model_And_Override_State_Without_Applying_Policy()
     {
