@@ -120,6 +120,7 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 - lifecycle: dispose/abort/stop の意味を取り違えていないか
 - permissions: auto-approve と `skip_permission` の境界が妥当か
 - tools: source-qualified tool filtering、`CopilotToolOptions`、ambient tool exposure が安全か
+- skills: `IncludedBuiltinSkills = []` は組み込みスキルだけの除外。スキルを使わない導線では `EnableSkills = false` を明示し、ambient / provider-backed スキルも無効化する。
 - structured output: SDK に schema support が無いなら防御 parser/tool strategy があるか
 
 ### 6. beta 新機能の採用可否を判断する
@@ -127,6 +128,8 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 追加 public API/event ごとに `必須移行 / 自動的な恩恵 / 具体的なアプリ導線・ユーザー価値 / 採用・見送り / 検証方法・撤回条件` の adoption matrix を作る。「必須の API 移行がない」と「新機能に採用価値がない」は別判断にする。現在の固定ツールセットや新規セッション中心の設計だけで価値なしと断定せず、段階的なツール制限、診断、再開導線に活かせるか検討し、必要な設計追加も記録する。
 
 診断を採用する場合は同梱ランタイムで RPC 応答・event 発火を検証する。sessionless policy は SDK 注入の session-local 制限を含まない、キャッシュ応答は live fetch 成功を保証しない、model final-result は内部再試行後のモデル処理単位で課金件数やワークフロー結果ではない、という契約を UI/tests に反映する。explicit app auth を使い、raw account/policy/error 内容を出さず、未報告・未知・subagent・取消・timeout・再利用セッションの遅延イベントを安全に扱う。ネットワークを要する診断は起動時ではなく必要時に行い、検証済みの範囲を超えて成功を主張しない。
+
+`ManagedSettings.ValidateAsync` の成功や `ComposeAsync` の round-trip は、個々の権限パターンの意味的な妥当性や実セッションでの適用を証明しない。新しい権限制限の採用には許可・拒否双方の実動作を検証し、SDK 文書と同梱ランタイムの差があれば記録して適用確認とは区別する。
 
 管理ポリシーの棚卸しを既定モデルだけに限定しない。同梱ランタイムの schema と安全な表示 DTO の対応をテストし、権限・Auto・サンドボックス・MCP/プラグイン等を分類して表示する。未報告・空・false・対象外を区別し、変更可否や取得元を推測しない。交差適用された許可リストは合成結果から消えるため、元の層別リストと交差適用を明示する。機密値は非表示、未知キーは件数のみとし、アプリ注入設定はセッション構築コードと共有して別枠にする。
 

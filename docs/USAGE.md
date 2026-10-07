@@ -95,6 +95,8 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 >
 > **Copilot SDK 診断**: `LogLevel` は SDK ランタイムのログレベルです。`SessionIdleTimeoutSeconds` は `0` / 未指定なら SDK 既定(無効)です。AI Credits は SDK の usage event / session metrics から取得します。in-process ランタイムでは SDK のクライアント別ファイルテレメトリは使用できず、プロンプトや応答内容のキャプチャも設定しません。
 >
+> **セッションのスキル**: Triage・下書き生成・Maintenance では SDK のスキル機能全体を明示的に無効化します。組み込みスキルだけでなく、端末にあるスキルやプロバイダーから供給されるスキルも使用せず、用途別のアプリ指示と登録済み radar ツールを使用します。
+>
 > **ランタイム**: RepoSyncRadar は常に SDK の実験的な in-process ランタイムを使用し、Copilot CLI の子プロセスは起動しません。SDK のビルドターゲットが公式リリースから SHA-256 検証済みのネイティブランタイム一式を取得します。配布物にその DLL が無い場合は公開ビルドを失敗させます。SDK は互換性のため CLI 名の実行ファイルも同梱しますが、アプリは使用しません。ランタイムの環境とネイティブライブラリは WPF アプリのプロセスと共有されます。旧 `RuntimeTransport` / `CliPath` / ファイルテレメトリ設定は使用せず、設定画面から次に保存するとローカル設定ファイルから削除されます。
 >
 > **トークンの保管場所**: OAuth で取得したアクセストークンは DPAPI(`CurrentUser` スコープ)で暗号化し `%LocalAppData%\RepoSyncRadar\github-token.bin` に保存されます。ヘッダーの **Sign out** で保存済みトークンを削除できます。手動でこのファイルを削除しても、次回起動時に再サインインを求められます。
