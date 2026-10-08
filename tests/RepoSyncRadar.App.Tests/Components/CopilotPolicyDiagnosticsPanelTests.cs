@@ -33,6 +33,7 @@ public sealed class CopilotPolicyDiagnosticsPanelTests
                 Assert.NotEmpty(table.QuerySelectorAll("tbody th[scope='row']"));
             });
             Assert.Contains("intelligence", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("調整前の要求値", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("交差適用", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("ポリシー未確定による隔離", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("未報告", cut.Markup, StringComparison.Ordinal);
@@ -55,6 +56,7 @@ public sealed class CopilotPolicyDiagnosticsPanelTests
         var app = cut.Find("[data-testid=\"settings-policy-app-restrictions\"]");
         Assert.Contains("shell", app.TextContent, StringComparison.Ordinal);
         Assert.Contains("権限確認の迂回禁止", app.TextContent, StringComparison.Ordinal);
+        Assert.Contains("AI による権限承認の禁止", app.TextContent, StringComparison.Ordinal);
         await service.DidNotReceive().ResolveAsync(Arg.Any<CancellationToken>());
     }
 
@@ -87,8 +89,9 @@ public sealed class CopilotPolicyDiagnosticsPanelTests
                       "capture":{"identity":false,"prompts":false,"responses":false,"toolArguments":false,"toolOutput":false,"policyDetail":false}}
                 }
               },
-              "values":{"model":"gpt-5.5","autoTier":"intelligence"},
-              "meta":{"model":{"overridable":true,"source":"server"},"autoTier":{"overridable":false,"source":"device"}},
+              "values":{"model":"gpt-5.5","autoTier":"intelligence","effortLevel":"high"},
+              "meta":{"model":{"overridable":true,"source":"server"},"autoTier":{"overridable":false,"source":"device"},
+                      "effortLevel":{"overridable":false,"source":"server","requested":"max"}},
               "layers":[
                   {"source":"server","settings":{"permissions":{"allow":["read","write"]}}},
                   {"source":"device","settings":{"permissions":{"allow":["read"],"deny":["shell"]}}}

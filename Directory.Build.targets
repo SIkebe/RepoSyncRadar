@@ -1,0 +1,26 @@
+<Project>
+
+  <!-- SDK runtime aliases are not in its asset manifest. Equal archive timestamps and
+       lengths can make SkipUnchangedFiles retain an older native library on upgrades. -->
+  <Target Name="InvalidateCopilotRuntimeAliases"
+          BeforeTargets="_CopyCopilotCliToOutput"
+          Condition="'$(CopilotCliVersion)' != '' And '$(CopilotCliBinaryPath)' == '' And '$(CopilotSkipCliDownload)' != 'true' And '$(_CopilotRid)' != ''">
+    <PropertyGroup>
+      <_RadarCopilotOutputDir>$(OutDir)runtimes\$(_CopilotRid)\native</_RadarCopilotOutputDir>
+      <_RadarCopilotVersionMarker>$(_RadarCopilotOutputDir)\.reposyncradar-runtime-version</_RadarCopilotVersionMarker>
+    </PropertyGroup>
+    <ReadLinesFromFile File="$(_RadarCopilotVersionMarker)" Condition="Exists('$(_RadarCopilotVersionMarker)')">
+      <Output TaskParameter="Lines" ItemName="_RadarPreviousCopilotVersion" />
+    </ReadLinesFromFile>
+    <Delete Files="$(_RadarCopilotOutputDir)\$(_CopilotRuntimeLib);$(_RadarCopilotOutputDir)\$(_CopilotBinary)"
+            Condition="'@(_RadarPreviousCopilotVersion)' != '$(CopilotCliVersion)'" />
+  </Target>
+
+  <Target Name="RecordCopilotRuntimeVersion"
+          AfterTargets="_CopyCopilotCliToOutput"
+          Condition="'$(_RadarCopilotVersionMarker)' != ''">
+    <WriteLinesToFile File="$(_RadarCopilotVersionMarker)" Lines="$(CopilotCliVersion)"
+                      Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+
+</Project>

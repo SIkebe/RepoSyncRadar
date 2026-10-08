@@ -1,3 +1,4 @@
+using System.Text.Json;
 using GitHub.Copilot;
 using GitHub.Copilot.Rpc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,6 +14,43 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 
 public class RadarPermissionPolicyTests
 {
+    [Theory]
+    [InlineData(null, "", true)]
+    [InlineData(null, "", false)]
+    [InlineData("", null, true)]
+    [InlineData("", null, false)]
+    [InlineData("", "new contents", true)]
+    [InlineData("", "new contents", false)]
+    public async Task Complete_File_Previews_Preserve_Empty_And_Missing_Sides_Without_AutoApproval(
+        string? before, string? after, bool approved)
+    {
+        var request = NewWrite("tc-preview", "C:\\repo\\new.md");
+        request.FileEdits =
+        [
+            new()
+            {
+                Before = before is null ? null : new() { Path = "C:\\repo\\old.md", Content = before },
+                After = after is null ? null : new() { Path = "C:\\repo\\new.md", Content = after },
+            },
+        ];
+        var json = JsonSerializer.Serialize<PermissionRequest>(request);
+        var restored = Assert.IsType<PermissionRequestWrite>(JsonSerializer.Deserialize<PermissionRequest>(json));
+        var edit = Assert.Single(restored.FileEdits!);
+        Assert.Equal(before, edit.Before?.Content);
+        Assert.Equal(after, edit.After?.Content);
+        Assert.Equal(before is null ? null : "C:\\repo\\old.md", edit.Before?.Path);
+        Assert.Equal(after is null ? null : "C:\\repo\\new.md", edit.After?.Path);
+        var prompt = Substitute.For<IPermissionPrompt>();
+        prompt.ConfirmAsync(restored, Arg.Any<CancellationToken>()).Returns(approved);
+        var policy = CreatePolicy(prompt);
+
+        var result = await policy.HandleAsync(restored, _invocation);
+
+        Assert.Equal(approved ? _approveOnceKind : _rejectKind, result.Kind);
+        AssertDecisionContext(result, PermissionDecisionOutcome.PromptedUser, PermissionDecisionSource.HumanResponse);
+        await prompt.Received(1).ConfirmAsync(restored, Arg.Any<CancellationToken>());
+    }
+
     private static readonly PermissionInvocation _invocation = new() { SessionId = "session-1" };
     private static readonly string _approveOnceKind = PermissionDecision.ApproveOnce().Kind;
     private static readonly string _rejectKind = PermissionDecision.Reject("test").Kind;

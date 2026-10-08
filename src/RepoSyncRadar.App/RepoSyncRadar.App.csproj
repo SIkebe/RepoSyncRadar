@@ -84,6 +84,15 @@
     </PropertyGroup>
     <Error Text="In-process Copilot runtime is missing from '$(_CopilotPublishSourceDir)'."
            Condition="!Exists('$(_CopilotPublishSourceDir)copilot_runtime.dll')" />
+    <ReadLinesFromFile File="$(_CopilotPublishDestDir).reposyncradar-runtime-version"
+                       Condition="Exists('$(_CopilotPublishDestDir).reposyncradar-runtime-version')">
+      <Output TaskParameter="Lines" ItemName="_CopilotPreviousPublishVersion" />
+    </ReadLinesFromFile>
+    <!-- Refresh the whole bundle on version changes, even with identical file metadata. -->
+    <PropertyGroup>
+      <_CopilotPublishSkipUnchangedFiles>true</_CopilotPublishSkipUnchangedFiles>
+      <_CopilotPublishSkipUnchangedFiles Condition="'@(_CopilotPreviousPublishVersion)' != '$(CopilotCliVersion)'">false</_CopilotPublishSkipUnchangedFiles>
+    </PropertyGroup>
     <ItemGroup>
       <_CopilotPublishRuntimeAsset Include="$(_CopilotPublishSourceDir)**\*" />
     </ItemGroup>
@@ -91,7 +100,7 @@
              Condition="'@(_CopilotPublishRuntimeAsset)' != ''" />
     <Copy SourceFiles="@(_CopilotPublishRuntimeAsset)"
           DestinationFiles="@(_CopilotPublishRuntimeAsset->'$(_CopilotPublishDestDir)%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true"
+          SkipUnchangedFiles="$(_CopilotPublishSkipUnchangedFiles)"
           Condition="'@(_CopilotPublishRuntimeAsset)' != ''" />
   </Target>
 

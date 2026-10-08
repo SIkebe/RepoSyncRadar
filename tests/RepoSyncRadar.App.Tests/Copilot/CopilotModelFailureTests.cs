@@ -6,6 +6,29 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 
 public sealed class CopilotModelFailureTests
 {
+    [Fact]
+    public void Retry_And_Transport_Metadata_Are_Not_A_Final_Model_Result()
+    {
+        var collector = new CopilotModelFailureCollector();
+        var failure = Assert.IsType<ModelCallFailureEvent>(SessionEvent.FromJson("""
+            {
+                "type":"model.call_failure",
+                "data":{"model":"offline-test","source":"top_level","statusCode":400,"retryAttempt":2,
+                        "requestBodyBytes":8192,"websocketFallbackReason":"connect_failed",
+                        "websocketFallbackAfterMs":125}
+            }
+            """));
+        collector.Observe(failure);
+        collector.Observe(Error());
+
+        Assert.Equal(2, failure.Data.RetryAttempt);
+        Assert.Equal(ModelCallFailureSource.TopLevel, failure.Data.Source);
+        Assert.Equal(8192, failure.Data.RequestBodyBytes);
+        Assert.Equal(ModelCallWebSocketFallbackReason.ConnectFailed, failure.Data.WebsocketFallbackReason);
+        Assert.Equal(TimeSpan.FromMilliseconds(125), failure.Data.WebsocketFallbackAfter);
+        Assert.Null(collector.Classify(new InvalidOperationException("A retry is not a final result.")));
+    }
+
     [Theory]
     [InlineData("http_400", CopilotModelFailureKind.InvalidRequest)]
     [InlineData("http_413", CopilotModelFailureKind.InputTooLarge)]

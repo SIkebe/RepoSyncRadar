@@ -63,6 +63,7 @@ public class SessionConfigBuilderTests
         Assert.Equal(
             DisableBypassPermissionsModes.Disable,
             config.ManagedSettings.Permissions!.DisableBypassPermissionsMode);
+        Assert.True(config.ManagedSettings.Permissions.DisableAssistedPermissionsMode);
         Assert.Equal(["shell"], config.ManagedSettings.Permissions.Deny);
         Assert.Equal(McpOAuthTokenStorageMode.InMemory, config.McpOAuthTokenStorage);
         Assert.NotNull(config.OnMcpAuthRequest);
@@ -118,6 +119,7 @@ public class SessionConfigBuilderTests
         Assert.Empty(config.IncludedBuiltinSkills!);
         Assert.Null(config.SkillProvider);
         Assert.False(config.Clone().EnableSkills);
+        Assert.True(config.ManagedSettings!.Permissions!.DisableAssistedPermissionsMode);
     }
 
     [Fact]

@@ -27,7 +27,8 @@ internal static class CopilotPolicyInventory
     private static readonly string[][] _groupKeys =
     [
         ["model", "autoTier", "effortLevel", "contextTier"],
-        ["permissions.allow", "permissions.ask", "permissions.deny", "permissions.disableBypassPermissionsMode"],
+        ["permissions.allow", "permissions.ask", "permissions.deny", "permissions.disableBypassPermissionsMode",
+            "permissions.disableAssistedPermissionsMode"],
         ["sandbox"],
         ["allowedMcpServers", "deniedMcpServers", "strictPluginOnlyCustomization", "allowManagedMcpServersOnly",
             "allowManagedHooksOnly", "features", "enabledPlugins", "extraKnownMarketplaces", "strictKnownMarketplaces"],
@@ -72,6 +73,8 @@ internal static class CopilotPolicyInventory
                 new("permissions.disableBypassPermissionsMode", _itemPrefix + "permissions.disableBypassPermissionsMode",
                     [State(permissions.DisableBypassPermissionsMode == GitHub.Copilot.DisableBypassPermissionsModes.Disable ? "Yes" : "Unreported")],
                     ["Client"], IsStatus: true),
+                Status("permissions.disableAssistedPermissionsMode", permissions.DisableAssistedPermissionsMode)
+                    with { Sources = ["Client"] },
                 new("permissions.deny", _itemPrefix + "permissions.deny",
                     deny.Select(rule => new CopilotPolicyValue(
                         Text: _permissionKinds.Contains(rule, StringComparer.Ordinal) ? rule : null,
@@ -91,17 +94,34 @@ internal static class CopilotPolicyInventory
             foreach (var key in _groupKeys[index])
             {
                 var value = Find(settings, key);
-                var meta = key switch { "model" => result.Meta?.Model, "autoTier" => result.Meta?.AutoTier, _ => null };
+                var meta = key switch
+                {
+                    "model" => result.Meta?.Model,
+                    "autoTier" => result.Meta?.AutoTier,
+                    "effortLevel" => result.Meta?.EffortLevel,
+                    "contextTier" => result.Meta?.ContextTier,
+                    _ => null,
+                };
                 var sources = meta is not null ? new[] { Source(meta.Source) } : SourcesFor(result, key);
-                if (key == "model" && result.Values?.Model is { } model)
+                var effective = key switch
                 {
-                    value = JsonSerializer.SerializeToElement(model);
-                }
-                else if (key == "autoTier" && result.Values?.AutoTier is { } tier)
+                    "model" => result.Values?.Model,
+                    "autoTier" => result.Values?.AutoTier?.Value,
+                    "effortLevel" => result.Values?.EffortLevel,
+                    "contextTier" => result.Values?.ContextTier?.Value,
+                    _ => null,
+                };
+                if (effective is not null)
                 {
-                    value = JsonSerializer.SerializeToElement(tier.Value);
+                    value = JsonSerializer.SerializeToElement(effective);
                 }
                 var row = Entry(key, value, sources) with { Overridable = meta?.Overridable };
+                if (meta?.Requested is { } requested)
+                {
+                    var values = row.Values.ToList();
+                    Format(key, JsonSerializer.SerializeToElement(requested), values, _valuePrefix + "Requested");
+                    row = row with { Values = values };
+                }
                 if (key == "permissions.allow" && result.Resolved.PermissionsAllowIntersected == true)
                 {
                     // The flattened result deliberately omits intersected allowlists; never call that "none".
@@ -263,7 +283,7 @@ internal static class CopilotPolicyInventory
         else if (element.ValueKind == JsonValueKind.String)
         {
             var text = element.GetString()!;
-            if (key.StartsWith("permissions.", StringComparison.Ordinal) && key != "permissions.disableBypassPermissionsMode")
+            if (key is "permissions.allow" or "permissions.ask" or "permissions.deny")
             {
                 var kind = _permissionKinds.FirstOrDefault(k => text == k
                     || text.StartsWith(k + ":", StringComparison.Ordinal)

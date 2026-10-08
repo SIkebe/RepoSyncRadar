@@ -499,6 +499,7 @@
   <data name="Copilot.Policy.Value.No" xml:space="preserve"><value>No / false</value></data>
   <data name="Copilot.Policy.Value.None" xml:space="preserve"><value>None (reported empty)</value></data>
   <data name="Copilot.Policy.Value.Unreported" xml:space="preserve"><value>Unreported</value></data>
+  <data name="Copilot.Policy.Value.Requested" xml:space="preserve"><value>Originally requested</value></data>
   <data name="Copilot.Policy.Value.NotApplicable" xml:space="preserve"><value>Not applicable</value></data>
   <data name="Copilot.Policy.Value.Hidden" xml:space="preserve"><value>Contents hidden</value></data>
   <data name="Copilot.Policy.Value.ScopeHidden" xml:space="preserve"><value> — scope details hidden</value></data>
@@ -533,6 +534,7 @@
   <data name="Copilot.Policy.Item.permissions.ask" xml:space="preserve"><value>Ask rules</value></data>
   <data name="Copilot.Policy.Item.permissions.deny" xml:space="preserve"><value>Deny rules</value></data>
   <data name="Copilot.Policy.Item.permissions.disableBypassPermissionsMode" xml:space="preserve"><value>Disable permission bypass</value></data>
+  <data name="Copilot.Policy.Item.permissions.disableAssistedPermissionsMode" xml:space="preserve"><value>Disable AI-assisted permission approval</value></data>
   <data name="Copilot.Policy.Item.sandbox" xml:space="preserve"><value>Sandbox settings</value></data>
   <data name="Copilot.Policy.Item.sandbox.enabled" xml:space="preserve"><value>Enabled</value></data>
   <data name="Copilot.Policy.Item.sandbox.failIfUnavailable" xml:space="preserve"><value>Fail if unavailable</value></data>

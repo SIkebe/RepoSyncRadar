@@ -16,6 +16,55 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class CopilotPolicyDiagnosticsTests
 {
     [Fact]
+    public void Inventory_Uses_Effective_Model_Controls_And_Their_Provenance()
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>("""
+            {
+              "resolved":{"settings":{"effortLevel":"max","contextTier":"long_context",
+                "permissions":{"disableAssistedPermissionsMode":false}}},
+              "values":{"effortLevel":"high","contextTier":"default"},
+              "meta":{"effortLevel":{"overridable":false,"source":"server","requested":"max"},
+                      "contextTier":{"overridable":true,"source":"device","requested":"long_context"}}
+            }
+            """)!;
+        var rows = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(g => g.Entries)
+            .ToDictionary(e => e.Key);
+
+        Assert.Equal(["high", "max"], rows["effortLevel"].Values.Select(v => v.Text));
+        Assert.False(rows["effortLevel"].Overridable);
+        Assert.Equal(["Server"], rows["effortLevel"].Sources);
+        Assert.Equal("Copilot.Policy.Value.Requested", rows["effortLevel"].Values[1].LabelKey);
+        Assert.Equal(["default", "long_context"], rows["contextTier"].Values.Select(v => v.Text));
+        Assert.True(rows["contextTier"].Overridable);
+        Assert.Equal(["Device"], rows["contextTier"].Sources);
+        Assert.Equal("Copilot.Policy.Value.No",
+            Assert.Single(rows["permissions.disableAssistedPermissionsMode"].Values).ResourceKey);
+    }
+
+    [Fact]
+    public void Inventory_Hides_Unknown_Requested_Values_And_Preserves_Missing_Metadata()
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>("""
+            {
+              "resolved":{"settings":{"effortLevel":"high"}},
+              "values":{"model":"gpt-5.5","contextTier":"default"},
+              "meta":{"model":{"source":"server","requested":"private-model"},
+                      "contextTier":{"source":"device","requested":"private-tier"}}
+            }
+            """)!;
+        var snapshot = CopilotPolicyDiagnostics.FromResult(result);
+        var rows = snapshot.Groups.SelectMany(g => g.Entries).ToDictionary(e => e.Key);
+
+        Assert.Null(rows["effortLevel"].Overridable);
+        Assert.Equal("high", Assert.Single(rows["effortLevel"].Values).Text);
+        Assert.Equal("Copilot.Policy.Value.Hidden", rows["model"].Values[1].ResourceKey);
+        Assert.Equal("Copilot.Policy.Value.Hidden", rows["contextTier"].Values[1].ResourceKey);
+        Assert.DoesNotContain("private", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+        Assert.Equal("Copilot.Policy.Value.Unreported",
+            Assert.Single(rows["permissions.disableAssistedPermissionsMode"].Values).ResourceKey);
+    }
+
+    [Fact]
     public void Inventory_Includes_All_Policy_Groups_And_Per_Key_Metadata()
     {
         var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>("""
