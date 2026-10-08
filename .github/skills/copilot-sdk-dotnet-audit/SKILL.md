@@ -69,6 +69,7 @@ PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-S
 - SDK 同梱の `build/GitHub.Copilot.SDK.targets` が公式 GitHub Release に公開された SHA-256 を検証して native runtime bundle を取得する。`copilot_runtime.dll` と参照アセットがビルド/配布物に含まれることを確認する。旧スタンドアロン CLI zip の取得処理は追加しない。
 
 更新後に `dotnet restore RepoSyncRadar.sln` を実行し、target package を NuGet cache に落とす。
+feed 未反映で一時 local source / isolated `--packages` を使う場合は、Windows の展開先を短くする。長い一時 directory 名は DLL が存在していても MSBuild の `MSB3106` / `MSB3021` を起こすため、source mapping を維持して短い root へ移し、restore をやり直す。恒久的な NuGet 設定や依存版は変更しない。
 
 EF Core / .NET SDK preview 追随で migration 生成物が変わる場合は、手編集だけで済ませない。必ず `dotnet-ef` を使い、必要なら一時 migration を `dotnet ef migrations add ...` で生成して差分を確認し、`dotnet ef migrations remove` で戻す。`remove` が直前の一時 migration を正しく消すには、その一時 migration がコンパイル対象に入っている必要があるため、`--no-build` のまま remove しない。preview SDK の analyzer が一時 migration を警告にする場合だけ、中間 build に限って `-p:TreatWarningsAsErrors=false` を使い、最終 build は通常の `-warnaserror` に戻す。
 
