@@ -8,6 +8,37 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class SdkCopilotSessionTests
 {
     [Theory]
+    [InlineData("connect_failed")]
+    [InlineData("connection_unavailable")]
+    [InlineData("send_failed")]
+    [InlineData("api_error")]
+    [InlineData("transport_failed")]
+    [InlineData("future_reason")]
+    public void Transport_Metadata_Does_Not_Create_Billing_Or_Extra_Requests(string fallbackReason)
+    {
+        var usage = Assert.IsType<AssistantUsageEvent>(SessionEvent.FromJson($$"""
+            {
+                "type":"assistant.usage",
+                "data":{"model":"offline-test","inputTokens":10,"outputTokens":5,
+                        "requestBodyBytes":8192,"transport":"http",
+                        "websocketFallbackReason":"{{fallbackReason}}","websocketFallbackAfterMs":125}
+            }
+            """));
+        var tracker = new CopilotUsageTracker();
+        tracker.Record(CopilotUsageTracker.FromAssistantUsage(usage, SessionPurpose.Adoption, "session-1"));
+
+        Assert.Equal(8192, usage.Data.RequestBodyBytes);
+        Assert.Equal(fallbackReason, usage.Data.WebsocketFallbackReason?.Value);
+        Assert.Equal(TimeSpan.FromMilliseconds(125), usage.Data.WebsocketFallbackAfter);
+        var snapshot = tracker.GetSnapshot();
+        Assert.Equal(1, snapshot.TurnCount);
+        Assert.Equal(15, snapshot.TotalTokens);
+        Assert.Null(snapshot.TotalNanoAiu);
+        Assert.Null(snapshot.Cost);
+        Assert.Equal(CopilotUsageBillingSource.None, snapshot.BillingSource);
+    }
+
+    [Theory]
     [InlineData(1)]
     [InlineData(1000)]
     public void Assistant_Message_Wire_Event_Preserves_Response_Content(int repetitions)
