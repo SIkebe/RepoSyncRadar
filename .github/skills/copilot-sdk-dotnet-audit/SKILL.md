@@ -193,6 +193,7 @@ dotnet ef migrations has-pending-model-changes --project src\RepoSyncRadar.Core\
 
 必要に応じて先に focused test を実行する。失敗したら、今回の SDK update に関係する範囲だけ直す。
 ネイティブランタイムを起動する test host には `GitHub.Copilot.SDK` を直接参照させ、SDK targets をその host でも実行する。ping 成功だけで更新済みと判断せず、`GetStatusAsync().Version` が package props の bundled runtime version と一致することを確認する。
+直接参照でも更新されない場合は、出力の `copilot_runtime.dll` と隣接 `runtime.node`、SHA-256 検証済み取得キャッシュの hash を比較する。SDK の未追跡 alias と `SkipUnchangedFiles` は、同じ timestamp / length の別版を古いまま残す場合がある。単に期待 version を古い値へ変えず、repository の version-marker による alias 無効化を確認する。
 
 ### 8. PR 作成・更新
 

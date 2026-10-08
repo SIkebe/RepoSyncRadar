@@ -2,6 +2,8 @@ using GitHub.Copilot;
 using GitHub.Copilot.Rpc;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Copilot;
@@ -12,6 +14,17 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 
 public sealed class CopilotInProcessRuntimeTests
 {
+    [Fact]
+    public void Native_Library_Matches_The_Bundled_Runtime_Node()
+    {
+        var nativeDirectory = Path.Combine(
+            AppContext.BaseDirectory, "runtimes", RuntimeInformation.RuntimeIdentifier, "native");
+        using var library = File.OpenRead(Path.Combine(nativeDirectory, "copilot_runtime.dll"));
+        using var runtime = File.OpenRead(Path.Combine(nativeDirectory, "runtime.node"));
+
+        Assert.Equal(SHA256.HashData(runtime), SHA256.HashData(library));
+    }
+
     [Fact]
     public async Task PingAsync_Connects_To_Bundled_InProcess_Runtime()
     {
@@ -26,7 +39,7 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.93-4", status.Version);
+        Assert.Equal("1.0.93", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
