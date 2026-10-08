@@ -111,6 +111,7 @@ internal static class SessionConfigBuilder
             Permissions = new ManagedSettingsPermissions
             {
                 DisableBypassPermissionsMode = DisableBypassPermissionsModes.Disable,
+                DisableAssistedPermissionsMode = true,
                 Deny = ["shell"],
             },
         };

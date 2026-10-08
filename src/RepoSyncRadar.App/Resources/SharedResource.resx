@@ -499,6 +499,7 @@
   <data name="Copilot.Policy.Value.No" xml:space="preserve"><value>なし / false</value></data>
   <data name="Copilot.Policy.Value.None" xml:space="preserve"><value>なし（空の報告値）</value></data>
   <data name="Copilot.Policy.Value.Unreported" xml:space="preserve"><value>未報告</value></data>
+  <data name="Copilot.Policy.Value.Requested" xml:space="preserve"><value>調整前の要求値</value></data>
   <data name="Copilot.Policy.Value.NotApplicable" xml:space="preserve"><value>対象外</value></data>
   <data name="Copilot.Policy.Value.Hidden" xml:space="preserve"><value>内容は非表示</value></data>
   <data name="Copilot.Policy.Value.ScopeHidden" xml:space="preserve"><value> — 対象の詳細は非表示</value></data>
@@ -533,6 +534,7 @@
   <data name="Copilot.Policy.Item.permissions.ask" xml:space="preserve"><value>確認必須ルール</value></data>
   <data name="Copilot.Policy.Item.permissions.deny" xml:space="preserve"><value>拒否ルール</value></data>
   <data name="Copilot.Policy.Item.permissions.disableBypassPermissionsMode" xml:space="preserve"><value>権限確認の迂回禁止</value></data>
+  <data name="Copilot.Policy.Item.permissions.disableAssistedPermissionsMode" xml:space="preserve"><value>AI による権限承認の禁止</value></data>
   <data name="Copilot.Policy.Item.sandbox" xml:space="preserve"><value>サンドボックス設定</value></data>
   <data name="Copilot.Policy.Item.sandbox.enabled" xml:space="preserve"><value>有効</value></data>
   <data name="Copilot.Policy.Item.sandbox.failIfUnavailable" xml:space="preserve"><value>利用不可なら失敗</value></data>
