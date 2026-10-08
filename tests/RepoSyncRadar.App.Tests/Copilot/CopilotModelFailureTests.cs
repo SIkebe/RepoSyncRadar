@@ -13,7 +13,7 @@ public sealed class CopilotModelFailureTests
         var failure = Assert.IsType<ModelCallFailureEvent>(SessionEvent.FromJson("""
             {
                 "type":"model.call_failure",
-                "data":{"model":"offline-test","source":"top-level","statusCode":400,"retryAttempt":2,
+                "data":{"model":"offline-test","source":"top_level","statusCode":400,"retryAttempt":2,
                         "requestBodyBytes":8192,"websocketFallbackReason":"connect_failed",
                         "websocketFallbackAfterMs":125}
             }
@@ -22,6 +22,7 @@ public sealed class CopilotModelFailureTests
         collector.Observe(Error());
 
         Assert.Equal(2, failure.Data.RetryAttempt);
+        Assert.Equal(ModelCallFailureSource.TopLevel, failure.Data.Source);
         Assert.Equal(8192, failure.Data.RequestBodyBytes);
         Assert.Equal(ModelCallWebSocketFallbackReason.ConnectFailed, failure.Data.WebsocketFallbackReason);
         Assert.Equal(TimeSpan.FromMilliseconds(125), failure.Data.WebsocketFallbackAfter);
