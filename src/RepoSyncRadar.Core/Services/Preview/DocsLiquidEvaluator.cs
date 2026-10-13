@@ -560,6 +560,7 @@ internal static partial class DocsLiquidEvaluator
         var value = EvaluateLiquidExpression(expr, context, scope);
         var rendered = RenderLiquidValue(value);
         if (rendered.Length == 0 && (scope.Contains(expr)
+            || IsScopedVariablePath(expr, scope)
             || expr.Contains("languageData", StringComparison.Ordinal)
             || expr.StartsWith("enterpriseServerReleases.", StringComparison.Ordinal)))
         {
@@ -598,7 +599,24 @@ internal static partial class DocsLiquidEvaluator
 
         var value = EvaluateLiquidExpression(trimmed, context, scope);
         result = IsTruthy(value);
-        return !ReferenceEquals(value, DocsLiquidDataValue.EmptyString) || scope.Contains(trimmed) || context.DataObjects.ContainsKey(trimmed);
+        return !ReferenceEquals(value, DocsLiquidDataValue.EmptyString)
+            || scope.Contains(trimmed)
+            || IsScopedVariablePath(trimmed, scope)
+            || context.DataObjects.ContainsKey(trimmed);
+    }
+
+    // A missing property of a scoped variable (e.g. `entry.tier` on a YAML row
+    // without `tier`) is nil in Liquid, so it must evaluate as falsy/empty
+    // instead of being treated as an unknown expression.
+    private static bool IsScopedVariablePath(string expression, LiquidScope scope)
+    {
+        var trimmed = expression.Trim();
+        if (trimmed.Length == 0 || trimmed.Any(static ch => char.IsWhiteSpace(ch) || ch is '|' or '\'' or '"'))
+        {
+            return false;
+        }
+        var rootEnd = trimmed.IndexOfAny(['.', '[']);
+        return rootEnd > 0 && scope.Contains(trimmed[..rootEnd]);
     }
 
     private static int CompareLiquidScalars(string left, string right)

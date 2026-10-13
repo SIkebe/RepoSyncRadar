@@ -3921,6 +3921,14 @@ internal static partial class MarkdownPreviewRenderer
                 continue;
             }
 
+            // Liquid loops such as `| {% for %}{% if %} |` leave pipe-only rows
+            // between generated rows; github/docs does not show them, and keeping
+            // them would split one table into header-less fragments.
+            if (pendingRows.Count > 0 && IsEmptyMarkdownTableRow(line))
+            {
+                continue;
+            }
+
             FlushTableFragment(expanded, pendingRows);
             if (expanded.Length > 0)
             {
@@ -3974,6 +3982,14 @@ internal static partial class MarkdownPreviewRenderer
     {
         var index = Array.BinarySearch(lineStarts, offset);
         return index >= 0 ? index : Math.Max(0, ~index - 1);
+    }
+
+    private static bool IsEmptyMarkdownTableRow(string line)
+    {
+        var trimmed = line.Trim();
+        return trimmed.Length > 0
+            && trimmed[0] == '|'
+            && trimmed.All(static ch => ch == '|' || char.IsWhiteSpace(ch));
     }
 
     private static List<string> SplitConcatenatedMarkdownTableRows(string line)

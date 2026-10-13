@@ -148,6 +148,68 @@ public sealed partial class MarkdownPreviewRendererTests
         Assert.DoesNotContain("{% octicon", html, StringComparison.Ordinal);
         Assert.DoesNotContain("&amp;quot;check", html, StringComparison.Ordinal);
         Assert.DoesNotContain("{{ entry.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Column 1", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_DataSequence_ForLoop_Table_Without_Inferred_Headers_And_With_Nil_Fallbacks()
+    {
+        var context = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, IReadOnlyList<IReadOnlyDictionary<string, string>>>(StringComparer.Ordinal)
+            {
+                ["tables.copilot.models-and-pricing"] =
+                [
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["model"] = "GPT-5 mini",
+                        ["provider"] = "openai",
+                        ["tier"] = "Default",
+                    },
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["model"] = "Claude Haiku 4.5",
+                        ["provider"] = "anthropic",
+                    },
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["model"] = "Claude Opus 4.8",
+                        ["provider"] = "anthropic",
+                        ["tier"] = "Long context",
+                        ["threshold"] = "&gt; 200K",
+                    },
+                ],
+            });
+        var markdown = """
+            ---
+            title: Pricing tables
+            ---
+
+            | Model | Tier | Threshold (input tokens) |
+            | --- | --- | --- |
+            | {% for entry in tables.copilot.models-and-pricing %}{% if entry.provider == "anthropic" %} |
+            | {{ entry.model }} | {% if entry.tier %}{{ entry.tier }}{% else %}Default{% endif %} | {% if entry.threshold %}{{ entry.threshold }}{% else %}Not applicable{% endif %} |
+            | {% endif %}{% endfor %} |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/reference/copilot-billing/models-and-pricing.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            context);
+
+        Assert.Equal(1, CountOccurrences(html, "<table"));
+        Assert.Equal(1, CountOccurrences(html, "<thead"));
+        Assert.Contains("Claude Haiku 4.5", html, StringComparison.Ordinal);
+        Assert.Contains("Not applicable", html, StringComparison.Ordinal);
+        Assert.Contains("Long context", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("GPT-5 mini", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Column 1", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{ entry.", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<td></td>", html, StringComparison.Ordinal);
     }
 
     [Fact]
