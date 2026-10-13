@@ -213,6 +213,41 @@ public sealed partial class MarkdownPreviewRendererTests
     }
 
     [Fact]
+    public void Preserves_Authored_Empty_Table_Body_Rows()
+    {
+        var markdown = """
+            ---
+            title: Empty rows
+            ---
+
+            | A | B |
+            | --- | --- |
+            | first | one |
+            | | |
+            | last | two |
+            """;
+        var baselineMarkdown = markdown.Replace("| | |\n", string.Empty, StringComparison.Ordinal)
+            .Replace("| | |\r\n", string.Empty, StringComparison.Ordinal);
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/example.md",
+            markdown,
+            "abc1234",
+            "PR HEAD",
+            DocsLiquidContext.Empty);
+        var baselineHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/example.md",
+            baselineMarkdown,
+            "abc1234",
+            "PR HEAD",
+            DocsLiquidContext.Empty);
+
+        Assert.NotEqual(markdown, baselineMarkdown);
+        Assert.Equal(1, CountOccurrences(html, "<table"));
+        Assert.Equal(CountOccurrences(baselineHtml, "<tr") + 1, CountOccurrences(html, "<tr"));
+    }
+
+    [Fact]
     public void Renders_Rowheaders_Table_With_Empty_Delimiter_Cell()
     {
         var context = new DocsLiquidContext(

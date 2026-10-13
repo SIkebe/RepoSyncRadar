@@ -3921,11 +3921,11 @@ internal static partial class MarkdownPreviewRenderer
                 continue;
             }
 
-            // Liquid loops such as `| {% for %}{% if %} |` leave pipe-only rows
-            // between generated rows; github/docs does not show them, and keeping
-            // them would split one table into header-less fragments.
+            // Authored empty rows (`| | |`) belong to the surrounding table;
+            // Liquid wrapper rows are already removed by DocsLiquidEvaluator.
             if (pendingRows.Count > 0 && IsEmptyMarkdownTableRow(line))
             {
+                pendingRows.Add(line);
                 continue;
             }
 
@@ -3987,7 +3987,7 @@ internal static partial class MarkdownPreviewRenderer
     private static bool IsEmptyMarkdownTableRow(string line)
     {
         var trimmed = line.Trim();
-        return trimmed.Length > 0
+        return trimmed.Length > 1
             && trimmed[0] == '|'
             && trimmed.All(static ch => ch == '|' || char.IsWhiteSpace(ch));
     }
