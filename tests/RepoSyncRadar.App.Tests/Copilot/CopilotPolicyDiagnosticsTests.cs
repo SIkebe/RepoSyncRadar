@@ -113,6 +113,28 @@ public sealed class CopilotPolicyDiagnosticsTests
         Assert.DoesNotContain("private", serialized, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("{}", "Unreported")]
+    [InlineData("""{"vscode":{}}""", "None")]
+    [InlineData("""{"vscode":{"temporaryDefaultToLocalHarness":false}}""", "No")]
+    [InlineData("""{"vscode":{"temporaryDefaultToLocalHarness":true}}""", "Yes")]
+    public void Inventory_Reports_VSCode_Preferences_Without_Claiming_App_Enforcement(
+        string settings, string state)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
+            $$$"""{"resolved":{"settings":{{{settings}}}}}""")!;
+        var entry = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .Single(row => row.Key == "vscode");
+
+        Assert.Equal($"Copilot.Policy.Value.{state}", entry.Values[0].ResourceKey);
+        Assert.Equal(state != "Unreported",
+            entry.Values.Any(value => value.ResourceKey == "Copilot.Policy.Value.NotApplicable"));
+        if (state is "Yes" or "No")
+        {
+            Assert.Equal("Copilot.Policy.Item.vscode.temporaryDefaultToLocalHarness", entry.Values[0].LabelKey);
+        }
+    }
+
     [Fact]
     public void Inventory_Distinguishes_Missing_Empty_False_And_NotApplicable()
     {
@@ -161,6 +183,7 @@ public sealed class CopilotPolicyDiagnosticsTests
                 "telemetry":{"headers":{"Authorization":"Bearer private-token"},"endpoint":"https://private.example","capture":{"prompts":true}},
                 "policyHelper":{"path":"C:\\private\\helper.exe","args":["private-token"]},
                 "forceLoginOrgs":["private-org"],
+                "vscode":{"temporaryDefaultToLocalHarness":"private-value","privateKey":"private-token"},
                 "futureSecret":"private-value"
               }},
               "diagnostics":[{"message":"private-token","path":"/private/path","severity":"error"}]

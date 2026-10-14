@@ -58,6 +58,8 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 
 PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-String` を使う。
 
+承認済み proxy feed の検索結果は公式リリースより遅れる場合があるため、最新 Preview は公式 tag と照合する。代替 source を使う許可が必要な環境では、明示許可なしに CDN fallback を実行しない。一時 restore を使う Windows 環境では package cache の絶対パスを短くする。DLL が存在していても長い参照パスは MSBuild のアセンブリ読み取りで `MSB3106` になる場合がある。
+
 ### 3. package bump と機械的追随を行う
 
 最低限、次を更新する。
