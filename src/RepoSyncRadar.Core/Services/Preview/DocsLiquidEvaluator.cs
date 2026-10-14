@@ -37,6 +37,7 @@ internal static partial class DocsLiquidEvaluator
     private const int _infiniteLoopGuard = 64;
     private const char _rawSentinelStart = '\uE000';
     private const char _rawSentinelEnd = '\uE001';
+    private const char _tableWrapperPipe = '\uE002';
 
     // {% raw %}...{% endraw %} — 中身を退避する。
     [GeneratedRegex(@"\{%\s*raw\s*%\}(?<content>.*?)\{%\s*endraw\s*%\}", RegexOptions.Singleline)]
@@ -77,6 +78,12 @@ internal static partial class DocsLiquidEvaluator
 
     [GeneratedRegex(@"(\r?\n){3,}")]
     private static partial Regex ExtraEmptyLinesRegex();
+
+    // `| {% for ... %}{% if ... %} |` のように、表の行の形をとった制御タグだけの行。
+    // github/docs ではループ展開後にこの行の `|` が空行として残らないため、
+    // 作者が意図した空行 (`| | |`) と区別できるよう展開前に印を付ける。
+    [GeneratedRegex(@"^(?<indent>[ \t]*)\|(?<body>(?:[ \t]*\{%-?\s*(?:(?:end)?(?:ifversion|for|if|unless)|elsif|else)\b[^%]*%\})+)[ \t]*\|(?<tail>[ \t]*\r?)$", RegexOptions.Multiline)]
+    private static partial Regex LiquidTableWrapperRowRegex();
 
     private static readonly Dictionary<string, OcticonDefinition> _octicons =
         new Dictionary<string, OcticonDefinition>(StringComparer.Ordinal)
@@ -180,6 +187,7 @@ internal static partial class DocsLiquidEvaluator
         });
 
         current = StripNonOutputLiquid(current);
+        current = MarkLiquidTableWrapperRows(current);
         var scope = new LiquidScope();
 
         // 2. for / ifversion / if を内側から再帰的に解く。for は data YAML 配列を
@@ -197,6 +205,7 @@ internal static partial class DocsLiquidEvaluator
         for (var depth = 0; depth < maxRecursionDepth; depth++)
         {
             var before = current;
+            current = MarkLiquidTableWrapperRows(current);
             current = ResolveAssignTagsOutsideForBlocks(current, context, scope);
             current = ResolveForLoops(current, context, version, scope);
             var dataSource = current;
@@ -228,9 +237,44 @@ internal static partial class DocsLiquidEvaluator
             });
         }
 
+        current = RemoveLiquidTableWrapperRows(current);
         current = CleanUpLiquidPost(current);
 
         return current;
+    }
+
+    private static string MarkLiquidTableWrapperRows(string source)
+        => source.Contains("{%", StringComparison.Ordinal)
+            ? LiquidTableWrapperRowRegex().Replace(
+                source,
+                m => $"{m.Groups["indent"].Value}{_tableWrapperPipe}{m.Groups["body"].Value} {_tableWrapperPipe}{m.Groups["tail"].Value}")
+            : source;
+
+    private static string RemoveLiquidTableWrapperRows(string source)
+    {
+        if (!source.Contains(_tableWrapperPipe, StringComparison.Ordinal))
+        {
+            return source;
+        }
+
+        var lines = source.Split('\n');
+        var kept = new StringBuilder(source.Length);
+        var first = true;
+        foreach (var line in lines)
+        {
+            if (line.Contains(_tableWrapperPipe, StringComparison.Ordinal)
+                && line.All(static ch => ch == _tableWrapperPipe || char.IsWhiteSpace(ch)))
+            {
+                continue;
+            }
+            if (!first)
+            {
+                kept.Append('\n');
+            }
+            kept.Append(line.Replace(_tableWrapperPipe, '|'));
+            first = false;
+        }
+        return kept.ToString();
     }
 
     /// <summary>
@@ -560,6 +604,7 @@ internal static partial class DocsLiquidEvaluator
         var value = EvaluateLiquidExpression(expr, context, scope);
         var rendered = RenderLiquidValue(value);
         if (rendered.Length == 0 && (scope.Contains(expr)
+            || IsScopedVariablePath(expr, scope)
             || expr.Contains("languageData", StringComparison.Ordinal)
             || expr.StartsWith("enterpriseServerReleases.", StringComparison.Ordinal)))
         {
@@ -598,8 +643,50 @@ internal static partial class DocsLiquidEvaluator
 
         var value = EvaluateLiquidExpression(trimmed, context, scope);
         result = IsTruthy(value);
-        return !ReferenceEquals(value, DocsLiquidDataValue.EmptyString) || scope.Contains(trimmed) || context.DataObjects.ContainsKey(trimmed);
+        return !ReferenceEquals(value, DocsLiquidDataValue.EmptyString)
+            || scope.Contains(trimmed)
+            || IsScopedVariablePath(trimmed, scope)
+            || context.DataObjects.ContainsKey(trimmed);
     }
+
+    // A missing property of a scoped variable (e.g. `entry.tier` on a YAML row
+    // without `tier`) is nil in Liquid, so it must evaluate as falsy/empty
+    // instead of being treated as an unknown expression.
+    private static bool IsScopedVariablePath(string expression, LiquidScope scope)
+    {
+        var trimmed = StripLiquidFilters(expression).Trim();
+        if (!ScopedVariablePathRegex().IsMatch(trimmed))
+        {
+            return false;
+        }
+        var rootEnd = trimmed.IndexOfAny(['.', '[']);
+        return scope.Contains(trimmed[..rootEnd]);
+    }
+
+    private static string StripLiquidFilters(string expression)
+    {
+        char quote = '\0';
+        for (var index = 0; index < expression.Length; index++)
+        {
+            var ch = expression[index];
+            if (quote != '\0')
+            {
+                quote = ch == quote ? '\0' : quote;
+            }
+            else if (ch is '"' or '\'')
+            {
+                quote = ch;
+            }
+            else if (ch == '|')
+            {
+                return expression[..index];
+            }
+        }
+        return expression;
+    }
+
+    [GeneratedRegex("""^[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+|\[(?:"[^"]*"|'[^']*'|[A-Za-z0-9_.-]+)\])+$""")]
+    private static partial Regex ScopedVariablePathRegex();
 
     private static int CompareLiquidScalars(string left, string right)
     {

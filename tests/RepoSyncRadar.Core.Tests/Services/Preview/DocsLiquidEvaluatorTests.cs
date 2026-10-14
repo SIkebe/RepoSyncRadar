@@ -315,6 +315,92 @@ public sealed class DocsLiquidEvaluatorTests
     }
 
     [Fact]
+    public void Expands_DataSequence_ForLoop_With_Nested_If_Else_Cells()
+    {
+        var ctx = WithDataSequence(
+            "tables.copilot.models-and-pricing",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["model"] = "GPT-5",
+                ["provider"] = "openai",
+                ["tier"] = "Default",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["model"] = "Claude Haiku",
+                ["provider"] = "anthropic",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["model"] = "Claude Opus",
+                ["provider"] = "anthropic",
+                ["tier"] = "Long context",
+                ["threshold"] = "> 200K",
+            });
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            """
+            | Model | Tier | Threshold |
+            | --- | --- | --- |
+            | {% for entry in tables.copilot.models-and-pricing %}{% if entry.provider == "anthropic" %} |
+            | {{ entry.model }} | {% if entry.tier %}{{ entry.tier }}{% else %}Default{% endif %} | {% if entry.threshold %}{{ entry.threshold }}{% else %}Not applicable{% endif %} |
+            | {% endif %}{% endfor %} |
+            """,
+            ctx);
+
+        Assert.Contains("| Claude Haiku | Default | Not applicable |", result, StringComparison.Ordinal);
+        Assert.Contains("| Claude Opus | Long context | > 200K |", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("GPT-5", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{%", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{ entry.", result, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"(?m)^\|\s*\|\s*$", result);
+    }
+
+    [Fact]
+    public void Treats_Missing_Bracket_Property_Of_Loop_Variable_As_Nil()
+    {
+        var ctx = WithDataSequence(
+            "tables.copilot.models-and-pricing",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["model"] = "Claude Haiku",
+            },
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["model"] = "Claude Opus",
+                ["tier"] = "Long context",
+            });
+
+        var result = DocsLiquidEvaluator.Evaluate(
+            """
+            {% for entry in tables.copilot.models-and-pricing %}{{ entry["model"] }}: {% if entry["tier"] %}{{ entry['tier'] }}{% else %}Default{% endif %}[{{ entry["threshold"] }}]({{ entry.missing | first }}|{{ entry["note"] | upcase }})
+            {% endfor %}
+            """,
+            ctx);
+
+        Assert.Contains("Claude Haiku: Default[](|)", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{", result, StringComparison.Ordinal);
+        Assert.Contains("Claude Opus: Long context[](|)", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("entry[", result, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Preserves_Authored_Empty_Table_Rows_Outside_Liquid_Wrappers()
+    {
+        var result = DocsLiquidEvaluator.Evaluate(
+            """
+            | A | B |
+            | --- | --- |
+            | | |
+            | x | y |
+            """,
+            DocsLiquidContext.Empty);
+
+        Assert.Contains("| | |", result, StringComparison.Ordinal);
+        Assert.DoesNotContain('\uE002', result);
+    }
+
+    [Fact]
     public void Expands_DataObject_Mapping_ForLoops_With_Assign_And_Case()
     {
         var features = Obj(
