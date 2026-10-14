@@ -29,7 +29,7 @@ internal static class CopilotPolicyInventory
         ["model", "autoTier", "effortLevel", "contextTier"],
         ["permissions.allow", "permissions.ask", "permissions.deny", "permissions.disableBypassPermissionsMode",
             "permissions.disableAssistedPermissionsMode"],
-        ["sandbox"],
+        ["sandbox", "vscode"],
         ["allowedMcpServers", "deniedMcpServers", "strictPluginOnlyCustomization", "allowManagedMcpServersOnly",
             "allowManagedHooksOnly", "features", "enabledPlugins", "extraKnownMarketplaces", "strictKnownMarketplaces"],
         ["remoteControl", "forceLoginOrgs", "forceRemoteSettingsRefresh", "policyHelper", "policyHelperFailureMode", "telemetry"],
@@ -42,6 +42,7 @@ internal static class CopilotPolicyInventory
         "sandbox.enabled", "sandbox.failIfUnavailable", "sandbox.allowBypass", "sandbox.addCurrentWorkingDirectory",
         "sandbox.sandboxMcpServers", "sandbox.sandboxLspServers", "sandbox.auth", "sandbox.auth.git", "sandbox.auth.gh",
         "sandbox.allowDevToolAccess", "sandbox.learningMode", "sandbox.userPolicy",
+        "vscode.temporaryDefaultToLocalHarness",
         "remoteControl.mode", "remoteControl.githubDotComOrganizations", "remoteControl.githubEnterpriseCloudDomains",
         "policyHelper.path", "policyHelper.args", "policyHelper.timeoutMs",
         "telemetry.enabled", "telemetry.endpoint", "telemetry.protocol", "telemetry.headers",
@@ -361,6 +362,10 @@ internal static class CopilotPolicyInventory
             if (output.Count == startingCount)
             {
                 AppendValue(output, State("None", label));
+            }
+            if (key == "vscode")
+            {
+                AppendValue(output, State("NotApplicable"));
             }
         }
         else

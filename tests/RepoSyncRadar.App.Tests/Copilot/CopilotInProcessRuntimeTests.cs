@@ -39,7 +39,7 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.97-2", status.Version);
+        Assert.Equal("1.0.98", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
@@ -138,7 +138,7 @@ public sealed class CopilotInProcessRuntimeTests
         await client.StartAsync(ct);
         var schema = await client.Rpc.ManagedSettings.SchemaAsync(ct);
         var server = await client.Rpc.ManagedSettings.ValidateAsync(
-            """{"model":"auto","autoTier":{"overridable":"intelligence"},"permissions":{"allow":["read","write"],"deny":["shell"]},"sandbox":{"enabled":true}}""",
+            """{"model":"auto","autoTier":{"overridable":"intelligence"},"permissions":{"allow":["read","write"],"deny":["shell"]},"sandbox":{"enabled":true},"vscode":{"temporaryDefaultToLocalHarness":false}}""",
             layer: "server", cancellationToken: ct);
         var device = await client.Rpc.ManagedSettings.ValidateAsync(
             """{"permissions":{"allow":["read"]},"enabledPlugins":{"github":false}}""",
@@ -165,6 +165,8 @@ public sealed class CopilotInProcessRuntimeTests
         Assert.Equal(["Device", "Server"], rows["permissions.allow"].Sources.Order(StringComparer.Ordinal));
         Assert.Contains(rows["permissions.allow"].Values, value => value.Text == "write");
         Assert.True(rows["autoTier"].Overridable);
+        Assert.Equal("Copilot.Policy.Value.No", rows["vscode"].Values[0].ResourceKey);
+        Assert.Equal("Copilot.Policy.Value.NotApplicable", rows["vscode"].Values[1].ResourceKey);
         Assert.Contains(rows["enabledPlugins"].Values, value => value.ResourceKey == "Copilot.Policy.Value.FalseCount");
     }
 
