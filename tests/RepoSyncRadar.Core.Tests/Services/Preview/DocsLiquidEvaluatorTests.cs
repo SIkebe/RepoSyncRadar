@@ -373,13 +373,14 @@ public sealed class DocsLiquidEvaluatorTests
 
         var result = DocsLiquidEvaluator.Evaluate(
             """
-            {% for entry in tables.copilot.models-and-pricing %}{{ entry["model"] }}: {% if entry["tier"] %}{{ entry['tier'] }}{% else %}Default{% endif %}[{{ entry["threshold"] }}]
+            {% for entry in tables.copilot.models-and-pricing %}{{ entry["model"] }}: {% if entry["tier"] %}{{ entry['tier'] }}{% else %}Default{% endif %}[{{ entry["threshold"] }}]({{ entry.missing | first }}|{{ entry["note"] | upcase }})
             {% endfor %}
             """,
             ctx);
 
-        Assert.Contains("Claude Haiku: Default[]", result, StringComparison.Ordinal);
-        Assert.Contains("Claude Opus: Long context[]", result, StringComparison.Ordinal);
+        Assert.Contains("Claude Haiku: Default[](|)", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("{{", result, StringComparison.Ordinal);
+        Assert.Contains("Claude Opus: Long context[](|)", result, StringComparison.Ordinal);
         Assert.DoesNotContain("entry[", result, StringComparison.Ordinal);
     }
 

@@ -654,13 +654,35 @@ internal static partial class DocsLiquidEvaluator
     // instead of being treated as an unknown expression.
     private static bool IsScopedVariablePath(string expression, LiquidScope scope)
     {
-        var trimmed = expression.Trim();
+        var trimmed = StripLiquidFilters(expression).Trim();
         if (!ScopedVariablePathRegex().IsMatch(trimmed))
         {
             return false;
         }
         var rootEnd = trimmed.IndexOfAny(['.', '[']);
         return scope.Contains(trimmed[..rootEnd]);
+    }
+
+    private static string StripLiquidFilters(string expression)
+    {
+        char quote = '\0';
+        for (var index = 0; index < expression.Length; index++)
+        {
+            var ch = expression[index];
+            if (quote != '\0')
+            {
+                quote = ch == quote ? '\0' : quote;
+            }
+            else if (ch is '"' or '\'')
+            {
+                quote = ch;
+            }
+            else if (ch == '|')
+            {
+                return expression[..index];
+            }
+        }
+        return expression;
     }
 
     [GeneratedRegex("""^[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+|\[(?:"[^"]*"|'[^']*'|[A-Za-z0-9_.-]+)\])+$""")]
