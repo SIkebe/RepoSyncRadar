@@ -39,7 +39,7 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.98", status.Version);
+        Assert.Equal("1.0.99-0", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
@@ -224,16 +224,21 @@ public sealed class CopilotInProcessRuntimeTests
         Assert.Equal(CopilotModelFailureKind.InvalidRequest, error.Kind);
         Assert.IsType<InvalidOperationException>(error.InnerException);
         Assert.True(handler.RequestCount > 0);
+        Assert.NotEmpty(handler.AgentInvocationIds);
+        Assert.All(handler.AgentInvocationIds, id => Assert.False(string.IsNullOrWhiteSpace(id)));
     }
 
     private sealed class RejectedModelRequestHandler : CopilotRequestHandler
     {
         private int _requestCount;
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string?> _agentInvocationIds = new();
         internal int RequestCount => Volatile.Read(ref _requestCount);
+        internal IReadOnlyList<string?> AgentInvocationIds => _agentInvocationIds.ToArray();
 
         protected override Task<HttpResponseMessage> SendRequestAsync(HttpRequestMessage request, CopilotRequestContext ctx)
         {
             Interlocked.Increment(ref _requestCount);
+            _agentInvocationIds.Enqueue(ctx.AgentInvocationId);
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
             {
                 Content = new StringContent("""{"error":{"message":"Synthetic invalid request","type":"invalid_request_error"}}""",
