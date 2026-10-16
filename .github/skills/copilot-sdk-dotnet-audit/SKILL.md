@@ -136,6 +136,8 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 
 管理ポリシーの棚卸しを既定モデルだけに限定しない。同梱ランタイムの schema と安全な表示 DTO の対応をテストし、権限・Auto・サンドボックス・MCP/プラグイン等を分類して表示する。未報告・空・false・対象外を区別し、変更可否や取得元を推測しない。交差適用された許可リストは合成結果から消えるため、元の層別リストと交差適用を明示する。機密値は非表示、未知キーは件数のみとし、アプリ注入設定はセッション構築コードと共有して別枠にする。
 
+管理設定に新しい選択軸や旧名の alias が追加された場合は、SDK が返す実効値と metadata を使い、`unmanaged` のような明示的な非管理指定を「欠落」と同一視して旧設定へフォールバックしない。設定の報告と実行機能への対応も区別し、新旧設定の競合・未報告・未知値の秘匿を同梱ランタイムの compose と表示 DTO の双方で検証する。
+
 結果は重要度順に評価する。
 
 1. **Correctness / user-visible failure**: breaking change、response parsing、timeout/cancel 誤解、tool filter 破綻

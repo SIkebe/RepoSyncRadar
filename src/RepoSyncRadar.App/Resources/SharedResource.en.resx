@@ -528,6 +528,7 @@
   <data name="Copilot.Policy.Diagnostic.Hidden" xml:space="preserve"><value>The runtime reported a diagnostic. Details are hidden to avoid exposing sensitive data.</value></data>
   <data name="Copilot.Policy.Item.model" xml:space="preserve"><value>Default model</value></data>
   <data name="Copilot.Policy.Item.autoTier" xml:space="preserve"><value>Auto routing</value></data>
+  <data name="Copilot.Policy.Item.ensembleTier" xml:space="preserve"><value>Ensemble policy preference (independent of execution support)</value></data>
   <data name="Copilot.Policy.Item.effortLevel" xml:space="preserve"><value>Reasoning effort</value></data>
   <data name="Copilot.Policy.Item.contextTier" xml:space="preserve"><value>Context tier</value></data>
   <data name="Copilot.Policy.Item.permissions.allow" xml:space="preserve"><value>Allow rules</value></data>

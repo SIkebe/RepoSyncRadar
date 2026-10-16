@@ -15,6 +15,70 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 #pragma warning disable GHCP001 // Test the public policy snapshot contract.
 public sealed class CopilotPolicyDiagnosticsTests
 {
+    [Theory]
+    [InlineData("balance", false)]
+    [InlineData("high", false)]
+    [InlineData("max", true)]
+    [InlineData("unmanaged", true)]
+    public void Inventory_Uses_Reported_Ensemble_Preference_Without_Legacy_Auto_Fallback(
+        string tier, bool overridable)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(JsonSerializer.Serialize(new
+        {
+            resolved = new { settings = new { autoTier = "intelligence", ensembleTier = "balance" } },
+            values = new { autoTier = "intelligence", ensembleTier = tier },
+            meta = new { ensembleTier = new { overridable, source = "server", requested = "high" } },
+        }))!;
+        var rows = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .ToDictionary(row => row.Key);
+
+        Assert.Equal([tier, "high"], rows["ensembleTier"].Values.Select(value => value.Text));
+        Assert.Equal("Copilot.Policy.Value.Requested", rows["ensembleTier"].Values[1].LabelKey);
+        Assert.Equal(["Server"], rows["ensembleTier"].Sources);
+        Assert.Equal(overridable, rows["ensembleTier"].Overridable);
+        Assert.Equal("intelligence", Assert.Single(rows["autoTier"].Values).Text);
+        Assert.DoesNotContain("unknown", rows.Keys);
+    }
+
+    [Theory]
+    [InlineData("{}", "Unreported")]
+    [InlineData("""{"ensembleTier":{"overridable":"max"}}""", null)]
+    [InlineData("""{"ensembleTier":"private-tier"}""", "Hidden")]
+    public void Inventory_Distinguishes_Missing_And_Redacted_Ensemble_Preference(
+        string settings, string? state)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
+            $$$"""{"resolved":{"settings":{{{settings}}}},"values":{"autoTier":"intelligence"}}""")!;
+        var snapshot = CopilotPolicyDiagnostics.FromResult(result);
+        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "ensembleTier");
+        var value = Assert.Single(entry.Values);
+
+        Assert.Equal(state is null ? null : "Copilot.Policy.Value." + state, value.ResourceKey);
+        Assert.Equal(state is null ? "max" : null, value.Text);
+        Assert.Null(entry.Overridable);
+        Assert.DoesNotContain("private", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Inventory_Hides_Unknown_Effective_And_Requested_Ensemble_Preferences()
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>("""
+            {
+              "resolved":{},
+              "values":{"ensembleTier":"private-effective"},
+              "meta":{"ensembleTier":{"source":"device","overridable":false,"requested":"private-requested"}}
+            }
+            """)!;
+        var snapshot = CopilotPolicyDiagnostics.FromResult(result);
+        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "ensembleTier");
+
+        Assert.Equal(2, entry.Values.Count);
+        Assert.All(entry.Values, value => Assert.Equal("Copilot.Policy.Value.Hidden", value.ResourceKey));
+        Assert.Equal(["Device"], entry.Sources);
+        Assert.False(entry.Overridable);
+        Assert.DoesNotContain("private", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Inventory_Uses_Effective_Model_Controls_And_Their_Provenance()
     {
