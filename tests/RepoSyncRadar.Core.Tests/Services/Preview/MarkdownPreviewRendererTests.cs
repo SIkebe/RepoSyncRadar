@@ -3247,13 +3247,59 @@ var value = 1;
         Assert.Contains("<td><code>action</code></td>", html, StringComparison.Ordinal);
         Assert.Contains("<td><code>string</code></td>", html, StringComparison.Ordinal);
         Assert.Contains("rsr-rendered-diff-added", html, StringComparison.Ordinal);
-        Assert.Contains("<code>assigned</code>", html, StringComparison.Ordinal);
-        Assert.Contains("<td><span class=\"rsr-rendered-diff-added\">The action that was performed.", html, StringComparison.Ordinal);
+        Assert.Contains("<code><span class=\"rsr-rendered-diff-added\">assigned</span></code>", html, StringComparison.Ordinal);
+        Assert.Contains("<td>The action that was performed. Can be one of <code>opened</code>, <code>closed</code>, <code>reopened</code>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">The action that was performed.", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"><code>action</code></span>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"><code>string</code></span>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
         Assert.Contains("<td><code>issue</code></td>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">The issue itself.</span>", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true, "rsr-rendered-diff-added")]
+    [InlineData(false, "rsr-rendered-diff-removed")]
+    public void RenderDocument_Marks_Only_Inserted_Text_Inside_Long_Table_Cell(
+        bool isAfter,
+        string markerClass)
+    {
+        const string beforeMarkdown = """
+            | Command | Purpose |
+            | ------- | ------- |
+            | `/model [MODEL]`, `/models [MODEL]` | Select the AI model you want to use, or choose **Auto**. Press <kbd>Tab</kbd> to cycle reasoning effort \| see [AUTOTITLE](/copilot/concepts/auto-model-selection). |
+            """;
+        const string afterMarkdown = """
+            | Command | Purpose |
+            | ------- | ------- |
+            | `/model [MODEL]`, `/models [MODEL]` | Select the AI model you want to use, or choose **Auto**. Model IDs are case-insensitive, and the canonical ID is saved. Press <kbd>Tab</kbd> to cycle reasoning effort \| see [AUTOTITLE](/copilot/concepts/auto-model-selection). |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/reference/copilot-cli-reference/cli-command-reference.md",
+            isAfter ? afterMarkdown : beforeMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: isAfter ? beforeMarkdown : afterMarkdown,
+            diffSide: isAfter
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("<td>Select the AI model you want to use, or choose <strong>Auto</strong>.", html, StringComparison.Ordinal);
+        Assert.Contains("<kbd>Tab</kbd> to cycle reasoning effort | see", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<td><span class=\"" + markerClass + "\">", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"" + markerClass + "\">Select", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
+        if (isAfter)
+        {
+            Assert.Contains("<span class=\"" + markerClass + "\">Model IDs are case-insensitive, and the canonical ID is saved.", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("<span class=\"" + markerClass + "\">Press", html, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Matches("<strong>Auto</strong>\\.\\s*<span class=\"[^\"]*rsr-rendered-diff-gap", html);
+            Assert.DoesNotContain("Model IDs", html, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

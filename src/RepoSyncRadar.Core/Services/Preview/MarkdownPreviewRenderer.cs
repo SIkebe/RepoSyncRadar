@@ -5193,6 +5193,7 @@ internal static partial class MarkdownPreviewRenderer
         {
             return line;
         }
+        var comparisonCells = comparisonLine is null ? [] : SplitMarkdownTableRow(comparisonLine, preserveEscapes: true);
         var marked = new StringBuilder(line.Length + 64);
         var current = new StringBuilder();
         var cellIndex = line.TrimStart().StartsWith('|') ? -1 : 0;
@@ -5217,7 +5218,8 @@ internal static partial class MarkdownPreviewRenderer
                     marked,
                     current.ToString(),
                     markerClass,
-                    cellsToMark.Contains(cellIndex));
+                    cellsToMark.Contains(cellIndex),
+                    GetComparisonTableCell(comparisonCells, cellIndex));
                 current.Clear();
                 cellIndex++;
                 marked.Append('|');
@@ -5229,9 +5231,13 @@ internal static partial class MarkdownPreviewRenderer
             marked,
             current.ToString(),
             markerClass,
-            cellsToMark.Contains(cellIndex));
+            cellsToMark.Contains(cellIndex),
+            GetComparisonTableCell(comparisonCells, cellIndex));
         return marked.ToString();
     }
+
+    private static string? GetComparisonTableCell(List<string> comparisonCells, int cellIndex)
+        => cellIndex >= 0 && cellIndex < comparisonCells.Count ? comparisonCells[cellIndex] : null;
 
     private static HashSet<int> FindMarkdownTableCellsToMark(string line, string? comparisonLine)
     {
@@ -5321,7 +5327,12 @@ internal static partial class MarkdownPreviewRenderer
     private static string NormalizeMarkdownTableCell(string cell)
         => Regex.Replace(cell.Trim(), @"\s+", " ");
 
-    private static void AppendMarkedTableCell(StringBuilder marked, string cell, string markerClass, bool shouldMark)
+    private static void AppendMarkedTableCell(
+        StringBuilder marked,
+        string cell,
+        string markerClass,
+        bool shouldMark,
+        string? comparisonCell)
     {
         if (!shouldMark || string.IsNullOrWhiteSpace(cell))
         {
@@ -5334,8 +5345,11 @@ internal static partial class MarkdownPreviewRenderer
         var leading = cell[..leadingLength];
         var trailing = cell[(cell.Length - trailingLength)..];
         var value = cell[leadingLength..(cell.Length - trailingLength)];
+        var comparisonValue = comparisonCell?.Trim();
         marked.Append(leading)
-            .Append(WrapRenderedDiff(value, markerClass))
+            .Append(string.IsNullOrEmpty(comparisonValue)
+                ? WrapRenderedDiff(value, markerClass)
+                : MarkRenderedDiffContent(value, markerClass, comparisonValue))
             .Append(trailing);
     }
 
@@ -5387,7 +5401,7 @@ internal static partial class MarkdownPreviewRenderer
         return value.Length is > 0 and <= 64 && !value.Any(char.IsWhiteSpace);
     }
 
-    private static List<string> SplitMarkdownTableRow(string excerpt)
+    private static List<string> SplitMarkdownTableRow(string excerpt, bool preserveEscapes = false)
     {
         var trimmed = excerpt.Trim();
         if (!trimmed.Contains('|', StringComparison.Ordinal) || IsMarkdownTableSeparatorRow(trimmed))
@@ -5409,6 +5423,10 @@ internal static partial class MarkdownPreviewRenderer
             if (ch == '\\')
             {
                 escaped = true;
+                if (preserveEscapes)
+                {
+                    current.Append(ch);
+                }
                 continue;
             }
             if (ch == '|')
