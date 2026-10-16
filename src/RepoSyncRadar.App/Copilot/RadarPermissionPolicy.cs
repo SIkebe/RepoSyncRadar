@@ -67,6 +67,7 @@ public sealed partial class RadarPermissionPolicy
 
         var sessionId = invocation?.SessionId ?? "<unknown>";
 
+        // Assisted prompt metadata must not bypass the app's manual managed-approval flow.
         if (request.ManagedApprovalRequired is true
             && request is PermissionRequestCustomTool
                 or PermissionRequestRead

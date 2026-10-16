@@ -528,6 +528,7 @@
   <data name="Copilot.Policy.Diagnostic.Hidden" xml:space="preserve"><value>ランタイムから診断が返されました。機密情報を避けるため詳細は非表示です。</value></data>
   <data name="Copilot.Policy.Item.model" xml:space="preserve"><value>既定モデル</value></data>
   <data name="Copilot.Policy.Item.autoTier" xml:space="preserve"><value>Auto ルーティング</value></data>
+  <data name="Copilot.Policy.Item.ensembleTier" xml:space="preserve"><value>Ensemble 管理設定（実行対応とは独立）</value></data>
   <data name="Copilot.Policy.Item.effortLevel" xml:space="preserve"><value>推論 effort</value></data>
   <data name="Copilot.Policy.Item.contextTier" xml:space="preserve"><value>コンテキスト枠</value></data>
   <data name="Copilot.Policy.Item.permissions.allow" xml:space="preserve"><value>許可ルール</value></data>

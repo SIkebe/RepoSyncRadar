@@ -39,10 +39,40 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.99-0", status.Version);
+        Assert.Equal("1.0.99-2", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
+    [Theory]
+    [InlineData("balance")]
+    [InlineData("high")]
+    [InlineData("max")]
+    [InlineData("unmanaged")]
+    public async Task Managed_Ensemble_Preference_RoundTrips_Without_Legacy_Auto_Fallback(string tier)
+    {
+        await using var client = new CopilotClient(CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(), NullLogger.Instance, "offline-policy-test", "0.1.30"));
+        var ct = TestContext.Current.CancellationToken;
+        await client.StartAsync(ct);
+        var validation = await client.Rpc.ManagedSettings.ValidateAsync(
+            $$$"""{"autoTier":"intelligence","ensembleTier":"{{{tier}}}"}""",
+            layer: "server", cancellationToken: ct);
+        Assert.True(validation.Valid);
+        var composed = await client.Rpc.ManagedSettings.ComposeAsync(
+            [new() { Source = ManagedSettingsChannel.Server, Settings = validation.Settings }], ct);
+
+        Assert.Equal(tier, composed.Values?.EnsembleTier?.Value);
+        var snapshot = CopilotPolicyDiagnostics.FromResult(new ManagedSettingsResolveResult
+        {
+            Resolved = composed.Resolved, Values = composed.Values, Meta = composed.Meta,
+            Layers = composed.Layers, Diagnostics = composed.Diagnostics,
+        });
+        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "ensembleTier");
+        Assert.Equal(tier, Assert.Single(entry.Values).Text);
+        Assert.Equal(["Server"], entry.Sources);
+        Assert.Equal(composed.Meta?.EnsembleTier?.Overridable, entry.Overridable);
+    }
+
     [Fact]
     public async Task App_Policy_Allows_Manual_Mode_And_Blocks_Assisted_Approval()
     {

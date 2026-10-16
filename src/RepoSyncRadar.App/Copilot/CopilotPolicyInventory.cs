@@ -26,7 +26,7 @@ internal static class CopilotPolicyInventory
     private const string _itemPrefix = "Copilot.Policy.Item.";
     private static readonly string[][] _groupKeys =
     [
-        ["model", "autoTier", "effortLevel", "contextTier"],
+        ["model", "autoTier", "ensembleTier", "effortLevel", "contextTier"],
         ["permissions.allow", "permissions.ask", "permissions.deny", "permissions.disableBypassPermissionsMode",
             "permissions.disableAssistedPermissionsMode"],
         ["sandbox", "vscode"],
@@ -99,6 +99,7 @@ internal static class CopilotPolicyInventory
                 {
                     "model" => result.Meta?.Model,
                     "autoTier" => result.Meta?.AutoTier,
+                    "ensembleTier" => result.Meta?.EnsembleTier,
                     "effortLevel" => result.Meta?.EffortLevel,
                     "contextTier" => result.Meta?.ContextTier,
                     _ => null,
@@ -108,6 +109,7 @@ internal static class CopilotPolicyInventory
                 {
                     "model" => result.Values?.Model,
                     "autoTier" => result.Values?.AutoTier?.Value,
+                    "ensembleTier" => result.Values?.EnsembleTier?.Value,
                     "effortLevel" => result.Values?.EffortLevel,
                     "contextTier" => result.Values?.ContextTier?.Value,
                     _ => null,
@@ -292,7 +294,8 @@ internal static class CopilotPolicyInventory
                 AppendValue(output, kind is null ? State("Hidden", label)
                     : new(kind, text == kind ? null : _valuePrefix + "ScopeHidden", label));
             }
-            else if (key == "model" ? CopilotPolicyDiagnostics.IsDisplayableModel(text) : _safeStrings.Contains(text))
+            else if (key == "model" ? CopilotPolicyDiagnostics.IsDisplayableModel(text)
+                : _safeStrings.Contains(text) || key == "ensembleTier" && text == "unmanaged")
             {
                 AppendValue(output, new(Text: text, LabelKey: label));
             }
@@ -337,7 +340,7 @@ internal static class CopilotPolicyInventory
         }
         else if (element.ValueKind == JsonValueKind.Object)
         {
-            if (key == "autoTier" && element.TryGetProperty("overridable", out var tier))
+            if (key is "autoTier" or "ensembleTier" && element.TryGetProperty("overridable", out var tier))
             {
                 Format(key, tier, output, label);
                 return;

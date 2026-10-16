@@ -52,6 +52,43 @@ public class RadarPermissionPolicyTests
     }
 
     private static readonly PermissionInvocation _invocation = new() { SessionId = "session-1" };
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Derived_Assisted_Prompt_Does_Not_Bypass_Raw_Managed_Approval(
+        bool customTool, bool approved)
+    {
+        PermissionRequest request = customTool
+            ? NewCustomTool("managed-derived-tool", "radar_score_commit", managedApprovalRequired: true)
+            : NewRead("managed-derived-read", "C:\\repo\\file.md", managedApprovalRequired: true);
+        var prompt = Substitute.For<IPermissionPrompt>();
+        prompt.ConfirmAsync(request, Arg.Any<CancellationToken>()).Returns(approved);
+        var invocation = new PermissionInvocation
+        {
+            SessionId = "session-managed-derived",
+            ManagedSettingsEnabled = true,
+            PromptRequest = new PermissionPromptRequestRead
+            {
+                Path = "C:\\repo\\file.md",
+                Intention = "Read the fixture.",
+                ManagedApprovalRequired = false,
+                AssistedApproval = new PermissionAssistedApproval
+                {
+                    Recommendation = AssistedApprovalRecommendation.Approve,
+                },
+            },
+        };
+
+        var result = await CreatePolicy(prompt).HandleAsync(request, invocation);
+
+        Assert.Equal(approved ? _approveOnceKind : _rejectKind, result.Kind);
+        AssertDecisionContext(result, PermissionDecisionOutcome.PromptedUser, PermissionDecisionSource.HumanResponse);
+        await prompt.Received(1).ConfirmAsync(request, Arg.Any<CancellationToken>());
+    }
+
     private static readonly string _approveOnceKind = PermissionDecision.ApproveOnce().Kind;
     private static readonly string _rejectKind = PermissionDecision.Reject("test").Kind;
     private static readonly string _userNotAvailableKind = PermissionDecision.UserNotAvailable().Kind;
