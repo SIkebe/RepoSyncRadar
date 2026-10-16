@@ -4471,6 +4471,7 @@ internal static partial class MarkdownPreviewRenderer
             .Select(range => SnapRangeOutsideLiquidTokens(content, range))
             .Select(range => ExpandRangeAcrossInlineHtmlElement(content, range))
             .Select(range => ExpandRangeAcrossMarkdownFormattingDelimiters(content, range))
+            .Select(range => ExpandRangeAcrossMarkdownEscapePairs(content, range))
             .Where(static range => range.Length > 0)
             .OrderBy(static range => range.Start)
             .ToArray();
@@ -4496,6 +4497,8 @@ internal static partial class MarkdownPreviewRenderer
         var gapIndexes = granularDiff.GapIndexes
             .Where(index => !mergedRanges.Any(
                 range => IsGapStrictlyInsideChangedRange(index, range.Start, range.End)))
+            .Select(index => MoveGapOutsideMarkdownEscapePair(content, index))
+            .Select(index => MoveGapOutsideMarkdownLink(content, index))
             .ToArray();
         var operations = mergedRanges
             .Select(static range => (Position: range.Start, Range: (InlineChangedRange?)range))
@@ -4759,9 +4762,62 @@ internal static partial class MarkdownPreviewRenderer
             return false;
         }
 
+        insertionIndex = MoveGapOutsideMarkdownEscapePair(content, insertionIndex);
+        insertionIndex = MoveGapOutsideMarkdownLink(content, insertionIndex);
         var marker = BuildRenderedDiffGapMarker(markerClass);
         marked = content[..insertionIndex] + marker + content[insertionIndex..];
         return true;
+    }
+
+    private static InlineChangedRange ExpandRangeAcrossMarkdownEscapePairs(
+        string content,
+        InlineChangedRange range)
+    {
+        if (range.Length == 0)
+        {
+            return range;
+        }
+
+        var start = range.Start;
+        var end = range.Start + range.Length;
+        if (IsBoundaryInsideMarkdownEscapePair(content, start))
+        {
+            while (start > 0 && content[start - 1] == '\\')
+            {
+                start--;
+            }
+        }
+        if (IsBoundaryInsideMarkdownEscapePair(content, end))
+        {
+            end++;
+        }
+
+        return new InlineChangedRange(start, end - start);
+    }
+
+    private static int MoveGapOutsideMarkdownEscapePair(string content, int insertionIndex)
+        => IsBoundaryInsideMarkdownEscapePair(content, insertionIndex)
+            ? insertionIndex + 1
+            : insertionIndex;
+
+    private static int MoveGapOutsideMarkdownLink(string content, int insertionIndex)
+        => TryFindMarkdownLinkAroundRange(content, new InlineChangedRange(insertionIndex, 0), out var linkRange)
+            ? linkRange.LinkEnd
+            : insertionIndex;
+
+    private static bool IsBoundaryInsideMarkdownEscapePair(string content, int boundary)
+    {
+        if (boundary <= 0 || boundary >= content.Length || content[boundary - 1] != '\\')
+        {
+            return false;
+        }
+
+        var precedingBackslashes = 0;
+        for (var index = boundary - 1; index >= 0 && content[index] == '\\'; index--)
+        {
+            precedingBackslashes++;
+        }
+        return precedingBackslashes % 2 != 0;
     }
 
     private static string BuildRenderedDiffGapMarker(string markerClass)

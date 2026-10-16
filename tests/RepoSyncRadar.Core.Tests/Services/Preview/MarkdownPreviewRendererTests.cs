@@ -3302,6 +3302,87 @@ var value = 1;
         }
     }
 
+    [Theory]
+    [InlineData(true, "rsr-rendered-diff-added")]
+    [InlineData(false, "rsr-rendered-diff-removed")]
+    public void RenderDocument_Keeps_Escaped_Table_Pipes_Intact_Across_Diff_Boundaries(
+        bool isAfter,
+        string markerClass)
+    {
+        const string beforeMarkdown = """
+            | Name | Description |
+            | ---- | ----------- |
+            | Example | left \+ right |
+            """;
+        const string afterMarkdown = """
+            | Name | Description |
+            | ---- | ----------- |
+            | Example | left \| right |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            isAfter ? afterMarkdown : beforeMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: isAfter ? beforeMarkdown : afterMarkdown,
+            diffSide: isAfter
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("<table>", html, StringComparison.Ordinal);
+        Assert.Contains("<td>Example</td>", html, StringComparison.Ordinal);
+        var expectedSymbol = isAfter ? "|" : "+";
+        Assert.Contains(
+            "<td>left <span class=\"" + markerClass + "\">" + expectedSymbol + "</span> right</td>",
+            html,
+            StringComparison.Ordinal);
+        Assert.Equal(2, html.Split("<td>", StringSplitOptions.None).Length - 1);
+    }
+
+    [Theory]
+    [InlineData(true, "rsr-rendered-diff-added")]
+    [InlineData(false, "rsr-rendered-diff-removed")]
+    public void RenderDocument_Keeps_Table_Link_Destinations_Intact_Across_Url_Extensions(
+        bool isAfter,
+        string markerClass)
+    {
+        const string beforeMarkdown = """
+            | Name | Guide |
+            | ---- | ----- |
+            | Example | [guide](/foo) |
+            """;
+        const string afterMarkdown = """
+            | Name | Guide |
+            | ---- | ----- |
+            | Example | [guide](/foo-bar) |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            isAfter ? afterMarkdown : beforeMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: isAfter ? beforeMarkdown : afterMarkdown,
+            diffSide: isAfter
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("<table>", html, StringComparison.Ordinal);
+        Assert.Contains("<td>Example</td>", html, StringComparison.Ordinal);
+        Assert.Matches("<a href=\"[^\"]*foo(-bar)?[^\"]*\">guide</a>", html);
+        Assert.Contains(
+            isAfter ? markerClass : "rsr-rendered-diff-gap",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotMatch("<a href=\"[^\"]*rsr-rendered-diff-gap", html);
+        Assert.Equal(2, html.Split("<td>", StringSplitOptions.None).Length - 1);
+        if (!isAfter)
+        {
+            Assert.Matches("</a><span class=\"[^\"]*rsr-rendered-diff-gap", html);
+        }
+    }
+
     [Fact]
     public void RenderDocument_Adds_Scrollbar_Markers_For_Rendered_Diffs()
     {
