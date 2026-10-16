@@ -1,0 +1,19 @@
+# These actions are SHA-pinned by actions.lock and checked by gh actions-lock --verify.
+# Keep the inline SHA requirement for actions not explicitly migrated here.
+excludes:
+  - policy_name: action_ref_should_be_full_length_commit_sha
+    action_name: actions/cache
+  - policy_name: action_ref_should_be_full_length_commit_sha
+    action_name: actions/checkout
+  - policy_name: action_ref_should_be_full_length_commit_sha
+    action_name: actions/download-artifact
+  - policy_name: action_ref_should_be_full_length_commit_sha
+    action_name: actions/setup-dotnet
+  - policy_name: action_ref_should_be_full_length_commit_sha
+    action_name: actions/upload-artifact
+  - policy_name: action_ref_should_be_full_length_commit_sha
+    action_name: actions/upload-code-coverage
+  - policy_name: action_ref_should_be_full_length_commit_sha
+    action_name: github/codeql-action/init
+  - policy_name: action_ref_should_be_full_length_commit_sha
+    action_name: github/codeql-action/analyze

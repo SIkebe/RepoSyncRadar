@@ -22,6 +22,7 @@ Use these repository instructions as the starting point. When code or validated 
   - `dotnet build RepoSyncRadar.sln -warnaserror`
   - `dotnet test RepoSyncRadar.sln --timeout 10m -- --filter-not-trait Category=Manual`
 - Validate GitHub Actions workflow changes with `ghalint run`; CI installs the ghalint version tracked in `tools/ghalint/go.mod` so Dependabot can update it.
+- Workflow dependencies use `.github/workflows/actions.lock`. After changing workflows or local actions, regenerate locally with `gh actions-lock` and validate with `gh actions-lock --verify` using `github/gh-actions-lock` `v0.2.0`; CI does not install or run the extension. Never edit the lockfile by hand. Keep `.github/ghalint.yaml` SHA-rule exceptions limited to explicitly migrated actions; the lockfile supplies their immutable commits and repository identities.
 - For focused test runs under xUnit v3/Microsoft.Testing.Platform, put filters after `--`. Examples:
   - `dotnet test tests/RepoSyncRadar.App.Tests/RepoSyncRadar.App.Tests.csproj -- --filter-class RepoSyncRadar.App.Tests.Components.AppHeaderTests`
   - `dotnet test tests/RepoSyncRadar.App.E2E.Tests -- --filter-trait Category=E2E`
