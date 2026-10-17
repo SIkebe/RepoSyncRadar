@@ -58,6 +58,8 @@ internal static class SessionConfigBuilder
             CustomAgentsLocalOnly = true,
             CoauthorEnabled = false,
             ManageScheduleEnabled = false,
+            // Repository-origin hooks run commands without per-hook approval; the radar never needs them.
+            EnableFileHooks = false,
             ManagedSettings = CreateManagedSettings(),
             McpOAuthTokenStorage = McpOAuthTokenStorageMode.InMemory,
             // RepoSyncRadar does not broker third-party MCP OAuth tokens. Fail closed if
