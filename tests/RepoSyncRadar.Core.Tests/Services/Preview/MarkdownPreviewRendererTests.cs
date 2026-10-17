@@ -3247,13 +3247,180 @@ var value = 1;
         Assert.Contains("<td><code>action</code></td>", html, StringComparison.Ordinal);
         Assert.Contains("<td><code>string</code></td>", html, StringComparison.Ordinal);
         Assert.Contains("rsr-rendered-diff-added", html, StringComparison.Ordinal);
-        Assert.Contains("<code>assigned</code>", html, StringComparison.Ordinal);
-        Assert.Contains("<td><span class=\"rsr-rendered-diff-added\">The action that was performed.", html, StringComparison.Ordinal);
+        Assert.Contains("<code><span class=\"rsr-rendered-diff-added\">assigned</span></code>", html, StringComparison.Ordinal);
+        Assert.Contains("<td>The action that was performed. Can be one of <code>opened</code>, <code>closed</code>, <code>reopened</code>", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">The action that was performed.", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"><code>action</code></span>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\"><code>string</code></span>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
         Assert.Contains("<td><code>issue</code></td>", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<span class=\"rsr-rendered-diff-added\">The issue itself.</span>", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true, "rsr-rendered-diff-added")]
+    [InlineData(false, "rsr-rendered-diff-removed")]
+    public void RenderDocument_Marks_Only_Inserted_Text_Inside_Long_Table_Cell(
+        bool isAfter,
+        string markerClass)
+    {
+        const string beforeMarkdown = """
+            | Command | Purpose |
+            | ------- | ------- |
+            | `/model [MODEL]`, `/models [MODEL]` | Select the AI model you want to use, or choose **Auto**. Press <kbd>Tab</kbd> to cycle reasoning effort \| see [AUTOTITLE](/copilot/concepts/auto-model-selection). |
+            """;
+        const string afterMarkdown = """
+            | Command | Purpose |
+            | ------- | ------- |
+            | `/model [MODEL]`, `/models [MODEL]` | Select the AI model you want to use, or choose **Auto**. Model IDs are case-insensitive, and the canonical ID is saved. Press <kbd>Tab</kbd> to cycle reasoning effort \| see [AUTOTITLE](/copilot/concepts/auto-model-selection). |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/reference/copilot-cli-reference/cli-command-reference.md",
+            isAfter ? afterMarkdown : beforeMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: isAfter ? beforeMarkdown : afterMarkdown,
+            diffSide: isAfter
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("<td>Select the AI model you want to use, or choose <strong>Auto</strong>.", html, StringComparison.Ordinal);
+        Assert.Contains("<kbd>Tab</kbd> to cycle reasoning effort | see", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<td><span class=\"" + markerClass + "\">", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("<span class=\"" + markerClass + "\">Select", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("&lt;/span&gt;", html, StringComparison.Ordinal);
+        if (isAfter)
+        {
+            Assert.Contains("<span class=\"" + markerClass + "\">Model IDs are case-insensitive, and the canonical ID is saved.", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("<span class=\"" + markerClass + "\">Press", html, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Matches("<strong>Auto</strong>\\.\\s*<span class=\"[^\"]*rsr-rendered-diff-gap", html);
+            Assert.DoesNotContain("Model IDs", html, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RenderDocument_Keeps_Table_Cell_Html_Attribute_Gaps_Outside_Tags(bool isAfter)
+    {
+        const string beforeMarkdown = """
+            | Key | Description |
+            | --- | --- |
+            | Shortcut | Press <kbd>Tab</kbd> to continue. |
+            """;
+        const string afterMarkdown = """
+            | Key | Description |
+            | --- | --- |
+            | Shortcut | Press <kbd class="key">Tab</kbd> to continue. |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            isAfter ? afterMarkdown : beforeMarkdown,
+            "abc1234",
+            isAfter ? "PR HEAD" : "Parent",
+            diffAgainstMarkdown: isAfter ? beforeMarkdown : afterMarkdown,
+            diffSide: isAfter
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        if (isAfter)
+        {
+            Assert.Contains("<kbd class=\"key\">Tab</kbd>", html, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Matches(
+                "<kbd><span class=\"[^\"]*rsr-rendered-diff-gap[^\"]*\" aria-hidden=\"true\"></span>Tab</kbd>",
+                html);
+        }
+        Assert.DoesNotContain("<kbd<span", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"key<span", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true, "rsr-rendered-diff-added")]
+    [InlineData(false, "rsr-rendered-diff-removed")]
+    public void RenderDocument_Keeps_Escaped_Table_Pipes_Intact_Across_Diff_Boundaries(
+        bool isAfter,
+        string markerClass)
+    {
+        const string beforeMarkdown = """
+            | Name | Description |
+            | ---- | ----------- |
+            | Example | left \+ right |
+            """;
+        const string afterMarkdown = """
+            | Name | Description |
+            | ---- | ----------- |
+            | Example | left \| right |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            isAfter ? afterMarkdown : beforeMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: isAfter ? beforeMarkdown : afterMarkdown,
+            diffSide: isAfter
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("<table>", html, StringComparison.Ordinal);
+        Assert.Contains("<td>Example</td>", html, StringComparison.Ordinal);
+        var expectedSymbol = isAfter ? "|" : "+";
+        Assert.Contains(
+            "<td>left <span class=\"" + markerClass + "\">" + expectedSymbol + "</span> right</td>",
+            html,
+            StringComparison.Ordinal);
+        Assert.Equal(2, html.Split("<td>", StringSplitOptions.None).Length - 1);
+    }
+
+    [Theory]
+    [InlineData(true, "rsr-rendered-diff-added")]
+    [InlineData(false, "rsr-rendered-diff-removed")]
+    public void RenderDocument_Keeps_Table_Link_Destinations_Intact_Across_Url_Extensions(
+        bool isAfter,
+        string markerClass)
+    {
+        const string beforeMarkdown = """
+            | Name | Guide |
+            | ---- | ----- |
+            | Example | [guide](/foo) |
+            """;
+        const string afterMarkdown = """
+            | Name | Guide |
+            | ---- | ----- |
+            | Example | [guide](/foo-bar) |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            isAfter ? afterMarkdown : beforeMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: isAfter ? beforeMarkdown : afterMarkdown,
+            diffSide: isAfter
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        Assert.Contains("<table>", html, StringComparison.Ordinal);
+        Assert.Contains("<td>Example</td>", html, StringComparison.Ordinal);
+        Assert.Matches("<a href=\"[^\"]*foo(-bar)?[^\"]*\">guide</a>", html);
+        Assert.Contains(
+            isAfter ? markerClass : "rsr-rendered-diff-gap",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotMatch("<a href=\"[^\"]*rsr-rendered-diff-gap", html);
+        Assert.Equal(2, html.Split("<td>", StringSplitOptions.None).Length - 1);
+        if (!isAfter)
+        {
+            Assert.Matches("</a><span class=\"[^\"]*rsr-rendered-diff-gap", html);
+        }
     }
 
     [Fact]

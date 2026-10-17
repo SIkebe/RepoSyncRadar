@@ -4471,6 +4471,7 @@ internal static partial class MarkdownPreviewRenderer
             .Select(range => SnapRangeOutsideLiquidTokens(content, range))
             .Select(range => ExpandRangeAcrossInlineHtmlElement(content, range))
             .Select(range => ExpandRangeAcrossMarkdownFormattingDelimiters(content, range))
+            .Select(range => ExpandRangeAcrossMarkdownEscapePairs(content, range))
             .Where(static range => range.Length > 0)
             .OrderBy(static range => range.Start)
             .ToArray();
@@ -4496,6 +4497,9 @@ internal static partial class MarkdownPreviewRenderer
         var gapIndexes = granularDiff.GapIndexes
             .Where(index => !mergedRanges.Any(
                 range => IsGapStrictlyInsideChangedRange(index, range.Start, range.End)))
+            .Select(index => MoveGapOutsideMarkdownEscapePair(content, index))
+            .Select(index => MoveGapOutsideMarkdownLink(content, index))
+            .Select(index => MoveGapOutsideInlineHtmlTag(content, index))
             .ToArray();
         var operations = mergedRanges
             .Select(static range => (Position: range.Start, Range: (InlineChangedRange?)range))
@@ -4759,9 +4763,88 @@ internal static partial class MarkdownPreviewRenderer
             return false;
         }
 
+        insertionIndex = MoveGapOutsideMarkdownEscapePair(content, insertionIndex);
+        insertionIndex = MoveGapOutsideMarkdownLink(content, insertionIndex);
+        insertionIndex = MoveGapOutsideInlineHtmlTag(content, insertionIndex);
         var marker = BuildRenderedDiffGapMarker(markerClass);
         marked = content[..insertionIndex] + marker + content[insertionIndex..];
         return true;
+    }
+
+    private static InlineChangedRange ExpandRangeAcrossMarkdownEscapePairs(
+        string content,
+        InlineChangedRange range)
+    {
+        if (range.Length == 0)
+        {
+            return range;
+        }
+
+        var start = range.Start;
+        var end = range.Start + range.Length;
+        if (IsBoundaryInsideMarkdownEscapePair(content, start))
+        {
+            while (start > 0 && content[start - 1] == '\\')
+            {
+                start--;
+            }
+        }
+        if (IsBoundaryInsideMarkdownEscapePair(content, end))
+        {
+            end++;
+        }
+
+        return new InlineChangedRange(start, end - start);
+    }
+
+    private static int MoveGapOutsideMarkdownEscapePair(string content, int insertionIndex)
+        => IsBoundaryInsideMarkdownEscapePair(content, insertionIndex)
+            ? insertionIndex + 1
+            : insertionIndex;
+
+    private static int MoveGapOutsideMarkdownLink(string content, int insertionIndex)
+        => TryFindMarkdownLinkAroundRange(content, new InlineChangedRange(insertionIndex, 0), out var linkRange)
+            ? linkRange.LinkEnd
+            : insertionIndex;
+
+    private static int MoveGapOutsideInlineHtmlTag(string content, int insertionIndex)
+    {
+        if (insertionIndex <= 0 || insertionIndex >= content.Length)
+        {
+            return insertionIndex;
+        }
+
+        var tagStart = content.LastIndexOf('<', insertionIndex);
+        if (tagStart < 0 || insertionIndex == tagStart)
+        {
+            return insertionIndex;
+        }
+
+        var tagEnd = FindHtmlTagEnd(content, tagStart);
+        if (tagEnd <= insertionIndex
+            || tagEnd > content.Length
+            || content[tagEnd - 1] != '>'
+            || GetHtmlTagName(content[tagStart..tagEnd], out _).Length == 0)
+        {
+            return insertionIndex;
+        }
+
+        return tagEnd;
+    }
+
+    private static bool IsBoundaryInsideMarkdownEscapePair(string content, int boundary)
+    {
+        if (boundary <= 0 || boundary >= content.Length || content[boundary - 1] != '\\')
+        {
+            return false;
+        }
+
+        var precedingBackslashes = 0;
+        for (var index = boundary - 1; index >= 0 && content[index] == '\\'; index--)
+        {
+            precedingBackslashes++;
+        }
+        return precedingBackslashes % 2 != 0;
     }
 
     private static string BuildRenderedDiffGapMarker(string markerClass)
@@ -5193,6 +5276,7 @@ internal static partial class MarkdownPreviewRenderer
         {
             return line;
         }
+        var comparisonCells = comparisonLine is null ? [] : SplitMarkdownTableRow(comparisonLine, preserveEscapes: true);
         var marked = new StringBuilder(line.Length + 64);
         var current = new StringBuilder();
         var cellIndex = line.TrimStart().StartsWith('|') ? -1 : 0;
@@ -5217,7 +5301,8 @@ internal static partial class MarkdownPreviewRenderer
                     marked,
                     current.ToString(),
                     markerClass,
-                    cellsToMark.Contains(cellIndex));
+                    cellsToMark.Contains(cellIndex),
+                    GetComparisonTableCell(comparisonCells, cellIndex));
                 current.Clear();
                 cellIndex++;
                 marked.Append('|');
@@ -5229,9 +5314,13 @@ internal static partial class MarkdownPreviewRenderer
             marked,
             current.ToString(),
             markerClass,
-            cellsToMark.Contains(cellIndex));
+            cellsToMark.Contains(cellIndex),
+            GetComparisonTableCell(comparisonCells, cellIndex));
         return marked.ToString();
     }
+
+    private static string? GetComparisonTableCell(List<string> comparisonCells, int cellIndex)
+        => cellIndex >= 0 && cellIndex < comparisonCells.Count ? comparisonCells[cellIndex] : null;
 
     private static HashSet<int> FindMarkdownTableCellsToMark(string line, string? comparisonLine)
     {
@@ -5321,7 +5410,12 @@ internal static partial class MarkdownPreviewRenderer
     private static string NormalizeMarkdownTableCell(string cell)
         => Regex.Replace(cell.Trim(), @"\s+", " ");
 
-    private static void AppendMarkedTableCell(StringBuilder marked, string cell, string markerClass, bool shouldMark)
+    private static void AppendMarkedTableCell(
+        StringBuilder marked,
+        string cell,
+        string markerClass,
+        bool shouldMark,
+        string? comparisonCell)
     {
         if (!shouldMark || string.IsNullOrWhiteSpace(cell))
         {
@@ -5334,8 +5428,11 @@ internal static partial class MarkdownPreviewRenderer
         var leading = cell[..leadingLength];
         var trailing = cell[(cell.Length - trailingLength)..];
         var value = cell[leadingLength..(cell.Length - trailingLength)];
+        var comparisonValue = comparisonCell?.Trim();
         marked.Append(leading)
-            .Append(WrapRenderedDiff(value, markerClass))
+            .Append(string.IsNullOrEmpty(comparisonValue)
+                ? WrapRenderedDiff(value, markerClass)
+                : MarkRenderedDiffContent(value, markerClass, comparisonValue))
             .Append(trailing);
     }
 
@@ -5387,7 +5484,7 @@ internal static partial class MarkdownPreviewRenderer
         return value.Length is > 0 and <= 64 && !value.Any(char.IsWhiteSpace);
     }
 
-    private static List<string> SplitMarkdownTableRow(string excerpt)
+    private static List<string> SplitMarkdownTableRow(string excerpt, bool preserveEscapes = false)
     {
         var trimmed = excerpt.Trim();
         if (!trimmed.Contains('|', StringComparison.Ordinal) || IsMarkdownTableSeparatorRow(trimmed))
@@ -5409,6 +5506,10 @@ internal static partial class MarkdownPreviewRenderer
             if (ch == '\\')
             {
                 escaped = true;
+                if (preserveEscapes)
+                {
+                    current.Append(ch);
+                }
                 continue;
             }
             if (ch == '|')
