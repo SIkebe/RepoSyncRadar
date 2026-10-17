@@ -3303,6 +3303,46 @@ var value = 1;
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RenderDocument_Keeps_Table_Cell_Html_Attribute_Gaps_Outside_Tags(bool isAfter)
+    {
+        const string beforeMarkdown = """
+            | Key | Description |
+            | --- | --- |
+            | Shortcut | Press <kbd>Tab</kbd> to continue. |
+            """;
+        const string afterMarkdown = """
+            | Key | Description |
+            | --- | --- |
+            | Shortcut | Press <kbd class="key">Tab</kbd> to continue. |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            isAfter ? afterMarkdown : beforeMarkdown,
+            "abc1234",
+            isAfter ? "PR HEAD" : "Parent",
+            diffAgainstMarkdown: isAfter ? beforeMarkdown : afterMarkdown,
+            diffSide: isAfter
+                ? MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After
+                : MarkdownPreviewRenderer.RenderedMarkdownDiffSide.Before);
+
+        if (isAfter)
+        {
+            Assert.Contains("<kbd class=\"key\">Tab</kbd>", html, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Matches(
+                "<kbd><span class=\"[^\"]*rsr-rendered-diff-gap[^\"]*\" aria-hidden=\"true\"></span>Tab</kbd>",
+                html);
+        }
+        Assert.DoesNotContain("<kbd<span", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("class=\"key<span", html, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(true, "rsr-rendered-diff-added")]
     [InlineData(false, "rsr-rendered-diff-removed")]
     public void RenderDocument_Keeps_Escaped_Table_Pipes_Intact_Across_Diff_Boundaries(

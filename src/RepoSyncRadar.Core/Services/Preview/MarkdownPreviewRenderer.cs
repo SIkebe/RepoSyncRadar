@@ -4499,6 +4499,7 @@ internal static partial class MarkdownPreviewRenderer
                 range => IsGapStrictlyInsideChangedRange(index, range.Start, range.End)))
             .Select(index => MoveGapOutsideMarkdownEscapePair(content, index))
             .Select(index => MoveGapOutsideMarkdownLink(content, index))
+            .Select(index => MoveGapOutsideInlineHtmlTag(content, index))
             .ToArray();
         var operations = mergedRanges
             .Select(static range => (Position: range.Start, Range: (InlineChangedRange?)range))
@@ -4764,6 +4765,7 @@ internal static partial class MarkdownPreviewRenderer
 
         insertionIndex = MoveGapOutsideMarkdownEscapePair(content, insertionIndex);
         insertionIndex = MoveGapOutsideMarkdownLink(content, insertionIndex);
+        insertionIndex = MoveGapOutsideInlineHtmlTag(content, insertionIndex);
         var marker = BuildRenderedDiffGapMarker(markerClass);
         marked = content[..insertionIndex] + marker + content[insertionIndex..];
         return true;
@@ -4804,6 +4806,31 @@ internal static partial class MarkdownPreviewRenderer
         => TryFindMarkdownLinkAroundRange(content, new InlineChangedRange(insertionIndex, 0), out var linkRange)
             ? linkRange.LinkEnd
             : insertionIndex;
+
+    private static int MoveGapOutsideInlineHtmlTag(string content, int insertionIndex)
+    {
+        if (insertionIndex <= 0 || insertionIndex >= content.Length)
+        {
+            return insertionIndex;
+        }
+
+        var tagStart = content.LastIndexOf('<', insertionIndex);
+        if (tagStart < 0 || insertionIndex == tagStart)
+        {
+            return insertionIndex;
+        }
+
+        var tagEnd = FindHtmlTagEnd(content, tagStart);
+        if (tagEnd <= insertionIndex
+            || tagEnd > content.Length
+            || content[tagEnd - 1] != '>'
+            || GetHtmlTagName(content[tagStart..tagEnd], out _).Length == 0)
+        {
+            return insertionIndex;
+        }
+
+        return tagEnd;
+    }
 
     private static bool IsBoundaryInsideMarkdownEscapePair(string content, int boundary)
     {
