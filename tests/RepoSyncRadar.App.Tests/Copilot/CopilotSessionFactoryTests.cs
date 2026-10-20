@@ -1,8 +1,15 @@
 using GitHub.Copilot;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using NSubstitute;
 using RepoSyncRadar.App.Copilot;
+using RepoSyncRadar.App.Copilot.Tools;
+using RepoSyncRadar.Core.Auth;
+using RepoSyncRadar.Core.Data;
 using RepoSyncRadar.Core.Options;
+using RepoSyncRadar.Core.Services;
 using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
@@ -78,6 +85,46 @@ public sealed class CopilotSessionFactoryTests
 
         Assert.Equal("gpt-5-mini", config.Model);
         Assert.Null(config.ReasoningEffort);
+    }
+
+    [Fact]
+    public async Task ActivateFallbackModel_Overrides_Model_And_Publishes_Fallback()
+    {
+        var options = Options.Create(new CopilotOptions
+        {
+            DefaultModel = "gpt-5.6-luna",
+            ReasoningEffort = "high",
+        });
+        var tracker = new CopilotModelFallbackTracker();
+        await using var factory = new CopilotSessionFactory(
+            options,
+            new RadarPermissionPolicy(
+                new RepoSyncRadar.App.Copilot.UrlAllowList(options),
+                Substitute.For<IPermissionPrompt>(),
+                NullLogger<RadarPermissionPolicy>.Instance),
+            Substitute.For<IGitHubAccessTokenProvider>(),
+            NullLogger<CopilotSessionFactory>.Instance,
+            new RadarTools(
+                Substitute.For<IRadarRepository>(),
+                Substitute.For<IDocsGitHubClient>(),
+                Substitute.For<IDocsApiClient>()),
+            new RadarWriteTools(Substitute.For<IDbContextFactory<RadarDbContext>>()),
+            Substitute.For<IAppVersionProvider>(),
+            modelFallbackTracker: tracker);
+        var config = new SessionConfig
+        {
+            Model = "gpt-5.6-luna",
+            ReasoningEffort = "high",
+        };
+
+        factory.ActivateFallbackModel(config, SessionPurpose.Adoption, "gpt-5.6-luna", "claude-sonnet-5");
+
+        Assert.Equal("claude-sonnet-5", config.Model);
+        Assert.Null(config.ReasoningEffort);
+        var fallback = Assert.IsType<CopilotModelFallback>(tracker.Current);
+        Assert.Equal(SessionPurpose.Adoption, fallback.Purpose);
+        Assert.Equal("gpt-5.6-luna", fallback.ConfiguredModel);
+        Assert.Equal("claude-sonnet-5", fallback.FallbackModel);
     }
 
     [Fact]

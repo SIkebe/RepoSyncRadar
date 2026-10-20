@@ -29,6 +29,7 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="AppHeader.ConfigHint" xml:space="preserve"><value>配布用 OAuth Client ID が見つかりません。独自 OAuth App を使う場合は設定画面または appsettings.local.json で上書きしてください (docs/USAGE.md)</value></data>
+  <data name="AppHeader.CopilotModelFallback" xml:space="preserve"><value>⚠ Copilot 代替モデル使用中: {0} → {1}</value></data>
   <data name="AppHeader.LastTriage" xml:space="preserve"><value>直近 Triage: 取得 {0} / 新規 {1} / スキップ {2}</value></data>
   <data name="AppHeader.NotConfigured" xml:space="preserve"><value>⚠ OAuth Client Id 未設定</value></data>
   <data name="AppHeader.NotSignedIn" xml:space="preserve"><value>○ 未サインイン</value></data>
@@ -385,6 +386,7 @@
   <data name="ReviewActions.Watch" xml:space="preserve"><value>注目する</value></data>
   <data name="Settings.CopilotUsage" xml:space="preserve"><value>Copilot 使用量</value></data>
   <data name="Settings.CopilotUsage.Empty" xml:space="preserve"><value>まだ Copilot SDK の使用量は記録されていません。</value></data>
+  <data name="Settings.CopilotUsage.ModelFallback" xml:space="preserve"><value>{0} に {1} セッションで既定モデル {2} を利用できなかったため、代替モデル {3} に切り替えました。アプリを再起動するまで {3} を使い続け、推論レベル設定は適用されません。アプリ設定の既定モデルを確認し、アプリを再起動してください。</value></data>
   <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits と Premium Request cost は SDK の usage event / session metrics から表示します。SDK が AI Credits を返さない場合は未報告のままにします。プロンプト本文は保存しません。</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>セッション metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
   <data name="Settings.BoostRules" xml:space="preserve"><value>重要度ブーストルール</value></data>

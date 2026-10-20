@@ -1007,6 +1007,67 @@ public sealed class AppHeaderTests
     }
 
     [Fact]
+    public void Header_And_Settings_Warn_When_Copilot_Model_Fallback_Is_Active()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var fallbackTracker = new CopilotModelFallbackTracker();
+        fallbackTracker.RecordFallback(SessionPurpose.Adoption, "gpt-5.6-luna", "claude-sonnet-5");
+
+        var sp = BuildServices(session, out _, out _, modelFallbackTracker: fallbackTracker);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        var header = cut.Find("[data-testid=\"app-header-copilot-model-fallback\"]");
+        Assert.Contains("gpt-5.6-luna → claude-sonnet-5", header.TextContent, StringComparison.Ordinal);
+        Assert.Contains("app-header-warning-text", header.ClassName, StringComparison.Ordinal);
+        Assert.Contains("推論レベル", header.GetAttribute("title"), StringComparison.Ordinal);
+
+        cut.Render(parameters => parameters.Add(h => h.SettingsOpen, true));
+        SelectSettingsSection(cut, "settings-section-nav-automation");
+
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-copilot-model-fallback\"]"));
+        var detail = cut.Find("[data-testid=\"settings-copilot-model-fallback\"]").TextContent;
+        Assert.Contains("Adoption", detail, StringComparison.Ordinal);
+        Assert.Contains("既定モデル gpt-5.6-luna", detail, StringComparison.Ordinal);
+        Assert.Contains("代替モデル claude-sonnet-5", detail, StringComparison.Ordinal);
+        Assert.Contains("再起動", detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Header_Shows_Copilot_Model_Fallback_Recorded_After_Render()
+    {
+        var session = Substitute.For<IGitHubAuthSession>();
+        session
+            .GetStateAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(GitHubAuthState.SignedIn));
+        session
+            .GetCurrentLoginAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<string?>("octocat"));
+        var fallbackTracker = new CopilotModelFallbackTracker();
+
+        var sp = BuildServices(session, out _, out _, modelFallbackTracker: fallbackTracker);
+        using var ctx = new Bunit.BunitContext();
+        var cut = ctx.Render<AppHeader>(
+            p => p.AddCascadingValue<IServiceProvider>(sp));
+
+        Assert.Empty(cut.FindAll("[data-testid=\"app-header-copilot-model-fallback\"]"));
+
+        fallbackTracker.RecordFallback(SessionPurpose.Triage, "gpt-5.6-luna", "gpt-5-mini");
+
+        cut.WaitForAssertion(() => Assert.Contains(
+            "gpt-5.6-luna → gpt-5-mini",
+            cut.Find("[data-testid=\"app-header-copilot-model-fallback\"]").TextContent,
+            StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Settings_Delete_Ignore_Rule_Removes_Single_Row_And_Refreshes_List()
     {
         var session = Substitute.For<IGitHubAuthSession>();
@@ -1459,7 +1520,8 @@ public sealed class AppHeaderTests
         IAppUserSettingsStore? settingsStore = null,
         ICopilotUsageTracker? usageTracker = null,
         IAppUpdateService? updateService = null,
-        IAppVersionProvider? versionProvider = null)
+        IAppVersionProvider? versionProvider = null,
+        ICopilotModelFallbackTracker? modelFallbackTracker = null)
     {
         agent = Substitute.For<ICopilotAgent>();
         broadcaster = Substitute.For<IReviewBroadcaster>();
@@ -1499,6 +1561,11 @@ public sealed class AppHeaderTests
         if (versionProvider is not null)
         {
             services.AddSingleton(versionProvider);
+        }
+
+        if (modelFallbackTracker is not null)
+        {
+            services.AddSingleton(modelFallbackTracker);
         }
 
         return services.BuildServiceProvider();

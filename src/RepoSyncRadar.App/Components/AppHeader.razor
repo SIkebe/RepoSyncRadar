@@ -117,6 +117,15 @@
                 Copilot @FormatAiCreditsOrTokens(_copilotUsage)
             </span>
         }
+        @if (!_settingsOpen && _modelFallback is { } headerModelFallback)
+        {
+            <span class="app-header-warning-text"
+                  data-testid="app-header-copilot-model-fallback"
+                  role="status"
+                  title="@FormatModelFallbackDetail(headerModelFallback)">
+                @L["AppHeader.CopilotModelFallback", headerModelFallback.ConfiguredModel, headerModelFallback.FallbackModel]
+            </span>
+        }
         @if (!_settingsOpen)
         {
             <MudButton Variant="Variant.Outlined"
@@ -358,6 +367,10 @@
 
                     <section class="settings-section" data-testid="settings-copilot-usage">
                         <h3>@L["Settings.CopilotUsage"]</h3>
+                        @if (_modelFallback is { } settingsModelFallback)
+                        {
+                            <p class="settings-warning" data-testid="settings-copilot-model-fallback" role="status">@FormatModelFallbackDetail(settingsModelFallback)</p>
+                        }
                         @if (!HasCopilotUsage(_copilotUsage))
                         {
                             <p class="settings-muted" data-testid="settings-copilot-usage-empty">@L["Settings.CopilotUsage.Empty"]</p>
@@ -586,6 +599,8 @@
     private IReviewBroadcaster? _broadcaster;
     private ICopilotUsageTracker? _usageTracker;
     private CopilotUsageSnapshot _copilotUsage = EmptyCopilotUsage;
+    private ICopilotModelFallbackTracker? _modelFallbackTracker;
+    private CopilotModelFallback? _modelFallback;
     private bool _settingsOpen;
     private bool _settingsLoading;
     private string? _settingsError;
@@ -633,6 +648,13 @@
         {
             _copilotUsage = _usageTracker.GetSnapshot();
             _usageTracker.Changed += OnCopilotUsageChanged;
+        }
+
+        _modelFallbackTracker = Services.GetService<ICopilotModelFallbackTracker>();
+        if (_modelFallbackTracker is not null)
+        {
+            _modelFallback = _modelFallbackTracker.Current;
+            _modelFallbackTracker.Changed += OnCopilotModelFallbackChanged;
         }
 
         if (_updateService is not null)
@@ -714,6 +736,25 @@
 
     private void ResetCopilotUsage()
         => _usageTracker?.Reset();
+
+    private void OnCopilotModelFallbackChanged()
+    {
+        if (_modelFallbackTracker is null)
+        {
+            return;
+        }
+
+        _modelFallback = _modelFallbackTracker.Current;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private string FormatModelFallbackDetail(CopilotModelFallback fallback)
+        => L[
+            "Settings.CopilotUsage.ModelFallback",
+            FormatCreatedAt(fallback.OccurredAt.LocalDateTime),
+            fallback.Purpose.ToString(),
+            fallback.ConfiguredModel,
+            fallback.FallbackModel];
 
     private void OnAppUpdateActivityChanged()
     {
@@ -1786,6 +1827,11 @@
         if (_usageTracker is not null)
         {
             _usageTracker.Changed -= OnCopilotUsageChanged;
+        }
+
+        if (_modelFallbackTracker is not null)
+        {
+            _modelFallbackTracker.Changed -= OnCopilotModelFallbackChanged;
         }
 
         if (_updateService is not null)

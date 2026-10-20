@@ -1753,6 +1753,17 @@ html, body {
     overflow-wrap: anywhere;
 }
 
+.settings-warning {
+    background: var(--radar-warning-bg, #fff8c5);
+    border: 1px solid var(--radar-warning-fg, #7d4e00);
+    border-radius: 6px;
+    color: var(--radar-warning-fg, #7d4e00);
+    font-size: 0.82rem;
+    margin: 0;
+    overflow-wrap: anywhere;
+    padding: 0.45rem 0.6rem;
+}
+
 .settings-policy-group {
     border-bottom: 1px solid #d8dee4;
     min-width: 0;
@@ -2864,6 +2875,7 @@ html, body {
     }
 
     .settings-error,
+    .settings-warning,
     .review-action-error,
     .sidebar-auth-error,
     .drafts-validation {

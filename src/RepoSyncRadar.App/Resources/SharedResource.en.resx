@@ -29,6 +29,7 @@
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <data name="AppHeader.ConfigHint" xml:space="preserve"><value>The packaged OAuth Client ID was not found. Override it in settings or appsettings.local.json only when using a custom OAuth App (docs/USAGE.md).</value></data>
+  <data name="AppHeader.CopilotModelFallback" xml:space="preserve"><value>⚠ Copilot fallback model in use: {0} → {1}</value></data>
   <data name="AppHeader.LastTriage" xml:space="preserve"><value>Last triage: fetched {0} / new {1} / skipped {2}</value></data>
   <data name="AppHeader.NotConfigured" xml:space="preserve"><value>⚠ OAuth Client Id not configured</value></data>
   <data name="AppHeader.NotSignedIn" xml:space="preserve"><value>○ Not signed in</value></data>
@@ -385,6 +386,7 @@
   <data name="ReviewActions.Watch" xml:space="preserve"><value>Watch</value></data>
   <data name="Settings.CopilotUsage" xml:space="preserve"><value>Copilot Usage</value></data>
   <data name="Settings.CopilotUsage.Empty" xml:space="preserve"><value>No Copilot SDK usage has been recorded yet.</value></data>
+  <data name="Settings.CopilotUsage.ModelFallback" xml:space="preserve"><value>At {0}, the default model {2} was unavailable for a {1} session, so Copilot switched to the fallback model {3}. {3} stays in use until the app restarts, and the reasoning effort setting is not applied. Check the default model in App Settings and restart the app.</value></data>
   <data name="Settings.CopilotUsage.Privacy" xml:space="preserve"><value>AI Credits and Premium Request cost are shown from SDK usage events and session metrics. If the SDK does not report AI Credits, they remain unreported. Prompt text is not stored.</value></data>
   <data name="Settings.CopilotUsage.SessionMetrics" xml:space="preserve"><value>Session metrics: {0} / {1} requests / last call {2} in, {3} out</value></data>
   <data name="Settings.BoostRules" xml:space="preserve"><value>Importance Boost Rules</value></data>
