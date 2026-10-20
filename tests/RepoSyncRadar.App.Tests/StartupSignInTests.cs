@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
+using RepoSyncRadar.App.Settings;
 using RepoSyncRadar.Core.Auth;
 using RepoSyncRadar.Core.Options;
 using Xunit;
@@ -28,6 +29,20 @@ public class StartupSignInTests
 
         Assert.False(string.IsNullOrWhiteSpace(clientId));
         Assert.StartsWith("Ov", clientId, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Bundled_Appsettings_DefaultModel_Matches_Code_Defaults()
+    {
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false)
+            .Build();
+
+        Assert.Equal("gpt-6-luna", configuration["Copilot:DefaultModel"]);
+        Assert.Equal("high", configuration["Copilot:ReasoningEffort"]);
+        Assert.Equal("gpt-6-luna", new CopilotOptions().DefaultModel);
+        Assert.Equal("gpt-6-luna", new LocalAppSettings().Copilot.DefaultModel);
     }
 
     [Fact]

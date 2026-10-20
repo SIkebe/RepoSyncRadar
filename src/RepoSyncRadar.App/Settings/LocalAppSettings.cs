@@ -75,7 +75,7 @@ public sealed class DocsApiLocalAppSettings
 
 public sealed class CopilotLocalAppSettings
 {
-    public string DefaultModel { get; set; } = "gpt-5.6-luna";
+    public string DefaultModel { get; set; } = "gpt-6-luna";
 
     public string? ReasoningEffort { get; set; } = "high";
 

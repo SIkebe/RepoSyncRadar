@@ -9,9 +9,9 @@ public sealed class CopilotOptions
 {
     public const string SectionName = "Copilot";
 
-    /// <summary>Default model id (e.g. <c>gpt-5.6-luna</c>, <c>claude-sonnet-5</c>).</summary>
+    /// <summary>Default model id (e.g. <c>gpt-6-luna</c>, <c>claude-sonnet-5</c>).</summary>
     [Required(AllowEmptyStrings = false)]
-    public string DefaultModel { get; set; } = "gpt-5.6-luna";
+    public string DefaultModel { get; set; } = "gpt-6-luna";
 
     /// <summary>Optional reasoning effort override for models that support it.</summary>
     [RegularExpression("^(low|medium|high|xhigh|max)$")]
