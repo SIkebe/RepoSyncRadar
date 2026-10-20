@@ -104,6 +104,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Copilot usage UI must label units explicitly: AI Credits as `credits`, Premium Request cost as `PR`, request counts as `requests`, and token counts as `tokens`.
 - Copilot usage UI should show AI Credits only from SDK usage events or `Usage.GetMetricsAsync()` session metrics; when SDK AI Credits are absent, leave credits unreported rather than estimating from a model pricing table.
 - For Copilot fallback models, prefer currently supported non-retiring models. Check GitHub Changelog plus the supported-models docs before hardcoding model IDs; avoid `GPT-4.1`, `GPT-5`, `GPT-5.2`, and `GPT-5.2-Codex` as preferred fallbacks because they are retired or scheduled for retirement.
+- Never switch Copilot models silently. When `CopilotSessionFactory` activates a process-wide fallback model, publish it through `ICopilotModelFallbackTracker` so the header and Settings Copilot usage show the configured model, fallback model, time, and purpose until restart.
 
 ## Preview And WebView
 

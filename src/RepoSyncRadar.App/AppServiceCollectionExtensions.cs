@@ -31,6 +31,7 @@ public static class AppServiceCollectionExtensions
         services.TryAddSingleton<ToolAuditHook>();
         services.TryAddSingleton<TriageScoringProgressTracker>();
         services.TryAddSingleton<ICopilotUsageTracker, CopilotUsageTracker>();
+        services.TryAddSingleton<ICopilotModelFallbackTracker, CopilotModelFallbackTracker>();
         services.TryAddSingleton<RadarTools>();
         services.TryAddSingleton<RadarWriteTools>();
         services.TryAddSingleton<IClipboard, WpfClipboard>();

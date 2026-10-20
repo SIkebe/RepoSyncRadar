@@ -269,6 +269,10 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 全セッション種別は `SessionConfigBuilder` を通じて `Copilot:DefaultModel` と
 `Copilot:ReasoningEffort` を共有する。出荷時の既定は `gpt-5.6-luna` / `high` で、
 ローカル設定から上書きできる。用途別のモデル選択は現在実装していない。
+既定モデルでのセッション作成が「モデル利用不可」で失敗した場合、`CopilotSessionFactory` は
+SDK のモデル一覧から代替モデルを選び、プロセス終了までその代替モデルを使い続ける
+(推論レベルは指定しない)。切り替えは `ICopilotModelFallbackTracker` で公開し、
+ヘッダーと設定の Copilot 使用量に警告を表示する。モデルを黙って切り替えない。
 
 ### 7.1 `MorningTriageSession`
 

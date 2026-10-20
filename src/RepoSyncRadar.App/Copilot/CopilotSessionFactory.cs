@@ -47,6 +47,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
     private readonly RadarTools _radarTools;
     private readonly RadarWriteTools _radarWriteTools;
     private readonly ICopilotUsageTracker? _usageTracker;
+    private readonly ICopilotModelFallbackTracker? _modelFallbackTracker;
     private readonly IAppVersionProvider _appVersionProvider;
     private readonly ILogger<CopilotSessionFactory> _logger;
     private readonly SemaphoreSlim _clientGate = new(1, 1);
@@ -63,7 +64,8 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         RadarWriteTools radarWriteTools,
         IAppVersionProvider appVersionProvider,
         ICopilotUsageTracker? usageTracker = null,
-        ToolAuditHook? auditHook = null)
+        ToolAuditHook? auditHook = null,
+        ICopilotModelFallbackTracker? modelFallbackTracker = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(permissionPolicy);
@@ -82,6 +84,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         _appVersionProvider = appVersionProvider;
         _usageTracker = usageTracker;
         _auditHook = auditHook;
+        _modelFallbackTracker = modelFallbackTracker;
     }
 
     public async Task<ICopilotSession> CreateSessionAsync(
@@ -122,12 +125,26 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             }
 
             LogRetryingWithFallbackModel(_logger, ex, model, fallbackModel);
-            _modelOverride = fallbackModel;
-            ConfigureFallbackModel(config, fallbackModel);
+            ActivateFallbackModel(config, purpose, configuredModel, fallbackModel);
             session = await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
         }
 
         return new SdkCopilotSession(session, purpose, _logger, _usageTracker);
+    }
+
+    /// <summary>
+    /// Switches this process to <paramref name="fallbackModel"/> for the current and all
+    /// later sessions, and publishes the switch so the UI can warn the user.
+    /// </summary>
+    internal void ActivateFallbackModel(
+        SessionConfig config,
+        SessionPurpose purpose,
+        string configuredModel,
+        string fallbackModel)
+    {
+        _modelOverride = fallbackModel;
+        ConfigureFallbackModel(config, fallbackModel);
+        _modelFallbackTracker?.RecordFallback(purpose, configuredModel, fallbackModel);
     }
 
     internal static void ConfigureFallbackModel(SessionConfig config, string fallbackModel)
