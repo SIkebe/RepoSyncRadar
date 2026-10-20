@@ -267,7 +267,7 @@ public static AIFunction CreateResolveUrlTool(PathToUrlResolver resolver) =>
 ## 7. セッション設計
 
 全セッション種別は `SessionConfigBuilder` を通じて `Copilot:DefaultModel` と
-`Copilot:ReasoningEffort` を共有する。出荷時の既定は `gpt-5.6-luna` / `high` で、
+`Copilot:ReasoningEffort` を共有する。出荷時の既定は `gpt-6-luna` / `high` で、
 ローカル設定から上書きできる。用途別のモデル選択は現在実装していない。
 
 ### 7.1 `MorningTriageSession`

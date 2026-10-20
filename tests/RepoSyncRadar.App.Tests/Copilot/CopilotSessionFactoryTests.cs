@@ -70,7 +70,7 @@ public sealed class CopilotSessionFactoryTests
     {
         var config = new SessionConfig
         {
-            Model = "gpt-5.6-luna",
+            Model = "gpt-6-luna",
             ReasoningEffort = "max",
         };
 

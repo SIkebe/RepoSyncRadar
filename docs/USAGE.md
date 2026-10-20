@@ -69,7 +69,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
       "PullRequestCreatedAtOrAfter": "2026-05-15T00:00:00Z"
    },
    "Copilot": {
-      "DefaultModel": "gpt-5.6-luna",
+      "DefaultModel": "gpt-6-luna",
       "ReasoningEffort": "high",
       "LogLevel": "info",
       "SessionIdleTimeoutSeconds": 0,

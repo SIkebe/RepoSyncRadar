@@ -17,7 +17,7 @@ public class SessionConfigBuilderTests
     {
         var copilot = new CopilotOptions
         {
-            DefaultModel = "gpt-5.6-luna",
+            DefaultModel = "gpt-6-luna",
             ReasoningEffort = "high",
             ContextTier = "long_context",
             Streaming = true,
@@ -33,7 +33,7 @@ public class SessionConfigBuilderTests
             Options.Create(copilot),
             handler);
 
-        Assert.Equal("gpt-5.6-luna", config.Model);
+        Assert.Equal("gpt-6-luna", config.Model);
         Assert.Equal("high", config.ReasoningEffort);
         Assert.Equal(ContextTier.LongContext, config.ContextTier);
         Assert.True(config.Streaming);
@@ -130,7 +130,7 @@ public class SessionConfigBuilderTests
     {
         var copilot = new CopilotOptions
         {
-            DefaultModel = "gpt-5.6-luna",
+            DefaultModel = "gpt-6-luna",
             AllowedUrlHosts = ["docs.github.com"],
         };
         Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> handler = (_, _) =>
