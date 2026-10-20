@@ -226,7 +226,7 @@ Commit List で 1 件選び、[`ReviewActions`](../src/RepoSyncRadar.App/Compone
    - `git rev-parse <sha>^` で変更前の親コミットを解決
    - `git show` / `git ls-tree` / `git grep` でクリックした Markdown、参照先 reusable/data/AUTOTITLE、または REST / GraphQL の生成済み JSON を bare clone から読む
    - Markdown/Liquid、または API reference の endpoint/type/parameter/field/status 構造を HTML に変換し、`PreviewBasePort` から空いている 1 port のローカル content server で before/after を配信
-3. 右側の WebView2 が左右 2 ペインになり、左に変更前 localhost、右に PR HEAD localhost を表示します。読み込み完了後、変更された本文ブロックは左側に取り消し線、右側に淡いハイライトで表示され、最初の差分へ自動で移動します。一方のペインだけにある追加・削除部分は、反対側へ VS Code 風の斜線ギャップを入れて後続ブロックの高さを揃えます。未変更の本文を挟まない連続した変更は、選択枠と右端の差分マーカーも含めて 1 つの差分として表示されます。右上の矢印または `F7` / `Shift+F7` で次・前の差分へ両ペインを同期して移動できます。公式 `docs.github.com` が既に更新済みでも、コミット単位の見た目差分を確認できます
+3. 右側の WebView2 が左右 2 ペインになり、左に変更前 localhost、右に PR HEAD localhost を表示します。読み込み完了後、変更された本文ブロックは左側に取り消し線、右側に淡いハイライトで表示され、最初の差分へ自動で移動します。一方のペインだけにある追加・削除部分は、反対側へ VS Code 風の斜線ギャップを入れて後続ブロックの高さを揃えます。未変更の本文を挟まない連続した変更は、選択枠と右端の差分マーカーも含めて 1 つの差分として表示されます。右上の矢印または `F7` / `Shift+F7` で次・前の差分へ両ペインを同期して移動できます。横に長い表やコードブロックは、その下端が画面外にある間もペイン下端に横スクロールバーを表示し、左右ペインで同じ表・コードブロックの横スクロール位置を同期します。公式 `docs.github.com` が既に更新済みでも、コミット単位の見た目差分を確認できます
 
 #### 前提
 

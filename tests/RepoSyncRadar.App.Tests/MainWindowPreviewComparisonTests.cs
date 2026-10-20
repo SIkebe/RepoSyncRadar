@@ -376,6 +376,95 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("return getScrollTop()", script, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("rsr-preview-horizontal-scroll:before:table:0:1:120.50", true, "table", 0, 1, 120.5)]
+    [InlineData("rsr-preview-horizontal-scroll:after:pre:2:3:0", false, "pre", 2, 3, 0)]
+    [InlineData("rsr-preview-horizontal-scroll:after:table:1:4:-3", false, "table", 1, 4, 0)]
+    public void TryParsePreviewHorizontalScrollMessage_Parses_Element_Position(
+        string message,
+        bool expectedBeforePane,
+        string expectedKind,
+        int expectedIndex,
+        int expectedCount,
+        double expectedScrollLeft)
+    {
+        var parsed = MainWindow.TryParsePreviewHorizontalScrollMessage(message, out var pane, out var position);
+
+        Assert.True(parsed);
+        Assert.Equal(expectedBeforePane, pane == PreviewDiffPane.Before);
+        Assert.Equal(expectedKind, position.ElementKind);
+        Assert.Equal(expectedIndex, position.Index);
+        Assert.Equal(expectedCount, position.Count);
+        Assert.Equal(expectedScrollLeft, position.ScrollLeft, precision: 6);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("rsr-preview-scroll:before:120")]
+    [InlineData("rsr-preview-horizontal-scroll:left:table:0:1:120")]
+    [InlineData("rsr-preview-horizontal-scroll:before:div:0:1:120")]
+    [InlineData("rsr-preview-horizontal-scroll:before:table:1:1:120")]
+    [InlineData("rsr-preview-horizontal-scroll:before:table:-1:1:120")]
+    [InlineData("rsr-preview-horizontal-scroll:before:table:0:1:not-a-number")]
+    [InlineData("rsr-preview-horizontal-scroll:before:table:0:1:NaN")]
+    [InlineData("rsr-preview-horizontal-scroll:before:table:0:1:120:5")]
+    public void TryParsePreviewHorizontalScrollMessage_Rejects_Invalid_Messages(string? message)
+    {
+        var parsed = MainWindow.TryParsePreviewHorizontalScrollMessage(message, out _, out _);
+
+        Assert.False(parsed);
+    }
+
+    [Fact]
+    public void TryParsePreviewScrollMessage_Ignores_Horizontal_Scroll_Messages()
+    {
+        var parsed = MainWindow.TryParsePreviewScrollMessage(
+            "rsr-preview-horizontal-scroll:before:table:0:1:120",
+            out _,
+            out _);
+
+        Assert.False(parsed);
+    }
+
+    [Fact]
+    public void BuildInstallSynchronizedScrollScript_Posts_Horizontal_Element_Scroll()
+    {
+        var script = MainWindow.BuildInstallSynchronizedScrollScript(PreviewDiffPane.After);
+
+        Assert.Contains("const horizontalTargetSelector = 'table,pre'", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "document.addEventListener('scroll', horizontalHandler, { capture: true, passive: true })",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "document.removeEventListener('scroll', existing.horizontalHandler, true)",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "rsr-preview-horizontal-scroll:${pane}:${kind}:${index}:${peers.length}:${currentLeft.toFixed(2)}",
+            script,
+            StringComparison.Ordinal);
+        Assert.Contains("appliedHorizontalScrollLeft.get(element)", script, StringComparison.Ordinal);
+        Assert.Contains("existing?.appliedHorizontalScrollLeft || new WeakMap()", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildApplySynchronizedHorizontalScrollScript_Targets_Matching_Element_And_Marks_Applied_Offset()
+    {
+        var script = MainWindow.BuildApplySynchronizedHorizontalScrollScript(
+            new PreviewHorizontalScrollPosition("table", 2, 5, 240.25));
+
+        Assert.Contains("document.querySelectorAll(\"table\")", script, StringComparison.Ordinal);
+        Assert.Contains("if (elements.length !== 5)", script, StringComparison.Ordinal);
+        Assert.Contains("const element = elements[2]", script, StringComparison.Ordinal);
+        Assert.Contains("Math.min(240.25, maxScrollLeft)", script, StringComparison.Ordinal);
+        Assert.Contains(
+            "window[stateKey]?.appliedHorizontalScrollLeft?.set(element, element.scrollLeft)",
+            script,
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ResolveWorkbenchColumnRestoreWidth_Preserves_User_Adjusted_Width()
     {

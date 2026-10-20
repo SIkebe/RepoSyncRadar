@@ -311,6 +311,10 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine(".rsr-rendered-diff-added{background:#2da44e24;border-radius:3px;box-shadow:0 0 0 2px #2da44e24;}.rsr-rendered-diff-removed{background:#cf222e24;border-radius:3px;box-shadow:0 0 0 2px #cf222e24;text-decoration-line:line-through;text-decoration-color:rgba(207,34,46,.85);text-decoration-thickness:1.2px;text-decoration-skip-ink:none;}.rsr-rendered-diff-gap{display:inline-block;width:.55em;height:1.05em;margin:0 .12em;vertical-align:-.15em;text-decoration:none;}");
         html.AppendLine("td .rsr-rendered-diff-added,th .rsr-rendered-diff-added,td .rsr-rendered-diff-removed,th .rsr-rendered-diff-removed{display:block;margin:-6px -13px;padding:6px 13px;}");
         html.AppendLine(".rsr-diff-scrollbar{bottom:0;pointer-events:none;position:fixed;right:0;top:0;width:10px;z-index:2147483647;}.rsr-diff-scrollbar-marker{border-radius:999px;box-shadow:0 0 0 1px rgba(255,255,255,.7),0 1px 3px rgba(0,0,0,.25);min-height:4px;position:absolute;right:0;width:10px;}.rsr-diff-scrollbar-marker--added{background:#2da44e;}.rsr-diff-scrollbar-marker--removed{background:#cf222e;}");
+        // Wide tables and code blocks scroll inside their own box, so a tall table
+        // keeps its native horizontal scrollbar far below the viewport. Mirror it
+        // with a viewport-pinned proxy while that native scrollbar is off-screen.
+        html.AppendLine(".rsr-horizontal-scrollbar{background:var(--rsr-article-bg);border-top:1px solid var(--rsr-border);bottom:0;box-shadow:0 -2px 6px rgba(0,0,0,.12);box-sizing:border-box;overflow-x:scroll;overflow-y:hidden;position:fixed;z-index:2147483647;}.rsr-horizontal-scrollbar[hidden]{display:none;}.rsr-horizontal-scrollbar-track{height:1px;}");
         html.AppendLine(".octicon{display:inline-block;vertical-align:text-bottom;fill:currentColor;overflow:visible;}");
         html.AppendLine(".ghd-alert{border:1px solid var(--rsr-border);border-left-width:4px;border-radius:6px;margin:0 0 1rem;padding:12px 14px;background:var(--rsr-article-bg);}");
         html.AppendLine(".ghd-alert>:last-child,.ghd-tool>:last-child{margin-bottom:0;}");
@@ -381,6 +385,7 @@ internal static partial class MarkdownPreviewRenderer
         html.AppendLine("<script>");
         html.AppendLine("(() => { document.addEventListener('click', event => { const button = event.target?.closest?.('[data-rsr-version-slug]'); if (!button || button.getAttribute('aria-current') === 'true') return; const slug = button.getAttribute('data-rsr-version-slug'); if (!slug) return; window.chrome?.webview?.postMessage(`rsr-preview-version:${slug}`); }); })();");
         AppendDiffScrollbarScript(html);
+        AppendHorizontalScrollbarScript(html);
         html.AppendLine("</script>");
         html.AppendLine("</head>");
         html.AppendLine("<body>");
@@ -559,6 +564,117 @@ internal static partial class MarkdownPreviewRenderer
     window.addEventListener('resize', scheduleBuild, { passive: true });
     window[stateKey] = { scheduleBuild, disable };
     window.setTimeout(scheduleBuild, 250);
+})();
+""");
+    }
+
+    private static void AppendHorizontalScrollbarScript(StringBuilder html)
+    {
+        html.AppendLine("""
+(() => {
+    const stateKey = '__repoSyncRadarHorizontalScrollbar';
+    const scrollbarId = 'rsr-horizontal-scrollbar';
+    const targetSelector = 'table,pre';
+    const minimumVisibleHeight = 40;
+    const minimumWidth = 24;
+    let scrollbar = null;
+    let track = null;
+    let target = null;
+    let frame = 0;
+    const ensureScrollbar = () => {
+        if (scrollbar?.isConnected) return;
+        document.getElementById(scrollbarId)?.remove();
+        scrollbar = document.createElement('div');
+        scrollbar.id = scrollbarId;
+        scrollbar.className = 'rsr-horizontal-scrollbar';
+        scrollbar.hidden = true;
+        scrollbar.tabIndex = -1;
+        scrollbar.setAttribute('aria-hidden', 'true');
+        track = document.createElement('div');
+        track.className = 'rsr-horizontal-scrollbar-track';
+        scrollbar.appendChild(track);
+        document.body.appendChild(scrollbar);
+    };
+    const hide = () => {
+        target = null;
+        if (scrollbar) scrollbar.hidden = true;
+    };
+    const findTarget = (viewportHeight) => {
+        for (const element of document.querySelectorAll(targetSelector)) {
+            if (element.scrollWidth - element.clientWidth <= 1) continue;
+            const rect = element.getBoundingClientRect();
+            if (rect.top <= viewportHeight - minimumVisibleHeight && rect.bottom > viewportHeight) {
+                return element;
+            }
+        }
+        return null;
+    };
+    const syncFromTarget = () => {
+        if (!scrollbar || !target || scrollbar.hidden) return;
+        if (Math.abs(scrollbar.scrollLeft - target.scrollLeft) > 1) {
+            scrollbar.scrollLeft = target.scrollLeft;
+        }
+    };
+    const update = () => {
+        frame = 0;
+        if (!document.body) return;
+        const root = document.documentElement;
+        const viewportHeight = root?.clientHeight || window.innerHeight || 0;
+        const viewportWidth = root?.clientWidth || window.innerWidth || 0;
+        const next = findTarget(viewportHeight);
+        if (!next) {
+            hide();
+            return;
+        }
+        const rect = next.getBoundingClientRect();
+        const contentLeft = rect.left + (parseFloat(window.getComputedStyle(next).borderLeftWidth) || 0);
+        const left = Math.max(0, contentLeft);
+        const width = Math.min(viewportWidth, contentLeft + next.clientWidth) - left;
+        if (width < minimumWidth) {
+            hide();
+            return;
+        }
+        ensureScrollbar();
+        target = next;
+        scrollbar.style.left = `${left.toFixed(1)}px`;
+        scrollbar.style.width = `${width.toFixed(1)}px`;
+        scrollbar.hidden = false;
+        track.style.width = `${(next.scrollWidth - next.clientWidth + scrollbar.clientWidth).toFixed(1)}px`;
+        syncFromTarget();
+    };
+    const schedule = () => {
+        if (frame !== 0) return;
+        frame = window.requestAnimationFrame(update);
+    };
+    const onScroll = (event) => {
+        const source = event.target;
+        if (scrollbar && source === scrollbar) {
+            if (target?.isConnected && Math.abs(target.scrollLeft - scrollbar.scrollLeft) > 1) {
+                target.scrollLeft = scrollbar.scrollLeft;
+            }
+            return;
+        }
+        if (target && source === target) {
+            syncFromTarget();
+            return;
+        }
+        schedule();
+    };
+    const start = () => {
+        if (typeof ResizeObserver === 'function' && document.body) {
+            new ResizeObserver(schedule).observe(document.body);
+        }
+        schedule();
+    };
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
+    window.addEventListener('resize', schedule, { passive: true });
+    window.addEventListener('load', schedule, { once: true });
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else {
+        start();
+    }
+    window[stateKey] = { schedule };
 })();
 """);
     }
