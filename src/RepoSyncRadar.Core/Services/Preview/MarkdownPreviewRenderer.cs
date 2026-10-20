@@ -581,6 +581,18 @@ internal static partial class MarkdownPreviewRenderer
     let track = null;
     let target = null;
     let frame = 0;
+    // Mirror writes queue their own scroll events, which can run after a newer offset was applied.
+    const mirroredScrollLeft = new WeakMap();
+    const mirrorScrollLeft = (element, left) => {
+        element.scrollLeft = left;
+        mirroredScrollLeft.set(element, element.scrollLeft);
+    };
+    const isMirrorEcho = (element) => {
+        if (!mirroredScrollLeft.has(element)) return false;
+        if (Math.abs(element.scrollLeft - mirroredScrollLeft.get(element)) <= 0.5) return true;
+        mirroredScrollLeft.delete(element);
+        return false;
+    };
     const ensureScrollbar = () => {
         if (scrollbar?.isConnected) return;
         document.getElementById(scrollbarId)?.remove();
@@ -612,7 +624,7 @@ internal static partial class MarkdownPreviewRenderer
     const syncFromTarget = () => {
         if (!scrollbar || !target || scrollbar.hidden) return;
         if (Math.abs(scrollbar.scrollLeft - target.scrollLeft) > 1) {
-            scrollbar.scrollLeft = target.scrollLeft;
+            mirrorScrollLeft(scrollbar, target.scrollLeft);
         }
     };
     const update = () => {
@@ -649,12 +661,14 @@ internal static partial class MarkdownPreviewRenderer
     const onScroll = (event) => {
         const source = event.target;
         if (scrollbar && source === scrollbar) {
+            if (isMirrorEcho(scrollbar)) return;
             if (target?.isConnected && Math.abs(target.scrollLeft - scrollbar.scrollLeft) > 1) {
-                target.scrollLeft = scrollbar.scrollLeft;
+                mirrorScrollLeft(target, scrollbar.scrollLeft);
             }
             return;
         }
         if (target && source === target) {
+            if (isMirrorEcho(target)) return;
             syncFromTarget();
             return;
         }

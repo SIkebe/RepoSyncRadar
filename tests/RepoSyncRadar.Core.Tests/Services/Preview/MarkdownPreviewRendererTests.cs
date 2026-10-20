@@ -3522,8 +3522,11 @@ var value = 1;
             "next.scrollWidth - next.clientWidth + scrollbar.clientWidth",
             html,
             StringComparison.Ordinal);
-        Assert.Contains("target.scrollLeft = scrollbar.scrollLeft", html, StringComparison.Ordinal);
-        Assert.Contains("scrollbar.scrollLeft = target.scrollLeft", html, StringComparison.Ordinal);
+        Assert.Contains("mirrorScrollLeft(target, scrollbar.scrollLeft)", html, StringComparison.Ordinal);
+        Assert.Contains("mirrorScrollLeft(scrollbar, target.scrollLeft)", html, StringComparison.Ordinal);
+        Assert.Contains("mirroredScrollLeft.set(element, element.scrollLeft)", html, StringComparison.Ordinal);
+        Assert.Contains("if (isMirrorEcho(scrollbar)) return;", html, StringComparison.Ordinal);
+        Assert.Contains("if (isMirrorEcho(target)) return;", html, StringComparison.Ordinal);
         Assert.Contains(
             "document.addEventListener('scroll', onScroll, { capture: true, passive: true })",
             html,
