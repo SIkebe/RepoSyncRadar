@@ -582,6 +582,101 @@ public sealed class DocsViewE2ETests
         }
     }
 
+    [Fact]
+    public async Task Horizontal_Scrollbar_Proxy_Ignores_Deferred_Mirror_Scroll_Events()
+    {
+        var header = string.Join(" | ", Enumerable.Range(1, 16).Select(i => $"Wide column heading {i}"));
+        var separator = string.Join(" | ", Enumerable.Repeat("---", 16));
+        var rows = Enumerable.Range(1, 60)
+            .Select(row => string.Join(" | ", Enumerable.Range(1, 16).Select(i => $"Row {row} cell {i}")));
+        var markdown = string.Join(
+            "\n",
+            new[] { $"| {header} |", $"| {separator} |" }.Concat(rows.Select(row => $"| {row} |")));
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+        var page = await CreateDocsPageAsync();
+        try
+        {
+            await page.SetViewportSizeAsync(800, 600);
+            await page.SetContentAsync(html);
+            var result = await page.EvaluateAsync<JsonElement>(
+                """
+                async () => {
+                    const nextFrame = () => new Promise(resolve => requestAnimationFrame(
+                        () => requestAnimationFrame(resolve)));
+                    const table = document.querySelector('table');
+                    window.__repoSyncRadarHorizontalScrollbar.schedule();
+                    await nextFrame();
+                    const proxy = document.getElementById('rsr-horizontal-scrollbar');
+                    if (!proxy || proxy.hidden) {
+                        return { proxyVisible: false };
+                    }
+                    // Hold real scroll events so mirror events can be replayed after newer offsets.
+                    const hold = event => {
+                        if (event.isTrusted && (event.target === table || event.target === proxy)) {
+                            event.stopImmediatePropagation();
+                        }
+                    };
+                    window.addEventListener('scroll', hold, true);
+                    const replay = element => element.dispatchEvent(new Event('scroll'));
+                    const left = element => Math.round(element.scrollLeft);
+
+                    table.scrollLeft = 100;
+                    replay(table);
+                    table.scrollLeft = 200;
+                    replay(proxy);
+                    const tableAfterStaleProxyEcho = left(table);
+                    replay(table);
+                    const proxyAfterNewerTableOffset = left(proxy);
+
+                    proxy.scrollLeft = 100;
+                    replay(proxy);
+                    proxy.scrollLeft = 300;
+                    replay(table);
+                    const proxyAfterStaleTableEcho = left(proxy);
+                    replay(proxy);
+                    const tableAfterNewerProxyOffset = left(table);
+
+                    table.scrollLeft = 50;
+                    replay(table);
+                    const proxyAfterDifferingTableOffset = left(proxy);
+
+                    await nextFrame();
+                    window.removeEventListener('scroll', hold, true);
+                    table.scrollLeft = 120;
+                    await nextFrame();
+                    await nextFrame();
+                    return {
+                        proxyVisible: true,
+                        tableAfterStaleProxyEcho,
+                        proxyAfterNewerTableOffset,
+                        proxyAfterStaleTableEcho,
+                        tableAfterNewerProxyOffset,
+                        proxyAfterDifferingTableOffset,
+                        finalTable: left(table),
+                        finalProxy: left(proxy),
+                    };
+                }
+                """);
+
+            Assert.True(result.GetProperty("proxyVisible").GetBoolean());
+            Assert.Equal(200, result.GetProperty("tableAfterStaleProxyEcho").GetInt32());
+            Assert.Equal(200, result.GetProperty("proxyAfterNewerTableOffset").GetInt32());
+            Assert.Equal(300, result.GetProperty("proxyAfterStaleTableEcho").GetInt32());
+            Assert.Equal(300, result.GetProperty("tableAfterNewerProxyOffset").GetInt32());
+            Assert.Equal(50, result.GetProperty("proxyAfterDifferingTableOffset").GetInt32());
+            Assert.Equal(120, result.GetProperty("finalTable").GetInt32());
+            Assert.Equal(120, result.GetProperty("finalProxy").GetInt32());
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
+    }
+
     private static string GetHighlighterScript(string methodName, params object[] arguments)
     {
         var appAssemblyPath = Path.ChangeExtension(AppHost.ResolveAppExePath(), ".dll");

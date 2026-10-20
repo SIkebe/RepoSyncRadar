@@ -3490,6 +3490,52 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderDocument_Pins_A_Horizontal_Scrollbar_Proxy_For_Wide_Blocks()
+    {
+        const string markdown = """
+            | Key | Type |
+            | --- | --- |
+            | `a.very.long.identifier` | boolean |
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("table{border-collapse:collapse;display:block;overflow:auto;}", html, StringComparison.Ordinal);
+        Assert.Contains(
+            ".rsr-horizontal-scrollbar{background:var(--rsr-article-bg);border-top:1px solid var(--rsr-border);bottom:0;",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains("overflow-x:scroll;overflow-y:hidden;position:fixed;", html, StringComparison.Ordinal);
+        Assert.Contains(".rsr-horizontal-scrollbar[hidden]{display:none;}", html, StringComparison.Ordinal);
+        Assert.Contains("const stateKey = '__repoSyncRadarHorizontalScrollbar'", html, StringComparison.Ordinal);
+        Assert.Contains("const targetSelector = 'table,pre'", html, StringComparison.Ordinal);
+        Assert.Contains("element.scrollWidth - element.clientWidth <= 1", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "rect.top <= viewportHeight - minimumVisibleHeight && rect.bottom > viewportHeight",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "next.scrollWidth - next.clientWidth + scrollbar.clientWidth",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains("mirrorScrollLeft(target, scrollbar.scrollLeft)", html, StringComparison.Ordinal);
+        Assert.Contains("mirrorScrollLeft(scrollbar, target.scrollLeft)", html, StringComparison.Ordinal);
+        Assert.Contains("mirroredScrollLeft.set(element, element.scrollLeft)", html, StringComparison.Ordinal);
+        Assert.Contains("if (isMirrorEcho(scrollbar)) return;", html, StringComparison.Ordinal);
+        Assert.Contains("if (isMirrorEcho(target)) return;", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "document.addEventListener('scroll', onScroll, { capture: true, passive: true })",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains("new ResizeObserver(schedule).observe(document.body)", html, StringComparison.Ordinal);
+        Assert.Contains("scrollbar.setAttribute('aria-hidden', 'true')", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Wraps_Code_Blocks_That_Contain_A_Diff()
     {
         const string beforeMarkdown = """

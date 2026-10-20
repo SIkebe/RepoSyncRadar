@@ -69,6 +69,12 @@ internal enum PreviewDiffNavigationDirection
     Next = 1,
 }
 
+internal readonly record struct PreviewHorizontalScrollPosition(
+    string ElementKind,
+    int Index,
+    int Count,
+    double ScrollLeft);
+
 /// <summary>
 /// Top-level shell. Hosts a BlazorWebView (UI shell) and WebView2 docs surfaces.
 /// Rendering mode C from DESIGN.md §9.3.
@@ -1697,6 +1703,22 @@ public partial class MainWindow : Window
             return;
         }
 
+        var senderCore = sender as CoreWebView2;
+        if (TryParsePreviewHorizontalScrollMessage(
+                message,
+                out var horizontalSourcePane,
+                out var horizontalPosition))
+        {
+            if (IsPreviewPaneSender(horizontalSourcePane, senderCore))
+            {
+                _ = ApplySynchronizedHorizontalScrollAsync(
+                    horizontalSourcePane == PreviewDiffPane.Before ? PreviewView : DocsView,
+                    horizontalPosition,
+                    _previewDiffGeneration);
+            }
+            return;
+        }
+
         if (!TryParsePreviewScrollMessage(
                 message,
                 out var sourcePane,
@@ -1705,12 +1727,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var senderCore = sender as CoreWebView2;
-        if (sourcePane == PreviewDiffPane.Before && !ReferenceEquals(senderCore, DocsView.CoreWebView2))
-        {
-            return;
-        }
-        if (sourcePane == PreviewDiffPane.After && !ReferenceEquals(senderCore, PreviewView.CoreWebView2))
+        if (!IsPreviewPaneSender(sourcePane, senderCore))
         {
             return;
         }
@@ -1721,6 +1738,11 @@ public partial class MainWindow : Window
             scrollTop,
             _previewDiffGeneration);
     }
+
+    private bool IsPreviewPaneSender(PreviewDiffPane pane, CoreWebView2? sender)
+        => pane == PreviewDiffPane.Before
+            ? ReferenceEquals(sender, DocsView.CoreWebView2)
+            : ReferenceEquals(sender, PreviewView.CoreWebView2);
 
     private void HandlePreviewVersionMessage(object? sender, DocsVersion version)
     {
@@ -1878,6 +1900,28 @@ public partial class MainWindow : Window
 
             var script = BuildApplySynchronizedScrollScript(scrollTop);
             await targetView.ExecuteScriptAsync(script);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPreviewScrollSyncFailed(_logger, ex);
+        }
+    }
+
+    private async Task ApplySynchronizedHorizontalScrollAsync(
+        WebView2CompositionControl targetView,
+        PreviewHorizontalScrollPosition position,
+        int generation)
+    {
+        try
+        {
+            if (_activePreviewDiffRequest is null
+                || generation != _previewDiffGeneration
+                || targetView.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            await targetView.ExecuteScriptAsync(BuildApplySynchronizedHorizontalScrollScript(position));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -2557,6 +2601,9 @@ public partial class MainWindow : Window
     if (existing && existing.keyHandler) {
         window.removeEventListener('keydown', existing.keyHandler, true);
     }
+    if (existing && existing.horizontalHandler) {
+        document.removeEventListener('scroll', existing.horizontalHandler, true);
+    }
 
     const getScrollTop = () => {
         const root = document.scrollingElement || document.documentElement || document.body;
@@ -2595,15 +2642,69 @@ public partial class MainWindow : Window
             `rsr-preview-diff-navigation:${direction}`);
     };
 
+    // Wide tables and code blocks scroll inside their own boxes. Mirror those
+    // horizontal offsets to the same element in the peer pane, ignoring the
+    // scroll event caused by applying a peer offset.
+    const horizontalTargetSelector = 'table,pre';
+    const appliedHorizontalScrollLeft = existing?.appliedHorizontalScrollLeft || new WeakMap();
+    const lastHorizontalScrollLeft = new WeakMap();
+    const pendingHorizontalElements = new Set();
+    let horizontalFrame = 0;
+    const flushHorizontal = () => {
+        horizontalFrame = 0;
+        const elements = Array.from(pendingHorizontalElements);
+        pendingHorizontalElements.clear();
+        elements.forEach(element => {
+            if (!element.isConnected) {
+                return;
+            }
+            const currentLeft = element.scrollLeft;
+            const appliedLeft = appliedHorizontalScrollLeft.get(element);
+            if (appliedLeft !== undefined) {
+                appliedHorizontalScrollLeft.delete(element);
+                if (Math.abs(currentLeft - appliedLeft) <= 1) {
+                    lastHorizontalScrollLeft.set(element, currentLeft);
+                    return;
+                }
+            }
+            const previousLeft = lastHorizontalScrollLeft.get(element) ?? 0;
+            lastHorizontalScrollLeft.set(element, currentLeft);
+            if (Math.abs(currentLeft - previousLeft) <= 0.5) {
+                return;
+            }
+            const kind = element.localName;
+            const peers = Array.from(document.querySelectorAll(kind));
+            const index = peers.indexOf(element);
+            if (index < 0) {
+                return;
+            }
+            window.chrome?.webview?.postMessage(
+                `rsr-preview-horizontal-scroll:${pane}:${kind}:${index}:${peers.length}:${currentLeft.toFixed(2)}`);
+        });
+    };
+    const horizontalHandler = (event) => {
+        const element = event.target;
+        if (!(element instanceof Element) || !element.matches(horizontalTargetSelector)) {
+            return;
+        }
+        pendingHorizontalElements.add(element);
+        if (horizontalFrame === 0) {
+            horizontalFrame = window.requestAnimationFrame(flushHorizontal);
+        }
+    };
+
     window[stateKey] = {
         pane,
         handler,
         keyHandler,
+        horizontalHandler,
+        appliedHorizontalScrollLeft,
         suppressUntil: existing?.suppressUntil || 0,
         lastScrollTop: existing?.lastScrollTop ?? getScrollTop(),
     };
     window.addEventListener('scroll', handler, { passive: true });
     window.addEventListener('keydown', keyHandler, true);
+    document.addEventListener('scroll', horizontalHandler, { capture: true, passive: true });
     return true;
 })();
 """;
@@ -2664,6 +2765,35 @@ public partial class MainWindow : Window
 """;
         }
 
+        internal static string BuildApplySynchronizedHorizontalScrollScript(PreviewHorizontalScrollPosition position)
+        {
+            var kindJson = JsonSerializer.Serialize(position.ElementKind);
+            var index = position.Index.ToString(CultureInfo.InvariantCulture);
+            var count = position.Count.ToString(CultureInfo.InvariantCulture);
+            var scrollLeftLiteral = Math.Max(0, position.ScrollLeft).ToString("R", CultureInfo.InvariantCulture);
+            return $$"""
+(() => {
+    const stateKey = '__repoSyncRadarPreviewScrollSync';
+    const elements = document.querySelectorAll({{kindJson}});
+    if (elements.length !== {{count}}) {
+        return false;
+    }
+    const element = elements[{{index}}];
+    if (!element) {
+        return false;
+    }
+    const maxScrollLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+    const scrollLeft = Math.min({{scrollLeftLiteral}}, maxScrollLeft);
+    if (Math.abs(element.scrollLeft - scrollLeft) <= 0.5) {
+        return true;
+    }
+    element.scrollLeft = scrollLeft;
+    window[stateKey]?.appliedHorizontalScrollLeft?.set(element, element.scrollLeft);
+    return true;
+})();
+""";
+        }
+
         internal static bool TryParsePreviewScrollMessage(
             string? message,
             out PreviewDiffPane pane,
@@ -2697,6 +2827,37 @@ public partial class MainWindow : Window
             }
 
             scrollTop = Math.Max(0, parsedScrollTop);
+            return true;
+        }
+
+        internal static bool TryParsePreviewHorizontalScrollMessage(
+            string? message,
+            out PreviewDiffPane pane,
+            out PreviewHorizontalScrollPosition position)
+        {
+            pane = default;
+            position = default;
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return false;
+            }
+
+            var parts = message.Split(':');
+            if (parts.Length != 6
+                || !string.Equals(parts[0], "rsr-preview-horizontal-scroll", StringComparison.Ordinal)
+                || parts[1] is not ("before" or "after")
+                || parts[2] is not ("table" or "pre")
+                || !int.TryParse(parts[3], NumberStyles.None, CultureInfo.InvariantCulture, out var index)
+                || !int.TryParse(parts[4], NumberStyles.None, CultureInfo.InvariantCulture, out var count)
+                || index >= count
+                || !double.TryParse(parts[5], NumberStyles.Float, CultureInfo.InvariantCulture, out var scrollLeft)
+                || !double.IsFinite(scrollLeft))
+            {
+                return false;
+            }
+
+            pane = parts[1] == "before" ? PreviewDiffPane.Before : PreviewDiffPane.After;
+            position = new PreviewHorizontalScrollPosition(parts[2], index, count, Math.Max(0, scrollLeft));
             return true;
         }
 
