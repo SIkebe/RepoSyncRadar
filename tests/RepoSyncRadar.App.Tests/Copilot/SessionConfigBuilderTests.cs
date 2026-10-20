@@ -59,6 +59,7 @@ public class SessionConfigBuilderTests
         Assert.False(config.CoauthorEnabled);
         Assert.False(config.ManageScheduleEnabled);
         Assert.False(config.EnableFileHooks);
+        Assert.Null(config.TrustWorkingDirectory);
         Assert.Null(config.AdditionalDirectories);
         Assert.NotNull(config.ManagedSettings);
         Assert.NotNull(config.ManagedSettings!.Permissions);

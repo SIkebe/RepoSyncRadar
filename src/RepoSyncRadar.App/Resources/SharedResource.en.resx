@@ -539,6 +539,7 @@
   <data name="Copilot.Policy.Item.sandbox" xml:space="preserve"><value>Sandbox settings</value></data>
   <data name="Copilot.Policy.Item.vscode" xml:space="preserve"><value>VS Code-only settings</value></data>
   <data name="Copilot.Policy.Item.vscode.temporaryDefaultToLocalHarness" xml:space="preserve"><value>Temporarily default new chats to the Local harness</value></data>
+  <data name="Copilot.Policy.Item.requireBase64ImageAttachments" xml:space="preserve"><value>Require base64 image attachments</value></data>
   <data name="Copilot.Policy.Item.sandbox.enabled" xml:space="preserve"><value>Enabled</value></data>
   <data name="Copilot.Policy.Item.sandbox.failIfUnavailable" xml:space="preserve"><value>Fail if unavailable</value></data>
   <data name="Copilot.Policy.Item.sandbox.allowBypass" xml:space="preserve"><value>Allow bypass</value></data>
