@@ -199,6 +199,23 @@ public sealed class CopilotPolicyDiagnosticsTests
         }
     }
 
+    [Theory]
+    [InlineData("{}", "Unreported")]
+    [InlineData("""{"requireBase64ImageAttachments":false}""", "No")]
+    [InlineData("""{"requireBase64ImageAttachments":true}""", "Yes")]
+    public void Inventory_Reports_Base64_Image_Attachment_Policy_As_Known_Runtime_Setting(
+        string settings, string state)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
+            $$$"""{"resolved":{"settings":{{{settings}}}}}""")!;
+        var groups = CopilotPolicyDiagnostics.FromResult(result).Groups;
+        var entry = Assert.Single(groups.Single(group => group.Key == "Runtime").Entries,
+            row => row.Key == "requireBase64ImageAttachments");
+
+        Assert.Equal($"Copilot.Policy.Value.{state}", Assert.Single(entry.Values).ResourceKey);
+        Assert.DoesNotContain(groups.SelectMany(group => group.Entries), row => row.Key == "unknown");
+    }
+
     [Fact]
     public void Inventory_Distinguishes_Missing_Empty_False_And_NotApplicable()
     {
