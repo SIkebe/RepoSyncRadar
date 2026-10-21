@@ -999,7 +999,7 @@ internal static partial class MarkdownPreviewRenderer
         }
     }
 
-    private static string RenderGitHubAlertBlocks(string content)
+    private static string RenderGitHubAlertBlocks(string content, string? containingAlertKind = null)
     {
         if (string.IsNullOrEmpty(content))
         {
@@ -1034,7 +1034,7 @@ internal static partial class MarkdownPreviewRenderer
                 blockquoteLines.Add(nextQuotedLine);
             }
 
-            if (TryRenderGitHubAlertBlock(blockquoteLines, out var alertHtml))
+            if (TryRenderGitHubAlertBlock(blockquoteLines, out var alertHtml, containingAlertKind))
             {
                 rendered.AppendLine(alertHtml);
             }
@@ -1050,7 +1050,10 @@ internal static partial class MarkdownPreviewRenderer
         return rendered.ToString();
     }
 
-    private static bool TryRenderGitHubAlertBlock(List<string> blockquoteLines, out string alertHtml)
+    private static bool TryRenderGitHubAlertBlock(
+        List<string> blockquoteLines,
+        out string alertHtml,
+        string? containingAlertKind = null)
     {
         alertHtml = string.Empty;
         if (blockquoteLines.Count == 0)
@@ -1074,9 +1077,16 @@ internal static partial class MarkdownPreviewRenderer
         }
         bodyLines.AddRange(blockquoteLines.Skip(1));
         var bodyMarkdown = string.Join('\n', bodyLines).Trim('\n');
+        if (string.Equals(kind, containingAlertKind, StringComparison.Ordinal))
+        {
+            // A reusable may contribute another same-kind alert inside an existing docs alert.
+            alertHtml = RenderGitHubAlertBlocks(bodyMarkdown, containingAlertKind);
+            return true;
+        }
+
         var bodyHtml = bodyMarkdown.Length == 0
             ? string.Empty
-            : Markdown.ToHtml(RenderGitHubAlertBlocks(bodyMarkdown), _pipeline).TrimEnd();
+            : Markdown.ToHtml(RenderGitHubAlertBlocks(bodyMarkdown, kind), _pipeline).TrimEnd();
         alertHtml = string.Create(
             CultureInfo.InvariantCulture,
             $"\n<div class=\"ghd-markdown-alert ghd-markdown-alert-{kind}\">\n<p class=\"ghd-markdown-alert-title\">{WebUtility.HtmlEncode(label)}</p>\n{bodyHtml}\n</div>\n");
@@ -4464,6 +4474,13 @@ internal static partial class MarkdownPreviewRenderer
             var quotePrefixLength = content.Length > 1 && content[1] == ' ' ? 2 : 1;
             var quotePrefix = content[..quotePrefixLength];
             var quoted = content[quotePrefixLength..];
+            while (quoted.StartsWith("> ", StringComparison.Ordinal)
+                || quoted.StartsWith(">[!", StringComparison.Ordinal))
+            {
+                var nestedQuotePrefixLength = quoted.Length > 1 && quoted[1] == ' ' ? 2 : 1;
+                quotePrefix += quoted[..nestedQuotePrefixLength];
+                quoted = quoted[nestedQuotePrefixLength..];
+            }
             if (TrySplitGitHubAlertQuotedLine(quoted, out var alertMarkerPrefix, out var alertInlineContent))
             {
                 if (alertInlineContent.Length == 0)

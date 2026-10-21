@@ -2183,6 +2183,82 @@ var value = 1;
     }
 
     [Fact]
+    public void RenderedDiff_Renders_GitHub_Alert_Added_To_Reusable()
+    {
+        const string markdown = """
+            > [!NOTE] {% data reusables.copilot.auto-model-discount %}
+            """;
+        const string beforeReusable = """
+            If you are on a paid Copilot plan, you qualify for a 10% discount on model costs while using auto model selection in Copilot Chat, Copilot CLI, the GitHub Copilot app, or Copilot cloud agent.
+            """;
+        const string afterReusable = """
+            If you are on a paid Copilot plan, you qualify for a 10% discount on model costs while using auto model selection in Copilot Chat, Copilot CLI, the GitHub Copilot app, or Copilot cloud agent.
+
+            > [!NOTE]
+            > If you are on the Copilot Max plan, you'll receive a 30% discount through October 28, 2026 while using auto model selection.
+            """;
+        var beforeContext = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["copilot.auto-model-discount"] = beforeReusable,
+            });
+        var afterContext = new DocsLiquidContext(
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["copilot.auto-model-discount"] = afterReusable,
+            });
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/copilot/concepts/billing-and-usage/individuals/billing.md",
+            markdown,
+            "502199a",
+            "PR HEAD",
+            afterContext,
+            diffAgainstMarkdown: markdown,
+            diffAgainstLiquidContext: beforeContext,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+
+        Assert.Contains("ghd-markdown-alert-note", html, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            html.Split("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", StringSplitOptions.None).Length - 1);
+        Assert.Contains(
+            "Copilot cloud agent.</p>\n<p><span class=\"rsr-rendered-diff-added\">If you are on the Copilot Max plan",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "If you are on the Copilot Max plan, you'll receive a 30% discount",
+            html,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("&gt; [!NOTE]", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Renders_Different_Nested_GitHub_Alert_Kinds_Separately()
+    {
+        const string markdown = """
+            > [!NOTE]
+            > Outer note.
+            >
+            > > [!TIP]
+            > > Nested tip.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", html, StringComparison.Ordinal);
+        Assert.Contains("class=\"ghd-markdown-alert ghd-markdown-alert-tip\"", html, StringComparison.Ordinal);
+        Assert.Contains("Outer note.", html, StringComparison.Ordinal);
+        Assert.Contains("Nested tip.", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_GitHub_Alert_List_Item_When_Diff_Marked()
     {
         const string beforeMarkdown = """
