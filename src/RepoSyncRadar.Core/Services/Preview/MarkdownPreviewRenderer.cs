@@ -1080,7 +1080,7 @@ internal static partial class MarkdownPreviewRenderer
         if (string.Equals(kind, containingAlertKind, StringComparison.Ordinal))
         {
             // A reusable may contribute another same-kind alert inside an existing docs alert.
-            alertHtml = RenderGitHubAlertBlocks(bodyMarkdown, containingAlertKind);
+            alertHtml = "\n" + RenderGitHubAlertBlocks(bodyMarkdown, containingAlertKind);
             return true;
         }
 

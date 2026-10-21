@@ -2259,6 +2259,28 @@ var value = 1;
     }
 
     [Fact]
+    public void Preserves_Paragraph_Separation_Before_Adjacent_Nested_Same_Kind_Alert()
+    {
+        const string markdown = """
+            > [!NOTE]
+            > Outer note.
+            > > [!NOTE]
+            > > Nested note.
+            """;
+
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            markdown,
+            "abc1234",
+            "PR HEAD");
+
+        Assert.Contains("<p>Outer note.</p>\n<p>Nested note.</p>", html, StringComparison.Ordinal);
+        Assert.Equal(
+            1,
+            html.Split("class=\"ghd-markdown-alert ghd-markdown-alert-note\"", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
     public void RenderDocument_Preserves_GitHub_Alert_List_Item_When_Diff_Marked()
     {
         const string beforeMarkdown = """
