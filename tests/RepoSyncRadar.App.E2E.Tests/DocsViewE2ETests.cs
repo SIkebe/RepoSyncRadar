@@ -583,6 +583,67 @@ public sealed class DocsViewE2ETests
     }
 
     [Fact]
+    public async Task Rendered_Diff_Changes_Within_A_Table_Cell_Keep_Text_Inline()
+    {
+        const string beforeMarkdown = """
+            | Property | Matching behavior |
+            | --- | --- |
+            | serverName | Matches the user-assigned server label exactly. Wildcards are not supported. Because users choose server names, use `serverUrl` or `serverCommand` when you need to enforce the identity of a server. |
+            """;
+        const string afterMarkdown = """
+            | Property | Matching behavior |
+            | --- | --- |
+            | serverName | Matches the user-assigned server label exactly. Wildcards are not supported. Allowlist entries are case-sensitive and limited to letters, numbers, and the characters `_`, `.`, `/`, and `-`, so registry names such as `microsoft/playwright-mcp` are accepted. Because users choose server names, use `serverUrl` or `serverCommand` when you need to enforce the identity of a server. |
+            """;
+        var html = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD",
+            diffAgainstMarkdown: beforeMarkdown,
+            diffSide: MarkdownPreviewRenderer.RenderedMarkdownDiffSide.After);
+        var plainHtml = MarkdownPreviewRenderer.RenderDocument(
+            "content/sample.md",
+            afterMarkdown,
+            "abc1234",
+            "PR HEAD");
+        var page = await CreateDocsPageAsync();
+        try
+        {
+            await page.SetViewportSizeAsync(800, 600);
+            await page.SetContentAsync(html);
+            var geometry = await page.EvaluateAsync<JsonElement>(
+                """
+                () => {
+                    const cell = document.querySelector('td .rsr-rendered-diff-added').closest('td');
+                    const changed = Array.from(
+                        cell.querySelectorAll('.rsr-rendered-diff-added'));
+                    return {
+                        changedCount: changed.length,
+                        displays: changed.map(element => getComputedStyle(element).display),
+                        cellHeight: cell.getBoundingClientRect().height,
+                    };
+                }
+                """);
+            await page.SetContentAsync(plainHtml);
+            var plainCellHeight = await page.EvaluateAsync<double>(
+                "() => document.querySelector('tbody tr td:nth-child(2)').getBoundingClientRect().height");
+
+            Assert.True(geometry.GetProperty("changedCount").GetInt32() > 1);
+            Assert.All(
+                geometry.GetProperty("displays").EnumerateArray(),
+                display => Assert.Equal("inline", display.GetString()));
+            Assert.True(
+                geometry.GetProperty("cellHeight").GetDouble() <= plainCellHeight + 1,
+                $"Diff markup grew the table cell from {plainCellHeight}px to {geometry.GetProperty("cellHeight").GetDouble()}px.");
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
+    }
+
+    [Fact]
     public async Task Horizontal_Scrollbar_Proxy_Ignores_Deferred_Mirror_Scroll_Events()
     {
         var header = string.Join(" | ", Enumerable.Range(1, 16).Select(i => $"Wide column heading {i}"));

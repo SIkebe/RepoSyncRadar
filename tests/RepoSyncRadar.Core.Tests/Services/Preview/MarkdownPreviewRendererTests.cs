@@ -3505,6 +3505,7 @@ var value = 1;
             "PR HEAD");
 
         Assert.Contains("table{border-collapse:collapse;display:block;overflow:auto;}", html, StringComparison.Ordinal);
+        Assert.Contains("vertical-align:top;", html, StringComparison.Ordinal);
         Assert.Contains(
             ".rsr-horizontal-scrollbar{background:var(--rsr-article-bg);border-top:1px solid var(--rsr-border);bottom:0;",
             html,
