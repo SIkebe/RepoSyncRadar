@@ -16,41 +16,44 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class CopilotPolicyDiagnosticsTests
 {
     [Theory]
-    [InlineData("balance", false)]
+    [InlineData("standard", false)]
     [InlineData("high", false)]
     [InlineData("max", true)]
     [InlineData("unmanaged", true)]
-    public void Inventory_Uses_Reported_Ensemble_Preference_Without_Legacy_Auto_Fallback(
+    public void Inventory_Uses_Reported_Fusion_Preference_Without_Legacy_Auto_Fallback(
         string tier, bool overridable)
     {
         var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(JsonSerializer.Serialize(new
         {
-            resolved = new { settings = new { autoTier = "intelligence", ensembleTier = "balance" } },
-            values = new { autoTier = "intelligence", ensembleTier = tier },
-            meta = new { ensembleTier = new { overridable, source = "server", requested = "high" } },
+            resolved = new { settings = new { autoTier = "intelligence", fusionTier = "standard" } },
+            values = new { autoTier = "intelligence", fusionTier = tier },
+            meta = new { fusionTier = new { overridable, source = "server", requested = "high" } },
+            layers = new[] { new { source = "server", settings = new { autoTier = "intelligence", fusionTier = tier } } },
         }))!;
         var rows = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
             .ToDictionary(row => row.Key);
 
-        Assert.Equal([tier, "high"], rows["ensembleTier"].Values.Select(value => value.Text));
-        Assert.Equal("Copilot.Policy.Value.Requested", rows["ensembleTier"].Values[1].LabelKey);
-        Assert.Equal(["Server"], rows["ensembleTier"].Sources);
-        Assert.Equal(overridable, rows["ensembleTier"].Overridable);
+        Assert.Equal([tier, "high"], rows["fusionTier"].Values.Select(value => value.Text));
+        Assert.Null(rows["fusionTier"].Values[0].LabelKey);
+        Assert.Equal("Copilot.Policy.Value.Requested", rows["fusionTier"].Values[1].LabelKey);
+        Assert.Equal(["Server"], rows["fusionTier"].Sources);
+        Assert.Equal(overridable, rows["fusionTier"].Overridable);
         Assert.Equal("intelligence", Assert.Single(rows["autoTier"].Values).Text);
         Assert.DoesNotContain("unknown", rows.Keys);
     }
 
     [Theory]
     [InlineData("{}", "Unreported")]
-    [InlineData("""{"ensembleTier":{"overridable":"max"}}""", null)]
-    [InlineData("""{"ensembleTier":"private-tier"}""", "Hidden")]
-    public void Inventory_Distinguishes_Missing_And_Redacted_Ensemble_Preference(
+    [InlineData("""{"fusionTier":{"overridable":"max"}}""", null)]
+    [InlineData("""{"fusionTier":"private-tier"}""", "Hidden")]
+    [InlineData("""{"fusionTier":"balance"}""", "Hidden")]
+    public void Inventory_Distinguishes_Missing_And_Redacted_Fusion_Preference(
         string settings, string? state)
     {
         var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
             $$$"""{"resolved":{"settings":{{{settings}}}},"values":{"autoTier":"intelligence"}}""")!;
         var snapshot = CopilotPolicyDiagnostics.FromResult(result);
-        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "ensembleTier");
+        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "fusionTier");
         var value = Assert.Single(entry.Values);
 
         Assert.Equal(state is null ? null : "Copilot.Policy.Value." + state, value.ResourceKey);
@@ -59,24 +62,55 @@ public sealed class CopilotPolicyDiagnosticsTests
         Assert.DoesNotContain("private", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void Inventory_Hides_Unknown_Effective_And_Requested_Ensemble_Preferences()
+    [Theory]
+    [InlineData("private-effective", "private-requested")]
+    [InlineData("balance", "intelligence")]
+    public void Inventory_Hides_Unknown_Effective_And_Requested_Fusion_Preferences(
+        string effective, string requested)
     {
-        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>("""
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>($$$"""
             {
               "resolved":{},
-              "values":{"ensembleTier":"private-effective"},
-              "meta":{"ensembleTier":{"source":"device","overridable":false,"requested":"private-requested"}}
+              "values":{"fusionTier":"{{{effective}}}"},
+              "meta":{"fusionTier":{"source":"device","overridable":false,"requested":"{{{requested}}}"}}
             }
             """)!;
         var snapshot = CopilotPolicyDiagnostics.FromResult(result);
-        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "ensembleTier");
+        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "fusionTier");
 
         Assert.Equal(2, entry.Values.Count);
         Assert.All(entry.Values, value => Assert.Equal("Copilot.Policy.Value.Hidden", value.ResourceKey));
         Assert.Equal(["Device"], entry.Sources);
         Assert.False(entry.Overridable);
         Assert.DoesNotContain("private", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("""[{"source":"server","settings":{"autoTier":"intelligence"}}]""", true)]
+    [InlineData("""[{"source":"server","settings":{"autoTier":"intelligence","fusionTier":"high"}}]""", false)]
+    [InlineData("""[{"source":"server","settings":{"autoTier":"intelligence"}},{"source":"device","settings":{"fusionTier":{"overridable":"high"}}}]""", false)]
+    [InlineData("[]", false)]
+    public void Inventory_Labels_Legacy_Auto_Projection_Only_When_Layers_Establish_Its_Origin(
+        string layers, bool projected)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
+            $$$"""
+            {
+              "resolved":{"settings":{"autoTier":"intelligence","fusionTier":"high"}},
+              "values":{"autoTier":"intelligence","fusionTier":"high"},
+              "meta":{"fusionTier":{"source":"server","overridable":false,"requested":"max"}},
+              "layers":{{{layers}}}
+            }
+            """)!;
+        var entry = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries)
+            .Single(row => row.Key == "fusionTier");
+
+        Assert.Equal("high", entry.Values[0].Text);
+        Assert.Equal(projected ? "Copilot.Policy.Value.LegacyAutoProjection" : null, entry.Values[0].LabelKey);
+        Assert.Equal("max", entry.Values[1].Text);
+        Assert.Equal("Copilot.Policy.Value.Requested", entry.Values[1].LabelKey);
+        Assert.Equal(["Server"], entry.Sources);
+        Assert.False(entry.Overridable);
     }
 
     [Fact]
