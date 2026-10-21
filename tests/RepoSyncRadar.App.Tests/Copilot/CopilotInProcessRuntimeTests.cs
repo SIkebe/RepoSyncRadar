@@ -39,38 +39,86 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.101-0", status.Version);
+        Assert.Equal("1.0.101", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
     [Theory]
-    [InlineData("balance")]
+    [InlineData("standard")]
     [InlineData("high")]
     [InlineData("max")]
     [InlineData("unmanaged")]
-    public async Task Managed_Ensemble_Preference_RoundTrips_Without_Legacy_Auto_Fallback(string tier)
+    public async Task Managed_Fusion_Preference_RoundTrips_Without_Legacy_Auto_Fallback(string tier)
     {
         await using var client = new CopilotClient(CopilotSessionFactory.BuildClientOptions(
             new CopilotOptions(), NullLogger.Instance, "offline-policy-test", "0.1.30"));
         var ct = TestContext.Current.CancellationToken;
         await client.StartAsync(ct);
         var validation = await client.Rpc.ManagedSettings.ValidateAsync(
-            $$$"""{"autoTier":"intelligence","ensembleTier":"{{{tier}}}"}""",
+            $$$"""{"autoTier":"intelligence","fusionTier":"{{{tier}}}"}""",
             layer: "server", cancellationToken: ct);
         Assert.True(validation.Valid);
         var composed = await client.Rpc.ManagedSettings.ComposeAsync(
             [new() { Source = ManagedSettingsChannel.Server, Settings = validation.Settings }], ct);
 
-        Assert.Equal(tier, composed.Values?.EnsembleTier?.Value);
+        Assert.Equal(tier, composed.Values?.FusionTier?.Value);
         var snapshot = CopilotPolicyDiagnostics.FromResult(new ManagedSettingsResolveResult
         {
             Resolved = composed.Resolved, Values = composed.Values, Meta = composed.Meta,
             Layers = composed.Layers, Diagnostics = composed.Diagnostics,
         });
-        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "ensembleTier");
+        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "fusionTier");
         Assert.Equal(tier, Assert.Single(entry.Values).Text);
+        Assert.Null(entry.Values[0].LabelKey);
         Assert.Equal(["Server"], entry.Sources);
-        Assert.Equal(composed.Meta?.EnsembleTier?.Overridable, entry.Overridable);
+        Assert.Equal(composed.Meta?.FusionTier?.Overridable, entry.Overridable);
+    }
+
+    [Theory]
+    [InlineData("intelligence", "high")]
+    [InlineData("balance", "standard")]
+    [InlineData("efficiency", "standard")]
+    public async Task Managed_Fusion_Projection_From_Legacy_Auto_Is_Explicitly_Labeled(
+        string autoTier, string fusionTier)
+    {
+        await using var client = new CopilotClient(CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(), NullLogger.Instance, "offline-policy-test", "0.1.30"));
+        var ct = TestContext.Current.CancellationToken;
+        await client.StartAsync(ct);
+        var validation = await client.Rpc.ManagedSettings.ValidateAsync(
+            $$$"""{"autoTier":"{{{autoTier}}}"}""", layer: "server", cancellationToken: ct);
+        Assert.True(validation.Valid);
+        var composed = await client.Rpc.ManagedSettings.ComposeAsync(
+            [new() { Source = ManagedSettingsChannel.Server, Settings = validation.Settings }], ct);
+
+        Assert.Equal(fusionTier, composed.Values?.FusionTier?.Value);
+        var snapshot = CopilotPolicyDiagnostics.FromResult(new ManagedSettingsResolveResult
+        {
+            Resolved = composed.Resolved, Values = composed.Values, Meta = composed.Meta,
+            Layers = composed.Layers, Diagnostics = composed.Diagnostics,
+        });
+        var entry = snapshot.Groups.SelectMany(group => group.Entries).Single(row => row.Key == "fusionTier");
+        var value = Assert.Single(entry.Values);
+        Assert.Equal(fusionTier, value.Text);
+        Assert.Equal("Copilot.Policy.Value.LegacyAutoProjection", value.LabelKey);
+    }
+
+    [Fact]
+    public async Task Managed_Ensemble_Key_Is_Dropped_With_A_Warning_Not_Treated_As_A_Fusion_Alias()
+    {
+        await using var client = new CopilotClient(CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(), NullLogger.Instance, "offline-policy-test", "0.1.30"));
+        var ct = TestContext.Current.CancellationToken;
+        await client.StartAsync(ct);
+        var validation = await client.Rpc.ManagedSettings.ValidateAsync(
+            """{"ensembleTier":"high"}""", layer: "server", cancellationToken: ct);
+
+        Assert.True(validation.Valid);
+        Assert.Contains(validation.Diagnostics,
+            diagnostic => diagnostic.Path == "ensembleTier" && diagnostic.Severity.Value == "warning");
+        Assert.NotNull(validation.Settings);
+        Assert.False(validation.Settings.Value.TryGetProperty("ensembleTier", out _));
+        Assert.False(validation.Settings.Value.TryGetProperty("fusionTier", out _));
     }
 
     [Fact]

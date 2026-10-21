@@ -26,7 +26,7 @@ internal static class CopilotPolicyInventory
     private const string _itemPrefix = "Copilot.Policy.Item.";
     private static readonly string[][] _groupKeys =
     [
-        ["model", "autoTier", "ensembleTier", "effortLevel", "contextTier"],
+        ["model", "autoTier", "fusionTier", "effortLevel", "contextTier"],
         ["permissions.allow", "permissions.ask", "permissions.deny", "permissions.disableBypassPermissionsMode",
             "permissions.disableAssistedPermissionsMode"],
         ["sandbox", "vscode", "requireBase64ImageAttachments"],
@@ -99,7 +99,7 @@ internal static class CopilotPolicyInventory
                 {
                     "model" => result.Meta?.Model,
                     "autoTier" => result.Meta?.AutoTier,
-                    "ensembleTier" => result.Meta?.EnsembleTier,
+                    "fusionTier" => result.Meta?.FusionTier,
                     "effortLevel" => result.Meta?.EffortLevel,
                     "contextTier" => result.Meta?.ContextTier,
                     _ => null,
@@ -109,7 +109,7 @@ internal static class CopilotPolicyInventory
                 {
                     "model" => result.Values?.Model,
                     "autoTier" => result.Values?.AutoTier?.Value,
-                    "ensembleTier" => result.Values?.EnsembleTier?.Value,
+                    "fusionTier" => result.Values?.FusionTier?.Value,
                     "effortLevel" => result.Values?.EffortLevel,
                     "contextTier" => result.Values?.ContextTier?.Value,
                     _ => null,
@@ -119,6 +119,15 @@ internal static class CopilotPolicyInventory
                     value = JsonSerializer.SerializeToElement(effective);
                 }
                 var row = Entry(key, value, sources) with { Overridable = meta?.Overridable };
+                if (key == "fusionTier" && effective is not null && result.Layers.Count > 0
+                    && result.Layers.All(layer => Find(layer.Settings, key) is null))
+                {
+                    // Without an explicit fusionTier in any layer, the runtime projects legacy autoTier into it.
+                    row = row with
+                    {
+                        Values = [.. row.Values.Select(item => item with { LabelKey = _valuePrefix + "LegacyAutoProjection" })],
+                    };
+                }
                 if (meta?.Requested is { } requested)
                 {
                     var values = row.Values.ToList();
@@ -295,7 +304,8 @@ internal static class CopilotPolicyInventory
                     : new(kind, text == kind ? null : _valuePrefix + "ScopeHidden", label));
             }
             else if (key == "model" ? CopilotPolicyDiagnostics.IsDisplayableModel(text)
-                : _safeStrings.Contains(text) || key == "ensembleTier" && text == "unmanaged")
+                : key == "fusionTier" ? text is "standard" or "high" or "max" or "unmanaged"
+                : _safeStrings.Contains(text))
             {
                 AppendValue(output, new(Text: text, LabelKey: label));
             }
@@ -340,7 +350,7 @@ internal static class CopilotPolicyInventory
         }
         else if (element.ValueKind == JsonValueKind.Object)
         {
-            if (key is "autoTier" or "ensembleTier" && element.TryGetProperty("overridable", out var tier))
+            if (key is "autoTier" or "fusionTier" && element.TryGetProperty("overridable", out var tier))
             {
                 Format(key, tier, output, label);
                 return;
