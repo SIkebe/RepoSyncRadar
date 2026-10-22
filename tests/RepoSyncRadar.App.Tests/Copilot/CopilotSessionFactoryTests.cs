@@ -149,7 +149,6 @@ public sealed class CopilotSessionFactoryTests
             CopilotHome = " C:/data/copilot ",
             LogLevel = " debug ",
             SessionIdleTimeoutSeconds = 120,
-            EnableRemoteSessions = true,
         };
 
         var logger = NullLogger<CopilotSessionFactory>.Instance;
@@ -164,7 +163,6 @@ public sealed class CopilotSessionFactoryTests
         Assert.Null(options.ClientInfo.IntegrationName);
         Assert.Null(options.ClientInfo.IntegrationVersion);
         Assert.Equal("debug", options.LogLevel?.Value);
-        Assert.True(options.EnableRemoteSessions);
 #pragma warning disable GHCP001 // Verifies the experimental SDK transport.
         Assert.IsType<InProcessRuntimeConnection>(options.Connection);
 #pragma warning restore GHCP001

@@ -36,9 +36,6 @@ public sealed class CopilotOptions
     /// <summary>Optional base directory for Copilot session state. Null uses the SDK default.</summary>
     public string? CopilotHome { get; set; }
 
-    /// <summary>Enable SDK remote session URL support. Default off because installed builds may not run from a GitHub repository.</summary>
-    public bool EnableRemoteSessions { get; set; }
-
     /// <summary>
     /// Optional CAPI Responses API WebSocket transport override. Null keeps the SDK/runtime default;
     /// false forces HTTP Responses transport for networks where WebSockets fail.
