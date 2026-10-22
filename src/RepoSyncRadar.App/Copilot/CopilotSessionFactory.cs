@@ -327,7 +327,6 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             // Force the SDK to use the token we hand it instead of falling back to
             // the account already signed in on the machine.
             UseLoggedInUser = false,
-            EnableRemoteSessions = copilot.EnableRemoteSessions,
         };
 #pragma warning restore GHCP001
 

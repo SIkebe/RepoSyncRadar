@@ -86,6 +86,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
                                 "TelemetryFilePath": "C:/logs/copilot.jsonl",
                                 "TelemetryOtlpProtocol": "http/json",
                                 "CaptureContent": true,
+                                "EnableRemoteSessions": true,
                                 "Unknown": "keep-copilot"
                             },
                             "DocsRepository": {
@@ -113,7 +114,6 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         settings.Copilot.LogLevel = " Debug ";
         settings.Copilot.SessionIdleTimeoutSeconds = 120;
         settings.Copilot.CopilotHome = " C:\\Users\\me\\.reposyncradar-copilot ";
-        settings.Copilot.EnableRemoteSessions = true;
         settings.Copilot.EnableWebSocketResponses = false;
         settings.Copilot.EnableSessionTelemetry = false;
         settings.Copilot.AllowedUrlHosts = ["https://docs.github.com", "api.github.com"];
@@ -151,7 +151,7 @@ public sealed class FileLocalAppSettingsStoreTests : IDisposable
         Assert.False(copilot.TryGetProperty("TelemetryFilePath", out _));
         Assert.False(copilot.TryGetProperty("TelemetryOtlpProtocol", out _));
         Assert.False(copilot.TryGetProperty("CaptureContent", out _));
-        Assert.True(root.GetProperty("Copilot").GetProperty("EnableRemoteSessions").GetBoolean());
+        Assert.False(copilot.TryGetProperty("EnableRemoteSessions", out _));
         Assert.False(root.GetProperty("Copilot").GetProperty("EnableWebSocketResponses").GetBoolean());
         Assert.False(root.GetProperty("Copilot").GetProperty("EnableSessionTelemetry").GetBoolean());
         Assert.Equal("docs.github.com", root.GetProperty("Copilot").GetProperty("AllowedUrlHosts")[0].GetString());

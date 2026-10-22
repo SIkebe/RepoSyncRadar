@@ -17,7 +17,6 @@ public sealed class LocalAppSettingsEditorTests
         settings.Copilot.DefaultModel = "gpt-5.5";
         settings.Copilot.ReasoningEffort = "max";
         settings.Copilot.ContextTier = "long_context";
-        settings.Copilot.EnableRemoteSessions = true;
         settings.Copilot.EnableWebSocketResponses = false;
         settings.Copilot.EnableSessionTelemetry = false;
         settings.Copilot.AllowedUrlHosts = ["docs.github.com", "api.github.com"];
@@ -36,6 +35,7 @@ public sealed class LocalAppSettingsEditorTests
         {
             Assert.Equal("github-local", cut.Find("[data-testid=\"settings-github-owner\"]").GetAttribute("value"));
             Assert.Equal("gpt-5.5", cut.Find("[data-testid=\"settings-copilot-model\"]").GetAttribute("value"));
+            Assert.Empty(cut.FindAll("[data-testid=\"settings-copilot-enable-remote-sessions\"]"));
             Assert.Empty(cut.FindAll("[data-testid=\"settings-copilot-runtime-transport\"]"));
             Assert.Empty(cut.FindAll("[data-testid=\"settings-copilot-cli-path\"]"));
             Assert.Empty(cut.FindAll("[data-testid=\"settings-copilot-telemetry-file\"]"));
@@ -44,7 +44,6 @@ public sealed class LocalAppSettingsEditorTests
             Assert.Equal("max", reasoningEffort.Value);
             var contextTier = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-context-tier\"]"));
             Assert.Equal("long_context", contextTier.Value);
-            Assert.True(cut.Find("[data-testid=\"settings-copilot-enable-remote-sessions\"]").HasAttribute("checked"));
             var webSocketResponses = Assert.IsAssignableFrom<IHtmlSelectElement>(cut.Find("[data-testid=\"settings-copilot-enable-websocket-responses\"]"));
             Assert.Equal("false", webSocketResponses.Value);
             Assert.False(cut.Find("[data-testid=\"settings-copilot-enable-session-telemetry\"]").HasAttribute("checked"));
@@ -110,7 +109,6 @@ public sealed class LocalAppSettingsEditorTests
         cut.Find("[data-testid=\"settings-copilot-model\"]").Input("gpt-5.5");
         cut.Find("[data-testid=\"settings-copilot-reasoning-effort\"]").Change("high");
         cut.Find("[data-testid=\"settings-copilot-context-tier\"]").Change("long_context");
-        cut.Find("[data-testid=\"settings-copilot-enable-remote-sessions\"]").Change(true);
         cut.Find("[data-testid=\"settings-copilot-enable-websocket-responses\"]").Change("false");
         cut.Find("[data-testid=\"settings-copilot-enable-session-telemetry\"]").Change(false);
         cut.Find("[data-testid=\"settings-copilot-allowed-hosts\"]").Input("docs.github.com\napi.github.com");
@@ -128,7 +126,6 @@ public sealed class LocalAppSettingsEditorTests
             Assert.Equal("gpt-5.5", store.Saved.Copilot.DefaultModel);
             Assert.Equal("high", store.Saved.Copilot.ReasoningEffort);
             Assert.Equal("long_context", store.Saved.Copilot.ContextTier);
-            Assert.True(store.Saved.Copilot.EnableRemoteSessions);
             Assert.False(store.Saved.Copilot.EnableWebSocketResponses.GetValueOrDefault());
             Assert.False(store.Saved.Copilot.EnableSessionTelemetry);
             Assert.Equal(["docs.github.com", "api.github.com"], store.Saved.Copilot.AllowedUrlHosts);

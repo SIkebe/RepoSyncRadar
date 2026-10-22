@@ -132,10 +132,6 @@
                     <span>@L["LocalSettings.Label.CopilotHome"]</span>
                     <input data-testid="settings-copilot-home" value="@settings.Copilot.CopilotHome" disabled="@_saving" @oninput="e => settings.Copilot.CopilotHome = NullableStringValue(e)" />
                 </label>
-                <label class="local-settings-check">
-                    <input type="checkbox" data-testid="settings-copilot-enable-remote-sessions" checked="@settings.Copilot.EnableRemoteSessions" disabled="@_saving" @onchange="e => settings.Copilot.EnableRemoteSessions = BoolValue(e)" />
-                    <span>@L["LocalSettings.Label.EnableRemoteSessions"]</span>
-                </label>
                 <label class="local-settings-field">
                     <span>@L["LocalSettings.Label.EnableWebSocketResponses"]</span>
                     <select data-testid="settings-copilot-enable-websocket-responses" @bind:get="EnableWebSocketResponsesValue" @bind:set="value => settings.Copilot.EnableWebSocketResponses = NullableBoolValue(value)" disabled="@_saving">

@@ -89,8 +89,6 @@ public sealed class CopilotLocalAppSettings
 
     public string? CopilotHome { get; set; }
 
-    public bool EnableRemoteSessions { get; set; }
-
     public bool? EnableWebSocketResponses { get; set; }
 
     public bool EnableSessionTelemetry { get; set; } = true;
@@ -115,7 +113,6 @@ public sealed class CopilotLocalAppSettings
             LogLevel = LogLevel,
             SessionIdleTimeoutSeconds = SessionIdleTimeoutSeconds,
             CopilotHome = CopilotHome,
-            EnableRemoteSessions = EnableRemoteSessions,
             EnableWebSocketResponses = EnableWebSocketResponses,
             EnableSessionTelemetry = EnableSessionTelemetry,
             AllowedUrlHosts = [.. AllowedUrlHosts],
