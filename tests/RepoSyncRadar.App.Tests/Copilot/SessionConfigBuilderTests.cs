@@ -153,5 +153,20 @@ public class SessionConfigBuilderTests
         Assert.Contains("use radar_fetch_rendered", config.SystemMessage!.Content, StringComparison.Ordinal);
         Assert.Contains("never use a built-in URL fetch tool", config.SystemMessage.Content, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData(SessionPurpose.Triage)]
+    [InlineData(SessionPurpose.Adoption)]
+    [InlineData(SessionPurpose.Maintenance)]
+    public void Build_Does_Not_Exclude_Managed_Policy_For_Any_Purpose(SessionPurpose purpose)
+    {
+        var config = SessionConfigBuilder.Build(
+            purpose,
+            Options.Create(new CopilotOptions()),
+            static (_, _) => Task.FromResult(PermissionDecision.Reject("No tools needed.")));
+
+        Assert.Null(config.ExcludedManagedSettings);
+        Assert.Null(config.Clone().ExcludedManagedSettings);
+    }
 }
 #pragma warning restore GHCP001
