@@ -32,7 +32,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://aka.ms/apm-unix | sh
+          # APM 0.35.0 regresses cold frozen installs and removes tracked skill files:
+          # https://github.com/microsoft/apm/issues/3372
+          curl -fsSL https://aka.ms/apm-unix | sh -s -- @v0.34.0
 
           apm_bin="$(command -v apm || true)"
           if [ -z "$apm_bin" ]; then
