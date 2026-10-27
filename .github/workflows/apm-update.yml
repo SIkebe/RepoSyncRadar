@@ -32,20 +32,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL https://aka.ms/apm-unix | sh
+          apm_venv="$RUNNER_TEMP/apm-venv"
+          python3 -m venv "$apm_venv"
+          "$apm_venv/bin/python" -m pip install --disable-pip-version-check --requirement tools/apm/requirements.txt
 
-          apm_bin="$(command -v apm || true)"
-          if [ -z "$apm_bin" ]; then
-            for candidate in "$HOME/.local/bin/apm" "$HOME/bin/apm" "$HOME/.apm/bin/apm"; do
-              if [ -x "$candidate" ]; then
-                apm_bin="$candidate"
-                break
-              fi
-            done
-          fi
-
-          if [ -z "$apm_bin" ]; then
-            echo "APM installer completed, but apm was not found on PATH." >&2
+          apm_bin="$apm_venv/bin/apm"
+          if [ ! -x "$apm_bin" ]; then
+            echo "APM package installation completed, but apm was not found in the virtual environment." >&2
             exit 1
           fi
 

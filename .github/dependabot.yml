@@ -28,6 +28,14 @@ updates:
       actions:
         patterns:
           - "*"
+  - package-ecosystem: pip
+    directory: "/tools/apm"
+    schedule:
+      interval: daily
+    ignore:
+      - dependency-name: apm-cli
+        versions:
+          - "0.35.0"
   - package-ecosystem: gomod
     directory: "/tools/ghalint"
     schedule:
