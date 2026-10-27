@@ -1,0 +1,2 @@
+# APM 0.35.0 regresses cold frozen installs; see https://github.com/microsoft/apm/issues/3372.
+apm-cli==0.34.0
