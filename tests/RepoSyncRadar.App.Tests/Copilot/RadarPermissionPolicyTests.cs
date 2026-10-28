@@ -410,6 +410,46 @@ public class RadarPermissionPolicyTests
         await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("radar_list_commits", false)]
+    [InlineData("docs.github.com", true)]
+    public async Task Connector_Display_Label_Does_Not_Change_Mcp_Identity_Or_Approval(
+        string? displayName, bool managedApprovalRequired)
+    {
+        var request = NewMcp("tc-connector", managedApprovalRequired);
+        request.ServerDisplayName = displayName;
+        request.ReadOnly = true;
+        var restored = Assert.IsType<PermissionRequestMcp>(
+            JsonSerializer.Deserialize<PermissionRequest>(JsonSerializer.Serialize<PermissionRequest>(request)));
+        Assert.Equal("third-party", restored.ServerName);
+        Assert.Equal(displayName, restored.ServerDisplayName);
+        var promptRequest = new PermissionPromptRequestMcp
+        {
+            ServerName = restored.ServerName,
+            ServerDisplayName = displayName,
+            ToolName = restored.ToolName,
+            ToolTitle = restored.ToolTitle,
+        };
+        var restoredPrompt = Assert.IsType<PermissionPromptRequestMcp>(
+            JsonSerializer.Deserialize<PermissionPromptRequest>(
+                JsonSerializer.Serialize<PermissionPromptRequest>(promptRequest)));
+        Assert.Equal("third-party", restoredPrompt.ServerName);
+        Assert.Equal(displayName, restoredPrompt.ServerDisplayName);
+        var invocation = new PermissionInvocation
+        {
+            SessionId = _invocation.SessionId,
+            PromptRequest = restoredPrompt,
+        };
+        var prompt = Substitute.For<IPermissionPrompt>();
+
+        var result = await CreatePolicy(prompt).HandleAsync(restored, invocation);
+
+        Assert.Equal(_userNotAvailableKind, result.Kind);
+        AssertDecisionContext(result, PermissionDecisionOutcome.AutopilotDenied, PermissionDecisionSource.HostPolicy);
+        await prompt.DidNotReceive().ConfirmAsync(Arg.Any<PermissionRequest>(), Arg.Any<CancellationToken>());
+    }
+
     private static void AssertDecisionContext(
         PermissionDecision decision,
         PermissionDecisionOutcome outcome,
