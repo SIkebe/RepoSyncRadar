@@ -94,6 +94,8 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 
 **生成 API の差分を省略しない**。Client/Session/Types と release note だけで棚卸しを完了しない。前後版の Generated/Rpc、SessionEvents、exact package の XML public surface を比較し、追加 method/DTO/event を採用候補へ入れる。移行が不要でも、新しい管理ポリシー診断や最終モデル結果イベントにはユーザー価値があり得る。公開 source がない版は exact package の public API 比較で補い、未確認部分を明記する。
 
+生成 RPC に既存の SDK 型と同名の public 型が追加されることもあるため、両 namespace を import する箇所は focused build で名前の衝突を確認する。管理ポリシーの schema coverage は欠落・余剰キーの全差分を報告し、型付き DTO に未反映の runtime-only キーも棚卸しする。URL・endpoint の値は一般的な安全文字列 allowlist より先に秘匿する。
+
 - `SendAndWaitAsync` は `AssistantMessageEvent?` を返す。最終テキストは `Data.Content`。
 - timeout は idle 待ちの上限で、in-flight agent work の中止ではない。
 - `MessageOptions` に JSON schema / response format が無い場合、JSON-only prompt だけを強保証として扱わない。

@@ -32,7 +32,8 @@ internal static class CopilotPolicyInventory
         ["sandbox", "vscode", "requireBase64ImageAttachments"],
         ["allowedMcpServers", "deniedMcpServers", "strictPluginOnlyCustomization", "allowManagedMcpServersOnly",
             "allowManagedHooksOnly", "features", "enabledPlugins", "extraKnownMarketplaces", "strictKnownMarketplaces"],
-        ["remoteControl", "forceLoginOrgs", "forceRemoteSettingsRefresh", "policyHelper", "policyHelperFailureMode", "telemetry"],
+        ["remoteControl", "forceLoginOrgs", "forceRemoteSettingsRefresh", "policyHelper", "policyHelperFailureMode", "telemetry",
+            "communication", "copilotInferenceUrl"],
     ];
     private static readonly string[] _groupNames = ["Model", "Permissions", "Runtime", "Customization", "RemoteTelemetry"];
     private static readonly HashSet<string> _rootKeys = _groupKeys.SelectMany(k => k)
@@ -50,6 +51,7 @@ internal static class CopilotPolicyInventory
         "telemetry.capture.prompts", "telemetry.capture.responses", "telemetry.capture.toolArguments",
         "telemetry.capture.toolOutput", "telemetry.capture.policyDetail", "telemetry.captureContent",
         "telemetry.lockCaptureContent", "telemetry.serviceName",
+        "communication.support", "communication.support.url",
     };
     private static readonly HashSet<string> _safeStrings = new(StringComparer.Ordinal)
     {
@@ -102,6 +104,7 @@ internal static class CopilotPolicyInventory
                     "fusionTier" => result.Meta?.FusionTier,
                     "effortLevel" => result.Meta?.EffortLevel,
                     "contextTier" => result.Meta?.ContextTier,
+                    "communication" => result.Meta?.Communication,
                     _ => null,
                 };
                 var sources = meta is not null ? new[] { Source(meta.Source) } : SourcesFor(result, key);
@@ -280,7 +283,8 @@ internal static class CopilotPolicyInventory
         }
         if (key is "sandbox.userPolicy" or "telemetry.headers" or "telemetry.resourceAttributes"
             or "telemetry.endpoint" or "telemetry.serviceName" or "policyHelper.path" or "policyHelper.args"
-            or "forceLoginOrgs" or "remoteControl.githubDotComOrganizations" or "remoteControl.githubEnterpriseCloudDomains")
+            or "forceLoginOrgs" or "remoteControl.githubDotComOrganizations" or "remoteControl.githubEnterpriseCloudDomains"
+            or "communication.support.url" or "copilotInferenceUrl")
         {
             var empty = element.ValueKind == JsonValueKind.Array && element.GetArrayLength() == 0
                 || element.ValueKind == JsonValueKind.Object && !element.EnumerateObject().Any()
