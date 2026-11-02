@@ -26,6 +26,7 @@ public sealed class ToolAuditHookTests
         var pre = new PreToolUseHookInput
         {
             ToolName = "radar_list_commits",
+            ToolCallId = "call-1",
             ToolArgs = Json(new { status = "Unseen" }),
             Timestamp = harness.Clock.GetUtcNow(),
         };
@@ -55,7 +56,7 @@ public sealed class ToolAuditHookTests
 
         var invocation = new HookInvocation { SessionId = "S1" };
         await hook.OnPreToolUseAsync(
-            new PreToolUseHookInput { ToolName = "radar_get_diff", ToolArgs = Json(new { sha = "abc" }) },
+            new PreToolUseHookInput { ToolName = "radar_get_diff", ToolCallId = "call-1", ToolArgs = Json(new { sha = "abc" }) },
             invocation, ct);
 
         var preTime = harness.UtcNow;
@@ -65,6 +66,7 @@ public sealed class ToolAuditHookTests
             new PostToolUseHookInput
             {
                 ToolName = "radar_get_diff",
+                ToolCallId = "call-1",
                 ToolArgs = Json(new { sha = "abc" }),
                 ToolResult = Json(new { diff = "@@ -1 +1 @@\n-old\n+new" }),
             },
@@ -86,7 +88,7 @@ public sealed class ToolAuditHookTests
         var invocation = new HookInvocation { SessionId = "S1" };
 
         await hook.OnPreToolUseAsync(
-            new PreToolUseHookInput { ToolName = "radar_save_review", ToolArgs = Json(new { sha = "abc" }) },
+            new PreToolUseHookInput { ToolName = "radar_save_review", ToolCallId = "call-1", ToolArgs = Json(new { sha = "abc" }) },
             invocation, ct);
 
         // Simulate the SDK reporting an error in the result payload.
@@ -94,6 +96,7 @@ public sealed class ToolAuditHookTests
             new PostToolUseHookInput
             {
                 ToolName = "radar_save_review",
+                ToolCallId = "call-1",
                 ToolResult = Json(new { error = "Unknown SHA: abc" }),
             },
             invocation, ct);
@@ -114,10 +117,10 @@ public sealed class ToolAuditHookTests
         var invocation = new HookInvocation { SessionId = "S1" };
 
         await hook.OnPreToolUseAsync(
-            new PreToolUseHookInput { ToolName = "radar_list_commits", ToolArgs = Json(new { }) },
+            new PreToolUseHookInput { ToolName = "radar_list_commits", ToolCallId = "call-1", ToolArgs = Json(new { }) },
             invocation, ct);
         await hook.OnPostToolUseAsync(
-            new PostToolUseHookInput { ToolName = "radar_list_commits", ToolResult = Json(new { count = 3 }) },
+            new PostToolUseHookInput { ToolName = "radar_list_commits", ToolCallId = "call-1", ToolResult = Json(new { count = 3 }) },
             invocation, ct);
 
         var records = harness.JsonlSink.Records;
@@ -137,7 +140,7 @@ public sealed class ToolAuditHookTests
 
         var tasks = Enumerable.Range(0, 10).Select(i => Task.Run(() =>
             hook.OnPreToolUseAsync(
-                new PreToolUseHookInput { ToolName = "radar_list_commits", ToolArgs = Json(new { i }) },
+                new PreToolUseHookInput { ToolName = "radar_list_commits", ToolCallId = $"call-{i}", ToolArgs = Json(new { i }) },
                 invocation, ct), ct)).ToArray();
         await Task.WhenAll(tasks);
 
@@ -224,6 +227,9 @@ public sealed class ToolAuditHookTests
     [Theory]
     [InlineData(null, "unmatched")]
     [InlineData("unmatched", null)]
+    [InlineData("first", "second")]
+    [InlineData("", "")]
+    [InlineData(" ", " ")]
     public async Task PostUse_Unmatched_Call_Id_Does_Not_Consume_Another_Pending_Row(
         string? preCallId, string? postCallId)
     {
@@ -249,7 +255,7 @@ public sealed class ToolAuditHookTests
     }
 
     [Fact]
-    public async Task PostUse_Without_Call_Ids_Preserves_Legacy_Fifo_Order()
+    public async Task Hooks_Without_Call_Ids_Are_Recorded_Independently()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var harness = await TestHarness.CreateAsync(ct);
@@ -273,8 +279,19 @@ public sealed class ToolAuditHookTests
 
         await using var db = harness.CreateDb();
         var rows = await db.CopilotToolLogs.OrderBy(row => row.Id).ToListAsync(ct);
-        Assert.Equal(2, rows.Count);
-        Assert.Equal(rows.Select(row => row.ArgsJson), rows.Select(row => row.ResultJson));
+        Assert.Equal(4, rows.Count);
+        Assert.All(rows.Take(2), row =>
+        {
+            Assert.Equal(default, row.EndedAt);
+            Assert.Equal(string.Empty, row.ResultJson);
+        });
+        Assert.All(rows.Skip(2), row =>
+        {
+            Assert.Equal(harness.UtcNow, row.EndedAt);
+            Assert.NotEqual(string.Empty, row.ResultJson);
+        });
+        Assert.Empty(harness.JsonlSink.Records.Where(record => record.Phase == "pre").Select(record => record.RowId)
+            .Intersect(harness.JsonlSink.Records.Where(record => record.Phase == "post").Select(record => record.RowId)));
     }
 
     private static JsonElement Json<T>(T value) => JsonSerializer.SerializeToElement(value);
