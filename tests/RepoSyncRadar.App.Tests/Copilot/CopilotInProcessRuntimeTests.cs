@@ -39,7 +39,7 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.105", status.Version);
+        Assert.Equal("1.0.106-1", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
@@ -216,7 +216,7 @@ public sealed class CopilotInProcessRuntimeTests
         await client.StartAsync(ct);
         var schema = await client.Rpc.ManagedSettings.SchemaAsync(ct);
         var server = await client.Rpc.ManagedSettings.ValidateAsync(
-            """{"model":"auto","autoTier":{"overridable":"intelligence"},"permissions":{"allow":["read","write"],"deny":["shell"]},"sandbox":{"enabled":true},"vscode":{"temporaryDefaultToLocalHarness":false}}""",
+            """{"model":"auto","autoTier":{"overridable":"intelligence"},"permissions":{"allow":["read","write"],"deny":["shell"]},"sandbox":{"enabled":true},"vscode":{"temporaryDefaultToLocalHarness":false},"communication":{"support":{"url":"https://support.example.invalid/private"}},"copilotInferenceUrl":"https://inference.example.invalid/private"}""",
             layer: "server", cancellationToken: ct);
         var device = await client.Rpc.ManagedSettings.ValidateAsync(
             """{"permissions":{"allow":["read"]},"enabledPlugins":{"github":false}}""",
@@ -234,10 +234,22 @@ public sealed class CopilotInProcessRuntimeTests
             Layers = composed.Layers, Diagnostics = composed.Diagnostics,
         });
         var rows = snapshot.Groups.SelectMany(group => group.Entries).ToDictionary(row => row.Key);
-        var schemaKeys = schema.Schema.GetProperty("properties").EnumerateObject().Select(property => property.Name);
+        var schemaKeys = schema.Schema.GetProperty("properties").EnumerateObject().Select(property => property.Name).ToArray();
         var inventoryKeys = rows.Keys.Where(key => !key.StartsWith("status.", StringComparison.Ordinal))
-            .Select(key => key.Split('.')[0]).Distinct(StringComparer.Ordinal);
-        Assert.Equal(schemaKeys.Order(StringComparer.Ordinal), inventoryKeys.Order(StringComparer.Ordinal));
+            .Select(key => key.Split('.')[0]).Distinct(StringComparer.Ordinal).ToArray();
+        Assert.Empty(schemaKeys.Except(inventoryKeys, StringComparer.Ordinal));
+        Assert.Empty(inventoryKeys.Except(schemaKeys, StringComparer.Ordinal));
+        Assert.Equal("https://support.example.invalid/private", composed.Values?.Communication?.Support?.Url);
+        Assert.Equal("Copilot.Policy.Value.Hidden", Assert.Single(rows["communication"].Values).ResourceKey);
+        Assert.Equal(["Server"], rows["communication"].Sources);
+        Assert.False(rows["communication"].Overridable);
+        Assert.Equal("https://inference.example.invalid/private",
+            composed.Resolved.Settings?.GetProperty("copilotInferenceUrl").GetString());
+        Assert.Equal("Copilot.Policy.Value.Hidden", Assert.Single(rows["copilotInferenceUrl"].Values).ResourceKey);
+        Assert.DoesNotContain("support.example.invalid", System.Text.Json.JsonSerializer.Serialize(snapshot),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("inference.example.invalid", System.Text.Json.JsonSerializer.Serialize(snapshot),
+            StringComparison.Ordinal);
         Assert.True(composed.Resolved.PermissionsAllowIntersected);
         Assert.Equal("Copilot.Policy.Value.Intersected", rows["permissions.allow"].Values[0].ResourceKey);
         Assert.Equal(["Device", "Server"], rows["permissions.allow"].Sources.Order(StringComparer.Ordinal));

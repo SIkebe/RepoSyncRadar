@@ -327,6 +327,7 @@ PermissionRequestHandler handler = async (req, _) =>
 
 `OnPreToolUse` / `OnPostToolUse` で **すべてのツール呼び出しを SQLite (`CopilotToolLog`) と JSONL に保存**。
 
+- 対応付け: `(SessionId, ToolCallId)` で入力と結果を結び、同じツールの並列呼び出しが逆順で完了しても取り違えない。ID を報告しない旧ランタイムだけはセッション・ツール別 FIFO を使い、未一致の結果は独立した監査行として保存する。
 - 再現性: 入力 → 出力 → エラー内容を残し、デバッグ可能。
 - セキュリティ: 想定外のシェルコマンド・URL アクセスを後追いで発見できる。
 - 性能: 同一引数で頻繁に呼ばれるツールは将来キャッシュ化できる。

@@ -579,6 +579,10 @@
   <data name="Copilot.Policy.Item.policyHelper.args" xml:space="preserve"><value>Arguments</value></data>
   <data name="Copilot.Policy.Item.policyHelper.timeoutMs" xml:space="preserve"><value>Timeout (ms)</value></data>
   <data name="Copilot.Policy.Item.policyHelperFailureMode" xml:space="preserve"><value>Helper failure handling</value></data>
+  <data name="Copilot.Policy.Item.communication" xml:space="preserve"><value>Organization support information</value></data>
+  <data name="Copilot.Policy.Item.copilotInferenceUrl" xml:space="preserve"><value>Copilot inference endpoint</value></data>
+  <data name="Copilot.Policy.Item.communication.support" xml:space="preserve"><value>Support</value></data>
+  <data name="Copilot.Policy.Item.communication.support.url" xml:space="preserve"><value>Support URL (informational only)</value></data>
   <data name="Copilot.Policy.Item.telemetry" xml:space="preserve"><value>Telemetry settings</value></data>
   <data name="Copilot.Policy.Item.telemetry.enabled" xml:space="preserve"><value>Enabled</value></data>
   <data name="Copilot.Policy.Item.telemetry.endpoint" xml:space="preserve"><value>Endpoint</value></data>

@@ -579,6 +579,10 @@
   <data name="Copilot.Policy.Item.policyHelper.args" xml:space="preserve"><value>引数</value></data>
   <data name="Copilot.Policy.Item.policyHelper.timeoutMs" xml:space="preserve"><value>タイムアウト（ms）</value></data>
   <data name="Copilot.Policy.Item.policyHelperFailureMode" xml:space="preserve"><value>ヘルパー失敗時の扱い</value></data>
+  <data name="Copilot.Policy.Item.communication" xml:space="preserve"><value>組織のサポート情報</value></data>
+  <data name="Copilot.Policy.Item.copilotInferenceUrl" xml:space="preserve"><value>Copilot 推論エンドポイント</value></data>
+  <data name="Copilot.Policy.Item.communication.support" xml:space="preserve"><value>サポート</value></data>
+  <data name="Copilot.Policy.Item.communication.support.url" xml:space="preserve"><value>サポート URL（案内情報のみ）</value></data>
   <data name="Copilot.Policy.Item.telemetry" xml:space="preserve"><value>テレメトリ設定</value></data>
   <data name="Copilot.Policy.Item.telemetry.enabled" xml:space="preserve"><value>有効</value></data>
   <data name="Copilot.Policy.Item.telemetry.endpoint" xml:space="preserve"><value>送信先</value></data>

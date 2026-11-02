@@ -12,7 +12,8 @@ namespace RepoSyncRadar.App.Copilot.Audit;
 /// Wires <see cref="SessionHooks.OnPreToolUse"/> and <see cref="SessionHooks.OnPostToolUse"/>
 /// to a durable audit trail: one row in <see cref="CopilotToolLog"/> per tool invocation plus
 /// one line per phase in the JSONL sink. Pre rows are matched to post rows by a per-(session, tool)
-/// FIFO queue of open ids so that parallel tool calls within the same session still pair correctly.
+/// FIFO queue only on older runtimes without tool-call IDs. Identified calls match by (session, tool-call ID)
+/// so parallel calls completing out of order retain their original inputs.
 /// </summary>
 public sealed partial class ToolAuditHook
 {
@@ -26,6 +27,7 @@ public sealed partial class ToolAuditHook
     private readonly TimeProvider _clock;
     private readonly ILogger<ToolAuditHook> _logger;
     private readonly ConcurrentDictionary<string, ConcurrentQueue<int>> _pendingByKey = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<(string SessionId, string ToolCallId), int> _pendingByCallId = new();
 
     public ToolAuditHook(
         IDbContextFactory<RadarDbContext> dbFactory,
@@ -74,9 +76,19 @@ public sealed partial class ToolAuditHook
         db.CopilotToolLogs.Add(row);
         await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        _pendingByKey
-            .GetOrAdd(MakeKey(sessionId, toolName), static _ => new ConcurrentQueue<int>())
-            .Enqueue(row.Id);
+        if (input.ToolCallId is { } callId)
+        {
+            if (!_pendingByCallId.TryAdd((sessionId, callId), row.Id))
+            {
+                throw new InvalidOperationException("A Copilot tool call is already pending for this session.");
+            }
+        }
+        else
+        {
+            _pendingByKey
+                .GetOrAdd(MakeKey(sessionId, toolName), static _ => new ConcurrentQueue<int>())
+                .Enqueue(row.Id);
+        }
 
         await _jsonlSink.AppendAsync(
             new AuditRecord("pre", row.Id, sessionId, toolName, argsJson, ResultJson: null, startedAt, EndedAt: null),
@@ -104,7 +116,7 @@ public sealed partial class ToolAuditHook
         var toolName = input.ToolName ?? string.Empty;
         var resultJson = SerializeJson(input.ToolResult);
 
-        var openId = TryDequeueOpenId(sessionId, toolName);
+        var openId = TryDequeueOpenId(sessionId, toolName, input.ToolCallId);
 
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         CopilotToolLog? row = null;
@@ -139,8 +151,12 @@ public sealed partial class ToolAuditHook
         return new PostToolUseHookOutput();
     }
 
-    private int? TryDequeueOpenId(string sessionId, string toolName)
+    private int? TryDequeueOpenId(string sessionId, string toolName, string? toolCallId)
     {
+        if (toolCallId is not null)
+        {
+            return _pendingByCallId.TryRemove((sessionId, toolCallId), out var rowId) ? rowId : null;
+        }
         if (_pendingByKey.TryGetValue(MakeKey(sessionId, toolName), out var queue) && queue.TryDequeue(out var id))
         {
             return id;

@@ -16,6 +16,78 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class CopilotPolicyDiagnosticsTests
 {
     [Theory]
+    [InlineData("{}", "Unreported")]
+    [InlineData("""{"copilotInferenceUrl":""}""", "None")]
+    [InlineData("""{"copilotInferenceUrl":"https://private.example/inference?token=secret"}""", "Hidden")]
+    [InlineData("""{"copilotInferenceUrl":"high"}""", "Hidden")]
+    public void Inventory_Redacts_The_Runtime_Inference_Endpoint(string settings, string state)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
+            $$$"""{"resolved":{"settings":{{{settings}}}}}""")!;
+        var snapshot = CopilotPolicyDiagnostics.FromResult(result);
+        var row = snapshot.Groups.SelectMany(group => group.Entries).Single(entry => entry.Key == "copilotInferenceUrl");
+        var value = Assert.Single(row.Values);
+
+        Assert.Equal("Copilot.Policy.Value." + state, value.ResourceKey);
+        Assert.Null(value.Text);
+        Assert.DoesNotContain("private", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Inventory_Preserves_Communication_Provenance_Without_Exposing_Requested_Urls()
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>("""
+            {"resolved":{"settings":{"communication":{"support":{"url":"https://private.example"}}}},
+             "meta":{"communication":{"source":"device","overridable":false,
+                 "requested":"https://requested.example"}}}
+            """)!;
+        var snapshot = CopilotPolicyDiagnostics.FromResult(result);
+        var row = snapshot.Groups.SelectMany(group => group.Entries).Single(entry => entry.Key == "communication");
+
+        Assert.Equal("Device", Assert.Single(row.Sources));
+        Assert.False(row.Overridable);
+        Assert.All(row.Values, value => Assert.Equal("Copilot.Policy.Value.Hidden", value.ResourceKey));
+        Assert.DoesNotContain("private.example", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+        Assert.DoesNotContain("requested.example", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("{}", "Unreported", null)]
+    [InlineData("""{"communication":{}}""", "None", null)]
+    [InlineData("""{"communication":{"support":{"url":""}}}""", "None", "Copilot.Policy.Item.communication.support.url")]
+    [InlineData("""{"communication":{"support":{"url":"https://private.example/support?token=secret"}}}""",
+        "Hidden", "Copilot.Policy.Item.communication.support.url")]
+    [InlineData("""{"communication":{"support":{"url":"high"}}}""",
+        "Hidden", "Copilot.Policy.Item.communication.support.url")]
+    public void Inventory_Recognizes_Informational_Support_Without_Exposing_Or_Opening_Its_Url(
+        string settings, string state, string? label)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
+            $$$"""
+            {"resolved":{"settings":{{{settings}}}},"layers":[{"source":"server","settings":{{{settings}}}}]}
+            """)!;
+        var snapshot = CopilotPolicyDiagnostics.FromResult(result);
+        var row = snapshot.Groups.SelectMany(group => group.Entries).Single(entry => entry.Key == "communication");
+        var value = Assert.Single(row.Values);
+
+        Assert.Equal("Copilot.Policy.Value." + state, value.ResourceKey);
+        Assert.Equal(label, value.LabelKey);
+        Assert.Null(value.Text);
+        if (state == "Unreported")
+        {
+            Assert.Empty(row.Sources);
+        }
+        else
+        {
+            Assert.Equal("Server", Assert.Single(row.Sources));
+        }
+        Assert.DoesNotContain("private", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+        Assert.DoesNotContain(snapshot.Groups.SelectMany(group => group.Entries), entry => entry.Key == "unknown");
+    }
+
+    [Theory]
     [InlineData("standard", false)]
     [InlineData("high", false)]
     [InlineData("max", true)]
