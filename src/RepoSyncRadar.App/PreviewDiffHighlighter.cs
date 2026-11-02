@@ -50,6 +50,16 @@ internal readonly record struct PreviewDiffNavigationResult(
     [property: JsonPropertyName("found")] bool Found,
     [property: JsonPropertyName("scrollTop")] double ScrollTop = 0);
 
+internal sealed record PreviewDiffViewportAnchor(
+    [property: JsonPropertyName("index")] int? Index,
+    [property: JsonPropertyName("navigationIndex")] int? NavigationIndex,
+    [property: JsonPropertyName("viewportTop")] double ViewportTop,
+    [property: JsonPropertyName("scrollTop")] double ScrollTop);
+
+internal sealed record PreviewDiffViewport(
+    PreviewDiffPane Pane,
+    PreviewDiffViewportAnchor Anchor);
+
 internal static class PreviewDiffHighlighter
 {
     internal const int MaximumAlignedChangeCount = 512;
@@ -1212,7 +1222,8 @@ internal static class PreviewDiffHighlighter
         WebView2CompositionControl beforeView,
         WebView2CompositionControl afterView,
         IReadOnlyList<PreviewDiffChange> changes,
-        Func<bool>? isCurrent = null)
+        Func<bool>? isCurrent = null,
+        PreviewDiffViewport? preservedViewport = null)
     {
         ArgumentNullException.ThrowIfNull(beforeView);
         ArgumentNullException.ThrowIfNull(afterView);
@@ -1262,9 +1273,8 @@ internal static class PreviewDiffHighlighter
             beforeMeasurement.Offsets.Select(static offset => offset!.Value).ToArray(),
             afterMeasurement.Offsets.Select(static offset => offset!.Value).ToArray());
         gapPlan = AddAlignmentNavigationPlaceholders(gapPlan, changes);
-        var synchronizedScrollTop = ResolveSynchronizedScrollTop(
-            beforeMeasurement.ScrollTop,
-            afterMeasurement.ScrollTop);
+        var synchronizedScrollTop = preservedViewport?.Anchor.ScrollTop
+            ?? ResolveSynchronizedScrollTop(beforeMeasurement.ScrollTop, afterMeasurement.ScrollTop);
 
         var appliedScrollTops = await Task.WhenAll(
             beforeView.ExecuteScriptAsync(BuildApplyAlignmentGapsScript(
@@ -1283,6 +1293,39 @@ internal static class PreviewDiffHighlighter
         if (beforeAppliedScrollTop is null || afterAppliedScrollTop is null)
         {
             return;
+        }
+
+        if (preservedViewport is not null)
+        {
+            var sourceView = preservedViewport.Pane == PreviewDiffPane.Before ? beforeView : afterView;
+            var anchorResult = await sourceView.ExecuteScriptAsync(
+                BuildResolveViewportAnchorScrollTopScript(preservedViewport.Anchor));
+            if (isCurrent is not null && !isCurrent())
+            {
+                return;
+            }
+
+            var anchorScrollTop = DeserializeDouble(anchorResult);
+            if (anchorScrollTop is null)
+            {
+                throw new InvalidOperationException("The preview viewport anchor could not be measured.");
+            }
+
+            var scrollScript = MainWindow.BuildApplySynchronizedScrollScript(anchorScrollTop.Value);
+            var restoredScrollTops = await Task.WhenAll(
+                beforeView.ExecuteScriptAsync(scrollScript),
+                afterView.ExecuteScriptAsync(scrollScript));
+            if (isCurrent is not null && !isCurrent())
+            {
+                return;
+            }
+
+            beforeAppliedScrollTop = DeserializeDouble(restoredScrollTops[0]);
+            afterAppliedScrollTop = DeserializeDouble(restoredScrollTops[1]);
+            if (beforeAppliedScrollTop is null || afterAppliedScrollTop is null)
+            {
+                throw new InvalidOperationException("The preview viewport could not be restored.");
+            }
         }
 
         var appliedSynchronizedScrollTop = ResolveAppliedSynchronizedScrollTop(
@@ -1332,6 +1375,63 @@ internal static class PreviewDiffHighlighter
         double beforeScrollTop,
         double afterScrollTop)
         => Math.Min(Math.Max(0, beforeScrollTop), Math.Max(0, afterScrollTop));
+
+    internal static PreviewDiffViewport SelectViewportAnchor(
+        PreviewDiffViewportAnchor before,
+        PreviewDiffViewportAnchor after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        var beforeHasAnchor = before.Index is not null || before.NavigationIndex is not null;
+        var afterHasAnchor = after.Index is not null || after.NavigationIndex is not null;
+        return beforeHasAnchor
+            && (!afterHasAnchor || Math.Abs(before.ViewportTop) < Math.Abs(after.ViewportTop))
+                ? new(PreviewDiffPane.Before, before)
+                : new(PreviewDiffPane.After, after);
+    }
+
+    internal static string BuildCaptureViewportAnchorScript()
+        => """
+(() => {
+  const scrollingRoot = document.scrollingElement || document.documentElement || document.body;
+  const scrollTop = window.scrollY || scrollingRoot?.scrollTop || 0;
+  const closestVisible = (selector) => Array.from(document.querySelectorAll(selector))
+    .map(element => ({ element, rect: element.getBoundingClientRect() }))
+    .filter(({ rect }) => rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight)
+    .sort((left, right) => Math.abs(left.rect.top) - Math.abs(right.rect.top))[0];
+  const anchor = closestVisible(
+    '[data-rsr-diff-index],.rsr-preview-diff-alignment-gap[data-rsr-diff-navigation-index]');
+  return {
+    index: anchor?.element.hasAttribute('data-rsr-diff-index')
+      ? Number(anchor.element.getAttribute('data-rsr-diff-index')) : null,
+    navigationIndex: anchor?.element.hasAttribute('data-rsr-diff-navigation-index')
+      ? Number(anchor.element.getAttribute('data-rsr-diff-navigation-index')) : null,
+    viewportTop: anchor?.rect.top ?? 0,
+    scrollTop
+  };
+})();
+""";
+
+    internal static string BuildResolveViewportAnchorScrollTopScript(PreviewDiffViewportAnchor anchor)
+    {
+        ArgumentNullException.ThrowIfNull(anchor);
+        var anchorJson = JsonSerializer.Serialize(anchor, _jsonOptions);
+        return $$"""
+(() => {
+  const anchor = {{anchorJson}};
+  const element = anchor.index !== null
+    ? document.querySelector(`[data-rsr-diff-index="${anchor.index}"]`)
+    : anchor.navigationIndex !== null
+      ? document.querySelector(`.rsr-preview-diff-alignment-gap[data-rsr-diff-navigation-index="${anchor.navigationIndex}"]`)
+      : null;
+  const scrollingRoot = document.scrollingElement || document.documentElement || document.body;
+  const scrollTop = window.scrollY || scrollingRoot?.scrollTop || 0;
+  return element
+    ? Math.max(0, scrollTop + element.getBoundingClientRect().top - anchor.viewportTop)
+    : anchor.scrollTop;
+})();
+""";
+    }
 
     internal static PreviewDiffAlignmentGapPlan AddAlignmentNavigationPlaceholders(
         PreviewDiffAlignmentGapPlan gapPlan,

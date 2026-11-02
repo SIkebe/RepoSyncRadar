@@ -148,7 +148,7 @@ public partial class MainWindow : Window
     private static readonly GridLength _collapsedSplitterColumnWidth = new(0);
     private static readonly TimeSpan _previewFocusLayoutShieldDuration = TimeSpan.FromMilliseconds(120);
     private static readonly TimeSpan _previewAlignmentDebounce = TimeSpan.FromMilliseconds(150);
-    private static readonly TimeSpan _previewAlignmentSettleDelay = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan _previewFocusAlignmentDebounce = TimeSpan.FromMilliseconds(16);
     private const int _previewAlignmentPassCount = 2;
 
     private readonly UrlAllowList _allowList;
@@ -184,8 +184,11 @@ public partial class MainWindow : Window
     private bool _previewFocusToggleMouseActivated;
     private bool? _pendingPreviewFocusMode;
     private bool _previewFocusModeChangeScheduled;
+    private bool _previewFocusLayoutTransitionPending;
+    private PreviewDiffViewport? _previewFocusModePreservedViewport;
     private DocsThemeMode _docsTheme = DocsThemeMode.Dark;
     private readonly DispatcherTimer _previewFocusLayoutShieldTimer;
+    private Brush _previewFocusLayoutShieldBackground = Brushes.Transparent;
     private readonly DispatcherTimer _previewAlignmentTimer;
     private HwndSource? _windowHwndSource;
     private string? _docsThemeDocumentScriptId;
@@ -430,7 +433,8 @@ public partial class MainWindow : Window
         }
 
         _pendingPreviewFocusMode = isPreviewFocusMode;
-        PreviewFocusLayoutShield.Visibility = Visibility.Visible;
+        _previewFocusLayoutTransitionPending = true;
+        ShowPreviewFocusLayoutShield();
         _previewFocusLayoutShieldTimer.Stop();
 
         if (_previewFocusModeChangeScheduled)
@@ -439,18 +443,99 @@ public partial class MainWindow : Window
         }
 
         _previewFocusModeChangeScheduled = true;
-        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+        _previewAlignmentOperationId++;
+        _previewAlignmentTimer.Stop();
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Render,
+            new Action(() => _ = ApplyPendingPreviewFocusModeChangeAsync()));
+    }
+
+    private async Task ApplyPendingPreviewFocusModeChangeAsync()
+    {
+        if (_pendingPreviewFocusMode is not { } pendingPreviewFocusMode)
         {
             _previewFocusModeChangeScheduled = false;
-            if (_pendingPreviewFocusMode is not { } pendingPreviewFocusMode)
+            return;
+        }
+
+        var generation = _previewDiffGeneration;
+        var navigationOperationId = _previewDiffNavigationOperationId;
+        var preservedViewport = await CapturePreviewViewportAsync(generation);
+        pendingPreviewFocusMode = _pendingPreviewFocusMode ?? pendingPreviewFocusMode;
+        _pendingPreviewFocusMode = null;
+        _previewFocusModeChangeScheduled = false;
+
+        if (_isPreviewFocusMode != pendingPreviewFocusMode)
+        {
+            _previewFocusModePreservedViewport = navigationOperationId == _previewDiffNavigationOperationId
+                ? preservedViewport
+                : null;
+            ApplyPreviewFocusMode(pendingPreviewFocusMode);
+            if (_activePreviewDiffPlan is not null && _beforePreviewDiffReady && _afterPreviewDiffReady)
             {
-                return;
+                _previewAlignmentTimer.Interval = _previewFocusAlignmentDebounce;
+                _previewAlignmentTimer.Stop();
+                _previewAlignmentTimer.Start();
+            }
+            else
+            {
+                CompletePreviewFocusLayoutTransition();
+            }
+        }
+        else
+        {
+            CompletePreviewFocusLayoutTransition();
+        }
+    }
+
+    private void CompletePreviewFocusLayoutTransition()
+    {
+        if (!_previewFocusLayoutTransitionPending)
+        {
+            return;
+        }
+
+        _previewFocusLayoutTransitionPending = false;
+        _previewFocusLayoutShieldTimer.Interval = _previewFocusAlignmentDebounce;
+        _previewFocusLayoutShieldTimer.Start();
+    }
+
+    private async Task<PreviewDiffViewport?> CapturePreviewViewportAsync(int generation)
+    {
+        if (_activePreviewDiffPlan is null
+            || !_beforePreviewDiffReady
+            || !_afterPreviewDiffReady
+            || DocsView.CoreWebView2 is null
+            || PreviewView.CoreWebView2 is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var script = PreviewDiffHighlighter.BuildCaptureViewportAnchorScript();
+            var results = await Task.WhenAll(
+                DocsView.ExecuteScriptAsync(script),
+                PreviewView.ExecuteScriptAsync(script));
+            if (generation != _previewDiffGeneration)
+            {
+                return null;
             }
 
-            _pendingPreviewFocusMode = null;
-            ApplyPreviewFocusMode(pendingPreviewFocusMode);
-            _previewFocusLayoutShieldTimer.Start();
-        });
+            var beforeAnchor = JsonSerializer.Deserialize<PreviewDiffViewportAnchor>(results[0]);
+            var afterAnchor = JsonSerializer.Deserialize<PreviewDiffViewportAnchor>(results[1]);
+            if (beforeAnchor is null || afterAnchor is null)
+            {
+                throw new InvalidOperationException("The preview viewport could not be captured.");
+            }
+
+            return PreviewDiffHighlighter.SelectViewportAnchor(beforeAnchor, afterAnchor);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogPreviewScrollSyncFailed(_logger, ex);
+            return null;
+        }
     }
 
     private void ApplyPreviewFocusMode(bool isPreviewFocusMode)
@@ -528,12 +613,128 @@ public partial class MainWindow : Window
     private void OnPreviewFocusLayoutShieldTimerTick(object? sender, EventArgs e)
     {
         _previewFocusLayoutShieldTimer.Stop();
-        if (_previewFocusModeChangeScheduled || _pendingPreviewFocusMode is not null)
+        _previewFocusLayoutShieldTimer.Interval = _previewFocusLayoutShieldDuration;
+        if (_previewFocusModeChangeScheduled
+            || _pendingPreviewFocusMode is not null
+            || _previewFocusModePreservedViewport is not null)
         {
             return;
         }
 
         PreviewFocusLayoutShield.Visibility = Visibility.Collapsed;
+        PreviewFocusLayoutShield.Background = _previewFocusLayoutShieldBackground;
+    }
+
+    // Freezes the pre-toggle frame while columns resize and preview gaps realign, so the
+    // user does not see a solid-color flash or intermediate layouts.
+    private void ShowPreviewFocusLayoutShield()
+    {
+        if (PreviewFocusLayoutShield.Visibility == Visibility.Visible)
+        {
+            return;
+        }
+
+        PreviewFocusLayoutShield.Background = (Brush?)CaptureWindowClientSnapshotBrush()
+            ?? _previewFocusLayoutShieldBackground;
+        PreviewFocusLayoutShield.Visibility = Visibility.Visible;
+    }
+
+    private ImageBrush? CaptureWindowClientSnapshotBrush()
+    {
+        var hwnd = _windowHwndSource?.Handle ?? IntPtr.Zero;
+        if (hwnd == IntPtr.Zero || WindowState == WindowState.Minimized)
+        {
+            return null;
+        }
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var clientOrigin = default(NativePoint);
+        if (!GetWindowRect(hwnd, out var windowRect)
+            || !GetClientRect(hwnd, out var clientRect)
+            || !ClientToScreen(hwnd, ref clientOrigin))
+        {
+            LogLayoutShieldSnapshotFailed(_logger, null);
+            return null;
+        }
+
+        var windowWidth = windowRect.Right - windowRect.Left;
+        var windowHeight = windowRect.Bottom - windowRect.Top;
+        var clientWidth = clientRect.Right - clientRect.Left;
+        var clientHeight = clientRect.Bottom - clientRect.Top;
+        var offsetX = clientOrigin.X - windowRect.Left;
+        var offsetY = clientOrigin.Y - windowRect.Top;
+        if (clientWidth <= 0
+            || clientHeight <= 0
+            || offsetX < 0
+            || offsetY < 0
+            || offsetX + clientWidth > windowWidth
+            || offsetY + clientHeight > windowHeight)
+        {
+            LogLayoutShieldSnapshotFailed(_logger, null);
+            return null;
+        }
+
+        var screenDc = GetDC(IntPtr.Zero);
+        var memoryDc = IntPtr.Zero;
+        var bitmap = IntPtr.Zero;
+        try
+        {
+            if (screenDc == IntPtr.Zero)
+            {
+                LogLayoutShieldSnapshotFailed(_logger, null);
+                return null;
+            }
+
+            memoryDc = CreateCompatibleDC(screenDc);
+            bitmap = CreateCompatibleBitmap(screenDc, windowWidth, windowHeight);
+            if (memoryDc == IntPtr.Zero || bitmap == IntPtr.Zero)
+            {
+                LogLayoutShieldSnapshotFailed(_logger, null);
+                return null;
+            }
+
+            var previousBitmap = SelectObject(memoryDc, bitmap);
+            var printed = PrintWindow(hwnd, memoryDc, _printWindowRenderFullContent);
+            SelectObject(memoryDc, previousBitmap);
+            if (!printed)
+            {
+                LogLayoutShieldSnapshotFailed(_logger, null);
+                return null;
+            }
+
+            var source = Imaging.CreateBitmapSourceFromHBitmap(
+                bitmap,
+                IntPtr.Zero,
+                new Int32Rect(offsetX, offsetY, clientWidth, clientHeight),
+                System.Windows.Media.Imaging.BitmapSizeOptions.FromEmptyOptions());
+            source.Freeze();
+            var brush = new ImageBrush(source) { Stretch = Stretch.Fill };
+            brush.Freeze();
+            LogLayoutShieldSnapshotCaptured(_logger, stopwatch.ElapsedMilliseconds);
+            return brush;
+        }
+        catch (ExternalException ex)
+        {
+            LogLayoutShieldSnapshotFailed(_logger, ex);
+            return null;
+        }
+        finally
+        {
+            if (bitmap != IntPtr.Zero)
+            {
+                DeleteObject(bitmap);
+            }
+
+            if (memoryDc != IntPtr.Zero)
+            {
+                DeleteDC(memoryDc);
+            }
+
+            if (screenDc != IntPtr.Zero)
+            {
+                ReleaseDC(IntPtr.Zero, screenDc);
+            }
+        }
     }
 
     private void UpdatePreviewFocusToggleButton()
@@ -639,7 +840,11 @@ public partial class MainWindow : Window
         PreviewStatusText.Foreground = overlayForeground;
         DocsPreviewStatusDetailText.Foreground = overlayMutedForeground;
         PreviewStatusDetailText.Foreground = overlayMutedForeground;
-        PreviewFocusLayoutShield.Background = layoutShieldBackground;
+        _previewFocusLayoutShieldBackground = layoutShieldBackground;
+        if (PreviewFocusLayoutShield.Background is not ImageBrush)
+        {
+            PreviewFocusLayoutShield.Background = layoutShieldBackground;
+        }
         Resources["PreviewChromeIconForegroundBrush"] = iconForeground;
         Resources["PreviewChromeIconHoverForegroundBrush"] = iconHoverForeground;
         Resources["PreviewChromeIconHoverBackgroundBrush"] = iconHoverBackground;
@@ -1122,6 +1327,8 @@ public partial class MainWindow : Window
         }
 
         _requestedPreviewDiffIndex = targetIndex;
+        _previewFocusModePreservedViewport = null;
+        _previewFocusLayoutShieldTimer.Start();
         var operationId = ++_previewDiffNavigationOperationId;
         _ = QueuePreviewDiffNavigationAsync(targetIndex, _previewDiffGeneration, operationId);
     }
@@ -1361,6 +1568,8 @@ public partial class MainWindow : Window
 
     private void StartPreviewDiffTracking(PreviewComparisonRequest request)
     {
+        _previewFocusModePreservedViewport = null;
+        _previewFocusLayoutShieldTimer.Start();
         _activePreviewDiffRequest = request;
         _activePreviewDiffPlan = null;
         _previewDiffGeneration++;
@@ -1373,6 +1582,8 @@ public partial class MainWindow : Window
 
     private void StopPreviewDiffTracking()
     {
+        _previewFocusModePreservedViewport = null;
+        _previewFocusLayoutShieldTimer.Start();
         _activePreviewDiffRequest = null;
         _activePreviewDiffPlan = null;
         _previewDiffGeneration++;
@@ -1699,6 +1910,11 @@ public partial class MainWindow : Window
         }
 
         if (!_beforePreviewDiffReady || !_afterPreviewDiffReady)
+        {
+            return;
+        }
+
+        if (_previewFocusModeChangeScheduled || _previewFocusModePreservedViewport is not null)
         {
             return;
         }
@@ -2173,6 +2389,9 @@ public partial class MainWindow : Window
 
         _previewAlignmentOperationId++;
         _previewAlignmentTimer.Stop();
+        _previewAlignmentTimer.Interval = _previewFocusLayoutTransitionPending
+            ? _previewFocusAlignmentDebounce
+            : _previewAlignmentDebounce;
         _previewAlignmentTimer.Start();
     }
 
@@ -2182,13 +2401,25 @@ public partial class MainWindow : Window
         var plan = _activePreviewDiffPlan;
         var generation = _previewDiffGeneration;
         var operationId = _previewAlignmentOperationId;
+        var preservedViewport = _previewFocusModePreservedViewport;
         if (plan is null || !_beforePreviewDiffReady || !_afterPreviewDiffReady)
         {
+            _previewFocusModePreservedViewport = null;
+            if (_previewFocusLayoutTransitionPending)
+            {
+                CompletePreviewFocusLayoutTransition();
+            }
+            else
+            {
+                _previewFocusLayoutShieldTimer.Start();
+            }
+
             return;
         }
         try
         {
             if (!ReferenceEquals(plan, _activePreviewDiffPlan)
+                || !ReferenceEquals(preservedViewport, _previewFocusModePreservedViewport)
                 || !IsPreviewAlignmentOperationCurrent(
                     generation,
                     _previewDiffGeneration,
@@ -2200,11 +2431,8 @@ public partial class MainWindow : Window
 
             for (var pass = 0; pass < _previewAlignmentPassCount; pass++)
             {
-                if (pass > 0)
-                {
-                    await Task.Delay(_previewAlignmentSettleDelay);
-                }
                 if (!ReferenceEquals(plan, _activePreviewDiffPlan)
+                    || !ReferenceEquals(preservedViewport, _previewFocusModePreservedViewport)
                     || !IsPreviewAlignmentOperationCurrent(
                         generation,
                         _previewDiffGeneration,
@@ -2219,15 +2447,51 @@ public partial class MainWindow : Window
                     PreviewView,
                     plan.Changes,
                     () => ReferenceEquals(plan, _activePreviewDiffPlan)
+                        && ReferenceEquals(preservedViewport, _previewFocusModePreservedViewport)
                         && IsPreviewAlignmentOperationCurrent(
                             generation,
                             _previewDiffGeneration,
                             operationId,
-                            _previewAlignmentOperationId));
+                            _previewAlignmentOperationId),
+                    preservedViewport);
+            }
+
+            if (IsPreviewAlignmentOperationCurrent(
+                    generation,
+                    _previewDiffGeneration,
+                    operationId,
+                    _previewAlignmentOperationId))
+            {
+                _previewFocusModePreservedViewport = null;
+                if (_previewFocusLayoutTransitionPending)
+                {
+                    CompletePreviewFocusLayoutTransition();
+                }
+                else
+                {
+                    _previewFocusLayoutShieldTimer.Start();
+                }
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            if (IsPreviewAlignmentOperationCurrent(
+                    generation,
+                    _previewDiffGeneration,
+                    operationId,
+                    _previewAlignmentOperationId))
+            {
+                _previewFocusModePreservedViewport = null;
+                if (_previewFocusLayoutTransitionPending)
+                {
+                    CompletePreviewFocusLayoutTransition();
+                }
+                else
+                {
+                    _previewFocusLayoutShieldTimer.Start();
+                }
+            }
+
             LogPreviewAlignmentFailed(_logger, ex);
         }
     }
@@ -3124,6 +3388,64 @@ public partial class MainWindow : Window
     [DllImport("user32.dll", ExactSpelling = true)]
     private static extern bool GetCursorPos(out POINT lpPoint);
 
+    private const uint _printWindowRenderFullContent = 0x00000002;
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, uint nFlags);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out NativeRect lpRect);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetClientRect(IntPtr hWnd, out NativeRect lpRect);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ClientToScreen(IntPtr hWnd, ref NativePoint lpPoint);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    private static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    [DllImport("gdi32.dll", ExactSpelling = true)]
+    private static extern IntPtr CreateCompatibleDC(IntPtr hdc);
+
+    [DllImport("gdi32.dll", ExactSpelling = true)]
+    private static extern IntPtr CreateCompatibleBitmap(IntPtr hdc, int cx, int cy);
+
+    [DllImport("gdi32.dll", ExactSpelling = true)]
+    private static extern IntPtr SelectObject(IntPtr hdc, IntPtr h);
+
+    [DllImport("gdi32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DeleteObject(IntPtr ho);
+
+    [DllImport("gdi32.dll", ExactSpelling = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DeleteDC(IntPtr hdc);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
     private static extern bool RegisterRawInputDevices(
         [In] RAWINPUTDEVICE[] pRawInputDevices,
@@ -3277,4 +3599,16 @@ public partial class MainWindow : Window
         Level = LogLevel.Debug,
         Message = "Preview diff alignment failed.")]
     private static partial void LogPreviewAlignmentFailed(ILogger logger, Exception exception);
+
+    [LoggerMessage(
+        EventId = 13,
+        Level = LogLevel.Debug,
+        Message = "Workbench toggle snapshot capture failed; using the solid layout shield.")]
+    private static partial void LogLayoutShieldSnapshotFailed(ILogger logger, Exception? exception);
+
+    [LoggerMessage(
+        EventId = 14,
+        Level = LogLevel.Debug,
+        Message = "Workbench toggle snapshot captured in {ElapsedMilliseconds} ms.")]
+    private static partial void LogLayoutShieldSnapshotCaptured(ILogger logger, long elapsedMilliseconds);
 }

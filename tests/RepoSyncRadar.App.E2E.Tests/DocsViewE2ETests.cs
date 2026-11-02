@@ -184,6 +184,98 @@ public sealed class DocsViewE2ETests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Preview_Diff_Viewport_Preserves_Visible_Content_Across_Resize_And_Gap_Rebuilds(
+        bool preserveGap)
+    {
+        var appAssembly = Assembly.LoadFrom(Path.ChangeExtension(AppHost.ResolveAppExePath(), ".dll"));
+        var highlighterType = appAssembly.GetType("RepoSyncRadar.App.PreviewDiffHighlighter", throwOnError: true)!;
+        var anchorType = appAssembly.GetType("RepoSyncRadar.App.PreviewDiffViewportAnchor", throwOnError: true)!;
+        var mainWindowType = appAssembly.GetType("RepoSyncRadar.App.MainWindow", throwOnError: true)!;
+        const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
+        var captureScript = Assert.IsType<string>(
+            highlighterType.GetMethod("BuildCaptureViewportAnchorScript", flags)!.Invoke(null, null));
+        var applyGaps = highlighterType.GetMethod("BuildApplyAlignmentGapsScript", flags)!;
+        var resolveAnchor = highlighterType.GetMethod("BuildResolveViewportAnchorScrollTopScript", flags)!;
+        var applyScroll = mainWindowType.GetMethod("BuildApplySynchronizedScrollScript", flags)!;
+        var context = Assert.Single(_fixture.DocsBrowser.Contexts);
+        var page = await context.NewPageAsync();
+        try
+        {
+            await page.SetViewportSizeAsync(480, 600);
+            await page.SetContentAsync(
+                """
+                <style>
+                  html, body { overflow-anchor: none; }
+                  article { font: 16px/1.5 sans-serif; padding: 20px; }
+                  #tail { height: 2000px; }
+                </style>
+                <main><article>
+                  <p id="intro" data-rsr-diff-index="0"></p>
+                  <h2 data-rsr-diff-index="1">Troubleshooting missing usage data</h2>
+                  <p id="tail" data-rsr-diff-index="2">Detailed breakdowns depend on client-side telemetry.</p>
+                </article></main>
+                """);
+            await page.EvaluateAsync(
+                "() => document.querySelector('#intro').textContent = 'Paragraph text that reflows when the workbench changes width. '.repeat(160)");
+            var initialGapScript = Assert.IsType<string>(
+                applyGaps.Invoke(null, ["""[{"anchorIndex":1,"height":1200,"navigationIndex":0}]""", 0d]));
+            await page.EvaluateAsync<double>(initialGapScript);
+            var targetSelector = preserveGap
+                ? ".rsr-preview-diff-alignment-gap[data-rsr-diff-navigation-index='0']"
+                : "[data-rsr-diff-index='1']";
+            await page.EvaluateAsync(
+                "selector => window.scrollTo(0, window.scrollY + document.querySelector(selector).getBoundingClientRect().top - 40)",
+                targetSelector);
+            var capture = await page.EvaluateAsync<JsonElement>(captureScript);
+            var originalViewportTop = capture.GetProperty("viewportTop").GetDouble();
+            Assert.InRange(Math.Abs(originalViewportTop - 40), 0, 0.5);
+            if (preserveGap)
+            {
+                Assert.Equal(0, capture.GetProperty("navigationIndex").GetInt32());
+                Assert.Equal(JsonValueKind.Null, capture.GetProperty("index").ValueKind);
+            }
+            else
+            {
+                Assert.Equal(1, capture.GetProperty("index").GetInt32());
+            }
+
+            var anchor = JsonSerializer.Deserialize(capture.GetRawText(), anchorType)!;
+            var restoreScript = Assert.IsType<string>(resolveAnchor.Invoke(null, [anchor]));
+            var originalScrollTop = capture.GetProperty("scrollTop").GetDouble();
+            var reflowObserved = false;
+            for (var pass = 0; pass < 6; pass++)
+            {
+                await page.SetViewportSizeAsync(pass % 2 == 0 ? 960 : 480, 600);
+                var gaps = pass % 2 == 0
+                    ? """[{"anchorIndex":1,"height":600,"navigationIndex":0}]"""
+                    : """[{"anchorIndex":1,"height":1200,"navigationIndex":0}]""";
+                var gapScript = Assert.IsType<string>(applyGaps.Invoke(null, [gaps, originalScrollTop]));
+                await page.EvaluateAsync<double>(gapScript);
+                var beforeRestore = await page.Locator(targetSelector).EvaluateAsync<double>(
+                    "element => element.getBoundingClientRect().top");
+                reflowObserved |= Math.Abs(beforeRestore - 40) > 100;
+                var targetScrollTop = await page.EvaluateAsync<double>(restoreScript);
+                var scrollScript = Assert.IsType<string>(applyScroll.Invoke(null, [targetScrollTop]));
+                await page.EvaluateAsync<double>(scrollScript);
+                await page.EvaluateAsync(
+                    "() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+
+                var viewportTop = await page.Locator(targetSelector).EvaluateAsync<double>(
+                    "element => element.getBoundingClientRect().top");
+                Assert.InRange(Math.Abs(viewportTop - originalViewportTop), 0, 0.5);
+            }
+
+            Assert.True(reflowObserved, "The fixture must shift the visible content without anchor restoration.");
+        }
+        finally
+        {
+            await page.CloseAsync();
+        }
+    }
+
     [Fact]
     public async Task Preview_Diff_Overlay_Unions_Targets_Clipped_By_Their_Own_Scroll_Containers()
     {

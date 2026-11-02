@@ -364,6 +364,30 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_CaptureViewportAnchorScript_Records_Visible_Block_And_Offset()
+    {
+        var script = PreviewDiffHighlighter.BuildCaptureViewportAnchorScript();
+
+        Assert.Contains("[data-rsr-diff-index],.rsr-preview-diff-alignment-gap", script, StringComparison.Ordinal);
+        Assert.Contains("rect.bottom > 0 && rect.top < window.innerHeight", script, StringComparison.Ordinal);
+        Assert.Contains("viewportTop: anchor?.rect.top ?? 0", script, StringComparison.Ordinal);
+        Assert.Contains("navigationIndex:", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ResolveViewportAnchorScript_Preserves_Content_Instead_Of_Absolute_ScrollTop()
+    {
+        var script = PreviewDiffHighlighter.BuildResolveViewportAnchorScrollTopScript(
+            new PreviewDiffViewportAnchor(12, null, 40.5, 960));
+
+        Assert.Contains("\"index\":12", script, StringComparison.Ordinal);
+        Assert.Contains("\"viewportTop\":40.5", script, StringComparison.Ordinal);
+        Assert.Contains("element.getBoundingClientRect().top - anchor.viewportTop", script, StringComparison.Ordinal);
+        Assert.Contains(": anchor.scrollTop", script, StringComparison.Ordinal);
+        Assert.Contains("data-rsr-diff-navigation-index", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildApplySynchronizedScrollScript_Uses_Absolute_ScrollTop_And_Suppresses_Feedback()
     {
         var script = MainWindow.BuildApplySynchronizedScrollScript(1520.75);
@@ -1095,6 +1119,32 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Equal(
             expected,
             PreviewDiffHighlighter.ResolveSynchronizedScrollTop(beforeScrollTop, afterScrollTop));
+    }
+
+    [Theory]
+    [InlineData(1, null, 30, 2, null, 40, true)]
+    [InlineData(1, null, -80, 2, null, 40, false)]
+    [InlineData(null, 0, 30, 2, null, 40, true)]
+    [InlineData(null, null, 0, 2, null, 40, false)]
+    [InlineData(1, null, 40, null, null, 0, true)]
+    [InlineData(1, null, 40, 2, null, 40, false)]
+    [InlineData(null, null, 0, null, null, 0, false)]
+    public void PreviewDiffHighlighter_SelectViewportAnchor_Prefers_Visible_Content_Closest_To_Viewport_Top(
+        int? beforeIndex,
+        int? beforeNavigationIndex,
+        double beforeViewportTop,
+        int? afterIndex,
+        int? afterNavigationIndex,
+        double afterViewportTop,
+        bool expectedBeforePane)
+    {
+        var before = new PreviewDiffViewportAnchor(beforeIndex, beforeNavigationIndex, beforeViewportTop, 960);
+        var after = new PreviewDiffViewportAnchor(afterIndex, afterNavigationIndex, afterViewportTop, 960);
+
+        var viewport = PreviewDiffHighlighter.SelectViewportAnchor(before, after);
+
+        Assert.Equal(expectedBeforePane, viewport.Pane == PreviewDiffPane.Before);
+        Assert.Same(expectedBeforePane ? before : after, viewport.Anchor);
     }
 
     [Theory]
