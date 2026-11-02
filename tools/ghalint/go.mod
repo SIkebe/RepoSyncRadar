@@ -2,6 +2,8 @@ module github.com/shodaiikebe/reposyncradar/tools/ghalint
 
 go 1.27.3
 
+tool github.com/suzuki-shunsuke/ghalint/cmd/ghalint
+
 require github.com/suzuki-shunsuke/ghalint v1.5.7
 
 require (
