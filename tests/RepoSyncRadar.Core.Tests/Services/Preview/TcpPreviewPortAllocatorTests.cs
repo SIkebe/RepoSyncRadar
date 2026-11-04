@@ -46,6 +46,21 @@ public sealed class TcpPreviewPortAllocatorTests
     }
 
     [Fact]
+    public void AllocateComparison_Skips_Pair_When_Before_Port_Is_Listening()
+    {
+        using var listener = StartListener();
+        var occupiedBeforePort = ((IPEndPoint)listener.LocalEndpoint).Port;
+        var sut = new TcpPreviewPortAllocator();
+
+        var pair = sut.AllocateComparison(occupiedBeforePort - 1, Array.Empty<int>());
+
+        Assert.True(pair.AfterPort > occupiedBeforePort);
+        Assert.Equal(pair.AfterPort + 1, pair.BeforePort);
+        using var after = StartListener(pair.AfterPort);
+        using var before = StartListener(pair.BeforePort);
+    }
+
+    [Fact]
     public void AllocateComparison_Allows_Reusable_Listening_Pair()
     {
         using var listeners = StartAdjacentListeners();

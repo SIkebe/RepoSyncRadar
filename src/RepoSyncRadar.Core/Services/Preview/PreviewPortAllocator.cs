@@ -1,4 +1,5 @@
-using System.Net.NetworkInformation;
+using System.Net;
+using System.Net.Sockets;
 
 namespace RepoSyncRadar.Core.Services.Preview;
 
@@ -19,10 +20,9 @@ public sealed class TcpPreviewPortAllocator : IPreviewPortAllocator
         ArgumentOutOfRangeException.ThrowIfGreaterThan(preferredPort, 65535);
         ArgumentNullException.ThrowIfNull(reusablePorts);
 
-        var listeningPorts = GetListeningPorts();
         for (var port = preferredPort; port <= 65535; port++)
         {
-            if (IsUsable(port, listeningPorts, reusablePorts))
+            if (IsUsable(port, reusablePorts))
             {
                 return port;
             }
@@ -41,12 +41,11 @@ public sealed class TcpPreviewPortAllocator : IPreviewPortAllocator
         }
         ArgumentNullException.ThrowIfNull(reusablePorts);
 
-        var listeningPorts = GetListeningPorts();
         for (var afterPort = preferredAfterPort; afterPort < 65535; afterPort++)
         {
             var beforePort = afterPort + 1;
-            if (IsUsable(afterPort, listeningPorts, reusablePorts)
-                && IsUsable(beforePort, listeningPorts, reusablePorts))
+            if (IsUsable(afterPort, reusablePorts)
+                && IsUsable(beforePort, reusablePorts))
             {
                 return new PreviewPortPair(afterPort, beforePort);
             }
@@ -56,12 +55,25 @@ public sealed class TcpPreviewPortAllocator : IPreviewPortAllocator
             $"PreviewBasePort {preferredAfterPort} 以降に比較用の連続 localhost port がありません。");
     }
 
-    private static HashSet<int> GetListeningPorts()
-        => IPGlobalProperties.GetIPGlobalProperties()
-            .GetActiveTcpListeners()
-            .Select(endpoint => endpoint.Port)
-            .ToHashSet();
+    private static bool IsUsable(int port, IReadOnlyCollection<int> reusablePorts)
+    {
+        if (reusablePorts.Contains(port))
+        {
+            return true;
+        }
 
-    private static bool IsUsable(int port, HashSet<int> listeningPorts, IReadOnlyCollection<int> reusablePorts)
-        => reusablePorts.Contains(port) || !listeningPorts.Contains(port);
+        using var listener = new TcpListener(IPAddress.Loopback, port)
+        {
+            ExclusiveAddressUse = true,
+        };
+        try
+        {
+            listener.Start();
+            return true;
+        }
+        catch (SocketException ex) when (ex.SocketErrorCode is SocketError.AddressAlreadyInUse or SocketError.AccessDenied)
+        {
+            return false;
+        }
+    }
 }

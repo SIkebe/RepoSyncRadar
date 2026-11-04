@@ -364,6 +364,59 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public void PreviewDiffHighlighter_CaptureViewportAnchorScript_Records_Visible_Block_And_Offset()
+    {
+        var script = PreviewDiffHighlighter.BuildCaptureViewportAnchorScript();
+
+        Assert.Contains("[data-rsr-diff-index],.rsr-preview-diff-alignment-gap", script, StringComparison.Ordinal);
+        Assert.Contains("rect.bottom > 0 && rect.top < window.innerHeight", script, StringComparison.Ordinal);
+        Assert.Contains("viewportTop: anchor?.rect.top ?? 0", script, StringComparison.Ordinal);
+        Assert.Contains("navigationIndex:", script, StringComparison.Ordinal);
+        Assert.Contains("fallbackIndex:", script, StringComparison.Ordinal);
+        Assert.Contains("fallbackViewportTop:", script, StringComparison.Ordinal);
+        Assert.Contains(".filter(({ rect }) => rect.height > 0)", script, StringComparison.Ordinal);
+        Assert.Contains("left.rect.top - anchor.rect.top", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ResolveViewportAnchorScript_Preserves_Content_Instead_Of_Absolute_ScrollTop()
+    {
+        var script = PreviewDiffHighlighter.BuildResolveViewportAnchorScrollTopScript(
+            new PreviewDiffViewportAnchor(12, null, 40.5, 960, 11, 20.25));
+
+        Assert.Contains("\"index\":12", script, StringComparison.Ordinal);
+        Assert.Contains("\"viewportTop\":40.5", script, StringComparison.Ordinal);
+        Assert.Contains("element.getBoundingClientRect().top - viewportTop", script, StringComparison.Ordinal);
+        Assert.Contains("\"fallbackIndex\":11", script, StringComparison.Ordinal);
+        Assert.Contains("\"fallbackViewportTop\":20.25", script, StringComparison.Ordinal);
+        Assert.Contains("primaryScrollTop:", script, StringComparison.Ordinal);
+        Assert.Contains("fallbackScrollTop:", script, StringComparison.Ordinal);
+        Assert.Contains("data-rsr-diff-navigation-index", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ResolveViewportAnchorScrollTop_Uses_Neighbor_When_Gap_Disappears_Or_Switches_Panes()
+    {
+        var anchor = new PreviewDiffViewportAnchor(null, 3, 40, 960, 12, 72);
+        var sourceWithoutGap = new PreviewDiffViewportAnchorResolution(null, 1010);
+        var otherWithoutGap = new PreviewDiffViewportAnchorResolution(null, null);
+        var otherWithMovedGap = new PreviewDiffViewportAnchorResolution(980, null);
+
+        Assert.Equal(
+            1010,
+            PreviewDiffHighlighter.ResolveViewportAnchorScrollTop(
+                anchor,
+                sourceWithoutGap,
+                otherWithoutGap));
+        Assert.Equal(
+            980,
+            PreviewDiffHighlighter.ResolveViewportAnchorScrollTop(
+                anchor,
+                sourceWithoutGap,
+                otherWithMovedGap));
+    }
+
+    [Fact]
     public void BuildApplySynchronizedScrollScript_Uses_Absolute_ScrollTop_And_Suppresses_Feedback()
     {
         var script = MainWindow.BuildApplySynchronizedScrollScript(1520.75);
@@ -1098,6 +1151,32 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Theory]
+    [InlineData(1, null, 30, 2, null, 40, true)]
+    [InlineData(1, null, -80, 2, null, 40, false)]
+    [InlineData(null, 0, 30, 2, null, 40, true)]
+    [InlineData(null, null, 0, 2, null, 40, false)]
+    [InlineData(1, null, 40, null, null, 0, true)]
+    [InlineData(1, null, 40, 2, null, 40, false)]
+    [InlineData(null, null, 0, null, null, 0, false)]
+    public void PreviewDiffHighlighter_SelectViewportAnchor_Prefers_Visible_Content_Closest_To_Viewport_Top(
+        int? beforeIndex,
+        int? beforeNavigationIndex,
+        double beforeViewportTop,
+        int? afterIndex,
+        int? afterNavigationIndex,
+        double afterViewportTop,
+        bool expectedBeforePane)
+    {
+        var before = new PreviewDiffViewportAnchor(beforeIndex, beforeNavigationIndex, beforeViewportTop, 960);
+        var after = new PreviewDiffViewportAnchor(afterIndex, afterNavigationIndex, afterViewportTop, 960);
+
+        var viewport = PreviewDiffHighlighter.SelectViewportAnchor(before, after);
+
+        Assert.Equal(expectedBeforePane, viewport.Pane == PreviewDiffPane.Before);
+        Assert.Same(expectedBeforePane ? before : after, viewport.Anchor);
+    }
+
+    [Theory]
     [InlineData(1180, 1180, 1180)]
     [InlineData(1180, 720, 720)]
     [InlineData(-10, 720, 0)]
@@ -1535,6 +1614,78 @@ public sealed class MainWindowPreviewComparisonTests
                 currentGeneration,
                 expectedOperationId,
                 currentOperationId));
+    }
+
+    [Theory]
+    [InlineData(true, true, true, true, true)]
+    [InlineData(false, true, true, true, false)]
+    [InlineData(true, false, true, true, false)]
+    [InlineData(true, true, false, true, false)]
+    [InlineData(true, true, true, false, false)]
+    public void ShouldResumePreviewFocusAlignment_When_Toggles_Coalesce_To_Current_Mode(
+        bool hasPreservedViewport,
+        bool hasActivePreviewDiffPlan,
+        bool beforePreviewDiffReady,
+        bool afterPreviewDiffReady,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            MainWindow.ShouldResumePreviewFocusAlignment(
+                hasPreservedViewport,
+                hasActivePreviewDiffPlan,
+                beforePreviewDiffReady,
+                afterPreviewDiffReady));
+    }
+
+    [Fact]
+    public async Task GetPreviewFocusViewportAsync_Reuses_Original_Until_Cleared_Then_Recaptures()
+    {
+        var originalViewport = new PreviewDiffViewport(
+            PreviewDiffPane.Before,
+            new PreviewDiffViewportAnchor(1, null, 40, 1000));
+        var reflowedViewport = new PreviewDiffViewport(
+            PreviewDiffPane.Before,
+            new PreviewDiffViewportAnchor(2, null, 80, 1200));
+        var captures = 0;
+        Task<PreviewDiffViewport?> CaptureAsync()
+        {
+            captures++;
+            return Task.FromResult<PreviewDiffViewport?>(
+                captures == 1 ? originalViewport : reflowedViewport);
+        }
+
+        var preservedViewport = await MainWindow.GetPreviewFocusViewportAsync(null, CaptureAsync);
+        Assert.Same(originalViewport, preservedViewport);
+
+        for (var toggle = 0; toggle < 2; toggle++)
+        {
+            preservedViewport = await MainWindow.GetPreviewFocusViewportAsync(preservedViewport, CaptureAsync);
+            Assert.Same(originalViewport, preservedViewport);
+        }
+        Assert.Equal(1, captures);
+
+        var nextViewport = await MainWindow.GetPreviewFocusViewportAsync(null, CaptureAsync);
+        Assert.Same(reflowedViewport, nextViewport);
+        Assert.Equal(2, captures);
+    }
+
+    [Fact]
+    public async Task GetPreviewFocusViewportAsync_Retries_If_Capture_Returns_Null()
+    {
+        var viewport = new PreviewDiffViewport(
+            PreviewDiffPane.After,
+            new PreviewDiffViewportAnchor(1, null, 40, 1000));
+        var captures = 0;
+        Task<PreviewDiffViewport?> CaptureAsync()
+            => Task.FromResult(++captures == 1 ? null : viewport);
+
+        var missingViewport = await MainWindow.GetPreviewFocusViewportAsync(null, CaptureAsync);
+        var nextViewport = await MainWindow.GetPreviewFocusViewportAsync(missingViewport, CaptureAsync);
+
+        Assert.Null(missingViewport);
+        Assert.Same(viewport, nextViewport);
+        Assert.Equal(2, captures);
     }
 
     [Fact]
