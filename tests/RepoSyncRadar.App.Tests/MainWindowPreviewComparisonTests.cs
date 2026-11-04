@@ -1639,6 +1639,56 @@ public sealed class MainWindowPreviewComparisonTests
     }
 
     [Fact]
+    public async Task GetPreviewFocusViewportAsync_Reuses_Original_Until_Cleared_Then_Recaptures()
+    {
+        var originalViewport = new PreviewDiffViewport(
+            PreviewDiffPane.Before,
+            new PreviewDiffViewportAnchor(1, null, 40, 1000));
+        var reflowedViewport = new PreviewDiffViewport(
+            PreviewDiffPane.Before,
+            new PreviewDiffViewportAnchor(2, null, 80, 1200));
+        var captures = 0;
+        Task<PreviewDiffViewport?> CaptureAsync()
+        {
+            captures++;
+            return Task.FromResult<PreviewDiffViewport?>(
+                captures == 1 ? originalViewport : reflowedViewport);
+        }
+
+        var preservedViewport = await MainWindow.GetPreviewFocusViewportAsync(null, CaptureAsync);
+        Assert.Same(originalViewport, preservedViewport);
+
+        for (var toggle = 0; toggle < 2; toggle++)
+        {
+            preservedViewport = await MainWindow.GetPreviewFocusViewportAsync(preservedViewport, CaptureAsync);
+            Assert.Same(originalViewport, preservedViewport);
+        }
+        Assert.Equal(1, captures);
+
+        var nextViewport = await MainWindow.GetPreviewFocusViewportAsync(null, CaptureAsync);
+        Assert.Same(reflowedViewport, nextViewport);
+        Assert.Equal(2, captures);
+    }
+
+    [Fact]
+    public async Task GetPreviewFocusViewportAsync_Retries_If_Capture_Returns_Null()
+    {
+        var viewport = new PreviewDiffViewport(
+            PreviewDiffPane.After,
+            new PreviewDiffViewportAnchor(1, null, 40, 1000));
+        var captures = 0;
+        Task<PreviewDiffViewport?> CaptureAsync()
+            => Task.FromResult(++captures == 1 ? null : viewport);
+
+        var missingViewport = await MainWindow.GetPreviewFocusViewportAsync(null, CaptureAsync);
+        var nextViewport = await MainWindow.GetPreviewFocusViewportAsync(missingViewport, CaptureAsync);
+
+        Assert.Null(missingViewport);
+        Assert.Same(viewport, nextViewport);
+        Assert.Equal(2, captures);
+    }
+
+    [Fact]
     public async Task ObservePreviousPreviewDiffNavigationAsync_Allows_Queue_After_Cancellation()
     {
         var canceledTask = Task.FromCanceled(new CancellationToken(canceled: true));

@@ -460,7 +460,9 @@ public partial class MainWindow : Window
 
         var generation = _previewDiffGeneration;
         var navigationOperationId = _previewDiffNavigationOperationId;
-        var preservedViewport = await CapturePreviewViewportAsync(generation);
+        var preservedViewport = await GetPreviewFocusViewportAsync(
+            _previewFocusModePreservedViewport,
+            () => CapturePreviewViewportAsync(generation));
         pendingPreviewFocusMode = _pendingPreviewFocusMode ?? pendingPreviewFocusMode;
         _pendingPreviewFocusMode = null;
         _previewFocusModeChangeScheduled = false;
@@ -516,6 +518,11 @@ public partial class MainWindow : Window
         _previewFocusLayoutShieldTimer.Interval = _previewFocusAlignmentDebounce;
         _previewFocusLayoutShieldTimer.Start();
     }
+
+    internal static async Task<PreviewDiffViewport?> GetPreviewFocusViewportAsync(
+        PreviewDiffViewport? preservedViewport,
+        Func<Task<PreviewDiffViewport?>> captureViewportAsync)
+        => preservedViewport ?? await captureViewportAsync();
 
     private async Task<PreviewDiffViewport?> CapturePreviewViewportAsync(int generation)
     {
@@ -1344,8 +1351,6 @@ public partial class MainWindow : Window
         }
 
         _requestedPreviewDiffIndex = targetIndex;
-        _previewFocusModePreservedViewport = null;
-        _previewFocusLayoutShieldTimer.Start();
         var operationId = ++_previewDiffNavigationOperationId;
         _ = QueuePreviewDiffNavigationAsync(targetIndex, _previewDiffGeneration, operationId);
     }
@@ -1370,6 +1375,8 @@ public partial class MainWindow : Window
 
     private Task QueuePreviewDiffNavigationAsync(int targetIndex, int generation, int operationId)
     {
+        _previewFocusModePreservedViewport = null;
+        _previewFocusLayoutShieldTimer.Start();
         var previousTask = _previewDiffNavigationTask;
         _previewDiffNavigationTask = NavigateAfterPreviousPreviewDiffAsync(
             previousTask,
