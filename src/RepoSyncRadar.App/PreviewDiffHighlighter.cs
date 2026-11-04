@@ -1428,7 +1428,7 @@ internal static class PreviewDiffHighlighter
   const fallback = isAlignmentGap
     ? Array.from(document.querySelectorAll('[data-rsr-diff-index]'))
       .map(element => ({ element, rect: element.getBoundingClientRect() }))
-      .filter(({ rect }) => rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight)
+      .filter(({ rect }) => rect.height > 0)
       .sort((left, right) =>
         Math.abs(left.rect.top - anchor.rect.top) - Math.abs(right.rect.top - anchor.rect.top))[0]
     : null;

@@ -185,10 +185,12 @@ public sealed class DocsViewE2ETests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
     public async Task Preview_Diff_Viewport_Preserves_Visible_Content_Across_Resize_And_Gap_Rebuilds(
-        bool preserveGap)
+        bool preserveGap,
+        bool removeGap)
     {
         var appAssembly = Assembly.LoadFrom(Path.ChangeExtension(AppHost.ResolveAppExePath(), ".dll"));
         var highlighterType = appAssembly.GetType("RepoSyncRadar.App.PreviewDiffHighlighter", throwOnError: true)!;
@@ -226,12 +228,13 @@ public sealed class DocsViewE2ETests
             var targetSelector = preserveGap
                 ? ".rsr-preview-diff-alignment-gap[data-rsr-diff-navigation-index='0']"
                 : "[data-rsr-diff-index='1']";
+            var initialViewportTop = removeGap ? -400 : 40;
             await page.EvaluateAsync(
-                "selector => window.scrollTo(0, window.scrollY + document.querySelector(selector).getBoundingClientRect().top - 40)",
-                targetSelector);
+                "({ selector, viewportTop }) => window.scrollTo(0, window.scrollY + document.querySelector(selector).getBoundingClientRect().top - viewportTop)",
+                new { selector = targetSelector, viewportTop = initialViewportTop });
             var capture = await page.EvaluateAsync<JsonElement>(captureScript);
             var originalViewportTop = capture.GetProperty("viewportTop").GetDouble();
-            Assert.InRange(Math.Abs(originalViewportTop - 40), 0, 0.5);
+            Assert.InRange(Math.Abs(originalViewportTop - initialViewportTop), 0, 0.5);
             if (preserveGap)
             {
                 Assert.Equal(0, capture.GetProperty("navigationIndex").GetInt32());
@@ -241,6 +244,16 @@ public sealed class DocsViewE2ETests
             {
                 Assert.Equal(1, capture.GetProperty("index").GetInt32());
             }
+            if (removeGap)
+            {
+                Assert.Equal(1, capture.GetProperty("fallbackIndex").GetInt32());
+                originalViewportTop = capture.GetProperty("fallbackViewportTop").GetDouble();
+                Assert.True(originalViewportTop > 600, "The fallback block must be below the viewport.");
+                var previousBlockBottom = await page.Locator("#intro").EvaluateAsync<double>(
+                    "element => element.getBoundingClientRect().bottom");
+                Assert.True(previousBlockBottom < 0, "The previous block must be above the viewport.");
+                targetSelector = "[data-rsr-diff-index='1']";
+            }
 
             var anchor = JsonSerializer.Deserialize(capture.GetRawText(), anchorType)!;
             var restoreScript = Assert.IsType<string>(resolveAnchor.Invoke(null, [anchor]));
@@ -249,15 +262,24 @@ public sealed class DocsViewE2ETests
             for (var pass = 0; pass < 6; pass++)
             {
                 await page.SetViewportSizeAsync(pass % 2 == 0 ? 960 : 480, 600);
-                var gaps = pass % 2 == 0
-                    ? """[{"anchorIndex":1,"height":600,"navigationIndex":0}]"""
-                    : """[{"anchorIndex":1,"height":1200,"navigationIndex":0}]""";
+                var gaps = removeGap
+                    ? "[]"
+                    : pass % 2 == 0
+                        ? """[{"anchorIndex":1,"height":600,"navigationIndex":0}]"""
+                        : """[{"anchorIndex":1,"height":1200,"navigationIndex":0}]""";
                 var gapScript = Assert.IsType<string>(applyGaps.Invoke(null, [gaps, originalScrollTop]));
                 await page.EvaluateAsync<double>(gapScript);
                 var beforeRestore = await page.Locator(targetSelector).EvaluateAsync<double>(
                     "element => element.getBoundingClientRect().top");
-                reflowObserved |= Math.Abs(beforeRestore - 40) > 100;
-                var targetScrollTop = await page.EvaluateAsync<double>(restoreScript);
+                reflowObserved |= Math.Abs(beforeRestore - originalViewportTop) > 100;
+                var resolution = await page.EvaluateAsync<JsonElement>(restoreScript);
+                if (removeGap)
+                {
+                    Assert.Equal(JsonValueKind.Null, resolution.GetProperty("primaryScrollTop").ValueKind);
+                }
+                var targetScrollTop = resolution
+                    .GetProperty(removeGap ? "fallbackScrollTop" : "primaryScrollTop")
+                    .GetDouble();
                 var scrollScript = Assert.IsType<string>(applyScroll.Invoke(null, [targetScrollTop]));
                 await page.EvaluateAsync<double>(scrollScript);
                 await page.EvaluateAsync(

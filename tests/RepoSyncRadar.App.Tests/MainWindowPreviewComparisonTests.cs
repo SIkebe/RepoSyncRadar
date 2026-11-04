@@ -374,6 +374,7 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("navigationIndex:", script, StringComparison.Ordinal);
         Assert.Contains("fallbackIndex:", script, StringComparison.Ordinal);
         Assert.Contains("fallbackViewportTop:", script, StringComparison.Ordinal);
+        Assert.Contains(".filter(({ rect }) => rect.height > 0)", script, StringComparison.Ordinal);
         Assert.Contains("left.rect.top - anchor.rect.top", script, StringComparison.Ordinal);
     }
 
