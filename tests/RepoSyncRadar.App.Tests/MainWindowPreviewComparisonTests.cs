@@ -372,19 +372,47 @@ public sealed class MainWindowPreviewComparisonTests
         Assert.Contains("rect.bottom > 0 && rect.top < window.innerHeight", script, StringComparison.Ordinal);
         Assert.Contains("viewportTop: anchor?.rect.top ?? 0", script, StringComparison.Ordinal);
         Assert.Contains("navigationIndex:", script, StringComparison.Ordinal);
+        Assert.Contains("fallbackIndex:", script, StringComparison.Ordinal);
+        Assert.Contains("fallbackViewportTop:", script, StringComparison.Ordinal);
+        Assert.Contains("left.rect.top - anchor.rect.top", script, StringComparison.Ordinal);
     }
 
     [Fact]
     public void PreviewDiffHighlighter_ResolveViewportAnchorScript_Preserves_Content_Instead_Of_Absolute_ScrollTop()
     {
         var script = PreviewDiffHighlighter.BuildResolveViewportAnchorScrollTopScript(
-            new PreviewDiffViewportAnchor(12, null, 40.5, 960));
+            new PreviewDiffViewportAnchor(12, null, 40.5, 960, 11, 20.25));
 
         Assert.Contains("\"index\":12", script, StringComparison.Ordinal);
         Assert.Contains("\"viewportTop\":40.5", script, StringComparison.Ordinal);
-        Assert.Contains("element.getBoundingClientRect().top - anchor.viewportTop", script, StringComparison.Ordinal);
-        Assert.Contains(": anchor.scrollTop", script, StringComparison.Ordinal);
+        Assert.Contains("element.getBoundingClientRect().top - viewportTop", script, StringComparison.Ordinal);
+        Assert.Contains("\"fallbackIndex\":11", script, StringComparison.Ordinal);
+        Assert.Contains("\"fallbackViewportTop\":20.25", script, StringComparison.Ordinal);
+        Assert.Contains("primaryScrollTop:", script, StringComparison.Ordinal);
+        Assert.Contains("fallbackScrollTop:", script, StringComparison.Ordinal);
         Assert.Contains("data-rsr-diff-navigation-index", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PreviewDiffHighlighter_ResolveViewportAnchorScrollTop_Uses_Neighbor_When_Gap_Disappears_Or_Switches_Panes()
+    {
+        var anchor = new PreviewDiffViewportAnchor(null, 3, 40, 960, 12, 72);
+        var sourceWithoutGap = new PreviewDiffViewportAnchorResolution(null, 1010);
+        var otherWithoutGap = new PreviewDiffViewportAnchorResolution(null, null);
+        var otherWithMovedGap = new PreviewDiffViewportAnchorResolution(980, null);
+
+        Assert.Equal(
+            1010,
+            PreviewDiffHighlighter.ResolveViewportAnchorScrollTop(
+                anchor,
+                sourceWithoutGap,
+                otherWithoutGap));
+        Assert.Equal(
+            980,
+            PreviewDiffHighlighter.ResolveViewportAnchorScrollTop(
+                anchor,
+                sourceWithoutGap,
+                otherWithMovedGap));
     }
 
     [Fact]
@@ -1585,6 +1613,28 @@ public sealed class MainWindowPreviewComparisonTests
                 currentGeneration,
                 expectedOperationId,
                 currentOperationId));
+    }
+
+    [Theory]
+    [InlineData(true, true, true, true, true)]
+    [InlineData(false, true, true, true, false)]
+    [InlineData(true, false, true, true, false)]
+    [InlineData(true, true, false, true, false)]
+    [InlineData(true, true, true, false, false)]
+    public void ShouldResumePreviewFocusAlignment_When_Toggles_Coalesce_To_Current_Mode(
+        bool hasPreservedViewport,
+        bool hasActivePreviewDiffPlan,
+        bool beforePreviewDiffReady,
+        bool afterPreviewDiffReady,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            MainWindow.ShouldResumePreviewFocusAlignment(
+                hasPreservedViewport,
+                hasActivePreviewDiffPlan,
+                beforePreviewDiffReady,
+                afterPreviewDiffReady));
     }
 
     [Fact]

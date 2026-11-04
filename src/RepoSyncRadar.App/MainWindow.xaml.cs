@@ -473,9 +473,7 @@ public partial class MainWindow : Window
             ApplyPreviewFocusMode(pendingPreviewFocusMode);
             if (_activePreviewDiffPlan is not null && _beforePreviewDiffReady && _afterPreviewDiffReady)
             {
-                _previewAlignmentTimer.Interval = _previewFocusAlignmentDebounce;
-                _previewAlignmentTimer.Stop();
-                _previewAlignmentTimer.Start();
+                SchedulePreviewFocusAlignment();
             }
             else
             {
@@ -484,8 +482,27 @@ public partial class MainWindow : Window
         }
         else
         {
-            CompletePreviewFocusLayoutTransition();
+            if (ShouldResumePreviewFocusAlignment(
+                    _previewFocusModePreservedViewport is not null,
+                    _activePreviewDiffPlan is not null,
+                    _beforePreviewDiffReady,
+                    _afterPreviewDiffReady))
+            {
+                SchedulePreviewFocusAlignment();
+            }
+            else
+            {
+                _previewFocusModePreservedViewport = null;
+                CompletePreviewFocusLayoutTransition();
+            }
         }
+    }
+
+    private void SchedulePreviewFocusAlignment()
+    {
+        _previewAlignmentTimer.Interval = _previewFocusAlignmentDebounce;
+        _previewAlignmentTimer.Stop();
+        _previewAlignmentTimer.Start();
     }
 
     private void CompletePreviewFocusLayoutTransition()
@@ -2503,6 +2520,16 @@ public partial class MainWindow : Window
         int currentOperationId)
         => expectedGeneration == currentGeneration
             && expectedOperationId == currentOperationId;
+
+    internal static bool ShouldResumePreviewFocusAlignment(
+        bool hasPreservedViewport,
+        bool hasActivePreviewDiffPlan,
+        bool beforePreviewDiffReady,
+        bool afterPreviewDiffReady)
+        => hasPreservedViewport
+            && hasActivePreviewDiffPlan
+            && beforePreviewDiffReady
+            && afterPreviewDiffReady;
 
     private void ShowOfficialOnlyMode()
         => ShowSinglePageMode("公式 docs.github.com");
