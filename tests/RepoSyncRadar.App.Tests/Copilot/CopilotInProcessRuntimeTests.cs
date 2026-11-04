@@ -39,7 +39,7 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.106-2", status.Version);
+        Assert.Equal("1.0.106-7", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
@@ -158,6 +158,10 @@ public sealed class CopilotInProcessRuntimeTests
         var policyEvent = await enforced.Task.WaitAsync(TimeSpan.FromSeconds(15), ct);
         Assert.Equal("permissions.disableAssistedPermissionsMode", policyEvent.Setting);
         Assert.Equal(ManagedSettingsEnforcedEscalation.AssistedApproval, policyEvent.Escalation);
+
+        var capabilities = await session.Rpc.Permissions.GetCapabilitiesAsync(ct);
+        Assert.False(capabilities.AssistedApproval);
+        Assert.False(capabilities.BypassPermissions);
     }
 
     [Fact]
