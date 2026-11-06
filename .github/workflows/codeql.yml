@@ -57,7 +57,7 @@ jobs:
 
       - name: Setup .NET SDK
         if: ${{ matrix.language == 'csharp' }}
-        uses: actions/setup-dotnet@v6.0.0
+        uses: actions/setup-dotnet@v6.1.0
         with:
           global-json-file: global.json
 
@@ -72,14 +72,14 @@ jobs:
 
       - name: Initialize CodeQL with manual build
         if: ${{ matrix.language == 'csharp' }}
-        uses: github/codeql-action/init@v4.39.1
+        uses: github/codeql-action/init@v4.39.2
         with:
           languages: ${{ matrix.language }}
           build-mode: manual
 
       - name: Initialize CodeQL
         if: ${{ matrix.language != 'csharp' }}
-        uses: github/codeql-action/init@v4.39.1
+        uses: github/codeql-action/init@v4.39.2
         with:
           languages: ${{ matrix.language }}
 
@@ -92,4 +92,4 @@ jobs:
         run: dotnet build RepoSyncRadar.sln --no-restore -warnaserror
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.39.1
+        uses: github/codeql-action/analyze@v4.39.2
