@@ -39,7 +39,7 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.107", status.Version);
+        Assert.Equal("1.0.108-0", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
@@ -142,6 +142,11 @@ public sealed class CopilotInProcessRuntimeTests
         };
         var ct = TestContext.Current.CancellationToken;
         await using var session = await client.CreateSessionAsync(config, ct);
+        Assert.NotNull(session.PermissionModeResult);
+        Assert.True(session.PermissionModeResult.Success);
+        Assert.Equal(PermissionMode.Manual, session.PermissionModeResult.Mode);
+        var initialMode = await session.Rpc.Permissions.GetModeAsync(ct);
+        Assert.Equal(PermissionMode.Manual, initialMode.Mode);
         var enforced = new TaskCompletionSource<SessionManagedSettingsEnforcedData>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         using var subscription = session.On<SessionManagedSettingsEnforcedEvent>(evt =>
@@ -220,7 +225,7 @@ public sealed class CopilotInProcessRuntimeTests
         await client.StartAsync(ct);
         var schema = await client.Rpc.ManagedSettings.SchemaAsync(ct);
         var server = await client.Rpc.ManagedSettings.ValidateAsync(
-            """{"model":"auto","autoTier":{"overridable":"intelligence"},"permissions":{"allow":["read","write"],"deny":["shell"]},"sandbox":{"enabled":true},"vscode":{"temporaryDefaultToLocalHarness":false},"communication":{"support":{"url":"https://support.example.invalid/private"}},"copilotInferenceUrl":"https://inference.example.invalid/private"}""",
+            """{"model":"auto","autoTier":{"overridable":"intelligence"},"permissions":{"allow":["read","write"],"deny":["shell"]},"sandbox":{"enabled":true},"vscode":{"temporaryDefaultToLocalHarness":false},"communication":{"support":{"url":"https://support.example.invalid/private"}},"copilotInferenceUrl":"https://inference.example.invalid/private","pluginAssignments":{"test-plugin@test-marketplace":{"state":"defaultEnabled","reason":"private-assignment-explanation"}}}""",
             layer: "server", cancellationToken: ct);
         var device = await client.Rpc.ManagedSettings.ValidateAsync(
             """{"permissions":{"allow":["read"]},"enabledPlugins":{"github":false}}""",
@@ -243,6 +248,12 @@ public sealed class CopilotInProcessRuntimeTests
             .Select(key => key.Split('.')[0]).Distinct(StringComparer.Ordinal).ToArray();
         Assert.Empty(schemaKeys.Except(inventoryKeys, StringComparer.Ordinal));
         Assert.Empty(inventoryKeys.Except(schemaKeys, StringComparer.Ordinal));
+        Assert.Equal("1", Assert.Single(rows["pluginAssignments"].Values).Text);
+        Assert.Equal("Copilot.Policy.Value.EntriesHidden", rows["pluginAssignments"].Values[0].ResourceKey);
+        Assert.Equal(["Server"], rows["pluginAssignments"].Sources);
+        Assert.DoesNotContain("private-assignment-explanation", System.Text.Json.JsonSerializer.Serialize(snapshot),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("test-plugin", System.Text.Json.JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
         Assert.Equal("https://support.example.invalid/private", composed.Values?.Communication?.Support?.Url);
         Assert.Equal("Copilot.Policy.Value.Hidden", Assert.Single(rows["communication"].Values).ResourceKey);
         Assert.Equal(["Server"], rows["communication"].Sources);

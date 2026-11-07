@@ -39,6 +39,7 @@ public sealed class CopilotPolicyDiagnosticsPanelTests
             Assert.Contains("未報告", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("対象外", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("内容は非表示", cut.Markup, StringComparison.Ordinal);
+            Assert.Contains("プラグインの管理割り当て", cut.Markup, StringComparison.Ordinal);
             Assert.Contains("実セッションでの適用確認ではありません", cut.Markup, StringComparison.Ordinal);
             Assert.DoesNotContain("Copilot.Policy.", cut.Markup, StringComparison.Ordinal);
             Assert.DoesNotContain("private", cut.Markup, StringComparison.OrdinalIgnoreCase);
@@ -69,7 +70,7 @@ public sealed class CopilotPolicyDiagnosticsPanelTests
                 "permissionsAllowIntersected":true,"sandboxEnabledByUndeterminedPolicy":false,
                 "clientManaged":false,"policyHelperManaged":false,"source":"mixed",
                 "managedKeys":["model","autoTier","effortLevel","permissions","sandbox","allowedMcpServers","deniedMcpServers",
-                    "strictPluginOnlyCustomization","allowManagedMcpServersOnly","allowManagedHooksOnly","features","enabledPlugins",
+                    "strictPluginOnlyCustomization","allowManagedMcpServersOnly","allowManagedHooksOnly","features","enabledPlugins","pluginAssignments",
                     "extraKnownMarketplaces","strictKnownMarketplaces","remoteControl","forceLoginOrgs","forceRemoteSettingsRefresh",
                     "policyHelper","policyHelperFailureMode","telemetry"],
                 "settings":{
@@ -79,6 +80,7 @@ public sealed class CopilotPolicyDiagnosticsPanelTests
                   "allowedMcpServers":[{"serverUrl":"https://private.example"}],"deniedMcpServers":[],
                   "strictPluginOnlyCustomization":["skills","hooks"],"allowManagedMcpServersOnly":true,
                   "allowManagedHooksOnly":false,"features":{"private-feature":false},"enabledPlugins":{"private-plugin":true},
+                  "pluginAssignments":{"private-plugin@marketplace":{"state":"defaultEnabled","reason":"private-reason"}},
                   "extraKnownMarketplaces":{"private-market":{"source":{"source":"git","url":"https://private.example"},"autoUpdate":true}},
                   "strictKnownMarketplaces":[],
                   "remoteControl":{"mode":"requireSSO","githubDotComOrganizations":["private-org"]},

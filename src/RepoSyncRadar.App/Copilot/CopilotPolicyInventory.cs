@@ -31,7 +31,7 @@ internal static class CopilotPolicyInventory
             "permissions.disableAssistedPermissionsMode"],
         ["sandbox", "vscode", "requireBase64ImageAttachments"],
         ["allowedMcpServers", "deniedMcpServers", "strictPluginOnlyCustomization", "allowManagedMcpServersOnly",
-            "allowManagedHooksOnly", "features", "enabledPlugins", "extraKnownMarketplaces", "strictKnownMarketplaces"],
+            "allowManagedHooksOnly", "features", "enabledPlugins", "pluginAssignments", "extraKnownMarketplaces", "strictKnownMarketplaces"],
         ["remoteControl", "forceLoginOrgs", "forceRemoteSettingsRefresh", "policyHelper", "policyHelperFailureMode", "telemetry",
             "communication", "copilotInferenceUrl"],
     ];
@@ -245,6 +245,20 @@ internal static class CopilotPolicyInventory
             return;
         }
         var element = value.Value;
+        if (key == "pluginAssignments")
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                var count = element.EnumerateObject().Count();
+                AppendValue(output, count == 0 ? State("None", label)
+                    : new(count.ToString(CultureInfo.InvariantCulture), _valuePrefix + "EntriesHidden", label));
+            }
+            else
+            {
+                AppendValue(output, State("Hidden", label));
+            }
+            return;
+        }
         if (key is "features" or "enabledPlugins" && element.ValueKind == JsonValueKind.Object)
         {
             var properties = element.EnumerateObject().ToArray();

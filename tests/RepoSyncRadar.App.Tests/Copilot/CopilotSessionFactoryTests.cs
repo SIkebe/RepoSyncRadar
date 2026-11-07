@@ -1,4 +1,5 @@
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,6 +17,39 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 
 public sealed class CopilotSessionFactoryTests
 {
+#pragma warning disable GHCP001 // Exercise fail-closed handling of the experimental startup permission result.
+    [Fact]
+    public void ValidatePermissionMode_Accepts_Confirmed_Manual_Mode()
+    {
+        CopilotSessionFactory.ValidatePermissionMode(new PermissionsSetModeResult
+        {
+            Success = true,
+            Mode = PermissionMode.Manual,
+        });
+    }
+
+    [Theory]
+    [InlineData(true, "assisted")]
+    [InlineData(true, "allow-all")]
+    [InlineData(true, "unknown-mode")]
+    [InlineData(false, "manual")]
+    public void ValidatePermissionMode_Rejects_Unconfirmed_Or_NonManual_Mode(bool success, string mode)
+    {
+        var result = new PermissionsSetModeResult { Success = success, Mode = new PermissionMode(mode) };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => CopilotSessionFactory.ValidatePermissionMode(result));
+
+        Assert.Equal("Copilot did not confirm manual permission mode for the session.", exception.Message);
+    }
+
+    [Fact]
+    public void ValidatePermissionMode_Rejects_Missing_Result()
+    {
+        Assert.Throws<InvalidOperationException>(() => CopilotSessionFactory.ValidatePermissionMode(null));
+    }
+#pragma warning restore GHCP001
+
     [Fact]
     public void ResolveFallbackModel_When_Configured_Model_Fails_Prefers_Current_Base_Model()
     {

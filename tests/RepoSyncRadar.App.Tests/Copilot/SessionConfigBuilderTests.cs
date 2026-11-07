@@ -158,6 +158,26 @@ public class SessionConfigBuilderTests
     [InlineData(SessionPurpose.Triage)]
     [InlineData(SessionPurpose.Adoption)]
     [InlineData(SessionPurpose.Maintenance)]
+    public void Build_Uses_Manual_Permissions_Without_Auto_Recovery_For_Every_Purpose(SessionPurpose purpose)
+    {
+        var config = SessionConfigBuilder.Build(
+            purpose,
+            Options.Create(new CopilotOptions()),
+            static (_, _) => Task.FromResult(PermissionDecision.Reject("No tools needed.")));
+
+        Assert.Equal(PermissionMode.Manual, config.PermissionMode);
+        Assert.Equal(PermissionMode.Manual, config.Clone().PermissionMode);
+        Assert.False(config.AutoModeRecovery);
+        Assert.False(config.Clone().AutoModeRecovery);
+        Assert.Null(config.OnAutoModeSwitchRequest);
+        Assert.Null(config.Memory!.StoreMemory);
+        Assert.Null(config.AllowMultipleToolCalls);
+    }
+
+    [Theory]
+    [InlineData(SessionPurpose.Triage)]
+    [InlineData(SessionPurpose.Adoption)]
+    [InlineData(SessionPurpose.Maintenance)]
     public void Build_Does_Not_Exclude_Managed_Policy_For_Any_Purpose(SessionPurpose purpose)
     {
         var config = SessionConfigBuilder.Build(
