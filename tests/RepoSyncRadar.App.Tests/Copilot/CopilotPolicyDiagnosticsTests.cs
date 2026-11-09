@@ -16,6 +16,43 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 public sealed class CopilotPolicyDiagnosticsTests
 {
     [Theory]
+    [InlineData("{}", "Unreported", null)]
+    [InlineData("""{"pluginAssignments":null}""", "Unreported", null)]
+    [InlineData("""{"pluginAssignments":{}}""", "None", null)]
+    [InlineData("""{"pluginAssignments":{"private-plugin@marketplace":{"state":"defaultEnabled","reason":"secret"}}}""", "EntriesHidden", "1")]
+    [InlineData("""{"pluginAssignments":{"private-one@marketplace":{"state":"defaultEnabled"},"private-two@marketplace":{"state":"defaultEnabled","reason":"secret"}}}""",
+        "EntriesHidden", "2")]
+    [InlineData("""{"pluginAssignments":"high"}""", "Hidden", null)]
+    [InlineData("""{"pluginAssignments":["enabled","secret"]}""", "Hidden", null)]
+    public void Inventory_Counts_Plugin_Assignments_Without_Exposing_Identifiers_Or_Reasons(
+        string settings, string state, string? count)
+    {
+        var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
+            $$$"""
+            {"resolved":{"settings":{{{settings}}}},"layers":[{"source":"server","settings":{{{settings}}}}]}
+            """)!;
+        var snapshot = CopilotPolicyDiagnostics.FromResult(result);
+        var group = snapshot.Groups.Single(item => item.Key == "Customization");
+        var row = group.Entries.Single(entry => entry.Key == "pluginAssignments");
+        var value = Assert.Single(row.Values);
+
+        Assert.Equal("Copilot.Policy.Value." + state, value.ResourceKey);
+        Assert.Equal(count, value.Text);
+        Assert.Null(row.Overridable);
+        if (settings == "{}")
+        {
+            Assert.Empty(row.Sources);
+        }
+        else
+        {
+            Assert.Equal("Server", Assert.Single(row.Sources));
+        }
+        Assert.DoesNotContain("private", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", JsonSerializer.Serialize(snapshot), StringComparison.Ordinal);
+        Assert.DoesNotContain(snapshot.Groups.SelectMany(item => item.Entries), entry => entry.Key == "unknown");
+    }
+
+    [Theory]
     [InlineData("{}", "Unreported")]
     [InlineData("""{"copilotInferenceUrl":""}""", "None")]
     [InlineData("""{"copilotInferenceUrl":"https://private.example/inference?token=secret"}""", "Hidden")]

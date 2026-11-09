@@ -124,6 +124,7 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 - auth: 明示 token と `UseLoggedInUser = false` の意図が守られているか
 - lifecycle: dispose/abort/stop の意味を取り違えていないか
 - permissions: auto-approve と `skip_permission` の境界が妥当か
+- 起動時 `PermissionMode` が public にある版では、必要なモードを create/resume で指定し、`PermissionModeResult` の成功・実効モードを確認する。設定した事実だけで適用済みとしない。Auto recovery は既存の通知付き fallback と別契約であり、active request の再送ではなく同意・capability・最終 outcome を検証する。
 - tools: source-qualified tool filtering、`CopilotToolOptions`、ambient tool exposure が安全か
 - skills: `IncludedBuiltinSkills = []` は組み込みスキルだけの除外。スキルを使わない導線では `EnableSkills = false` を明示し、ambient / provider-backed スキルも無効化する。
 - structured output: SDK に schema support が無いなら防御 parser/tool strategy があるか

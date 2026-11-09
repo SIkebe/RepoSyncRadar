@@ -1,4 +1,5 @@
 using GitHub.Copilot;
+using GitHub.Copilot.Rpc;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -129,8 +130,30 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             session = await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
         }
 
+#pragma warning disable GHCP001 // Verify the experimental startup permission result before exposing the session.
+        try
+        {
+            ValidatePermissionMode(session.PermissionModeResult);
+        }
+        catch
+        {
+            await session.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+#pragma warning restore GHCP001
+
         return new SdkCopilotSession(session, purpose, _logger, _usageTracker);
     }
+
+#pragma warning disable GHCP001 // Validate the public experimental startup permission contract.
+    internal static void ValidatePermissionMode(PermissionsSetModeResult? result)
+    {
+        if (result is not { Success: true } || result.Mode != PermissionMode.Manual)
+        {
+            throw new InvalidOperationException("Copilot did not confirm manual permission mode for the session.");
+        }
+    }
+#pragma warning restore GHCP001
 
     /// <summary>
     /// Switches this process to <paramref name="fallbackModel"/> for the current and all

@@ -45,6 +45,8 @@ internal static class SessionConfigBuilder
                 Content = SystemPromptFor(purpose),
             },
             OnPermissionRequest = permissionHandler,
+            PermissionMode = PermissionMode.Manual,
+            AutoModeRecovery = false,
             EnableSessionTelemetry = copilot.EnableSessionTelemetry,
             EnableFileChangeTracking = false,
             EnableSessionStore = false,

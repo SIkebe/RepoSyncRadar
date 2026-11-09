@@ -564,6 +564,7 @@
   <data name="Copilot.Policy.Item.allowManagedHooksOnly" xml:space="preserve"><value>Managed hooks only</value></data>
   <data name="Copilot.Policy.Item.features" xml:space="preserve"><value>Feature availability settings</value></data>
   <data name="Copilot.Policy.Item.enabledPlugins" xml:space="preserve"><value>Plugin activation settings</value></data>
+  <data name="Copilot.Policy.Item.pluginAssignments" xml:space="preserve"><value>Managed plugin assignments</value></data>
   <data name="Copilot.Policy.Item.extraKnownMarketplaces" xml:space="preserve"><value>Additional marketplaces</value></data>
   <data name="Copilot.Policy.Item.strictKnownMarketplaces" xml:space="preserve"><value>Allowed marketplaces</value></data>
   <data name="Copilot.Policy.Item.marketplace.source" xml:space="preserve"><value>Source type</value></data>
