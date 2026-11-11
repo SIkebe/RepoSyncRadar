@@ -72,7 +72,7 @@ Use these repository instructions as the starting point. When code or validated 
 - Keep experimental API warning suppressions local to the integration that requires them.
 - Correlate pre/post tool audit hooks only by `(SessionId, ToolCallId)` from the bundled runtime; do not retain legacy-runtime FIFO compatibility. Missing, blank, or unmatched IDs must produce independent audit rows with warnings, never inferred matches.
 - Leave `SessionConfig.ExcludedManagedSettings` unset so fetched, device, and policy-helper restrictions are not selectively bypassed; app-injected permissions remain separate.
-- RepoSyncRadar uses `RuntimeConnection.ForInProcess()` exclusively; it does not support per-client SDK `Telemetry`, `Environment`, or `WorkingDirectory`. Verify native runtime startup, a model turn, and shutdown in installed-package smoke before a release.
+- RepoSyncRadar uses `RuntimeConnection.ForInProcess()` exclusively; per-client `Environment` and `WorkingDirectory` are unsupported. The SDK supports typed in-process `Telemetry`, but the app intentionally does not configure exporters or content capture. Verify native runtime startup, a model turn, and shutdown in installed-package smoke before a release.
 - Keep session file-change tracking disabled until RepoSyncRadar has a user-visible rewind flow; current radar tools do not edit workspace files.
 - Start all app-owned sessions with `PermissionMode.Manual` and verify `PermissionModeResult` before exposing them. Keep runtime Auto recovery disabled until consent and recovery outcomes are wired to the visible fallback tracker; never silently resend an active request.
 - Treat SDK capabilities as unavailable until confirmed in the installed package's public API. Do not rely on runtime internals or prompt-only structured-output guarantees.
@@ -82,7 +82,7 @@ Use these repository instructions as the starting point. When code or validated 
 
 ### Client And Telemetry
 
-- Wire configured diagnostics through SDK options, and report session usage from SDK events/metrics. The in-process transport rejects client-level `Telemetry`; never log tokens, prompts, or responses.
+- Wire configured diagnostics through SDK options, and report session usage from SDK events/metrics. Keep SDK telemetry exporters and content capture unconfigured unless a deliberate privacy-reviewed feature needs them; never log tokens, prompts, or responses.
 - Report AI Credits only from SDK usage events (`CopilotUsage.TotalNanoAiu`) or session metrics. The SDK has no metrics event/call coverage boundary, and usage may arrive after idle: never add events to cumulative metrics by arrival time. Retain cumulative event totals independently of the 50-record history, deduplicate by session/call ID (event ID fallback), and use per-session per-counter maxima as conservative observed totals. Incomplete event history can temporarily underreport later usage until metrics refresh succeeds. Request versions reject stale/pre-reset metrics responses only; they do not establish coverage. Never estimate from model pricing.
 
 ### Auth Resolution
