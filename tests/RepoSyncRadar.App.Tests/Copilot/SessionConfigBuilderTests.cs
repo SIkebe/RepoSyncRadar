@@ -124,6 +124,7 @@ public class SessionConfigBuilderTests
         Assert.Empty(config.IncludedBuiltInAgents);
         Assert.Empty(config.Clone().IncludedBuiltInAgents!);
         Assert.Null(config.SkillProvider);
+        Assert.Null(config.OnShellAuthenticationRequest);
         Assert.False(config.Clone().EnableSkills);
         Assert.True(config.ManagedSettings!.Permissions!.DisableAssistedPermissionsMode);
     }
