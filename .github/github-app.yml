@@ -1,6 +1,6 @@
 instructions: |
   RepoSyncRadar is a Windows 11 desktop app. Run repository commands from the
-  repository root with the preview .NET SDK pinned in global.json.
+  repository root with the .NET 11 GA SDK pinned in global.json.
 
 scripts:
   - name: Restore
