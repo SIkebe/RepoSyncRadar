@@ -25,7 +25,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 2. **target version を明確にする**。ユーザー指定があればそれを使う。未指定なら NuGet prerelease を含めて候補を確認し、最新へ進めてよいか判断する。
 3. **app code と突き合わせる**。SDK の changelog 感想で終えず、`src/RepoSyncRadar.App/Copilot/`、`RepoSyncRadar.Core/Options/`、settings、UI/tests を見る。
 4. **public surface 優先**。内部実装だけにあるものは使える API として扱わない。experimental API は `GHCP001` 等の警告と変更リスクを明示する。
-5. **機密情報を出さない**。トークン、prompt/response content、telemetry content は記録・表示しない。in-process ランタイムで使えないクライアント別 `Telemetry` / `CaptureContent` を追加しない。
+5. **機密情報を出さない**。トークン、prompt/response content、telemetry content は記録・表示しない。typed in-process `Telemetry` の対応状況は exact package で確認し、対応済みでも privacy-reviewed な用途なしに exporter / `CaptureContent` を追加しない。
 6. **既存の未コミット変更を壊さない**。dirty worktree を前提に、関係ない変更は戻さない。
 7. **実装は小さく根本に当てる**。package bump、version notice、SDK 契約との不一致、設定の未配線、安全な beta 新機能活用に絞る。
 8. **見送りも根拠を残す**。公式 release notes の項目を採用しない場合は、該当コード検索結果と「なぜこのアプリでは不要か」を PR 本文または完了報告に書く。
@@ -145,7 +145,7 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 
 1. **Correctness / user-visible failure**: breaking change、response parsing、timeout/cancel 誤解、tool filter 破綻
 2. **Security / privacy**: token fallback、ambient custom instructions、org-level custom agents、prompt/response logging、telemetry content capture
-3. **Observability**: SDK logger、runtime log level、request/session IDs、usage metrics、safe lifecycle/error hooks (クライアント別 OTel exporter は in-process 非対応)
+3. **Observability**: SDK logger、runtime log level、request/session IDs、usage metrics、safe lifecycle/error hooks (in-process typed OTel の対応と privacy 境界は exact package で確認)
 4. **Lifecycle / reliability**: stop/force stop、idle cleanup、abort on cancel、session persistence/migration
 5. **Performance / UX**: streaming/subagent streaming、permission round-trip、model fallback
 6. **Preview / experimental opportunity**: structured output、remote sessions、canvas、quota/account APIs、Preview language/runtime/tooling

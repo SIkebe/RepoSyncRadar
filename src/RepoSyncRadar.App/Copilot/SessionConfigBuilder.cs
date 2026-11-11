@@ -54,6 +54,7 @@ internal static class SessionConfigBuilder
             // Excluding built-ins alone does not disable ambient or provider-backed skills.
             EnableSkills = false,
             IncludedBuiltinSkills = [],
+            IncludedBuiltInAgents = [],
             Memory = new GitHub.Copilot.MemoryConfiguration { Enabled = false },
             ToolSearch = new ToolSearchConfig { Enabled = false },
             SkipCustomInstructions = true,

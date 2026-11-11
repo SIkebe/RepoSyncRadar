@@ -93,7 +93,7 @@ RepoSyncRadar は **アプリ上でサインインさせた GitHub ユーザー�
 >
 > `OAuthScopes` には `public_repo` を指定してください — Copilot SDK の認証(ユーザー識別)と Octokit の `github/docs` 読み取りの両方を 1 つのトークンでまかなえます。
 >
-> **Copilot SDK 診断**: `LogLevel` は SDK ランタイムのログレベルです。`SessionIdleTimeoutSeconds` は `0` / 未指定なら SDK 既定(無効)です。AI Credits は SDK の usage event / session metrics から取得します。in-process ランタイムでは SDK のクライアント別ファイルテレメトリは使用できず、プロンプトや応答内容のキャプチャも設定しません。
+> **Copilot SDK 診断**: `LogLevel` は SDK ランタイムのログレベルです。`SessionIdleTimeoutSeconds` は `0` / 未指定なら SDK 既定(無効)です。AI Credits は SDK の usage event / session metrics から取得します。SDK は typed in-process テレメトリに対応していますが、このアプリでは exporter やプロンプト・応答内容のキャプチャを設定しません。
 >
 > **セッションのスキル**: Triage・下書き生成・Maintenance では SDK のスキル機能全体を明示的に無効化します。組み込みスキルだけでなく、端末にあるスキルやプロバイダーから供給されるスキルも使用せず、用途別のアプリ指示と登録済み radar ツールを使用します。
 >
