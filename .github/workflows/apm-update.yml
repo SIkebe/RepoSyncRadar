@@ -53,6 +53,8 @@ jobs:
           # A fresh checkout has no local deployment receipts. After the audit
           # verifies the committed files, move only lock-owned skill directories
           # aside so unmanaged skills stay in place and no --force is needed.
+          # Revisit this backup if APM can safely adopt committed files by
+          # verifying their lockfile hashes without local receipts.
           skill_dirs="$(yq -r '.dependencies[].deployed_files[] | select(test("^\.agents/skills/[^/]+$"))' apm.lock.yaml | sort -u)"
           if [ -z "$skill_dirs" ]; then
             echo "No APM-managed skill directories were found in apm.lock.yaml." >&2
