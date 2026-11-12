@@ -51,26 +51,28 @@ jobs:
           set -euo pipefail
           "$APM_BIN" audit --ci --no-fail-fast
           # A fresh checkout has no local deployment receipts. After the audit
-          # verifies the committed files, move only lock-owned skill directories
-          # aside so unmanaged skills stay in place and no --force is needed.
+          # verifies the committed files, move only lock-owned skill files
+          # aside so unmanaged files stay in place and no --force is needed.
           # Revisit this backup if APM can safely adopt committed files by
           # verifying their lockfile hashes without local receipts.
-          skill_dirs="$(yq -r '.dependencies[].deployed_files[] | select(test("^\.agents/skills/[^/]+$"))' apm.lock.yaml | sort -u)"
-          if [ -z "$skill_dirs" ]; then
-            echo "No APM-managed skill directories were found in apm.lock.yaml." >&2
-            exit 1
-          fi
-          while IFS= read -r dir; do
-            if [[ ! "${dir#.agents/skills/}" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || [ -L "$dir" ] || [ ! -d "$dir" ]; then
-              echo "Refusing to move unexpected APM skill path: $dir" >&2
-              exit 1
-            fi
-          done <<< "$skill_dirs"
           backup="$RUNNER_TEMP/apm-managed-skills"
           mkdir "$backup"
-          while IFS= read -r dir; do
-            mv "$dir" "$backup/"
-          done <<< "$skill_dirs"
+          yq -r -0 '.dependencies[].deployed_file_hashes | keys | .[]' apm.lock.yaml | sort -zu > "$backup/paths"
+          if [ ! -s "$backup/paths" ]; then
+            echo "No APM-managed skill files were found in apm.lock.yaml." >&2
+            exit 1
+          fi
+          repo_root="$(realpath -e .)"
+          while IFS= read -r -d '' file; do
+            if [[ "$file" != .agents/skills/*/* ]] || [ ! -f "$file" ] || [ "$(realpath -e -- "$file")" != "$repo_root/$file" ]; then
+              echo "Refusing to move unexpected APM skill path: $file" >&2
+              exit 1
+            fi
+          done < "$backup/paths"
+          while IFS= read -r -d '' file; do
+            mkdir -p "$backup/$(dirname -- "$file")"
+            mv -- "$file" "$backup/$file"
+          done < "$backup/paths"
           "$APM_BIN" install --frozen
           "$APM_BIN" audit --ci --no-fail-fast
           git diff --exit-code -- apm.yml apm.lock.yaml .agents/skills
