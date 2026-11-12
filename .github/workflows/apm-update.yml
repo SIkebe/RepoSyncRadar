@@ -46,9 +46,36 @@ jobs:
           "$apm_bin" --version
 
       - name: Verify locked APM state
+        shell: bash
         run: |
-          & $env:APM_BIN install --frozen
-          & $env:APM_BIN audit --ci --no-fail-fast
+          set -euo pipefail
+          "$APM_BIN" audit --ci --no-fail-fast
+          # A fresh checkout has no local deployment receipts. After the audit
+          # verifies the committed files, move only lock-owned skill files
+          # aside so unmanaged files stay in place and no --force is needed.
+          # Revisit this backup if APM can safely adopt committed files by
+          # verifying their lockfile hashes without local receipts.
+          backup="$RUNNER_TEMP/apm-managed-skills"
+          mkdir "$backup"
+          yq -r -0 '.dependencies[].deployed_file_hashes | keys | .[]' apm.lock.yaml | sort -zu > "$backup/paths"
+          if [ ! -s "$backup/paths" ]; then
+            echo "No APM-managed skill files were found in apm.lock.yaml." >&2
+            exit 1
+          fi
+          repo_root="$(realpath -e .)"
+          while IFS= read -r -d '' file; do
+            if [[ "$file" != .agents/skills/*/* ]] || [ ! -f "$file" ] || [ "$(realpath -e -- "$file")" != "$repo_root/$file" ]; then
+              echo "Refusing to move unexpected APM skill path: $file" >&2
+              exit 1
+            fi
+          done < "$backup/paths"
+          while IFS= read -r -d '' file; do
+            mkdir -p "$backup/$(dirname -- "$file")"
+            mv -- "$file" "$backup/$file"
+          done < "$backup/paths"
+          "$APM_BIN" install --frozen
+          "$APM_BIN" audit --ci --no-fail-fast
+          git diff --exit-code -- apm.yml apm.lock.yaml .agents/skills
 
       - name: Resolve SHA-pinned APM updates
         env:
@@ -122,9 +149,11 @@ jobs:
 
       - name: Regenerate APM lockfile and deployed skills
         if: ${{ env.APM_UPDATE_CHANGED == 'true' }}
+        shell: bash
         run: |
-          & $env:APM_BIN install
-          & $env:APM_BIN audit --ci --no-fail-fast
+          set -euo pipefail
+          "$APM_BIN" install
+          "$APM_BIN" audit --ci --no-fail-fast
 
       - name: Create update pull request
         if: ${{ env.APM_UPDATE_CHANGED == 'true' }}
@@ -189,7 +218,7 @@ jobs:
 
           - [ ] `dotnet build RepoSyncRadar.sln -warnaserror` - N/A - APM skill content only
           - [ ] `dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual` - N/A - APM skill content only
-          - [x] Focused tests: `apm install --frozen`; `apm audit --ci --no-fail-fast`; `apm install`; `apm audit --ci --no-fail-fast`
+          - [x] Focused tests: committed-state audit; lock-owned skill file backup; `apm install --frozen`; `apm audit --ci --no-fail-fast`; `git diff --exit-code -- apm.yml apm.lock.yaml .agents/skills`; `apm install`; `apm audit --ci --no-fail-fast`
           - [ ] Manual smoke / screenshots, if UI or WebView behavior changed; otherwise replace with `N/A - no UI/WebView changes`: N/A - no UI/WebView changes
 
           ## Risk And Rollback
