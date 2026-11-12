@@ -17,11 +17,11 @@
   <ItemGroup Label="Blazor / Razor">
     <PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="11.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.Components.WebView" Version="11.0.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="11.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Wpf" Version="11.0.10" />
   </ItemGroup>
 
   <ItemGroup Label="WebView2">
-    <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+    <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
   </ItemGroup>
 
   <ItemGroup Label="EF Core / SQLite">
@@ -30,35 +30,35 @@
   </ItemGroup>
 
   <ItemGroup Label="UI Components">
-    <PackageVersion Include="MudBlazor" Version="9.4.0" />
+    <PackageVersion Include="MudBlazor" Version="9.12.0" />
   </ItemGroup>
 
   <ItemGroup Label="Markdown">
-    <PackageVersion Include="Markdig" Version="1.2.0" />
-    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.4" />
-    <PackageVersion Include="YamlDotNet" Version="17.1.0" />
+    <PackageVersion Include="Markdig" Version="1.6.0" />
+    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.5" />
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup Label="GitHub / Copilot">
     <PackageVersion Include="Octokit" Version="14.0.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.32-preview.1" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.32-preview.3" />
   </ItemGroup>
 
   <ItemGroup Label="Installer / Updates">
-    <PackageVersion Include="Velopack" Version="1.1.1" />
+    <PackageVersion Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
   <ItemGroup Label="Testing">
-    <PackageVersion Include="xunit.v3" Version="3.2.2" />
-    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
-    <PackageVersion Include="Microsoft.Testing.Platform" Version="1.9.1" />
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.0.6" />
-    <PackageVersion Include="NSubstitute" Version="5.3.0" />
-    <PackageVersion Include="RichardSzalay.MockHttp" Version="7.0.0" />
-    <PackageVersion Include="bunit" Version="2.8.1-preview" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+    <PackageVersion Include="Microsoft.Testing.Platform" Version="2.5.3" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
+    <PackageVersion Include="RichardSzalay.MockHttp" Version="7.1.0" />
+    <PackageVersion Include="bunit" Version="2.15.2" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="11.0.0" />
-    <PackageVersion Include="Microsoft.Playwright" Version="1.59.0" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.6.0" />
+    <PackageVersion Include="Microsoft.Playwright" Version="1.64.1" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="11.0.0" />
   </ItemGroup>
 
 </Project>
