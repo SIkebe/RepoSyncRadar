@@ -218,7 +218,7 @@ jobs:
 
           - [ ] `dotnet build RepoSyncRadar.sln -warnaserror` - N/A - APM skill content only
           - [ ] `dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual` - N/A - APM skill content only
-          - [x] Focused tests: committed-state audit; lock-owned skill directory backup; `apm install --frozen`; `apm audit --ci --no-fail-fast`; `git diff --exit-code -- apm.yml apm.lock.yaml .agents/skills`; `apm install`; `apm audit --ci --no-fail-fast`
+          - [x] Focused tests: committed-state audit; lock-owned skill file backup; `apm install --frozen`; `apm audit --ci --no-fail-fast`; `git diff --exit-code -- apm.yml apm.lock.yaml .agents/skills`; `apm install`; `apm audit --ci --no-fail-fast`
           - [ ] Manual smoke / screenshots, if UI or WebView behavior changed; otherwise replace with `N/A - no UI/WebView changes`: N/A - no UI/WebView changes
 
           ## Risk And Rollback
