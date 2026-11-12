@@ -72,4 +72,3 @@ copilot-traces.jsonl
 
 # APM dependencies
 apm_modules/
-tools/apm/__pycache__/
