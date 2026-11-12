@@ -43,12 +43,21 @@ jobs:
           fi
 
           echo "APM_BIN=$apm_bin" >> "$GITHUB_ENV"
+          echo "APM_PYTHON=$apm_venv/bin/python" >> "$GITHUB_ENV"
           "$apm_bin" --version
 
       - name: Verify locked APM state
+        shell: bash
         run: |
-          & $env:APM_BIN install --frozen
-          & $env:APM_BIN audit --ci --no-fail-fast
+          set -euo pipefail
+          "$APM_PYTHON" -m unittest discover -s tools/apm -p 'test_*.py'
+          "$APM_BIN" audit --ci --no-fail-fast
+          # A fresh checkout has no local deployment receipts. Preserve verified
+          # managed files before restoring them without the security override.
+          "$APM_PYTHON" tools/apm/prepare_cold_install.py --backup "$RUNNER_TEMP/apm-committed-skills"
+          "$APM_BIN" install --frozen
+          "$APM_BIN" audit --ci --no-fail-fast
+          git diff --exit-code -- apm.yml apm.lock.yaml .agents/skills
 
       - name: Resolve SHA-pinned APM updates
         env:
@@ -122,9 +131,11 @@ jobs:
 
       - name: Regenerate APM lockfile and deployed skills
         if: ${{ env.APM_UPDATE_CHANGED == 'true' }}
+        shell: bash
         run: |
-          & $env:APM_BIN install
-          & $env:APM_BIN audit --ci --no-fail-fast
+          set -euo pipefail
+          "$APM_BIN" install
+          "$APM_BIN" audit --ci --no-fail-fast
 
       - name: Create update pull request
         if: ${{ env.APM_UPDATE_CHANGED == 'true' }}
@@ -189,7 +200,7 @@ jobs:
 
           - [ ] `dotnet build RepoSyncRadar.sln -warnaserror` - N/A - APM skill content only
           - [ ] `dotnet test RepoSyncRadar.sln -- --filter-not-trait Category=Manual` - N/A - APM skill content only
-          - [x] Focused tests: `apm install --frozen`; `apm audit --ci --no-fail-fast`; `apm install`; `apm audit --ci --no-fail-fast`
+          - [x] Focused tests: Python cold-install preparation tests; committed-state audit and verified-file backup; `apm install --frozen`; `apm audit --ci --no-fail-fast`; `git diff --exit-code -- apm.yml apm.lock.yaml .agents/skills`; `apm install`; `apm audit --ci --no-fail-fast`
           - [ ] Manual smoke / screenshots, if UI or WebView behavior changed; otherwise replace with `N/A - no UI/WebView changes`: N/A - no UI/WebView changes
 
           ## Risk And Rollback
