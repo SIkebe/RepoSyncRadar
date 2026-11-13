@@ -343,20 +343,18 @@ public sealed class CopilotPolicyDiagnosticsTests
     }
 
     [Theory]
-    [InlineData("{}", "Unreported")]
-    [InlineData("""{"requireBase64ImageAttachments":false}""", "No")]
-    [InlineData("""{"requireBase64ImageAttachments":true}""", "Yes")]
-    public void Inventory_Reports_Base64_Image_Attachment_Policy_As_Known_Runtime_Setting(
-        string settings, string state)
+    [InlineData("""{"requireBase64ImageAttachments":false}""")]
+    [InlineData("""{"requireBase64ImageAttachments":true}""")]
+    public void Inventory_Hides_Removed_Base64_Image_Attachment_Policy(string settings)
     {
         var result = JsonSerializer.Deserialize<ManagedSettingsResolveResult>(
             $$$"""{"resolved":{"settings":{{{settings}}}}}""")!;
-        var groups = CopilotPolicyDiagnostics.FromResult(result).Groups;
-        var entry = Assert.Single(groups.Single(group => group.Key == "Runtime").Entries,
-            row => row.Key == "requireBase64ImageAttachments");
+        var rows = CopilotPolicyDiagnostics.FromResult(result).Groups.SelectMany(group => group.Entries).ToArray();
 
-        Assert.Equal($"Copilot.Policy.Value.{state}", Assert.Single(entry.Values).ResourceKey);
-        Assert.DoesNotContain(groups.SelectMany(group => group.Entries), row => row.Key == "unknown");
+        Assert.DoesNotContain(rows, row => row.Key == "requireBase64ImageAttachments");
+        var unknown = Assert.Single(rows, row => row.Key == "unknown");
+        Assert.Equal("1", Assert.Single(unknown.Values).Text);
+        Assert.Equal("Copilot.Policy.Value.Hidden", unknown.Values[0].ResourceKey);
     }
 
     [Fact]

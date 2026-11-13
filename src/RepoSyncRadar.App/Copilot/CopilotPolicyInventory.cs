@@ -29,7 +29,7 @@ internal static class CopilotPolicyInventory
         ["model", "autoTier", "fusionTier", "effortLevel", "contextTier"],
         ["permissions.allow", "permissions.ask", "permissions.deny", "permissions.disableBypassPermissionsMode",
             "permissions.disableAssistedPermissionsMode"],
-        ["sandbox", "vscode", "requireBase64ImageAttachments"],
+        ["sandbox", "vscode"],
         ["allowedMcpServers", "deniedMcpServers", "strictPluginOnlyCustomization", "allowManagedMcpServersOnly",
             "allowManagedHooksOnly", "features", "enabledPlugins", "pluginAssignments", "extraKnownMarketplaces", "strictKnownMarketplaces"],
         ["remoteControl", "forceLoginOrgs", "forceRemoteSettingsRefresh", "policyHelper", "policyHelperFailureMode", "telemetry",

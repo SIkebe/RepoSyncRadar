@@ -39,7 +39,7 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.110-3", status.Version);
+        Assert.Equal("1.0.111", status.Version);
     }
 
 #pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
@@ -119,6 +119,24 @@ public sealed class CopilotInProcessRuntimeTests
         Assert.NotNull(validation.Settings);
         Assert.False(validation.Settings.Value.TryGetProperty("ensembleTier", out _));
         Assert.False(validation.Settings.Value.TryGetProperty("fusionTier", out _));
+    }
+
+    [Fact]
+    public async Task Removed_Base64_Image_Policy_Is_Dropped_With_A_Warning()
+    {
+        await using var client = new CopilotClient(CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(), NullLogger.Instance, "offline-policy-test", "0.1.30"));
+        var ct = TestContext.Current.CancellationToken;
+        await client.StartAsync(ct);
+
+        var validation = await client.Rpc.ManagedSettings.ValidateAsync(
+            """{"requireBase64ImageAttachments":true}""", layer: "server", cancellationToken: ct);
+
+        Assert.True(validation.Valid);
+        Assert.Contains(validation.Diagnostics,
+            diagnostic => diagnostic.Path == "requireBase64ImageAttachments" && diagnostic.Severity.Value == "warning");
+        Assert.NotNull(validation.Settings);
+        Assert.False(validation.Settings.Value.TryGetProperty("requireBase64ImageAttachments", out _));
     }
 
     [Fact]
@@ -331,6 +349,55 @@ public sealed class CopilotInProcessRuntimeTests
         Assert.True(handler.RequestCount > 0);
         Assert.NotEmpty(handler.AgentInvocationIds);
         Assert.All(handler.AgentInvocationIds, id => Assert.False(string.IsNullOrWhiteSpace(id)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Stopping_InProcess_Runtime_Cancels_Pending_Inference(bool forceStop)
+    {
+        var handler = new PendingModelRequestHandler();
+        var options = CopilotSessionFactory.BuildClientOptions(
+            new CopilotOptions(), NullLogger.Instance, "offline-shutdown-test", "0.1.30");
+        options.RequestHandler = handler;
+        await using var client = new CopilotClient(options);
+        var config = SessionConfigBuilder.Build(SessionPurpose.Adoption,
+            Options.Create(new CopilotOptions()),
+            static (_, _) => Task.FromResult(PermissionDecision.Reject("Offline test denies all tools.")));
+        config.Model = "gpt-5.5";
+        config.AvailableTools = new ToolSet();
+        config.DisabledMcpServers = ["github"];
+        config.Provider = new GitHub.Copilot.ProviderConfig
+        {
+            Type = "openai",
+            WireApi = "chat-completions",
+            BaseUrl = "https://offline-model.invalid/v1",
+            ApiKey = "synthetic-key",
+        };
+        var ct = TestContext.Current.CancellationToken;
+        await using var session = await client.CreateSessionAsync(config, ct);
+        await session.SendAsync(new MessageOptions { Prompt = "Offline shutdown probe." }, ct);
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
+
+        await (forceStop ? client.ForceStopAsync() : client.StopAsync())
+            .WaitAsync(TimeSpan.FromSeconds(30), ct);
+
+        await handler.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(15), ct);
+    }
+
+    private sealed class PendingModelRequestHandler : CopilotRequestHandler
+    {
+        internal TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal TaskCompletionSource Cancelled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendRequestAsync(
+            HttpRequestMessage request, CopilotRequestContext ctx)
+        {
+            using var registration = ctx.CancellationToken.Register(() => Cancelled.TrySetResult());
+            Started.TrySetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, ctx.CancellationToken);
+            throw new InvalidOperationException("The pending inference must end through cancellation.");
+        }
     }
 
     private sealed class RejectedModelRequestHandler : CopilotRequestHandler
