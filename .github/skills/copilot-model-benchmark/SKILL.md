@@ -100,6 +100,13 @@ $effort = "high"
 $prompt = 'READ-ONLY BENCHMARK. Do not edit files, run shell commands, or run tests. Start the answer with BENCHMARK-7Q. ...'
 $output = Join-Path $artifactDir "$model-$effort.txt"
 $timing = Join-Path $artifactDir "$model-$effort.time.txt"
+$usage = Join-Path $artifactDir "$model-$effort.usage.json"
+
+# Isolated config: disables remote sessions and hooks without touching the user's config.
+$isolatedHome = Join-Path $artifactDir 'copilot-home'
+New-Item -ItemType Directory -Path $isolatedHome -Force | Out-Null
+'{"remoteSessions":false,"disableAllHooks":true}' |
+    Set-Content (Join-Path $isolatedHome 'settings.json')
 
 $mcpConfigJson = & copilot.cmd mcp list --json
 if ($LASTEXITCODE -ne 0) {
@@ -112,9 +119,12 @@ $disabledMcpArgs = @(
 )
 
 $sw = [Diagnostics.Stopwatch]::StartNew()
+$env:COPILOT_HOME = $isolatedHome
 & copilot.cmd -C . `
   --model $model `
-  --effort $effort `
+  --reasoning-effort $effort `
+  --context default `
+  --trust-folder . `
   --prompt $prompt `
   --available-tools view glob grep lsp `
   --allow-all-tools `
@@ -123,16 +133,19 @@ $sw = [Diagnostics.Stopwatch]::StartNew()
   --disable-builtin-mcps `
   @disabledMcpArgs `
   --no-custom-instructions `
-  --no-remote `
-  --no-remote-export `
+  --sync-session=off `
   --no-auto-update `
   --max-ai-credits 120 `
+  --usage-output-file $usage `
   1> $output 2>&1
 $exitCode = $LASTEXITCODE
 $sw.Stop()
+Remove-Item Env:COPILOT_HOME
 "elapsed_ms=$($sw.ElapsedMilliseconds)`nexit_code=$exitCode" | Set-Content $timing
 ```
 
+CLIが `--no-remote` や `--effort` を受け付けない版では、上記のisolated `COPILOT_HOME` と `--sync-session=off`、`--reasoning-effort` を使う。事前に `copilot --help` で各optionの存在を確認する。isolated homeでは認証が別途必要になる場合がある。
+usage fileの `tokenDetails.input` はcache readを除くため、input tokensは `modelMetrics.<model>.usage.inputTokens`、AI Creditsは `totalNanoAiu / 1e9` と `aiCreditsStatus` から取る。
 `--max-ai-credits`は比較対象と予算に合わせる。1回のmodel callで上限を超える場合があるため、厳密なhard capとは扱わない。
 
 ### 公平性
