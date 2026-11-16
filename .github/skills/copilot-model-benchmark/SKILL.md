@@ -118,29 +118,40 @@ $disabledMcpArgs = @(
         ForEach-Object { "--disable-mcp-server=$_" }
 )
 
+$hadCopilotHome = Test-Path Env:COPILOT_HOME
+$originalCopilotHome = $env:COPILOT_HOME
 $sw = [Diagnostics.Stopwatch]::StartNew()
-$env:COPILOT_HOME = $isolatedHome
-& copilot.cmd -C . `
-  --model $model `
-  --reasoning-effort $effort `
-  --context default `
-  --trust-folder . `
-  --prompt $prompt `
-  --available-tools view glob grep lsp `
-  --allow-all-tools `
-  --deny-tool=write `
-  --deny-tool='shell(*)' `
-  --disable-builtin-mcps `
-  @disabledMcpArgs `
-  --no-custom-instructions `
-  --sync-session=off `
-  --no-auto-update `
-  --max-ai-credits 120 `
-  --usage-output-file $usage `
-  1> $output 2>&1
-$exitCode = $LASTEXITCODE
-$sw.Stop()
-Remove-Item Env:COPILOT_HOME
+try {
+    $env:COPILOT_HOME = $isolatedHome
+    & copilot.cmd -C . `
+      --model $model `
+      --reasoning-effort $effort `
+      --context default `
+      --trust-folder . `
+      --prompt $prompt `
+      --available-tools view glob grep lsp `
+      --allow-all-tools `
+      --deny-tool=write `
+      --deny-tool='shell(*)' `
+      --disable-builtin-mcps `
+      @disabledMcpArgs `
+      --no-custom-instructions `
+      --sync-session=off `
+      --no-auto-update `
+      --max-ai-credits 120 `
+      --usage-output-file $usage `
+      1> $output 2>&1
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    $sw.Stop()
+    if ($hadCopilotHome) {
+        $env:COPILOT_HOME = $originalCopilotHome
+    }
+    else {
+        Remove-Item Env:COPILOT_HOME
+    }
+}
 "elapsed_ms=$($sw.ElapsedMilliseconds)`nexit_code=$exitCode" | Set-Content $timing
 ```
 
