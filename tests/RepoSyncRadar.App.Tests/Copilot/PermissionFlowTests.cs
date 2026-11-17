@@ -1,5 +1,5 @@
-using GitHub.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot;
+using Microsoft.Copilot.Rpc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -9,7 +9,7 @@ using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
 
-#pragma warning disable GHCP001 // Copilot SDK permission decisions remain experimental.
+#pragma warning disable MCPSDK001 // Copilot SDK permission decisions remain experimental.
 
 /// <summary>
 /// Validates that <see cref="RadarPermissionPolicy"/> still routes stronger
@@ -66,4 +66,4 @@ public sealed class PermissionFlowTests
         Assert.Equal(_rejectKind, result.Kind);
     }
 }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001

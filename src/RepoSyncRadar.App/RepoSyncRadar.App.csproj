@@ -25,7 +25,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="MudBlazor" />
-    <PackageReference Include="GitHub.Copilot.SDK" />
+    <PackageReference Include="Microsoft.Copilot.SDK" />
     <PackageReference Include="Velopack" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Octokit" />
@@ -68,7 +68,7 @@
   </ItemGroup>
 
   <!--
-    GitHub.Copilot.SDK の targets は build 時に $(OutDir)runtimes\<rid>\native 配下へ
+    Microsoft.Copilot.SDK の targets は build 時に $(OutDir)runtimes\<rid>\native 配下へ
     in-process runtime の native assets を配置するが、PublishSingleFile=true では publish 出力
     ($(PublishDir)) に伝播しない。Build 出力の native directory を publish 後にコピーし、
     installed app が SDK の native library と依存アセットを解決できるようにする。

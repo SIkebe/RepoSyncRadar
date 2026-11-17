@@ -3,7 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot.Rpc;
 using System.Text.Json;
 using Xunit;
 
@@ -61,7 +61,7 @@ public sealed class CopilotPolicyDiagnosticsPanelTests
         await service.DidNotReceive().ResolveAsync(Arg.Any<CancellationToken>());
     }
 
-#pragma warning disable GHCP001 // Synthetic SDK result exercises the real safe mapper, never an account policy.
+#pragma warning disable MCPSDK001 // Synthetic SDK result exercises the real safe mapper, never an account policy.
     public static CopilotPolicySnapshot CreateInventorySample()
         => CopilotPolicyDiagnostics.FromResult(JsonSerializer.Deserialize<ManagedSettingsResolveResult>("""
             {
@@ -101,7 +101,7 @@ public sealed class CopilotPolicyDiagnosticsPanelTests
               "diagnostics":[{"message":"private refresh served from cache","path":"permissions.allow","severity":"warning"}]
             }
             """)!);
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001
 
     [Fact]
     public async Task Check_Is_OnDemand_And_Shows_Locked_Model_And_Snapshot_Scope()

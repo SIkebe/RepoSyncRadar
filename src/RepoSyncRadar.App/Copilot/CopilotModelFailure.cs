@@ -1,4 +1,4 @@
-using GitHub.Copilot;
+using Microsoft.Copilot;
 using Microsoft.Extensions.Localization;
 
 namespace RepoSyncRadar.App.Copilot;

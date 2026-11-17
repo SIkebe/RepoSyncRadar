@@ -1,5 +1,5 @@
 using System.ComponentModel;
-using GitHub.Copilot;
+using Microsoft.Copilot;
 using Microsoft.EntityFrameworkCore;
 using RepoSyncRadar.App.Components;
 using RepoSyncRadar.App.Copilot;

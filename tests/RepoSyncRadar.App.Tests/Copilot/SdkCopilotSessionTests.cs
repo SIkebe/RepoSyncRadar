@@ -1,4 +1,4 @@
-using GitHub.Copilot;
+using Microsoft.Copilot;
 using Microsoft.Extensions.Logging.Abstractions;
 using RepoSyncRadar.App.Copilot;
 using Xunit;

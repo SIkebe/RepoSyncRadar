@@ -1,5 +1,5 @@
 using System.Text.Json;
-using GitHub.Copilot;
+using Microsoft.Copilot;
 using Microsoft.Extensions.AI;
 using RepoSyncRadar.App.Copilot;
 using RepoSyncRadar.App.Copilot.Tools;

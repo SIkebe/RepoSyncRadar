@@ -1,5 +1,5 @@
-using GitHub.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot;
+using Microsoft.Copilot.Rpc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -17,7 +17,7 @@ namespace RepoSyncRadar.App.Tests.Copilot;
 
 public sealed class CopilotSessionFactoryTests
 {
-#pragma warning disable GHCP001 // Exercise fail-closed handling of the experimental startup permission result.
+#pragma warning disable MCPSDK001 // Exercise fail-closed handling of the experimental startup permission result.
     [Fact]
     public void ValidatePermissionMode_Accepts_Confirmed_Manual_Mode()
     {
@@ -48,7 +48,7 @@ public sealed class CopilotSessionFactoryTests
     {
         Assert.Throws<InvalidOperationException>(() => CopilotSessionFactory.ValidatePermissionMode(null));
     }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001
 
     [Fact]
     public void ResolveFallbackModel_When_Configured_Model_Fails_Prefers_Current_Base_Model()
@@ -109,16 +109,13 @@ public sealed class CopilotSessionFactoryTests
     [Fact]
     public void ConfigureFallbackModel_Clears_ModelSpecific_ReasoningEffort()
     {
-        var config = new SessionConfig
-        {
-            Model = "gpt-6-luna",
-            ReasoningEffort = "max",
-        };
+        var config = new CreateSessionOptions { Model = "gpt-6-luna" };
+        config.Inference.ReasoningEffort = "max";
 
         CopilotSessionFactory.ConfigureFallbackModel(config, "gpt-5-mini");
 
         Assert.Equal("gpt-5-mini", config.Model);
-        Assert.Null(config.ReasoningEffort);
+        Assert.Null(config.Inference.ReasoningEffort);
     }
 
     [Fact]
@@ -145,16 +142,13 @@ public sealed class CopilotSessionFactoryTests
             new RadarWriteTools(Substitute.For<IDbContextFactory<RadarDbContext>>()),
             Substitute.For<IAppVersionProvider>(),
             modelFallbackTracker: tracker);
-        var config = new SessionConfig
-        {
-            Model = "gpt-5.6-luna",
-            ReasoningEffort = "high",
-        };
+        var config = new CreateSessionOptions { Model = "gpt-5.6-luna" };
+        config.Inference.ReasoningEffort = "high";
 
         factory.ActivateFallbackModel(config, SessionPurpose.Adoption, "gpt-5.6-luna", "claude-sonnet-5");
 
         Assert.Equal("claude-sonnet-5", config.Model);
-        Assert.Null(config.ReasoningEffort);
+        Assert.Null(config.Inference.ReasoningEffort);
         var fallback = Assert.IsType<CopilotModelFallback>(tracker.Current);
         Assert.Equal(SessionPurpose.Adoption, fallback.Purpose);
         Assert.Equal("gpt-5.6-luna", fallback.ConfiguredModel);
@@ -188,21 +182,22 @@ public sealed class CopilotSessionFactoryTests
         var logger = NullLogger<CopilotSessionFactory>.Instance;
         var options = CopilotSessionFactory.BuildClientOptions(copilot, logger, "token-123", "0.1.30");
 
-        Assert.False(options.UseLoggedInUser);
-        Assert.Same(logger, options.Logger);
-        Assert.Equal("token-123", options.GitHubToken);
+        Assert.Equal(CopilotClientMode.CodingAgent, options.Mode);
+        Assert.False(options.GitHub.UseLoggedInUser);
+        Assert.Same(logger, options.Observability.Logger);
+        Assert.Equal("token-123", options.GitHub.Token);
         Assert.NotNull(options.ClientInfo);
         Assert.Equal("RepoSyncRadar", options.ClientInfo!.ApplicationName);
         Assert.Equal("0.1.30", options.ClientInfo.ApplicationVersion);
         Assert.Null(options.ClientInfo.IntegrationName);
         Assert.Null(options.ClientInfo.IntegrationVersion);
-        Assert.Equal("debug", options.LogLevel?.Value);
-#pragma warning disable GHCP001 // Verifies the experimental SDK transport.
-        Assert.IsType<InProcessRuntimeConnection>(options.Connection);
-#pragma warning restore GHCP001
-        Assert.Equal("C:/data/copilot", options.BaseDirectory);
-        Assert.Equal(120, options.SessionIdleTimeoutSeconds);
-        Assert.Null(options.Telemetry);
+        Assert.Equal("debug", options.Observability.LogLevel?.Value);
+#pragma warning disable MCPSDK001 // Verifies the experimental SDK transport.
+        var runtime = Assert.IsType<InProcessRuntimeConnection>(options.Runtime);
+#pragma warning restore MCPSDK001
+        Assert.Equal("C:/data/copilot", runtime.BaseDirectory);
+        Assert.Equal(120, runtime.SessionIdleTimeoutSeconds);
+        Assert.Null(options.Observability.Telemetry);
     }
 
     [Fact]
@@ -214,8 +209,12 @@ public sealed class CopilotSessionFactoryTests
             "token-123",
             "0.1.30");
 
-        Assert.Null(options.Telemetry);
-        Assert.Null(options.SessionIdleTimeoutSeconds);
+        Assert.Null(options.Observability.Telemetry);
+#pragma warning disable MCPSDK001 // Verifies the experimental SDK transport.
+        var runtime = Assert.IsType<InProcessRuntimeConnection>(options.Runtime);
+#pragma warning restore MCPSDK001
+        Assert.Null(runtime.BaseDirectory);
+        Assert.Null(runtime.SessionIdleTimeoutSeconds);
     }
 
     private static AIFunction CreateTool(string name)

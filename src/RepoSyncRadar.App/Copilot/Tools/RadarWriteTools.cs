@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
-using GitHub.Copilot;
+using Microsoft.Copilot;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;

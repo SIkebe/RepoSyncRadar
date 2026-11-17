@@ -38,7 +38,7 @@ It combines deterministic ingestion of Repo sync PRs with GitHub Copilot SDK tri
 | GitHub account | The signed-in account must have an active GitHub Copilot subscription. |
 | Git | Optional for basic triage, but required for local docs preview because the app reads `github/docs` content by commit SHA from a bare clone. |
 
-The installed app is self-contained and does not require a separate .NET Desktop Runtime. The `GitHub.Copilot.SDK` package supplies the native Copilot runtime, which runs inside the app process.
+The installed app is self-contained and does not require a separate .NET Desktop Runtime. The `Microsoft.Copilot.SDK` package supplies the native Copilot runtime, which runs inside the app process.
 
 ## Install and run
 

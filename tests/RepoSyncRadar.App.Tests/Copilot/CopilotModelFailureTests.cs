@@ -1,4 +1,4 @@
-using GitHub.Copilot;
+using Microsoft.Copilot;
 using RepoSyncRadar.App.Copilot;
 using Xunit;
 

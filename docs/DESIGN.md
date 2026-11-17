@@ -3,7 +3,7 @@
 > 本書は、GitHub Enterprise Cloud 管理者が `github/docs` の Repo sync PR を日次で確認し、自分の管理・運用している環境に影響しうる product / policy / billing / security / operational change を見つけるためのデスクトップアプリ **RepoSyncRadar** の設計を、議論の経緯ごと記録するものです。
 >
 > - **言語 / ランタイム**: C# (.NET 10) / WPF + BlazorWebView
-> - **エージェント**: [`github/copilot-sdk`](https://github.com/github/copilot-sdk) の .NET SDK (`GitHub.Copilot.SDK`)
+> - **エージェント**: [`microsoft/copilot-sdk`](https://github.com/microsoft/copilot-sdk) の .NET SDK (`Microsoft.Copilot.SDK`)
 > - **データ**: SQLite + EF Core
 > - **GitHub 連携**: Octokit.NET
 > - **公式 Docs 連携**: `docs.github.com/api/*`
@@ -175,7 +175,7 @@
 | データ | SQLite + EF Core | ローカル単独 / 軽量 / クエリ容易 / バックアップが 1 ファイル |
 | GitHub API | Octokit.NET | .NET の事実上標準 |
 | 公式 docs データ取得 | HttpClient → `docs.github.com/api/*` | 自前パースが不要、redirect 解決も API 側でしてくれる |
-| エージェント | `GitHub.Copilot.SDK` | 後述。Copilot ランタイムをプロセス内の JSON-RPC で駆動 |
+| エージェント | `Microsoft.Copilot.SDK` | 後述。Copilot ランタイムをプロセス内の JSON-RPC で駆動 |
 | Razor UI | MudBlazor | Fluent UI Blazor でも可。差分表示は `BlazorMonaco` を併用 |
 | Git 操作 (Phase 6) | `git` CLI | bare クローンから SHA 指定で必要ファイルを読む |
 | 自動更新 | Velopack | Squirrel.Windows の後継 |
@@ -193,7 +193,7 @@
 | 単発の Chat Completion を呼ぶ | **セッション**を作り、エージェントが**自律的に計画・ツール呼び出し・ファイル編集**を行う |
 | プロンプトとレスポンスのみ | `SessionEvent` ストリーム(User / Assistant / ToolStart / ToolComplete / Idle / Error / Delta…)+ Streaming + Hooks + 権限承認 |
 | LLM 呼び出しは自前で組む | **オーケストレーションは Copilot 側、自分は「ツール」と「権限ハンドラ」を実装** |
-| Node / Python のみ | **.NET 公式サポート(`GitHub.Copilot.SDK` NuGet)** |
+| Node / Python のみ | **.NET 公式サポート(`Microsoft.Copilot.SDK` NuGet)** |
 | 課金は Models API | **Copilot サブスクリプションのプレミアムリクエスト**(BYOK で OpenAI / Anthropic / Azure AI Foundry も可) |
 
 ### 5.2 SDK の構造
@@ -209,7 +209,7 @@
 - **Slash commands** — `CommandDefinition` で `/myCmd` を定義し TUI から呼べる(本アプリでは未使用予定)。
 - **Telemetry** — OpenTelemetry / file exporter。`System.Diagnostics.Activity` を活用、`traceparent` 自動伝搬。
 - **Infinite Sessions** — デフォルト ON。context 上限を自動 compaction + workspace ディレクトリに永続化。`SessionCompactionStartEvent` / `SessionCompactionCompleteEvent` で観測可能。
-- **BYOK** — `ProviderConfig` で `Type` / `BaseUrl` / `ApiKey` 指定。Entra ID / Managed Identity は不可、API キーのみ。
+- **BYOK** — `Inference.Providers` の `NamedProviderConfig` (`Type` / `BaseUrl` / `ApiKey`) と `Inference.Models` で指定。Entra ID / Managed Identity は不可、API キーのみ。
 - **認証** — アプリ同梱の公開 OAuth Client ID + Device Flow / DPAPI 保存トークン / デバッグ用環境変数 (`COPILOT_GITHUB_TOKEN`) / BYOK。
 
 ### 5.3 必須事項チェックリスト
@@ -225,7 +225,7 @@
 
 ## 6. カスタムツール一覧
 
-Copilot エージェントは「計画 → ツール選択 → 実行 → 観察 → 反復」を自走する。我々は **アプリ固有のツールを C# で書き、`SessionConfig.Tools` に登録** する。
+Copilot エージェントは「計画 → ツール選択 → 実行 → 観察 → 反復」を自走する。我々は **アプリ固有のツールを C# で書き、`CreateSessionOptions.Tools.Definitions` に登録** する。
 
 | ツール名 | 役割 | 主な実装 |
 |---|---|---|
@@ -685,7 +685,7 @@ RepoSyncRadar.sln
 <PackageVersion Include="Microsoft.Extensions.Options" Version="..." />
 <PackageVersion Include="Microsoft.Web.WebView2" Version="..." />
 <PackageVersion Include="MudBlazor" Version="..." />
-<PackageVersion Include="GitHub.Copilot.SDK" Version="..." />
+<PackageVersion Include="Microsoft.Copilot.SDK" Version="..." />
 <PackageVersion Include="Octokit" Version="..." />
 ```
 
@@ -716,7 +716,7 @@ Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Ph
 | D1 | デスクトップアプリとして実装 | 2026-05-12 | L3 / L4 がブラウザ + GitHub UI では効率悪い |
 | D2 | Blazor Desktop (WPF + BlazorWebView) を採用 | 2026-05-12 | Windows 専用 / C# 優位 / マルチペイン構成 / MAUI 移植余地 |
 | D3 | Electron / Tauri は不採用 | 2026-05-12 | C# 単一スタックの優位を最大化 |
-| D4 | `GitHub.Copilot.SDK` を中核に据える | 2026-05-12 | エージェントオーケストレーションを自前実装しない |
+| D4 | `Microsoft.Copilot.SDK` を中核に据える | 2026-05-12 | エージェントオーケストレーションを自前実装しない |
 | D5 | SQLite + EF Core を採用 | 2026-05-12 | ローカル単独、バックアップ 1 ファイル、クエリ容易 |
 | D6 | submodule は不採用、アプリは独立リポジトリ | 2026-05-12 | submodule は vendoring 用途 / 毎日追跡と相性が悪い |
 | D7 | Phase 1〜4 は API オンリー、Phase 5 で bare clone + Markdown/Liquid preview | 2026-05-12 | 初期セットアップを軽量に保つ |
@@ -742,7 +742,7 @@ Phase 0〜2 で **既に大幅に負担軽減**、Phase 4 で 80% カバー、Ph
 
 ## 付録 A — 参考リンク
 
-- [`github/copilot-sdk`](https://github.com/github/copilot-sdk) — Multi-platform SDK
+- [`microsoft/copilot-sdk`](https://github.com/microsoft/copilot-sdk) — Multi-platform SDK
 - [.NET README](https://github.com/github/copilot-sdk/blob/main/dotnet/README.md)
 - [C# Instructions](https://github.com/github/awesome-copilot/blob/main/instructions/copilot-sdk-csharp.instructions.md)
 - [`github/docs` article API](https://github.com/github/docs/blob/main/src/article-api/README.md)

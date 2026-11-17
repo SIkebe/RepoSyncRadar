@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
-using GitHub.Copilot;
+using Microsoft.Copilot;
 using RepoSyncRadar.App.Settings;
 
 namespace RepoSyncRadar.App.Copilot;

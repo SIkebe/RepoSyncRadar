@@ -1,10 +1,10 @@
-using GitHub.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot;
+using Microsoft.Copilot.Rpc;
 using Microsoft.Extensions.Logging;
 
 namespace RepoSyncRadar.App.Copilot;
 
-#pragma warning disable GHCP001 // Copilot SDK permission decisions remain experimental.
+#pragma warning disable MCPSDK001 // Copilot SDK permission decisions remain experimental.
 
 /// <summary>
 /// Implements <see cref="PermissionRequestHandler"/> for RepoSyncRadar. The policy is
@@ -200,4 +200,4 @@ public sealed partial class RadarPermissionPolicy
         Message = "Managed policy requires human approval for {Kind}; prompting user (session={SessionId})")]
     private static partial void LogPromptingForManagedApproval(ILogger logger, string? kind, string sessionId);
 }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001

@@ -1,5 +1,5 @@
 using System.Text.Json.Serialization;
-using GitHub.Copilot;
+using Microsoft.Copilot;
 using Microsoft.Extensions.Logging;
 using RepoSyncRadar.Core.Services;
 
@@ -58,7 +58,7 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
         return assistant?.Data?.Content ?? string.Empty;
     }
 
-#pragma warning disable GHCP001 // Typed structured output is experimental in the installed SDK.
+#pragma warning disable MCPSDK001 // Typed structured output is experimental in the installed SDK.
     public async Task<DraftBundle> SendStructuredDraftAsync(
         string prompt,
         TimeSpan timeout,
@@ -72,7 +72,7 @@ internal sealed partial class SdkCopilotSession : ICopilotSession
         await RefreshUsageMetricsAsync(cancellationToken).ConfigureAwait(false);
         return CreateDraftBundle(draft.Explanation, draft.Twitter, draft.Customer);
     }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001
 
     private async Task<T> SendWithDiagnosticsAsync<T>(Func<Task<T>> send, CancellationToken cancellationToken)
     {

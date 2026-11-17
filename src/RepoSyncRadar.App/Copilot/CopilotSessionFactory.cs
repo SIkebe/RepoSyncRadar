@@ -1,5 +1,5 @@
-using GitHub.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot;
+using Microsoft.Copilot.Rpc;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -130,7 +130,7 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             session = await client.CreateSessionAsync(config, cancellationToken).ConfigureAwait(false);
         }
 
-#pragma warning disable GHCP001 // Verify the experimental startup permission result before exposing the session.
+#pragma warning disable MCPSDK001 // Verify the experimental startup permission result before exposing the session.
         try
         {
             ValidatePermissionMode(session.PermissionModeResult);
@@ -140,12 +140,12 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             await session.DisposeAsync().ConfigureAwait(false);
             throw;
         }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001
 
         return new SdkCopilotSession(session, purpose, _logger, _usageTracker);
     }
 
-#pragma warning disable GHCP001 // Validate the public experimental startup permission contract.
+#pragma warning disable MCPSDK001 // Validate the public experimental startup permission contract.
     internal static void ValidatePermissionMode(PermissionsSetModeResult? result)
     {
         if (result is not { Success: true } || result.Mode != PermissionMode.Manual)
@@ -153,14 +153,14 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
             throw new InvalidOperationException("Copilot did not confirm manual permission mode for the session.");
         }
     }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001
 
     /// <summary>
     /// Switches this process to <paramref name="fallbackModel"/> for the current and all
     /// later sessions, and publishes the switch so the UI can warn the user.
     /// </summary>
     internal void ActivateFallbackModel(
-        SessionConfig config,
+        CreateSessionOptions config,
         SessionPurpose purpose,
         string configuredModel,
         string fallbackModel)
@@ -170,13 +170,13 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         _modelFallbackTracker?.RecordFallback(purpose, configuredModel, fallbackModel);
     }
 
-    internal static void ConfigureFallbackModel(SessionConfig config, string fallbackModel)
+    internal static void ConfigureFallbackModel(CreateSessionOptions config, string fallbackModel)
     {
         ArgumentNullException.ThrowIfNull(config);
         ArgumentException.ThrowIfNullOrWhiteSpace(fallbackModel);
 
         config.Model = fallbackModel;
-        config.ReasoningEffort = null;
+        config.Inference.ReasoningEffort = null;
     }
 
     internal static string? ResolveFallbackModel(string? configuredModel, IReadOnlyList<string> availableModelIds)
@@ -333,35 +333,30 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentException.ThrowIfNullOrWhiteSpace(applicationVersion);
 
-#pragma warning disable GHCP001 // The in-process runtime is an experimental SDK transport.
+#pragma warning disable MCPSDK001 // The in-process runtime is an experimental SDK transport.
         var clientOptions = new CopilotClientOptions
         {
-            Connection = RuntimeConnection.ForInProcess(),
-            Logger = logger,
-            LogLevel = string.IsNullOrWhiteSpace(copilot.LogLevel)
-                ? CopilotLogLevel.Info
-                : new CopilotLogLevel(copilot.LogLevel.Trim()),
-            GitHubToken = token,
+            // CodingAgent preserves the v1 runtime defaults; Empty changes persistence and auth.
+            Mode = CopilotClientMode.CodingAgent,
+            Runtime = RuntimeConnection.ForInProcess(
+                string.IsNullOrWhiteSpace(copilot.CopilotHome) ? null : copilot.CopilotHome.Trim(),
+                copilot.SessionIdleTimeoutSeconds is > 0 ? copilot.SessionIdleTimeoutSeconds : null),
             ClientInfo = new CopilotClientInfo
             {
                 ApplicationName = "RepoSyncRadar",
                 ApplicationVersion = applicationVersion,
             },
-            // Force the SDK to use the token we hand it instead of falling back to
-            // the account already signed in on the machine.
-            UseLoggedInUser = false,
         };
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001
 
-        if (!string.IsNullOrWhiteSpace(copilot.CopilotHome))
-        {
-            clientOptions.BaseDirectory = copilot.CopilotHome.Trim();
-        }
-
-        if (copilot.SessionIdleTimeoutSeconds is > 0)
-        {
-            clientOptions.SessionIdleTimeoutSeconds = copilot.SessionIdleTimeoutSeconds;
-        }
+        clientOptions.Observability.Logger = logger;
+        clientOptions.Observability.LogLevel = string.IsNullOrWhiteSpace(copilot.LogLevel)
+            ? CopilotLogLevel.Info
+            : new CopilotLogLevel(copilot.LogLevel.Trim());
+        clientOptions.GitHub.Token = token;
+        // Force the SDK to use the token we hand it instead of falling back to
+        // the account already signed in on the machine.
+        clientOptions.GitHub.UseLoggedInUser = false;
 
         return clientOptions;
     }

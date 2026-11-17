@@ -1,5 +1,5 @@
-using GitHub.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot;
+using Microsoft.Copilot.Rpc;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Copilot.Audit;
@@ -7,10 +7,10 @@ using RepoSyncRadar.Core.Options;
 
 namespace RepoSyncRadar.App.Copilot;
 
-#pragma warning disable GHCP001 // Copilot SDK permission and MCP auth decisions remain experimental.
+#pragma warning disable MCPSDK001 // Copilot SDK permission and MCP auth decisions remain experimental.
 
 /// <summary>
-/// Builds <see cref="SessionConfig"/> values for a given <see cref="SessionPurpose"/>.
+/// Builds <see cref="CreateSessionOptions"/> values for a given <see cref="SessionPurpose"/>.
 /// Pulled out of <see cref="CopilotSessionFactory"/> so the SDK-free wiring can be unit
 /// tested without ever spawning a <see cref="CopilotClient"/> process.
 /// </summary>
@@ -18,7 +18,7 @@ internal static class SessionConfigBuilder
 {
     private const string _clientName = "RepoSyncRadar";
 
-    public static SessionConfig Build(
+    public static CreateSessionOptions Build(
         SessionPurpose purpose,
         IOptions<CopilotOptions> options,
         Func<PermissionRequest, PermissionInvocation, Task<PermissionDecision>> permissionHandler,
@@ -30,13 +30,10 @@ internal static class SessionConfigBuilder
 
         var copilot = options.Value;
 
-        var config = new SessionConfig
+        var config = new CreateSessionOptions
         {
             ClientName = _clientName,
             Model = copilot.DefaultModel,
-            ReasoningEffort = copilot.ReasoningEffort,
-            ContextTier = ParseContextTier(copilot.ContextTier),
-            Streaming = copilot.Streaming,
             SystemMessage = new SystemMessageConfig
             {
                 // SystemMessageMode.Append keeps the SDK guard-rails and only adds our
@@ -44,35 +41,39 @@ internal static class SessionConfigBuilder
                 Mode = SystemMessageMode.Append,
                 Content = SystemPromptFor(purpose),
             },
-            OnPermissionRequest = permissionHandler,
-            PermissionMode = PermissionMode.Manual,
-            AutoModeRecovery = false,
-            EnableSessionTelemetry = copilot.EnableSessionTelemetry,
-            EnableFileChangeTracking = false,
-            EnableSessionStore = false,
-            EnableExperimentalMode = false,
-            // Excluding built-ins alone does not disable ambient or provider-backed skills.
-            EnableSkills = false,
-            IncludedBuiltinSkills = [],
-            IncludedBuiltInAgents = [],
-            Memory = new GitHub.Copilot.MemoryConfiguration { Enabled = false },
-            ToolSearch = new ToolSearchConfig { Enabled = false },
-            SkipCustomInstructions = true,
-            CustomAgentsLocalOnly = true,
-            CoauthorEnabled = false,
-            ManageScheduleEnabled = false,
-            // Repository-origin hooks run commands without per-hook approval; the radar never needs them.
-            EnableFileHooks = false,
-            ManagedSettings = CreateManagedSettings(),
-            McpOAuthTokenStorage = McpOAuthTokenStorageMode.InMemory,
-            // RepoSyncRadar does not broker third-party MCP OAuth tokens. Fail closed if
-            // an OAuth-protected MCP server is introduced before a user-visible flow exists.
-            OnMcpAuthRequest = CancelMcpAuthRequestAsync,
         };
+
+        config.Inference.ReasoningEffort = copilot.ReasoningEffort;
+        config.Inference.ContextTier = ParseContextTier(copilot.ContextTier);
+        config.Events.Streaming = copilot.Streaming;
+        config.Permissions.OnRequest = permissionHandler;
+        config.Permissions.Mode = PermissionMode.Manual;
+        config.Interaction.AutoModeRecovery = false;
+        config.GitHub.TelemetryEnabled = copilot.EnableSessionTelemetry;
+        config.Filesystem.TrackFileChanges = false;
+        config.State.EnableCrossSessionStore = false;
+        config.State.Memory = new Microsoft.Copilot.MemoryConfiguration { Enabled = false };
+        config.Experiments.EnableExperimentalMode = false;
+        // Excluding built-ins alone does not disable ambient or provider-backed skills.
+        config.Skills.Enabled = false;
+        config.Skills.IncludedBuiltinSkills = [];
+        config.Agents.IncludedBuiltInAgents = [];
+        config.Agents.LocalDiscoveryOnly = true;
+        config.Tools.Search = new ToolSearchConfig { Enabled = false };
+        config.Tools.ManageScheduleEnabled = false;
+        config.Instructions.SkipCustomInstructions = true;
+        config.Git.CoauthorEnabled = false;
+        // Repository-origin hooks run commands without per-hook approval; the radar never needs them.
+        config.Hooks.EnableRepositoryHooks = false;
+        config.Policy.ManagedSettings = CreateManagedSettings();
+        config.Mcp.OauthTokenStorage = McpOAuthTokenStorageMode.InMemory;
+        // RepoSyncRadar does not broker third-party MCP OAuth tokens. Fail closed if
+        // an OAuth-protected MCP server is introduced before a user-visible flow exists.
+        config.Mcp.OnAuthRequest = CancelMcpAuthRequestAsync;
 
         if (copilot.EnableWebSocketResponses is { } enableWebSocketResponses)
         {
-            config.Capi = new GitHub.Copilot.CapiSessionOptions
+            config.GitHub.Capi = new Microsoft.Copilot.CapiSessionOptions
             {
                 EnableWebSocketResponses = enableWebSocketResponses,
             };
@@ -80,19 +81,19 @@ internal static class SessionConfigBuilder
 
         if (tools is { Count: > 0 })
         {
-            config.Tools = tools.Cast<AIFunctionDeclaration>().ToList();
+            config.Tools.Definitions = tools.Cast<AIFunctionDeclaration>().ToList();
             var availableTools = new ToolSet();
             foreach (var tool in tools)
             {
                 availableTools.AddCustom(tool.Name);
             }
 
-            config.AvailableTools = availableTools;
+            config.Tools.AvailableTools = availableTools;
         }
 
         if (auditHook is not null)
         {
-            config.Hooks = new SessionHooks
+            config.Hooks.Handlers = new SessionHooks
             {
                 OnPreToolUse = async (input, invocation) =>
                 {
@@ -106,7 +107,6 @@ internal static class SessionConfigBuilder
                 },
             };
         }
-
         return config;
     }
 
@@ -151,4 +151,4 @@ internal static class SessionConfigBuilder
         _ => throw new ArgumentOutOfRangeException(nameof(purpose), purpose, "Unsupported session purpose."),
     };
 }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001

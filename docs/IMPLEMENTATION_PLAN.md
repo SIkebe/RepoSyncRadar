@@ -452,7 +452,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 
 ### 11.2 スコープ
 
-- `RepoSyncRadar.App/Copilot/CopilotSessionFactory.cs` — `CopilotClient` 1 個を所有、`CreateSessionAsync(SessionPurpose)` で `SessionConfig` を組む
+- `RepoSyncRadar.App/Copilot/CopilotSessionFactory.cs` — `CopilotClient` 1 個を所有、`CreateSessionAsync(SessionPurpose)` で `CreateSessionOptions` を組む
   - `SystemMessageMode = Append`
   - `Streaming = options.Streaming`
   - `Model = options.DefaultModel`
@@ -480,7 +480,7 @@ Copilot SDK との接合点を「ICopilotAgent → ICopilotSessionFactory → Co
 | `shell` 未知のコマンド | `DeniedByRules` |
 | 未知の `Kind` | `DeniedByRules` |
 
-`CopilotSessionFactory` 自体は SDK 実装に強く依存するので **インスタンス生成テスト 1 件**(`SessionConfig` のプロパティ確認)のみ。
+`CopilotSessionFactory` 自体は SDK 実装に強く依存するので **インスタンス生成テスト 1 件**(`CreateSessionOptions` のプロパティ確認)のみ。
 
 ### 11.4 完了基準
 

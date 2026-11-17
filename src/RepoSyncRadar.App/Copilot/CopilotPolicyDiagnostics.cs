@@ -1,5 +1,5 @@
-using GitHub.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot;
+using Microsoft.Copilot.Rpc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using RepoSyncRadar.App.Auth;
@@ -33,7 +33,7 @@ internal sealed class CopilotPolicyDiagnostics(
     IAppVersionProvider version,
     ILogger<CopilotPolicyDiagnostics> logger) : ICopilotPolicyDiagnostics
 {
-#pragma warning disable GHCP001 // On-demand enterprise policy snapshots; no session-local enforcement claims.
+#pragma warning disable MCPSDK001 // On-demand enterprise policy snapshots; no session-local enforcement claims.
     public async Task<CopilotPolicySnapshot> ResolveAsync(CancellationToken cancellationToken)
     {
         if (await auth.GetStateAsync(cancellationToken).ConfigureAwait(false) != GitHubAuthState.SignedIn)
@@ -46,9 +46,12 @@ internal sealed class CopilotPolicyDiagnostics(
             CopilotSessionFactory.BuildClientOptions(options.Value, logger, token, version.DisplayVersion));
         await client.StartAsync(cancellationToken).ConfigureAwait(false);
         var result = await client.Rpc.ManagedSettings.ResolveAsync(
-            gitHubToken: token,
-            clientName: "RepoSyncRadar",
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+            new ManagedSettingsResolveRequest
+            {
+                GitHubToken = token,
+                ClientName = "RepoSyncRadar",
+            },
+            cancellationToken).ConfigureAwait(false);
         return FromResult(result);
     }
 
@@ -74,7 +77,7 @@ internal sealed class CopilotPolicyDiagnostics(
             DiagnosticsTruncated = result.Diagnostics.Count > 32,
         };
     }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001
 
     internal static bool IsDisplayableModel(string? model)
         => !(string.IsNullOrWhiteSpace(model) || model.Length > 96
