@@ -1,5 +1,5 @@
-using GitHub.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot;
+using Microsoft.Copilot.Rpc;
 using System.Net;
 using System.Net.Http;
 using System.Runtime.InteropServices;
@@ -39,10 +39,10 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.112", status.Version);
+        Assert.Equal("1.0.113-0.unstable.r43977958116.g150b9c6", status.Version);
     }
 
-#pragma warning disable GHCP001 // Exercise experimental public APIs against the bundled native runtime.
+#pragma warning disable MCPSDK001 // Exercise experimental public APIs against the bundled native runtime.
     [Theory]
     [InlineData("standard")]
     [InlineData("high")]
@@ -144,20 +144,15 @@ public sealed class CopilotInProcessRuntimeTests
     {
         var options = CopilotSessionFactory.BuildClientOptions(
             new CopilotOptions(), NullLogger.Instance, "offline-permission-test", "0.1.30");
-        options.RequestHandler = new RejectedModelRequestHandler();
+        options.Models.RequestHandler = new RejectedModelRequestHandler();
+        // BYOK offline sessions must not send a synthetic GitHub token for live validation.
+        options.GitHub.Token = null;
         await using var client = new CopilotClient(options);
         var config = SessionConfigBuilder.Build(SessionPurpose.Adoption,
             Options.Create(new CopilotOptions()),
             static (_, _) => Task.FromResult(PermissionDecision.Reject("Offline test denies all tools.")));
-        config.AvailableTools = new ToolSet();
-        config.DisabledMcpServers = ["github"];
-        config.Provider = new GitHub.Copilot.ProviderConfig
-        {
-            Type = "openai",
-            WireApi = "chat-completions",
-            BaseUrl = "https://offline-model.invalid/v1",
-            ApiKey = "synthetic-key",
-        };
+        ConfigureOfflineProvider(config);
+
         var ct = TestContext.Current.CancellationToken;
         await using var session = await client.CreateSessionAsync(config, ct);
         Assert.NotNull(session.PermissionModeResult);
@@ -301,21 +296,16 @@ public sealed class CopilotInProcessRuntimeTests
         var handler = new RejectedModelRequestHandler();
         var options = CopilotSessionFactory.BuildClientOptions(
             new CopilotOptions(), NullLogger.Instance, "offline-model-test", "0.1.30");
-        options.RequestHandler = handler;
+        options.Models.RequestHandler = handler;
+        // BYOK offline sessions must not send a synthetic GitHub token for live validation.
+        options.GitHub.Token = null;
         await using var client = new CopilotClient(options);
         var config = SessionConfigBuilder.Build(SessionPurpose.Adoption,
             Options.Create(new CopilotOptions()),
             static (_, _) => Task.FromResult(PermissionDecision.Reject("Offline test denies all tools.")));
         config.Model = "gpt-5.5";
-        config.AvailableTools = new ToolSet();
-        config.DisabledMcpServers = ["github"];
-        config.Provider = new GitHub.Copilot.ProviderConfig
-        {
-            Type = "openai",
-            WireApi = "chat-completions",
-            BaseUrl = "https://offline-model.invalid/v1",
-            ApiKey = "synthetic-key",
-        };
+        ConfigureOfflineProvider(config);
+
         var ct = TestContext.Current.CancellationToken;
         var sdkSession = await client.CreateSessionAsync(config, ct);
         var events = new System.Collections.Concurrent.ConcurrentQueue<string>();
@@ -359,21 +349,16 @@ public sealed class CopilotInProcessRuntimeTests
         var handler = new PendingModelRequestHandler();
         var options = CopilotSessionFactory.BuildClientOptions(
             new CopilotOptions(), NullLogger.Instance, "offline-shutdown-test", "0.1.30");
-        options.RequestHandler = handler;
+        options.Models.RequestHandler = handler;
+        // BYOK offline sessions must not send a synthetic GitHub token for live validation.
+        options.GitHub.Token = null;
         await using var client = new CopilotClient(options);
         var config = SessionConfigBuilder.Build(SessionPurpose.Adoption,
             Options.Create(new CopilotOptions()),
             static (_, _) => Task.FromResult(PermissionDecision.Reject("Offline test denies all tools.")));
         config.Model = "gpt-5.5";
-        config.AvailableTools = new ToolSet();
-        config.DisabledMcpServers = ["github"];
-        config.Provider = new GitHub.Copilot.ProviderConfig
-        {
-            Type = "openai",
-            WireApi = "chat-completions",
-            BaseUrl = "https://offline-model.invalid/v1",
-            ApiKey = "synthetic-key",
-        };
+        ConfigureOfflineProvider(config);
+
         var ct = TestContext.Current.CancellationToken;
         await using var session = await client.CreateSessionAsync(config, ct);
         await session.SendAsync(new MessageOptions { Prompt = "Offline shutdown probe." }, ct);
@@ -400,6 +385,28 @@ public sealed class CopilotInProcessRuntimeTests
         }
     }
 
+    private static void ConfigureOfflineProvider(CreateSessionOptions config)
+    {
+        // BYOK sessions use named providers and an explicit model; CAPI stays off so no request leaves the test.
+        config.Model = "gpt-5.5";
+        config.GitHub.Capi = new Microsoft.Copilot.CapiSessionOptions { Enabled = false };
+        config.Tools.AvailableTools = new ToolSet();
+        config.Mcp.DisabledServers = ["github"];
+        config.Inference.DefaultProvider = "offline";
+        config.Inference.Providers =
+        [
+            new Microsoft.Copilot.NamedProviderConfig
+            {
+                Name = "offline",
+                Type = "openai",
+                WireApi = "chat-completions",
+                BaseUrl = "https://offline-model.invalid/v1",
+                ApiKey = "synthetic-key",
+            },
+        ];
+        config.Inference.Models = [new Microsoft.Copilot.ProviderModelConfig { Id = "gpt-5.5", Provider = "offline" }];
+    }
+
     private sealed class RejectedModelRequestHandler : CopilotRequestHandler
     {
         private int _requestCount;
@@ -418,5 +425,5 @@ public sealed class CopilotInProcessRuntimeTests
             });
         }
     }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001
 }

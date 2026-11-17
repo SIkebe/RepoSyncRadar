@@ -1,6 +1,6 @@
 ---
 name: copilot-sdk-dotnet-audit
-description: 'Upgrade RepoSyncRadar to a newer GitHub.Copilot.SDK version or audit a related .NET preview update in the same PR. USE FOR: Copilot SDK update/upgrade, beta upgrade, GitHub.Copilot.SDK beta.N に更新, bundled Copilot runtime refresh, .NET preview release-note audit, SDK source/package diff review, API breaking-change対応, beta/.NET preview変更点をアプリに活かす, PR作成まで. Reads user-provided official URLs plus linked area release notes, updates package/version notices, reads NuGet metadata plus SDK source/tests, applies safe app improvements, validates build/tests, and opens or updates a PR.'
+description: 'Upgrade RepoSyncRadar to a newer Microsoft.Copilot.SDK version or audit a related .NET preview update in the same PR. USE FOR: Copilot SDK update/upgrade, beta upgrade, Microsoft.Copilot.SDK (旧 GitHub.Copilot.SDK) 2.x/beta.N に更新, bundled Copilot runtime refresh, .NET preview release-note audit, SDK source/package diff review, API breaking-change対応, beta/.NET preview変更点をアプリに活かす, PR作成まで. Reads user-provided official URLs plus linked area release notes, updates package/version notices, reads NuGet metadata plus SDK source/tests, applies safe app improvements, validates build/tests, and opens or updates a PR.'
 argument-hint: 'target SDK/.NET version or official URL, e.g. 1.0.0-beta.9 / .NET 11 Preview 5 blog; optional: PR作成 / 調査のみ / 特定領域 usage/auth/telemetry/tools'
 ---
 
@@ -8,11 +8,11 @@ argument-hint: 'target SDK/.NET version or official URL, e.g. 1.0.0-beta.9 / .NE
 
 ## 役割
 
-RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアップデートする。単なる package bump で終えず、NuGet package metadata、generated props/targets、XML docs、SDK source/tests、アプリ側 SDK 利用を突き合わせ、必要な breaking-change 対応と beta 変更点の有効活用を小さく実装する。最後に build/test を通し、ユーザーが求めた場合は PR まで作る。
+RepoSyncRadar の `Microsoft.Copilot.SDK` を新しい version へ安全にアップデートする。単なる package bump で終えず、NuGet package metadata、generated props/targets、XML docs、SDK source/tests、アプリ側 SDK 利用を突き合わせ、必要な breaking-change 対応と beta 変更点の有効活用を小さく実装する。最後に build/test を通し、ユーザーが求めた場合は PR まで作る。
 
 ## いつ使うか
 
-- 「`GitHub.Copilot.SDK` を `1.0.0-beta.N` にアップデートして」と言われたとき
+- 「`Microsoft.Copilot.SDK` を `1.0.0-beta.N` にアップデートして」と言われたとき
 - 「Copilot SDK beta upgrade」「SDK update」「bundled Copilot runtime を更新」などの依頼
 - SDK upgrade 後に app integration、usage billing、auth、telemetry、lifecycle、tools/permissions、structured output を見直すとき
 - Copilot SDK audit の追加 context として .NET preview ブログや release notes が渡され、SDK / ASP.NET Core / EF Core / WPF / libraries / runtime / C# の変更を RepoSyncRadar に反映できるか確認するとき
@@ -24,7 +24,7 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 1. **ユーザー提供の公式 URL を最初に読む**。ブログ記事、release note、issue、PR、docs URL が渡されたら本文だけでなく、本文からリンクされる詳細 release notes / breaking changes / SDK docs も先に開き、関連項目をチェックリスト化してから package audit に進む。概要記事だけ読んだ扱いにしない。通常の fetch が banner、shell、空本文、途中切れだけを返した場合は読了扱いにせず、同じ公式 site の REST API、raw file、release metadata、GitHub API などで本文を取得し直す。RepoSyncRadar の技術スタックに関係する .NET preview では、SDK だけでなく ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C# の area notes も確認する。該当 area note が存在するか分からない場合は release-notes ディレクトリや公式 docs を探し、存在しないことも根拠として残す。
 2. **target version を明確にする**。ユーザー指定があればそれを使う。未指定なら NuGet prerelease を含めて候補を確認し、最新へ進めてよいか判断する。
 3. **app code と突き合わせる**。SDK の changelog 感想で終えず、`src/RepoSyncRadar.App/Copilot/`、`RepoSyncRadar.Core/Options/`、settings、UI/tests を見る。
-4. **public surface 優先**。内部実装だけにあるものは使える API として扱わない。experimental API は `GHCP001` 等の警告と変更リスクを明示する。
+4. **public surface 優先**。内部実装だけにあるものは使える API として扱わない。experimental API は `MCPSDK001` 等の警告と変更リスクを明示する。
 5. **機密情報を出さない**。トークン、prompt/response content、telemetry content は記録・表示しない。typed in-process `Telemetry` の対応状況は exact package で確認し、対応済みでも privacy-reviewed な用途なしに exporter / `CaptureContent` を追加しない。
 6. **既存の未コミット変更を壊さない**。dirty worktree を前提に、関係ない変更は戻さない。
 7. **実装は小さく根本に当てる**。package bump、version notice、SDK 契約との不一致、設定の未配線、安全な beta 新機能活用に絞る。
@@ -47,12 +47,12 @@ RepoSyncRadar の `GitHub.Copilot.SDK` を新しい version へ安全にアッ�
 3. .NET preview が関係する場合は、公式 release metadata で exact SDK version を確認し、次の area notes を明示的に確認する。存在しない/空の場合もその事実を記録する: SDK、ASP.NET Core/Blazor、EF Core、WPF/.NET desktop、libraries、runtime、C#。RepoSyncRadar では WPF + BlazorWebView + EF Core SQLite + WebView2 + MTP + C# union + release packaging の観点を必ず含め、runtime async、compiler、build semantics、test tooling の主要 issue・PR も追う。公開版は `release.json` の `release.sdk.version` と download notes で確定する。`build-metadata.json` や area note の API 検証版は出荷版より古い場合がある。WPF BlazorWebView の独立した package version も NuGet metadata で確認する。Microsoft Learn のまとめが対象 Preview より古い場合は、対象 Preview の release notes と linked PR/tests を優先し、docs の更新遅延を evidence matrix に残す。
 4. 読んだ公式情報から「採用候補」「破壊的変更」「このリポジトリでは対象外」のチェックリストを作る。例: .NET preview なら各 area note の見出しを、`Directory.Build.props`、`.csproj`、release scripts、GitHub Actions、Blazor components、EF migrations、WPF host、docs と突き合わせる。
 5. evidence matrix が埋まり、target と repository への影響が説明できることを確認してから編集へ進む。
-6. `Directory.Packages.props` と project references から現在の `GitHub.Copilot.SDK` version を確認する。
-7. `dotnet package search GitHub.Copilot.SDK --exact-match --prerelease --format json` で target 版の存在を確認する。
+6. `Directory.Packages.props` と project references から現在の `Microsoft.Copilot.SDK` version を確認する。
+7. `dotnet package search Microsoft.Copilot.SDK --exact-match --prerelease --format json` で target 版の存在を確認する。
 8. 変更前後の package metadata を読む。
    - `.nuspec`: version、repository URL/commit、dependencies
-   - `build/GitHub.Copilot.SDK.props`: bundled `CopilotCliVersion`
-   - `build/GitHub.Copilot.SDK.targets`: native runtime download/copy/publish behavior
+   - `build/Microsoft.Copilot.SDK.props`: bundled `CopilotCliVersion`
+   - `build/Microsoft.Copilot.SDK.targets`: native runtime download/copy/publish behavior
    - README / XML docs: public API surface
    - Release 本文の runtime dependency と .NET package の `CopilotCliVersion` が異なる場合は、exact package の props と実際の `GetStatusAsync().Version` を根拠にする。XML docs には internal DTO も含まれるため、新 API の採用前に source または reflection で public accessibility を確認する。
 9. 公式 repo commit が分かる場合、`artifacts/sdk-audit/copilot-sdk` など ignored 配下に checkout/fetch して source/tests を読む。`.nuspec` の repository が SDK repo ではなく runtime repo を指すことがあるため、commit を SDK release tag と同一視しない。公開 tag がない package は exact package の XML docs / public API と props/targets を前後版で比較し、公開 source で確認できない範囲を明記する。
@@ -65,11 +65,11 @@ PowerShell で `rg` が無い環境では `Get-ChildItem -Recurse` と `Select-S
 
 最低限、次を更新する。
 
-- `Directory.Packages.props`: `GitHub.Copilot.SDK` version
+- `Directory.Packages.props`: `Microsoft.Copilot.SDK` version
 - `src/RepoSyncRadar.App/Settings/ThirdPartyNotices.cs`: SDK version
 - `.github/copilot-instructions.md`: 常時必要な repo-wide SDK 契約が変わる場合だけ更新する。package / bundled runtime version や release 固有 API は毎回の context を膨らませるため記録しない。
-- `GHCP001` suppression コメントなど、古い beta 番号を含む説明
-- SDK 同梱の `build/GitHub.Copilot.SDK.targets` が公式 GitHub Release に公開された SHA-256 を検証して native runtime bundle を取得する。`copilot_runtime.dll` と参照アセットがビルド/配布物に含まれることを確認する。旧スタンドアロン CLI zip の取得処理は追加しない。
+- `MCPSDK001` suppression コメントなど、古い beta 番号を含む説明
+- SDK 同梱の `build/Microsoft.Copilot.SDK.targets` が公式 GitHub Release に公開された SHA-256 を検証して native runtime bundle を取得する。`copilot_runtime.dll` と参照アセットがビルド/配布物に含まれることを確認する。旧スタンドアロン CLI zip の取得処理は追加しない。
 
 更新後に `dotnet restore RepoSyncRadar.sln` を実行し、target package を NuGet cache に落とす。
 
@@ -85,7 +85,7 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 
 - `dotnet/src/Session.cs`: `SendAsync`、`SendAndWaitAsync`、event handling、timeout、abort、dispose、tool execution
 - `dotnet/src/Client.cs`: `CopilotClientOptions`、create/resume session、model listing、stop/force stop、auth status、mode defaults
-- `dotnet/src/Types.cs`: `SessionConfig`、`MessageOptions`、`TelemetryConfig`、`SessionHooks`、`InfiniteSessionConfig`、tool/session options
+- `dotnet/src/Types.cs`: `CreateSessionOptions`、`MessageOptions`、`TelemetryConfig`、`SessionHooks`、`InfiniteSessionConfig`、tool/session options
 - `dotnet/src/Generated/Rpc.cs` と DTOs: usage/account/quota/auth/model APIs
 - `dotnet/src/Generated/SessionEvents.cs` と serializer context: 新規 lifecycle/result/policy events、payload、未知の値と subagent attribution
 - E2E/unit tests: session fidelity、streaming、tools、permissions、error resilience、compaction、telemetry、per-session auth、new feature tests
@@ -121,12 +121,12 @@ NuGet の repository metadata が runtime repository の commit を指す場合�
 - response extraction: `ToString()` ではなく `Data.Content` か
 - usage: `AssistantUsageEvent` と `Usage.GetMetricsAsync()` の両方を正しく扱っているか。idle 後の metadata 配信と metrics の公開 coverage 契約を確認し、API call ID / event 境界のない累積値に到着時刻ベースで event を加算しない。完全な照合ができない場合は保守的な観測値と過少表示の限界を明記し、遅延 event・取得失敗・重複・50 件の履歴切り詰め・reset を回帰テストする。
 - telemetry/logging: option はあるのに SDK に渡していないものがないか
-- auth: 明示 token と `UseLoggedInUser = false` の意図が守られているか
+- auth: 明示 token と `GitHub.UseLoggedInUser = false` の意図が守られているか
 - lifecycle: dispose/abort/stop の意味を取り違えていないか
 - permissions: auto-approve と `skip_permission` の境界が妥当か
 - 起動時 `PermissionMode` が public にある版では、必要なモードを create/resume で指定し、`PermissionModeResult` の成功・実効モードを確認する。設定した事実だけで適用済みとしない。Auto recovery は既存の通知付き fallback と別契約であり、active request の再送ではなく同意・capability・最終 outcome を検証する。
 - tools: source-qualified tool filtering、`CopilotToolOptions`、ambient tool exposure が安全か
-- skills: `IncludedBuiltinSkills = []` は組み込みスキルだけの除外。スキルを使わない導線では `EnableSkills = false` を明示し、ambient / provider-backed スキルも無効化する。
+- skills: `Skills.IncludedBuiltinSkills = []` は組み込みスキルだけの除外。スキルを使わない導線では `Skills.Enabled = false` を明示し、ambient / provider-backed スキルも無効化する。
 - structured output: SDK に schema support が無いなら防御 parser/tool strategy があるか
 
 ### 6. beta 新機能の採用可否を判断する
@@ -200,7 +200,7 @@ dotnet ef migrations has-pending-model-changes --project src\RepoSyncRadar.Core\
 ```
 
 必要に応じて先に focused test を実行する。失敗したら、今回の SDK update に関係する範囲だけ直す。
-ネイティブランタイムを起動する test host には `GitHub.Copilot.SDK` を直接参照させ、SDK targets をその host でも実行する。ping 成功だけで更新済みと判断せず、`GetStatusAsync().Version` が package props の bundled runtime version と一致することを確認する。
+ネイティブランタイムを起動する test host には `Microsoft.Copilot.SDK` を直接参照させ、SDK targets をその host でも実行する。ping 成功だけで更新済みと判断せず、`GetStatusAsync().Version` が package props の bundled runtime version と一致することを確認する。
 直接参照でも更新されない場合は、出力の `copilot_runtime.dll` と隣接 `runtime.node`、SHA-256 検証済み取得キャッシュの hash を比較する。SDK の未追跡 alias と `SkipUnchangedFiles` は、同じ timestamp / length の別版を古いまま残す場合がある。単に期待 version を古い値へ変えず、repository の version-marker による alias 無効化を確認する。
 
 ### 8. PR 作成・更新

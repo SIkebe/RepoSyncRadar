@@ -1,5 +1,5 @@
-using GitHub.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot;
+using Microsoft.Copilot.Rpc;
 
 namespace RepoSyncRadar.App.Copilot;
 
@@ -213,7 +213,7 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
         Changed?.Invoke();
     }
 
-#pragma warning disable GHCP001 // Copilot SDK usage cost and metrics remain experimental.
+#pragma warning disable MCPSDK001 // Copilot SDK usage cost and metrics remain experimental.
     internal static CopilotUsageRecord FromAssistantUsage(
         AssistantUsageEvent usage,
         SessionPurpose purpose,
@@ -271,7 +271,7 @@ public sealed class CopilotUsageTracker : ICopilotUsageTracker
             metrics.LastCallOutputTokens,
             modelMetrics);
     }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001
 }
 
 public sealed record CopilotUsageRecord(

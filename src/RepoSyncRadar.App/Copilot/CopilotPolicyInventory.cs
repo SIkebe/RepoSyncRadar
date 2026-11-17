@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot.Rpc;
 
 namespace RepoSyncRadar.App.Copilot;
 
@@ -18,7 +18,7 @@ public sealed record CopilotPolicyGroup(string Key, IReadOnlyList<CopilotPolicyE
 
 public sealed record CopilotPolicyDiagnostic(string Severity, string? SettingKey, string SummaryKey);
 
-#pragma warning disable GHCP001 // Project only safe display values from the public managed-settings API.
+#pragma warning disable MCPSDK001 // Project only safe display values from the public managed-settings API.
 internal static class CopilotPolicyInventory
 {
     private const int _maxItems = 32;
@@ -74,7 +74,7 @@ internal static class CopilotPolicyInventory
             return new("AppRestrictions",
             [
                 new("permissions.disableBypassPermissionsMode", _itemPrefix + "permissions.disableBypassPermissionsMode",
-                    [State(permissions.DisableBypassPermissionsMode == GitHub.Copilot.DisableBypassPermissionsModes.Disable ? "Yes" : "Unreported")],
+                    [State(permissions.DisableBypassPermissionsMode == Microsoft.Copilot.DisableBypassPermissionsModes.Disable ? "Yes" : "Unreported")],
                     ["Client"], IsStatus: true),
                 Status("permissions.disableAssistedPermissionsMode", permissions.DisableAssistedPermissionsMode)
                     with { Sources = ["Client"] },
@@ -453,4 +453,4 @@ internal static class CopilotPolicyInventory
             "mixed" => "Mixed", "none" => "None", _ => "Unknown",
         };
 }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001

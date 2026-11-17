@@ -68,7 +68,7 @@ This checklist captures the current public-release blockers and must-fix follow-
 ## Confirmed Good Signals
 
 - `COPILOT_GITHUB_TOKEN` is the only debug token override; the app intentionally does not read `GH_TOKEN` or `GITHUB_TOKEN`.
-- Copilot SDK is configured with `UseLoggedInUser = false`, so the app uses the token it obtains instead of ambient CLI sign-in state.
+- Copilot SDK is configured with `GitHub.UseLoggedInUser = false`, so the app uses the token it obtains instead of ambient CLI sign-in state.
 - OAuth tokens are stored with DPAPI under the current Windows user.
 - WebView navigation uses an allow-list, and local preview routes are loopback-only.
 - `appsettings.local.json` is ignored and excluded from publish output.

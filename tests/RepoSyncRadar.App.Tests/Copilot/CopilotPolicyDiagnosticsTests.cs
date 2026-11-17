@@ -1,6 +1,6 @@
 using System.Text.Json;
-using GitHub.Copilot;
-using GitHub.Copilot.Rpc;
+using Microsoft.Copilot;
+using Microsoft.Copilot.Rpc;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -12,7 +12,7 @@ using Xunit;
 
 namespace RepoSyncRadar.App.Tests.Copilot;
 
-#pragma warning disable GHCP001 // Test the public policy snapshot contract.
+#pragma warning disable MCPSDK001 // Test the public policy snapshot contract.
 public sealed class CopilotPolicyDiagnosticsTests
 {
     [Theory]
@@ -696,4 +696,4 @@ public sealed class CopilotPolicyDiagnosticsTests
         await tokens.DidNotReceive().GetAccessTokenAsync(Arg.Any<CancellationToken>());
     }
 }
-#pragma warning restore GHCP001
+#pragma warning restore MCPSDK001

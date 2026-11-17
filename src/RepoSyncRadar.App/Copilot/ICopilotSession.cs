@@ -3,7 +3,7 @@ using RepoSyncRadar.Core.Services;
 namespace RepoSyncRadar.App.Copilot;
 
 /// <summary>
-/// Thin abstraction over <see cref="GitHub.Copilot.CopilotSession"/> so the agent
+/// Thin abstraction over <see cref="Microsoft.Copilot.CopilotSession"/> so the agent
 /// orchestrators (Morning Triage and Draft generation) can be unit-tested
 /// without starting the embedded Copilot runtime. The production implementation
 /// (<see cref="SdkCopilotSession"/>) forwards calls to the real SDK.
