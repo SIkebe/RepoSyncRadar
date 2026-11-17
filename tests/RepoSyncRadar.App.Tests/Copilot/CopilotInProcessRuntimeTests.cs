@@ -39,7 +39,7 @@ public sealed class CopilotInProcessRuntimeTests
         var status = await client.GetStatusAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("pong: in-process", response.Message);
-        Assert.Equal("1.0.113-0.unstable.r43977958116.g150b9c6", status.Version);
+        Assert.Equal("1.0.113-1", status.Version);
     }
 
 #pragma warning disable MCPSDK001 // Exercise experimental public APIs against the bundled native runtime.
