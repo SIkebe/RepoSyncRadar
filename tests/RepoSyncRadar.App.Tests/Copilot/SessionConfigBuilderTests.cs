@@ -48,6 +48,8 @@ public class SessionConfigBuilderTests
         Assert.False(config.State.Memory!.Enabled);
         Assert.NotNull(config.Tools.Search);
         Assert.Equal(false, config.Tools.Search!.Enabled);
+        Assert.NotNull(config.Tools.AvailableTools);
+        Assert.Empty(config.Tools.AvailableTools);
         Assert.NotNull(config.GitHub.Capi);
         Assert.False(config.GitHub.Capi!.EnableWebSocketResponses.GetValueOrDefault());
         Assert.NotNull(config.SystemMessage);

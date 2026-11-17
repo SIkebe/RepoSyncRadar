@@ -70,6 +70,8 @@ internal static class SessionConfigBuilder
         // RepoSyncRadar does not broker third-party MCP OAuth tokens. Fail closed if
         // an OAuth-protected MCP server is introduced before a user-visible flow exists.
         config.Mcp.OnAuthRequest = CancelMcpAuthRequestAsync;
+        var availableTools = new ToolSet();
+        config.Tools.AvailableTools = availableTools;
 
         if (copilot.EnableWebSocketResponses is { } enableWebSocketResponses)
         {
@@ -82,13 +84,10 @@ internal static class SessionConfigBuilder
         if (tools is { Count: > 0 })
         {
             config.Tools.Definitions = tools.Cast<AIFunctionDeclaration>().ToList();
-            var availableTools = new ToolSet();
             foreach (var tool in tools)
             {
                 availableTools.AddCustom(tool.Name);
             }
-
-            config.Tools.AvailableTools = availableTools;
         }
 
         if (auditHook is not null)
