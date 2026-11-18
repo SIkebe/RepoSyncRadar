@@ -25,6 +25,8 @@ public sealed partial class CopilotSessionFactory : ICopilotSessionFactory
 
     private static readonly string[] _preferredFallbackModels =
     [
+        "gpt-6.2-astra",
+        "gpt-6.2-sol",
         "gpt-5.3-codex",
         DefaultFallbackModel,
         "gpt-5.5",
