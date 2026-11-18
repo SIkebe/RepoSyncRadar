@@ -61,6 +61,26 @@ public sealed class CopilotSessionFactoryTests
     }
 
     [Fact]
+    public void ResolveFallbackModel_Prefers_Advertised_Gpt62_Models()
+    {
+        var fallback = CopilotSessionFactory.ResolveFallbackModel(
+            "gpt-6-luna",
+            ["gpt-6.2-sol", "gpt-6.2-astra", "gpt-5.3-codex"]);
+
+        Assert.Equal("gpt-6.2-astra", fallback);
+    }
+
+    [Fact]
+    public void ResolveFallbackModel_Uses_Advertised_Gpt62_Sol_When_Astra_Is_Unavailable()
+    {
+        var fallback = CopilotSessionFactory.ResolveFallbackModel(
+            "gpt-6-luna",
+            ["gpt-6.2-sol", "gpt-5.3-codex"]);
+
+        Assert.Equal("gpt-6.2-sol", fallback);
+    }
+
+    [Fact]
     public void ResolveFallbackModel_When_Base_Model_Is_Missing_Prefers_Broadly_Available_Gpt5Mini()
     {
         var fallback = CopilotSessionFactory.ResolveFallbackModel(
