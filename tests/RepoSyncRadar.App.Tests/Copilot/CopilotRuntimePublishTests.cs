@@ -9,6 +9,77 @@ public sealed class CopilotRuntimePublishTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task RuntimeCopy_ReplacesEqualSizeAndTimestampAliasesBeforeCopy(bool removePreviousMarker)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var repositoryRoot = FindRepositoryRoot();
+        var testDirectory = Path.Combine(repositoryRoot, "artifacts", "runtime-copy-tests", Guid.NewGuid().ToString("N"));
+        var sourceDirectory = Path.Combine(testDirectory, "source");
+        var outputDirectory = Path.Combine(testDirectory, "build");
+        var destinationDirectory = Path.Combine(outputDirectory, "runtimes", "win-x64", "native");
+        Directory.CreateDirectory(sourceDirectory);
+        Directory.CreateDirectory(destinationDirectory);
+
+        try
+        {
+            var timestamp = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var aliases = new[] { "copilot_runtime.dll", "copilot.exe" };
+            foreach (var alias in aliases)
+            {
+                var source = Path.Combine(sourceDirectory, alias);
+                var destination = Path.Combine(destinationDirectory, alias);
+                await File.WriteAllTextAsync(source, "new-runtime", cancellationToken);
+                await File.WriteAllTextAsync(destination, "old-runtime", cancellationToken);
+                File.SetLastWriteTimeUtc(source, timestamp);
+                File.SetLastWriteTimeUtc(destination, timestamp);
+            }
+
+            var marker = Path.Combine(destinationDirectory, ".reposyncradar-runtime-version");
+            if (!removePreviousMarker)
+            {
+                await File.WriteAllTextAsync(marker, "old-version", cancellationToken);
+            }
+
+            var projectPath = Path.Combine(testDirectory, "Copy.proj");
+            new XDocument(
+                new XElement("Project",
+                    new XElement("PropertyGroup",
+                        new XElement("OutDir", outputDirectory + Path.DirectorySeparatorChar),
+                        new XElement("SourceDir", sourceDirectory),
+                        new XElement("_CopilotRid", "win-x64"),
+                        new XElement("_CopilotRuntimeLib", aliases[0]),
+                        new XElement("_CopilotBinary", aliases[1]),
+                        new XElement("CopilotCliVersion", "new-version")),
+                    new XElement("Target",
+                        new XAttribute("Name", "_CopyCopilotCliToOutput"),
+                        new XAttribute("DependsOnTargets", "_CopyCopilotCliToOutputCore")),
+                    new XElement("Target",
+                        new XAttribute("Name", "_CopyCopilotCliToOutputCore"),
+                        new XElement("Copy",
+                            new XAttribute("SourceFiles", "$(SourceDir)\\$(_CopilotRuntimeLib);$(SourceDir)\\$(_CopilotBinary)"),
+                            new XAttribute("DestinationFolder", "$(OutDir)runtimes\\$(_CopilotRid)\\native"),
+                            new XAttribute("SkipUnchangedFiles", "true"))),
+                    new XElement("Import", new XAttribute("Project", Path.Combine(repositoryRoot, "Directory.Build.targets")))))
+                .Save(projectPath);
+
+            await RunMsBuildAsync(repositoryRoot, projectPath, ["-target:_CopyCopilotCliToOutput"], cancellationToken);
+
+            foreach (var alias in aliases)
+            {
+                Assert.Equal("new-runtime", await File.ReadAllTextAsync(Path.Combine(destinationDirectory, alias), cancellationToken));
+            }
+
+            Assert.Equal("new-version", (await File.ReadAllTextAsync(marker, cancellationToken)).Trim());
+        }
+        finally
+        {
+            Directory.Delete(testDirectory, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task RepeatedPublish_ReplacesEqualSizeAndTimestampRuntimeAssets(bool removePreviousMarker)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -86,6 +157,22 @@ public sealed class CopilotRuntimePublishTests
         string runtimeVersion,
         CancellationToken cancellationToken)
     {
+        await RunMsBuildAsync(repositoryRoot, projectPath,
+        [
+            "-target:CopyCopilotRuntimeAfterPublish",
+            "-property:RuntimeIdentifier=win-x64",
+            $"-property:CopilotCliVersion={runtimeVersion}",
+            $"-property:OutDir={outputDirectory}{Path.DirectorySeparatorChar}",
+            $"-property:PublishDir={publishDirectory}{Path.DirectorySeparatorChar}",
+        ], cancellationToken);
+    }
+
+    private static async Task RunMsBuildAsync(
+        string repositoryRoot,
+        string projectPath,
+        string[] arguments,
+        CancellationToken cancellationToken)
+    {
         var startInfo = new ProcessStartInfo("dotnet")
         {
             WorkingDirectory = repositoryRoot,
@@ -94,14 +181,7 @@ public sealed class CopilotRuntimePublishTests
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        foreach (var argument in new[]
-        {
-            "msbuild", projectPath, "-nologo", "-verbosity:quiet", "-target:CopyCopilotRuntimeAfterPublish",
-            "-property:RuntimeIdentifier=win-x64",
-            $"-property:CopilotCliVersion={runtimeVersion}",
-            $"-property:OutDir={outputDirectory}{Path.DirectorySeparatorChar}",
-            $"-property:PublishDir={publishDirectory}{Path.DirectorySeparatorChar}",
-        })
+        foreach (var argument in new[] { "msbuild", projectPath, "-nologo", "-verbosity:quiet" }.Concat(arguments))
         {
             startInfo.ArgumentList.Add(argument);
         }
