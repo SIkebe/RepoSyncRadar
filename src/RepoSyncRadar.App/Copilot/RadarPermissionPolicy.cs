@@ -66,7 +66,16 @@ public sealed partial class RadarPermissionPolicy
         ArgumentNullException.ThrowIfNull(request);
 
         var sessionId = invocation?.SessionId ?? "<unknown>";
+        var decision = await HandleCoreAsync(request, sessionId).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(invocation?.RequestId))
+        {
+            LogPermissionDecision(_logger, sessionId, invocation.RequestId, decision.Kind);
+        }
+        return decision;
+    }
 
+    private async Task<PermissionDecision> HandleCoreAsync(PermissionRequest request, string sessionId)
+    {
         // Assisted prompt metadata must not bypass the app's manual managed-approval flow.
         if (request.ManagedApprovalRequired is true
             && request is PermissionRequestCustomTool
@@ -199,5 +208,9 @@ public sealed partial class RadarPermissionPolicy
     [LoggerMessage(EventId = 9, Level = LogLevel.Information,
         Message = "Managed policy requires human approval for {Kind}; prompting user (session={SessionId})")]
     private static partial void LogPromptingForManagedApproval(ILogger logger, string? kind, string sessionId);
+
+    [LoggerMessage(EventId = 10, Level = LogLevel.Debug,
+        Message = "Permission decision {Decision} (session={SessionId}, request={RequestId})")]
+    private static partial void LogPermissionDecision(ILogger logger, string sessionId, string requestId, string decision);
 }
 #pragma warning restore MCPSDK001

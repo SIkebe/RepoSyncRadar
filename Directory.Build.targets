@@ -3,7 +3,7 @@
   <!-- SDK runtime aliases are not in its asset manifest. Equal archive timestamps and
        lengths can make SkipUnchangedFiles retain an older native library on upgrades. -->
   <Target Name="InvalidateCopilotRuntimeAliases"
-          BeforeTargets="_CopyCopilotCliToOutput"
+          BeforeTargets="_CopyCopilotCliToOutputCore"
           Condition="'$(CopilotCliVersion)' != '' And '$(CopilotCliBinaryPath)' == '' And '$(CopilotSkipCliDownload)' != 'true' And '$(_CopilotRid)' != ''">
     <PropertyGroup>
       <_RadarCopilotOutputDir>$(OutDir)runtimes\$(_CopilotRid)\native</_RadarCopilotOutputDir>
@@ -17,7 +17,7 @@
   </Target>
 
   <Target Name="RecordCopilotRuntimeVersion"
-          AfterTargets="_CopyCopilotCliToOutput"
+          AfterTargets="_CopyCopilotCliToOutputCore"
           Condition="'$(_RadarCopilotVersionMarker)' != ''">
     <WriteLinesToFile File="$(_RadarCopilotVersionMarker)" Lines="$(CopilotCliVersion)"
                       Overwrite="true" WriteOnlyWhenDifferent="true" />
