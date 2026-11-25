@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Copilot;
 using Microsoft.Copilot.Rpc;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -52,6 +53,56 @@ public class RadarPermissionPolicyTests
     }
 
     private static readonly PermissionInvocation _invocation = new() { SessionId = "session-1" };
+
+    [Theory]
+    [InlineData(true, "request-a")]
+    [InlineData(false, "request-b")]
+    [InlineData(true, null)]
+    [InlineData(false, " ")]
+    public async Task Permission_Decisions_Are_Correlated_Only_When_Request_Id_Is_Available(
+        bool approved, string? requestId)
+    {
+        var request = NewWrite("tool-call", "secret-file-name");
+        var prompt = Substitute.For<IPermissionPrompt>();
+        prompt.ConfirmAsync(request, Arg.Any<CancellationToken>()).Returns(approved);
+        var logger = new CapturingLogger();
+        var policy = new RadarPermissionPolicy(
+            new UrlAllowList(Options.Create(new CopilotOptions())), prompt, logger);
+
+        var decision = await policy.HandleAsync(request, new PermissionInvocation
+        {
+            SessionId = "session-test",
+            RequestId = requestId,
+        });
+
+        Assert.Equal(approved ? _approveOnceKind : _rejectKind, decision.Kind);
+        var entries = logger.Entries.Where(entry => entry.EventId.Id == 10).ToArray();
+        if (string.IsNullOrWhiteSpace(requestId))
+        {
+            Assert.Empty(entries);
+        }
+        else
+        {
+            var entry = Assert.Single(entries);
+            Assert.Equal(LogLevel.Debug, entry.Level);
+            Assert.Contains("session-test", entry.Message);
+            Assert.Contains(requestId, entry.Message);
+            Assert.Contains(decision.Kind, entry.Message);
+            Assert.DoesNotContain("secret-file-name", entry.Message);
+        }
+    }
+
+    private sealed class CapturingLogger : ILogger<RadarPermissionPolicy>
+    {
+        public List<(LogLevel Level, EventId EventId, string Message)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel logLevel) => true;
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Entries.Add((logLevel, eventId, formatter(state, exception)));
+    }
 
     [Theory]
     [InlineData(false, false)]
