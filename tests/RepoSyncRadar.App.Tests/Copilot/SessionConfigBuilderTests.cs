@@ -131,6 +131,28 @@ public class SessionConfigBuilderTests
         Assert.True(config.Policy.ManagedSettings!.Permissions!.DisableAssistedPermissionsMode);
     }
 
+    [Theory]
+    [InlineData(SessionPurpose.Triage)]
+    [InlineData(SessionPurpose.Adoption)]
+    [InlineData(SessionPurpose.Maintenance)]
+    public void Build_Excludes_Ambient_Extension_Sources_For_Every_Purpose(SessionPurpose purpose)
+    {
+        var config = SessionConfigBuilder.Build(
+            purpose,
+            Options.Create(new CopilotOptions()),
+            static (_, _) => Task.FromResult(PermissionDecision.Reject("No tools needed.")));
+
+        Assert.NotNull(config.ExtensionSources);
+        Assert.False(config.ExtensionSources.User);
+        Assert.False(config.ExtensionSources.Project);
+        Assert.False(config.ExtensionSources.Plugins);
+        var clone = config.Clone();
+        Assert.NotNull(clone.ExtensionSources);
+        Assert.False(clone.ExtensionSources.User);
+        Assert.False(clone.ExtensionSources.Project);
+        Assert.False(clone.ExtensionSources.Plugins);
+    }
+
     [Fact]
     public void Build_For_Adoption_Restricts_Fetching_To_Radar_Tool()
     {
