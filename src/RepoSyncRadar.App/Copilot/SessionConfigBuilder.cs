@@ -57,6 +57,12 @@ internal static class SessionConfigBuilder
         // Excluding built-ins alone does not disable ambient or provider-backed skills.
         config.Skills.Enabled = false;
         config.Skills.IncludedBuiltinSkills = [];
+        config.ExtensionSources = new ExtensionSources
+        {
+            User = false,
+            Project = false,
+            Plugins = false,
+        };
         config.Agents.IncludedBuiltInAgents = [];
         config.Agents.LocalDiscoveryOnly = true;
         config.Tools.Search = new ToolSearchConfig { Enabled = false };
